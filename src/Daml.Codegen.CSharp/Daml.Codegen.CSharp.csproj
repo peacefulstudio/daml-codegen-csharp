@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackageId>Daml.Codegen.CSharp</PackageId>
+    <Description>C# code generator for Daml smart contracts. Generates strongly-typed C# classes from Daml Archive (.dar) files.</Description>
+    <PackageTags>daml;canton;blockchain;smart-contracts;codegen;cli</PackageTags>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>daml-codegen-csharp</ToolCommandName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Daml.Codegen.CSharp.Runtime\Daml.Codegen.CSharp.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Proto\com\digitalasset\daml\lf\archive\daml_lf.proto" ProtoRoot="Proto" GrpcServices="None" />
+    <Protobuf Include="Proto\com\digitalasset\daml\lf\archive\daml_lf1.proto" ProtoRoot="Proto" GrpcServices="None" />
+    <Protobuf Include="Proto\com\digitalasset\daml\lf\archive\daml_lf2.proto" ProtoRoot="Proto" GrpcServices="None" />
+  </ItemGroup>
+
+</Project>

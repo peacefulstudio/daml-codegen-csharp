@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Example showing how to use generated Daml C# code</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daml.Codegen.CSharp.Runtime\Daml.Codegen.CSharp.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>
