@@ -126,3 +126,5 @@ BenchmarkDotNet.Artifacts/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+output/

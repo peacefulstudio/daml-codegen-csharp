@@ -40,6 +40,17 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             var moduleNamespace = $"{rootNamespace}.{SanitizeIdentifier(module.Name.Replace(".", "."))}";
 
+            // Build a set of template names so we can skip their data types
+            var templateNames = module.Templates.Select(t => t.Name).ToHashSet();
+
+            // Build a lookup of data types by name for populating template fields
+            var dataTypesByName = module.DataTypes
+                .Where(dt => dt.Definition is DamlRecordDefinition)
+                .ToDictionary(dt => dt.Name, dt => (DamlRecordDefinition)dt.Definition!);
+
+            // Build a lookup of all data types by full name for choice argument resolution
+            var allDataTypes = module.DataTypes.ToDictionary(dt => dt.Name, dt => dt);
+
             // Generate templates
             foreach (var template in module.Templates)
             {
@@ -49,7 +60,12 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                     continue;
                 }
 
-                var code = GenerateTemplate(package, module, template, moduleNamespace);
+                // Get fields from corresponding data type if template has none
+                var fields = template.Fields.Count > 0
+                    ? template.Fields
+                    : (dataTypesByName.TryGetValue(template.Name, out var recordDef) ? recordDef.Fields : []);
+
+                var code = GenerateTemplate(package, module, template, fields, allDataTypes, moduleNamespace);
                 var path = Path.Combine(
                     moduleNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
                     $"{SanitizeIdentifier(template.Name)}.cs");
@@ -57,9 +73,15 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 yield return new GeneratedFile(path, code);
             }
 
-            // Generate data types
+            // Generate data types (skip those that are templates)
             foreach (var dataType in module.DataTypes)
             {
+                // Skip data types that correspond to templates - they're generated as part of the template
+                if (templateNames.Contains(dataType.Name))
+                {
+                    continue;
+                }
+
                 var code = GenerateDataType(package, module, dataType, moduleNamespace);
                 var path = Path.Combine(
                     moduleNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
@@ -77,6 +99,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPackage package,
         DamlModule module,
         DamlTemplate template,
+        IReadOnlyList<DamlField> fields,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
         var sb = new StringBuilder();
@@ -111,12 +135,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         // Template record
         var className = SanitizeIdentifier(template.Name);
+        indent.CurrentTypeName = className;
 
-        if (options.UseRecordTypes && options.UsePrimaryConstructors && template.Fields.Count > 0)
+        if (options.UseRecordTypes && options.UsePrimaryConstructors && fields.Count > 0)
         {
             // Record with primary constructor
             indent.Append($"public sealed record {className}(");
-            WriteRecordParameters(indent, template.Fields);
+            WriteRecordParameters(indent, fields);
             indent.AppendLine(") : ITemplate");
         }
         else if (options.UseRecordTypes)
@@ -137,20 +162,20 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // Properties (if not using primary constructor)
         if (!options.UsePrimaryConstructors || !options.UseRecordTypes)
         {
-            WriteProperties(indent, template.Fields);
+            WriteProperties(indent, fields);
         }
 
         // ToRecord method
-        WriteToRecordMethod(indent, template.Fields);
+        WriteToRecordMethod(indent, fields);
 
         // FromRecord method
-        WriteFromRecordMethod(indent, className, template.Fields);
+        WriteFromRecordMethod(indent, className, fields);
 
         // Choice argument types and methods
         foreach (var choice in template.Choices)
         {
-            WriteChoiceArgumentType(indent, choice);
-            WriteChoiceMethod(indent, choice);
+            WriteChoiceArgumentType(indent, choice, dataTypes);
+            WriteChoiceMethod(indent, choice, dataTypes);
         }
 
         // ContractId nested class
@@ -384,30 +409,78 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine();
     }
 
-    private void WriteChoiceArgumentType(IndentWriter indent, DamlChoice choice)
+    /// <summary>
+    /// Gets the argument type info for a choice, including the C# type name and whether it's a data type reference.
+    /// </summary>
+    private static (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsExternalRef) GetChoiceArgumentInfo(
+        DamlChoice choice,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        var choiceName = SanitizeIdentifier(choice.Name);
-
-        indent.AppendLine($"/// <summary>Arguments for the {choice.Name} choice.</summary>");
-
-        if (choice.ArgumentType is DamlTypeRef)
+        // Check if the argument type is a reference to a data type in the same module
+        if (choice.ArgumentType is DamlTypeRef typeRef && dataTypes.TryGetValue(typeRef.Name, out var dataType))
         {
-            // Complex argument type - generate nested record
-            indent.AppendLine($"public sealed record {choiceName}Argument");
-            indent.AppendLine("{");
-            indent.Indent();
-            // Would extract fields from ArgumentType
-            indent.Dedent();
-            indent.AppendLine("}");
+            var fields = dataType.Definition is DamlRecordDefinition recordDef ? recordDef.Fields : null;
+            return (SanitizeIdentifier(typeRef.Name), fields, false);
         }
 
+        // Check for Unit type (no arguments)
+        if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit })
+        {
+            return ("DamlUnit", null, false);
+        }
+
+        // Check for external type references (like DA.Internal.Template:Archive)
+        // These are typically empty argument records, so we use DamlUnit
+        if (choice.ArgumentType is DamlTypeRef externalRef)
+        {
+            // Standard Archive choice from daml-prim uses an empty record
+            if (externalRef.Name == "Archive")
+            {
+                return ("DamlUnit", null, true);
+            }
+            // Other external references - fallback to DamlUnit as safe default
+            return ("DamlUnit", null, true);
+        }
+
+        // Fallback to generating a nested argument type
+        return ($"{SanitizeIdentifier(choice.Name)}Arg", null, false);
+    }
+
+    private void WriteChoiceArgumentType(IndentWriter indent, DamlChoice choice, IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var (argTypeName, _, isExternalRef) = GetChoiceArgumentInfo(choice, dataTypes);
+
+        // If the argument type is a reference to an existing data type, don't generate a nested class
+        // The data type is already generated separately
+        if (choice.ArgumentType is DamlTypeRef typeRef && dataTypes.ContainsKey(typeRef.Name))
+        {
+            // No nested class needed - we'll reference the existing data type
+            return;
+        }
+
+        // If it's Unit or external reference (like Archive), no argument type needed
+        if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit } || isExternalRef)
+        {
+            return;
+        }
+
+        // For other cases (shouldn't happen often), generate a simple argument type
+        var choiceName = SanitizeIdentifier(choice.Name);
+        indent.AppendLine($"/// <summary>Arguments for the {choice.Name} choice.</summary>");
+        indent.AppendLine($"public sealed record {choiceName}Arg");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine("// TODO: Extract fields from argument type");
+        indent.Dedent();
+        indent.AppendLine("}");
         indent.AppendLine();
     }
 
-    private void WriteChoiceMethod(IndentWriter indent, DamlChoice choice)
+    private void WriteChoiceMethod(IndentWriter indent, DamlChoice choice, IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnType = MapDamlTypeToCSharp(choice.ReturnType);
+        var (argTypeName, argFields, isExternalRef) = GetChoiceArgumentInfo(choice, dataTypes);
 
         indent.AppendLine($"/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");
@@ -417,17 +490,65 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
         indent.AppendLine($"/// </summary>");
 
-        // We'll generate a method that returns a Choice descriptor
-        indent.AppendLine($"public static Choice<{indent.CurrentTypeName}, {choiceName}Argument, {returnType}> Choice{choiceName} {{ get; }} = new()");
+        // Generate the Choice property with proper encoder/decoder
+        indent.AppendLine($"public static Choice<{indent.CurrentTypeName}, {argTypeName}, {returnType}> Choice{choiceName} {{ get; }} = new()");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine($"Name = \"{choice.Name}\",");
         indent.AppendLine($"Consuming = {(choice.Consuming ? "true" : "false")},");
-        indent.AppendLine("ArgumentEncoder = arg => DamlUnit.Instance, // TODO: Implement");
-        indent.AppendLine("ResultDecoder = val => default! // TODO: Implement");
+
+        // Generate ArgumentEncoder
+        if (argTypeName == "DamlUnit" || isExternalRef)
+        {
+            indent.AppendLine("ArgumentEncoder = _ => DamlUnit.Instance,");
+        }
+        else
+        {
+            // The argument type has ToRecord() method
+            indent.AppendLine("ArgumentEncoder = arg => arg.ToRecord(),");
+        }
+
+        // Generate ResultDecoder
+        WriteResultDecoder(indent, choice.ReturnType, returnType);
+
         indent.Dedent();
         indent.AppendLine("};");
         indent.AppendLine();
+    }
+
+    private void WriteResultDecoder(IndentWriter indent, DamlType returnType, string csharpReturnType)
+    {
+        // Generate appropriate decoder based on return type
+        switch (returnType)
+        {
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
+                indent.AppendLine("ResultDecoder = _ => DamlUnit.Instance");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Bool }:
+                indent.AppendLine("ResultDecoder = val => val.As<DamlBool>().Value");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Int64 }:
+                indent.AppendLine("ResultDecoder = val => val.As<DamlInt64>().Value");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Text }:
+                indent.AppendLine("ResultDecoder = val => val.As<DamlText>().Value");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Party }:
+                indent.AppendLine("ResultDecoder = val => val.As<DamlParty>().Value");
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
+                var contractType = MapDamlTypeToCSharp(arg);
+                indent.AppendLine($"ResultDecoder = val => new ContractId<{contractType}>(val.As<DamlContractId>().Value)");
+                break;
+            case DamlTypeRef:
+                // Reference to a data type - use FromRecord
+                indent.AppendLine($"ResultDecoder = val => {csharpReturnType}.FromRecord(val.As<DamlRecord>())");
+                break;
+            default:
+                // Fallback for complex types
+                indent.AppendLine($"ResultDecoder = val => {csharpReturnType}.FromRecord(val.As<DamlRecord>())");
+                break;
+        }
     }
 
     private void WriteContractIdClass(IndentWriter indent, string className)
@@ -585,6 +706,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
         DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "string",
+        // Numeric with scale argument (Numeric n) - maps to decimal
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
             $"ContractId<{MapDamlTypeToCSharp(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
@@ -608,10 +731,15 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"new DamlDate({fieldName})",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"new DamlTimestamp({fieldName})",
         DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"new DamlParty({fieldName})",
+        // Numeric with scale argument
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
+            $"new DamlNumeric({fieldName})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } } =>
             $"{fieldName}.ToDamlValue()",
-        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } =>
-            $"{fieldName} is not null ? new DamlOptional({GetToValueConversion(((DamlTypeApp)type).Arguments[0], fieldName)}) : DamlOptional.None",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app =>
+            $"{fieldName} is not null ? new DamlOptional({GetToValueConversion(app.Arguments[0], fieldName)}) : DamlOptional.None",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app =>
+            $"new DamlList({fieldName}.Select(x => {GetToValueConversion(app.Arguments[0], "x")}))",
         _ => $"{fieldName}.ToRecord()"
     };
 
@@ -624,6 +752,20 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"(({valueName}).As<DamlDate>()).Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"(({valueName}).As<DamlTimestamp>()).Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"(({valueName}).As<DamlParty>()).Value",
+        // Numeric with scale argument
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
+            $"(({valueName}).As<DamlNumeric>()).Value",
+        // Optional type
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
+            $"(({valueName}).As<DamlOptional>()).HasValue ? {GetFromValueConversion(arg, $"({valueName}).As<DamlOptional>().Value!")} : null",
+        // List type
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
+            $"(({valueName}).As<DamlList>()).Select(x => {GetFromValueConversion(arg, "x")}).ToList()",
+        // ContractId type
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
+            $"new ContractId<{MapDamlTypeToCSharp(arg)}>((({valueName}).As<DamlContractId>()).Value)",
+        // Type reference (cross-module types)
+        DamlTypeRef typeRef => $"{SanitizeIdentifier(typeRef.Name)}.FromRecord(({valueName}).As<DamlRecord>())",
         _ => $"default! /* TODO: Implement deserialization for {type} */"
     };
 
