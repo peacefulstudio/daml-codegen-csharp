@@ -1,6 +1,7 @@
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.DarReader;
 using FluentAssertions;
+using System.IO;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
