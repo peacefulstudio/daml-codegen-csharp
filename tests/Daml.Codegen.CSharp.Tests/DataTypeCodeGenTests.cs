@@ -30,7 +30,8 @@ public class DataTypeCodeGenTests
             Name = "test-package",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [module]
+            Modules = [module],
+            DependencyReferences = []
         };
 
         return new DarArchive

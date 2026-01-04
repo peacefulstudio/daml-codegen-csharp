@@ -24,7 +24,21 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         files.AddRange(GeneratePackage(dar.MainPackage));
 
         // Optionally generate code for dependencies
-        // (usually not needed as they should have their own codegen output)
+        if (options.IncludeDependencies)
+        {
+            foreach (var dep in dar.Dependencies)
+            {
+                logger.Debug($"Generating code for dependency: {dep.Name}");
+                files.AddRange(GeneratePackage(dep));
+            }
+        }
+
+        // Generate project file if requested
+        if (options.GenerateProjectFile)
+        {
+            var projectGenerator = new ProjectFileGenerator(options);
+            files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage));
+        }
 
         return files;
     }

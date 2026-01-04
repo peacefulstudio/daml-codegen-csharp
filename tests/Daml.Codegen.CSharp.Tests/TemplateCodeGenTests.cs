@@ -30,7 +30,8 @@ public class TemplateCodeGenTests
             Name = packageName,
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [module]
+            Modules = [module],
+            DependencyReferences = []
         };
 
         return new DarArchive
@@ -780,7 +781,8 @@ public class TemplateCodeGenTests
             Name = "versioned-package",
             Version = new Version(2, 3, 4),
             LfVersion = "2.1",
-            Modules = [module]
+            Modules = [module],
+            DependencyReferences = []
         };
 
         var dar = new DarArchive

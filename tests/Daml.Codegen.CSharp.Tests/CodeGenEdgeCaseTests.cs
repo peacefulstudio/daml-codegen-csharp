@@ -34,7 +34,8 @@ public class CodeGenEdgeCaseTests
             Name = "test-package",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [module]
+            Modules = [module],
+            DependencyReferences = []
         };
 
         return new DarArchive
@@ -641,7 +642,8 @@ public class CodeGenEdgeCaseTests
             Name = "test-package",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [module1, module2]
+            Modules = [module1, module2],
+            DependencyReferences = []
         };
 
         var dar = new DarArchive

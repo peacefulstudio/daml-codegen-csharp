@@ -56,6 +56,26 @@ public sealed class CodeGenOptions
     /// Gets or sets whether to generate primary constructors.
     /// </summary>
     public bool UsePrimaryConstructors { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to generate a .csproj project file.
+    /// </summary>
+    public bool GenerateProjectFile { get; init; }
+
+    /// <summary>
+    /// Gets or sets whether to include dependency packages in code generation.
+    /// </summary>
+    public bool IncludeDependencies { get; init; }
+
+    /// <summary>
+    /// Gets or sets the target framework for the generated project (e.g., "net10.0").
+    /// </summary>
+    public string TargetFramework { get; init; } = "net10.0";
+
+    /// <summary>
+    /// Gets or sets the version of the Daml.Codegen.CSharp.Runtime package to reference.
+    /// </summary>
+    public string? RuntimePackageVersion { get; init; }
 }
 
 /// <summary>

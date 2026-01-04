@@ -434,7 +434,8 @@ public class DamlModelTests
             Name = "my-package",
             Version = new Version(1, 2, 3),
             LfVersion = "2.1",
-            Modules = modules
+            Modules = modules,
+            DependencyReferences = []
         };
 
         // Assert
@@ -496,7 +497,8 @@ public class DamlModelTests
             Name = "main",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = []
+            Modules = [],
+            DependencyReferences = []
         };
 
         var dep1 = new DamlPackage
@@ -505,7 +507,8 @@ public class DamlModelTests
             Name = "dep1",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = []
+            Modules = [],
+            DependencyReferences = []
         };
 
         var dep2 = new DamlPackage
@@ -514,7 +517,8 @@ public class DamlModelTests
             Name = "dep2",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = []
+            Modules = [],
+            DependencyReferences = []
         };
 
         // Act
@@ -542,7 +546,8 @@ public class DamlModelTests
             Name = "main",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = []
+            Modules = [],
+            DependencyReferences = []
         };
 
         // Act
