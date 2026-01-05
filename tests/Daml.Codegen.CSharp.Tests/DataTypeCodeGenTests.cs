@@ -661,8 +661,8 @@ public class DataTypeCodeGenTests
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        // Block-scoped namespace has { } braces (module dots are replaced with underscores)
-        code.Should().Contain("namespace Test.Package.Test_Module");
+        // Block-scoped namespace has { } braces (uses root namespace from package)
+        code.Should().Contain("namespace Test.Package");
         code.Should().Contain("{");
     }
 
@@ -832,8 +832,8 @@ public class DataTypeCodeGenTests
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        // Module dots are replaced with underscores in the namespace segment
-        code.Should().Contain("namespace Custom.Namespace.Test_Module;");
+        // When custom root namespace is specified, all types go into that namespace directly
+        code.Should().Contain("namespace Custom.Namespace;");
     }
 
     [Fact]

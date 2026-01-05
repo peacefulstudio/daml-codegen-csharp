@@ -93,12 +93,32 @@ public sealed class ProjectFileGenerator
 
     /// <summary>
     /// Sanitizes a Daml package name to be a valid .NET package/project name.
+    /// Converts to PascalCase and joins with dots (e.g., "cats-markets" -> "Cats.Markets").
     /// </summary>
     private static string SanitizePackageName(string name)
     {
-        // Replace hyphens with dots (common convention)
-        // Also handle any other invalid characters
-        var sanitized = name.Replace('-', '.');
+        // Split on hyphens and underscores, convert each part to PascalCase
+        var parts = name.Split('-', '_')
+            .Select(ToPascalCase)
+            .Select(SanitizeIdentifier);
+        return string.Join(".", parts);
+    }
+
+    private static string ToPascalCase(string s)
+    {
+        if (string.IsNullOrEmpty(s))
+        {
+            return s;
+        }
+
+        // Capitalize first letter
+        return char.ToUpperInvariant(s[0]) + s[1..];
+    }
+
+    private static string SanitizeIdentifier(string name)
+    {
+        // Replace invalid characters with underscores
+        var sanitized = string.Concat(name.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_'));
 
         // Ensure it doesn't start with a number
         if (sanitized.Length > 0 && char.IsDigit(sanitized[0]))

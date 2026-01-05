@@ -286,7 +286,7 @@ public class ChoiceCodeGenTests
         factoryFile.Should().NotBeNull();
         var code = factoryFile!.Content;
 
-        code.Should().Contain("Choice<Factory, CreateArgs, ContractId<Product>>");
+        code.Should().Contain("Choice<Factory, Create, ContractId<Product>>");
         code.Should().Contain("ResultDecoder = val => new ContractId<Product>(val.As<DamlContractId>().Value)");
     }
 

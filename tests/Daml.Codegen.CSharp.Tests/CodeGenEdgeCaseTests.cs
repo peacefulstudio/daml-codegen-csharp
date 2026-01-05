@@ -124,8 +124,8 @@ public class CodeGenEdgeCaseTests
         containerFile.Should().NotBeNull();
         var code = containerFile!.Content;
 
-        // Type variables are passed through
-        code.Should().Contain("a Item");
+        // Type variables are mapped to generic type parameters (a -> TA)
+        code.Should().Contain("TA Item");
     }
 
     #endregion
@@ -666,8 +666,9 @@ public class CodeGenEdgeCaseTests
         type1File.Should().NotBeNull();
         type2File.Should().NotBeNull();
 
-        type1File!.Content.Should().Contain("Module_One");
-        type2File!.Content.Should().Contain("Module_Two");
+        // All types from all modules go into the root namespace (derived from package name)
+        type1File!.Content.Should().Contain("namespace Test.Package;");
+        type2File!.Content.Should().Contain("namespace Test.Package;");
     }
 
     #endregion

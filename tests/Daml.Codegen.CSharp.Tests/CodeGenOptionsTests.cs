@@ -143,7 +143,7 @@ public class CodeGenOptionsTests
         // Assert
         var projectFile = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
         projectFile.Should().NotBeNull();
-        projectFile!.RelativePath.Should().Be("main.package.csproj");
+        projectFile!.RelativePath.Should().Be("Main.Package.csproj");
         projectFile.Content.Should().Contain("<TargetFramework>net10.0</TargetFramework>");
     }
 

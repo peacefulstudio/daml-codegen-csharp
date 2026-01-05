@@ -82,7 +82,7 @@ public class TemplateCodeGenTests
         var code = templateFile!.Content;
 
         code.Should().Contain(": ITemplate");
-        code.Should().Contain("public sealed record SimpleTemplate");
+        code.Should().Contain("public sealed partial record SimpleTemplate");
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class TemplateCodeGenTests
         tokenFile.Should().NotBeNull();
         var code = tokenFile!.Content;
 
-        code.Should().Contain("public new sealed record ContractId(string Value)");
+        code.Should().Contain("public sealed record ContractId(string Value)");
         code.Should().Contain(": ContractId<Token>(Value)");
         code.Should().Contain("IExercises<Token>");
     }
@@ -213,8 +213,8 @@ public class TemplateCodeGenTests
         holdingFile.Should().NotBeNull();
         var code = holdingFile!.Content;
 
-        code.Should().Contain("public new sealed record Contract(ContractId Id, Holding Data)");
-        code.Should().Contain(": Contract<Holding>(Id, Data)");
+        code.Should().Contain("public sealed record Contract(ContractId Id, Holding Data)");
+        code.Should().Contain(": IContract<ContractId, Holding>");
         code.Should().Contain("public static Contract FromCreatedEvent(CreatedEvent @event)");
     }
 
@@ -592,7 +592,7 @@ public class TemplateCodeGenTests
         var code = templateFile!.Content;
 
         // Should have record without primary constructor
-        code.Should().Contain("public sealed record NoConstructor : ITemplate");
+        code.Should().Contain("public sealed partial record NoConstructor : ITemplate");
         code.Should().Contain("public required string Value { get; init; }");
     }
 
@@ -649,7 +649,7 @@ public class TemplateCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        code.Should().Contain("public sealed class ClassTemplate : ITemplate");
+        code.Should().Contain("public sealed partial class ClassTemplate : ITemplate");
     }
 
     #endregion
@@ -695,7 +695,7 @@ public class TemplateCodeGenTests
         var code = emptyFile!.Content;
 
         // Should still have record declaration but without primary constructor parameters
-        code.Should().Contain("public sealed record EmptyTemplate : ITemplate");
+        code.Should().Contain("public sealed partial record EmptyTemplate : ITemplate");
         code.Should().Contain("public DamlRecord ToRecord()");
         code.Should().Contain("DamlRecord.Create(");
     }
@@ -740,8 +740,8 @@ public class TemplateCodeGenTests
 
         // Assert
         templateFile.Should().NotBeNull();
-        // Module name dots are replaced with underscores in the path
-        templateFile!.RelativePath.Should().Contain("Deeply_Nested_Module");
+        // All types go into the root namespace directory (derived from package name, not module)
+        templateFile!.RelativePath.Should().Contain("Test/Package/");
     }
 
     #endregion

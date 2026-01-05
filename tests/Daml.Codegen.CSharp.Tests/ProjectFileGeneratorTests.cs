@@ -42,7 +42,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.RelativePath.Should().Be("my.package.csproj");
+        // Package name is converted to PascalCase namespace (my-package -> My.Package)
+        file.RelativePath.Should().Be("My.Package.csproj");
     }
 
     [Fact]
@@ -211,7 +212,7 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"my.dependency\" Version=\"2.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0\" />");
     }
 
     [Fact]
@@ -264,8 +265,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.RelativePath.Should().Be("my.cool.package.name.csproj");
-        file.Content.Should().Contain("<PackageId>my.cool.package.name</PackageId>");
+        file.RelativePath.Should().Be("My.Cool.Package.Name.csproj");
+        file.Content.Should().Contain("<PackageId>My.Cool.Package.Name</PackageId>");
     }
 
     [Fact]
@@ -288,8 +289,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.RelativePath.Should().Be("_123.numeric.package.csproj");
-        file.Content.Should().Contain("<PackageId>_123.numeric.package</PackageId>");
+        file.RelativePath.Should().Be("_123.Numeric.Package.csproj");
+        file.Content.Should().Contain("<PackageId>_123.Numeric.Package</PackageId>");
     }
 
     [Fact]
@@ -320,7 +321,7 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"some.dependency\" Version=\"*\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Some.Dependency\" Version=\"*\" />");
     }
 
     [Fact]
@@ -463,8 +464,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"known.dep\" Version=\"2.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0\" />");
         file.Content.Should().Contain("<!-- Unknown dependency: unknown123456789 -->");
-        file.Content.Should().Contain("<PackageReference Include=\"another.known.dep\" Version=\"3.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0\" />");
     }
 }
