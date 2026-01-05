@@ -127,4 +127,8 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Code generation test output
 output/
+
+# Coverage reports
+coverage/
