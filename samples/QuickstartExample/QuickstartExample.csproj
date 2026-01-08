@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <Description>Example showing how to use generated Daml C# code</Description>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
