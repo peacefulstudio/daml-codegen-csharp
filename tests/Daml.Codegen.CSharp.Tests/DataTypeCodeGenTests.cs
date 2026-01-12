@@ -948,6 +948,52 @@ public class DataTypeCodeGenTests
         code.Should().Contain("KebabCaseField");
     }
 
+    [Fact]
+    public void Generate_should_handle_tuple_field_names()
+    {
+        // Arrange - tuple fields in Daml are named _1, _2, etc.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "TupleType",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("_1", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlField("_2", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlField("_3", new DamlPrimitiveType(DamlPrimitive.Bool))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var tupleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("TupleType.cs", StringComparison.Ordinal));
+
+        // Assert
+        tupleFile.Should().NotBeNull();
+        var code = tupleFile!.Content;
+
+        // Tuple fields _1, _2, _3 should become valid C# identifiers _1, _2, _3
+        code.Should().Contain("string _1");
+        code.Should().Contain("long _2");
+        code.Should().Contain("bool _3");
+
+        // The ToRecord should reference the original field names
+        code.Should().Contain("DamlField.Create(\"_1\"");
+        code.Should().Contain("DamlField.Create(\"_2\"");
+        code.Should().Contain("DamlField.Create(\"_3\"");
+    }
+
     #endregion
 
     #region Template Filtering Tests

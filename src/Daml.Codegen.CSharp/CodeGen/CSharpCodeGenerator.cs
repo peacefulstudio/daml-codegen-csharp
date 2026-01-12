@@ -1319,7 +1319,16 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             }
         }
 
-        return sb.ToString();
+        var result = sb.ToString();
+
+        // If the result starts with a digit (e.g., from "_1" becoming "1"),
+        // prefix with underscore to make it a valid identifier
+        if (result.Length > 0 && char.IsDigit(result[0]))
+        {
+            return "_" + result;
+        }
+
+        return result;
     }
 
     [GeneratedRegex("[^a-zA-Z0-9_]")]
