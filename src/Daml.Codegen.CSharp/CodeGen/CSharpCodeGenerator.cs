@@ -185,6 +185,21 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 yield return new GeneratedFile(path, code);
             }
         }
+
+        // Generate ContractIdentifiers helper class if enabled
+        if (options.GenerateContractIdentifiers)
+        {
+            var allTemplates = package.Modules
+                .SelectMany(m => m.Templates.Select(t => (Module: m, Template: t)))
+                .Where(x => _rootFilter is null || _rootFilter.IsMatch($"{x.Module.Name}:{x.Template.Name}"))
+                .ToList();
+
+            if (allTemplates.Count > 0)
+            {
+                var identifiersFile = GenerateContractIdentifiersFile(package, allTemplates, rootNamespace);
+                yield return identifiersFile;
+            }
+        }
     }
 
     /// <summary>
@@ -439,6 +454,91 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Generates the ContractIdentifiers helper class with fully qualified identifiers for all templates.
+    /// </summary>
+    private GeneratedFile GenerateContractIdentifiersFile(
+        DamlPackage package,
+        IReadOnlyList<(DamlModule Module, DamlTemplate Template)> templates,
+        string moduleNamespace)
+    {
+        var sb = new StringBuilder();
+        var indent = new IndentWriter(sb);
+
+        // File header
+        WriteFileHeader(indent);
+
+        // Usings - include static import for TemplateExtensions.GetTemplateId
+        indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Contracts;");
+        indent.AppendLine("using static Daml.Codegen.CSharp.Runtime.Contracts.TemplateExtensions;");
+        indent.AppendLine();
+
+        // Namespace
+        if (options.UseFileScopedNamespaces)
+        {
+            indent.AppendLine($"namespace {moduleNamespace};");
+            indent.AppendLine();
+        }
+        else
+        {
+            indent.AppendLine($"namespace {moduleNamespace}");
+            indent.AppendLine("{");
+            indent.Indent();
+        }
+
+        // Class documentation
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine("/// Provides fully qualified contract identifiers for all templates in this package.");
+            indent.AppendLine("/// These identifiers can be used for PQS queries.");
+            indent.AppendLine("/// </summary>");
+        }
+
+        indent.AppendLine("public static class ContractIdentifiers");
+        indent.AppendLine("{");
+        indent.Indent();
+
+        // Generate a property for each template
+        for (int i = 0; i < templates.Count; i++)
+        {
+            var (module, template) = templates[i];
+            var templateClassName = SanitizeIdentifier(template.Name);
+
+            if (options.GenerateXmlDocs)
+            {
+                indent.AppendLine("/// <summary>");
+                indent.AppendLine($"/// Gets the fully qualified template identifier for {template.Name} contracts.");
+                indent.AppendLine($"/// Format: {{packageId}}:{module.Name}:{template.Name}");
+                indent.AppendLine("/// </summary>");
+            }
+
+            indent.AppendLine($"public static string {templateClassName} {{ get; }} = GetTemplateId<{templateClassName}>();");
+
+            // Add blank line between properties, but not after the last one
+            if (i < templates.Count - 1)
+            {
+                indent.AppendLine();
+            }
+        }
+
+        indent.Dedent();
+        indent.AppendLine("}");
+
+        if (!options.UseFileScopedNamespaces)
+        {
+            indent.Dedent();
+            indent.AppendLine("}");
+        }
+
+        // Place the file one level above the package folder (beside it, not inside)
+        var namespacePath = moduleNamespace.Replace(".", Path.DirectorySeparatorChar.ToString());
+        var parentPath = Path.GetDirectoryName(namespacePath) ?? string.Empty;
+        var path = Path.Combine(parentPath, "ContractIdentifiers.cs");
+
+        return new GeneratedFile(path, sb.ToString());
     }
 
     /// <summary>

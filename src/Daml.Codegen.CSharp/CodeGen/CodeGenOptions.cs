@@ -76,6 +76,11 @@ public sealed class CodeGenOptions
     /// Gets or sets the version of the Daml.Codegen.CSharp.Runtime package to reference.
     /// </summary>
     public string? RuntimePackageVersion { get; init; }
+
+    /// <summary>
+    /// Gets or sets whether to generate a ContractIdentifiers helper class.
+    /// </summary>
+    public bool GenerateContractIdentifiers { get; init; } = true;
 }
 
 /// <summary>
