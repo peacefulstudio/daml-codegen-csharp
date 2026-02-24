@@ -511,7 +511,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             {
                 indent.AppendLine("/// <summary>");
                 indent.AppendLine($"/// Gets the fully qualified template identifier for {template.Name} contracts.");
-                indent.AppendLine($"/// Format: {{packageId}}:{module.Name}:{template.Name}");
+                indent.AppendLine($"/// Format: {{packageName}}:{module.Name}:{template.Name}");
                 indent.AppendLine("/// </summary>");
             }
 
