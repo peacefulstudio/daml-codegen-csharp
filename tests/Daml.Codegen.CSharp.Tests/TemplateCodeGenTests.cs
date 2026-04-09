@@ -275,7 +275,7 @@ public class TemplateCodeGenTests
         code.Should().Contain("long IntField");
         code.Should().Contain("bool BoolField");
         code.Should().Contain("decimal NumericField");
-        code.Should().Contain("string PartyField");
+        code.Should().Contain("Party PartyField");
         code.Should().Contain("DateOnly DateField");
         code.Should().Contain("DateTimeOffset TimestampField");
     }
@@ -531,7 +531,7 @@ public class TemplateCodeGenTests
         optionalFile.Should().NotBeNull();
         var code = optionalFile!.Content;
 
-        code.Should().Contain("MaybeText is not null ? new DamlOptional(new DamlText(MaybeText)) : DamlOptional.None");
+        code.Should().Contain("MaybeText is { } __MaybeText ? new DamlOptional(new DamlText(__MaybeText)) : DamlOptional.None");
     }
 
     #endregion

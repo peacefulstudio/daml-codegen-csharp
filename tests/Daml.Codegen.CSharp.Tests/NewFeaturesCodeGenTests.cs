@@ -149,9 +149,9 @@ public class NewFeaturesCodeGenTests
         profileFile.Should().NotBeNull();
         var code = profileFile!.Content;
 
-        // Party maps to string, so key should be string
-        code.Should().Contain("IHasKey<string>");
-        code.Should().Contain("public string Key =>");
+        // Party maps to Party, so key should be Party
+        code.Should().Contain("IHasKey<Party>");
+        code.Should().Contain("public Party Key =>");
     }
 
     [Fact]
@@ -1101,7 +1101,7 @@ public class NewFeaturesCodeGenTests
         // Template should exist with key and upgrade support
         var assetFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         assetFile.Should().NotBeNull();
-        assetFile!.Content.Should().Contain("IHasKey<string>");
+        assetFile!.Content.Should().Contain("IHasKey<Party>");
         assetFile.Content.Should().Contain("IUpgradeable");
 
         // Generic data type should exist

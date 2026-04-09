@@ -195,9 +195,9 @@ public class DataTypeCodeGenTests
         ownershipFile.Should().NotBeNull();
         var code = ownershipFile!.Content;
 
-        // Party maps to string
-        code.Should().Contain("string Owner");
-        code.Should().Contain("string Receiver");
+        // Party maps to Party
+        code.Should().Contain("Party Owner");
+        code.Should().Contain("Party Receiver");
     }
 
     [Fact]

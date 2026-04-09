@@ -28,8 +28,8 @@ namespace QuickstartExample;
 /// Generated from Daml template Main:Iou
 /// </summary>
 public sealed record Iou(
-    string Issuer,
-    string Owner,
+    Party Issuer,
+    Party Owner,
     string Currency,
     decimal Amount) : ITemplate
 {
@@ -49,8 +49,8 @@ public sealed record Iou(
     public DamlRecord ToRecord()
     {
         return DamlRecord.Create(
-            DamlField.Create("issuer", new DamlParty(Issuer)),
-            DamlField.Create("owner", new DamlParty(Owner)),
+            DamlField.Create("issuer", Issuer.ToDamlValue()),
+            DamlField.Create("owner", Owner.ToDamlValue()),
             DamlField.Create("currency", new DamlText(Currency)),
             DamlField.Create("amount", new DamlNumeric(Amount))
         );
@@ -60,18 +60,18 @@ public sealed record Iou(
     public static Iou FromRecord(DamlRecord record)
     {
         return new Iou(
-            Issuer: record.GetRequiredField("issuer").As<DamlParty>().Value,
-            Owner: record.GetRequiredField("owner").As<DamlParty>().Value,
+            Issuer: Party.FromDamlValue(record.GetRequiredField("issuer").As<DamlParty>()),
+            Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
             Currency: record.GetRequiredField("currency").As<DamlText>().Value,
             Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value
         );
     }
 
     /// <summary>Arguments for the Transfer choice.</summary>
-    public sealed record TransferArgument(string NewOwner)
+    public sealed record TransferArgument(Party NewOwner)
     {
         public DamlValue ToValue() => DamlRecord.Create(
-            DamlField.Create("newOwner", new DamlParty(NewOwner))
+            DamlField.Create("newOwner", NewOwner.ToDamlValue())
         );
     }
 
@@ -85,7 +85,7 @@ public sealed record Iou(
             ExerciseCommand.For(this, "Transfer", arg.ToValue());
 
         /// <summary>Exercise the Transfer choice.</summary>
-        public ExerciseCommand ExerciseTransfer(string newOwner) =>
+        public ExerciseCommand ExerciseTransfer(Party newOwner) =>
             ExerciseTransfer(new TransferArgument(newOwner));
     }
 
@@ -110,8 +110,8 @@ class Program
         // Example 1: Create an Iou contract
         Console.WriteLine("1. Creating an Iou contract:");
         var iou = new Iou(
-            Issuer: "Alice",
-            Owner: "Bob",
+            Issuer: new Party("Alice"),
+            Owner: new Party("Bob"),
             Currency: "USD",
             Amount: 1000.00m
         );
@@ -144,7 +144,7 @@ class Program
         // Example 5: Create an ExerciseCommand (Transfer)
         Console.WriteLine("5. Building an ExerciseCommand (Transfer):");
         var contractId = new Iou.IouContractId("00abc123");
-        var exerciseCmd = contractId.ExerciseTransfer(newOwner: "Charlie");
+        var exerciseCmd = contractId.ExerciseTransfer(newOwner: new Party("Charlie"));
         Console.WriteLine($"   Contract: {exerciseCmd.ContractId}");
         Console.WriteLine($"   Choice: {exerciseCmd.Choice}");
         Console.WriteLine($"   Type: {exerciseCmd.CommandType}\n");
@@ -152,7 +152,7 @@ class Program
         // Example 6: Build a command submission
         Console.WriteLine("6. Building a command submission:");
         var submission = CommandsSubmission.Single(createCmd)
-            .WithActAs("Alice")
+            .WithActAs(new Party("Alice"))
             .WithWorkflowId("iou-issuance")
             .WithCommandId(Guid.NewGuid().ToString());
         Console.WriteLine($"   Commands: {submission.Commands.Count}");

@@ -1039,7 +1039,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 indent.AppendLine("ResultDecoder = val => val.As<DamlText>().Value");
                 break;
             case DamlPrimitiveType { Primitive: DamlPrimitive.Party }:
-                indent.AppendLine("ResultDecoder = val => val.As<DamlParty>().Value");
+                indent.AppendLine("ResultDecoder = val => Party.FromDamlValue(val.As<DamlParty>())");
                 break;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
                 var contractType = MapDamlTypeToCSharp(arg);
@@ -1277,7 +1277,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => "string",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "string",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "Party",
         // Numeric with scale argument (Numeric n) - maps to decimal
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
@@ -1302,14 +1302,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"new DamlText({fieldName})",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"new DamlDate({fieldName})",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"new DamlTimestamp({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"new DamlParty({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{fieldName}.ToDamlValue()",
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"new DamlNumeric({fieldName})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } } =>
             $"{fieldName}.ToDamlValue()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app =>
-            $"{fieldName} is not null ? new DamlOptional({GetToValueConversion(app.Arguments[0], fieldName)}) : DamlOptional.None",
+            $"{fieldName} is {{ }} __{fieldName} ? new DamlOptional({GetToValueConversion(app.Arguments[0], $"__{fieldName}")}) : DamlOptional.None",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app =>
             $"new DamlList({fieldName}.Select(x => {GetToValueConversion(app.Arguments[0], "x")}))",
         _ => $"{fieldName}.ToRecord()"
@@ -1323,7 +1323,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"(({valueName}).As<DamlText>()).Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"(({valueName}).As<DamlDate>()).Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"(({valueName}).As<DamlTimestamp>()).Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"(({valueName}).As<DamlParty>()).Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"Party.FromDamlValue(({valueName}).As<DamlParty>())",
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"(({valueName}).As<DamlNumeric>()).Value",

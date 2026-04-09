@@ -231,8 +231,8 @@ public class CodeGenEdgeCaseTests
         contractFile.Should().NotBeNull();
         var code = contractFile!.Content;
 
-        code.Should().Contain("Choice<Contract, DamlUnit, string> ChoiceGetOwner");
-        code.Should().Contain("ResultDecoder = val => val.As<DamlParty>().Value");
+        code.Should().Contain("Choice<Contract, DamlUnit, Party> ChoiceGetOwner");
+        code.Should().Contain("ResultDecoder = val => Party.FromDamlValue(val.As<DamlParty>())");
     }
 
     [Fact]
@@ -337,7 +337,7 @@ public class CodeGenEdgeCaseTests
         var code = assetFile!.Content;
 
         // Should have fields from the data type
-        code.Should().Contain("string Owner");
+        code.Should().Contain("Party Owner");
         code.Should().Contain("decimal Value");
     }
 
