@@ -73,7 +73,7 @@ public sealed class CodeGenOptions
     public string TargetFramework { get; init; } = "net10.0";
 
     /// <summary>
-    /// Gets or sets the version of the Daml.Codegen.CSharp.Runtime package to reference.
+    /// Gets or sets the version of the Daml.Runtime package to reference.
     /// </summary>
     public string? RuntimePackageVersion { get; init; }
 

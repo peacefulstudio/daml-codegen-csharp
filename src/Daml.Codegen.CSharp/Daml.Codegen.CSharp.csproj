@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Daml.Codegen.CSharp.Runtime\Daml.Codegen.CSharp.Runtime.csproj" />
+    <ProjectReference Include="..\Daml.Runtime\Daml.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>

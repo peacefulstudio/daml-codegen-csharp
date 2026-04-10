@@ -471,8 +471,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         WriteFileHeader(indent);
 
         // Usings - include static import for TemplateExtensions.GetTemplateId
-        indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Contracts;");
-        indent.AppendLine("using static Daml.Codegen.CSharp.Runtime.Contracts.TemplateExtensions;");
+        indent.AppendLine("using Daml.Runtime.Contracts;");
+        indent.AppendLine("using static Daml.Runtime.Contracts.TemplateExtensions;");
         indent.AppendLine();
 
         // Namespace
@@ -690,13 +690,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteUsings(IndentWriter indent)
     {
-        indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Commands;");
-        indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Contracts;");
-        indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Data;");
+        indent.AppendLine("using Daml.Runtime.Commands;");
+        indent.AppendLine("using Daml.Runtime.Contracts;");
+        indent.AppendLine("using Daml.Runtime.Data;");
 
         if (options.GenerateJsonSupport)
         {
-            indent.AppendLine("using Daml.Codegen.CSharp.Runtime.Serialization;");
+            indent.AppendLine("using Daml.Runtime.Serialization;");
         }
 
         indent.AppendLine();

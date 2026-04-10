@@ -243,7 +243,7 @@ public class ContractIdentifiersTests
         var code = identifiersFile!.Content;
 
         // Should use static import from TemplateExtensions
-        code.Should().Contain("using static Daml.Codegen.CSharp.Runtime.Contracts.TemplateExtensions;");
+        code.Should().Contain("using static Daml.Runtime.Contracts.TemplateExtensions;");
         code.Should().Contain("GetTemplateId<MyTemplate>()");
         // Should NOT contain the private helper method anymore
         code.Should().NotContain("private static string GetTemplateId<T>()");
@@ -353,8 +353,8 @@ public class ContractIdentifiersTests
         identifiersFile.Should().NotBeNull();
         var code = identifiersFile!.Content;
 
-        code.Should().Contain("using Daml.Codegen.CSharp.Runtime.Contracts;");
-        code.Should().Contain("using static Daml.Codegen.CSharp.Runtime.Contracts.TemplateExtensions;");
+        code.Should().Contain("using Daml.Runtime.Contracts;");
+        code.Should().Contain("using static Daml.Runtime.Contracts.TemplateExtensions;");
     }
 
     [Fact]

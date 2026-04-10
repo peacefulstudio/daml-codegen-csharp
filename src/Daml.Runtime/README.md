@@ -1,0 +1,90 @@
+# Daml.Runtime
+
+Runtime library for Daml C# code generation. This package provides the base types and serialization support required by C# code generated from Daml templates.
+
+## Installation
+
+```bash
+dotnet add package Daml.Runtime
+```
+
+## Usage
+
+This package is automatically referenced by code generated using the `daml-codegen-csharp` tool. You typically don't need to use it directly unless you're:
+
+1. Building custom serialization logic
+2. Working with the Ledger API directly
+3. Creating utility libraries for Daml contracts
+
+### Working with Generated Types
+
+Generated template classes implement `ITemplate` and provide:
+
+- Strongly-typed contract creation
+- Choice exercise methods
+- JSON serialization/deserialization
+- Contract ID types
+
+```csharp
+using Daml.Runtime.Commands;
+using YourPackage.Templates;
+
+// Create a contract
+var iou = new Iou(
+    Issuer: "Alice",
+    Owner: "Bob",
+    Currency: "USD",
+    Amount: 100.00m
+);
+
+// Build a create command
+var createCmd = CreateCommand.For(iou);
+
+// Exercise a choice
+var exerciseCmd = ExerciseCommand.For(
+    contractId,
+    "Transfer",
+    new Transfer.Argument(NewOwner: "Charlie")
+);
+```
+
+### Manual Serialization
+
+If you need to work with Daml values directly:
+
+```csharp
+using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
+
+// Create a record manually
+var record = DamlRecord.Create(
+    DamlField.Create("name", new DamlText("Alice")),
+    DamlField.Create("amount", new DamlNumeric(42.5m))
+);
+
+// Serialize to JSON
+string json = DamlJsonSerializer.Serialize(record);
+
+// Deserialize from JSON
+var parsed = DamlJsonSerializer.DeserializeRecord(json);
+```
+
+## Type Mappings
+
+| Daml Type | C# Type |
+|-----------|---------|
+| `Int` | `DamlInt64` / `long` |
+| `Numeric` | `DamlNumeric` / `decimal` |
+| `Text` | `DamlText` / `string` |
+| `Bool` | `DamlBool` / `bool` |
+| `Party` | `DamlParty` |
+| `Date` | `DamlDate` / `DateOnly` |
+| `Time` | `DamlTimestamp` / `DateTimeOffset` |
+| `ContractId T` | `ContractId<T>` |
+| `Optional a` | `DamlOptional` |
+| `List a` | `DamlList` |
+| `TextMap a` | `DamlTextMap` |
+
+## License
+
+Apache-2.0

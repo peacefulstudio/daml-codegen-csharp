@@ -54,7 +54,7 @@ public sealed class ProjectFileGenerator
 
         // Runtime package reference
         var runtimeVersion = _options.RuntimePackageVersion ?? "*";
-        sb.AppendLine($"    <PackageReference Include=\"Daml.Codegen.CSharp.Runtime\" Version=\"{runtimeVersion}\" />");
+        sb.AppendLine($"    <PackageReference Include=\"Daml.Runtime\" Version=\"{runtimeVersion}\" />");
 
         sb.AppendLine("  </ItemGroup>");
 

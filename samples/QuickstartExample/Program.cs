@@ -1,10 +1,10 @@
 // Example demonstrating how generated Daml C# code would be used.
 // This shows what the codegen produces and how to interact with contracts.
 
-using Daml.Codegen.CSharp.Runtime.Commands;
-using Daml.Codegen.CSharp.Runtime.Contracts;
-using Daml.Codegen.CSharp.Runtime.Data;
-using Daml.Codegen.CSharp.Runtime.Serialization;
+using Daml.Runtime.Commands;
+using Daml.Runtime.Contracts;
+using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 
 namespace QuickstartExample;
 

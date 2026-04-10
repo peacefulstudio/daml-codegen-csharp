@@ -735,7 +735,7 @@ public class DataTypeCodeGenTests
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        code.Should().Contain("using Daml.Codegen.CSharp.Runtime.Serialization;");
+        code.Should().Contain("using Daml.Runtime.Serialization;");
     }
 
     [Fact]
@@ -781,7 +781,7 @@ public class DataTypeCodeGenTests
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        code.Should().NotContain("using Daml.Codegen.CSharp.Runtime.Serialization;");
+        code.Should().NotContain("using Daml.Runtime.Serialization;");
     }
 
     #endregion

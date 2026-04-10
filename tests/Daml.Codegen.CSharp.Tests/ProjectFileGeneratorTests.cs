@@ -158,7 +158,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Daml.Codegen.CSharp.Runtime\" Version=\"1.2.3\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Daml.Runtime\" Version=\"1.2.3\" />");
+        file.Content.Should().NotContain("Daml.Codegen.CSharp.Runtime");
     }
 
     [Fact]
@@ -181,7 +182,7 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Daml.Codegen.CSharp.Runtime\" Version=\"*\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Daml.Runtime\" Version=\"*\" />");
     }
 
     [Fact]
