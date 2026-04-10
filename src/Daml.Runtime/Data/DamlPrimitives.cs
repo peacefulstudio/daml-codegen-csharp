@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Daml.Runtime.Data;
 
 /// <summary>
@@ -93,6 +96,7 @@ public sealed record DamlTimestamp(DateTimeOffset Value) : DamlValue
 /// Represents a first-class Daml Party identifier.
 /// Implicit conversion to string (for logging/interpolation), explicit from string.
 /// </summary>
+[JsonConverter(typeof(PartyJsonConverter))]
 public readonly record struct Party
 {
     private readonly string? _id;
@@ -120,6 +124,56 @@ public readonly record struct Party
     {
         ArgumentNullException.ThrowIfNull(value);
         return new(value.Value ?? throw new InvalidOperationException("Cannot create Party from DamlParty with null Value."));
+    }
+}
+
+/// <summary>
+/// System.Text.Json converter for <see cref="Party"/>. Serializes as a plain JSON string
+/// so Party round-trips through JSON payloads produced by PQS and the JSON Ledger API,
+/// which encode parties as raw strings (e.g. "Alice::1220abcd...").
+/// </summary>
+internal sealed class PartyJsonConverter : JsonConverter<Party>
+{
+    // HandleNull=true so a bare `null` on a non-nullable Party field surfaces as a
+    // JsonException here instead of silently producing a default(Party) that later
+    // throws InvalidOperationException on .Id access. Party? is unaffected — STJ
+    // short-circuits null for Nullable<T> before invoking the converter.
+    public override bool HandleNull => true;
+
+    public override Party Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.String)
+        {
+            throw new JsonException($"Expected string token for Party, got {reader.TokenType}.");
+        }
+
+        // Translate the ArgumentException Party's constructor would throw into a
+        // JsonException, so callers catching serialization errors see the right type.
+        var id = reader.GetString()!;
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new JsonException("Party id cannot be null or whitespace.");
+        }
+
+        return new Party(id);
+    }
+
+    public override void Write(Utf8JsonWriter writer, Party value, JsonSerializerOptions options)
+    {
+        // Mirror Read: translate the InvalidOperationException that Party.Id throws
+        // for default(Party) into a JsonException so callers can catch both directions
+        // of the round-trip uniformly.
+        string id;
+        try
+        {
+            id = value.Id;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new JsonException("Cannot serialize an uninitialized Party.", ex);
+        }
+
+        writer.WriteStringValue(id);
     }
 }
 
