@@ -1,0 +1,102 @@
+using System.Diagnostics.CodeAnalysis;
+using Daml.Runtime.Contracts;
+
+namespace Daml.Runtime.Data;
+
+/// <summary>
+/// Helpers for unwrapping <see cref="DamlValue"/> instances into CLR types.
+/// </summary>
+public static class DamlValueExtensions
+{
+    /// <summary>
+    /// Converts a <see cref="DamlValue"/> to a CLR type. Can be invoked either as an extension
+    /// method (<c>value.FromDamlValue&lt;T&gt;()</c>) or as a static call
+    /// (<c>DamlValueExtensions.FromDamlValue&lt;T&gt;(value)</c>).
+    /// </summary>
+    /// <remarks>
+    /// Resolution order:
+    /// <list type="number">
+    /// <item>If <typeparamref name="TResult"/> is assignable from <paramref name="value"/>'s runtime type,
+    /// the original instance is returned. This takes precedence over every other branch, so
+    /// <c>FromDamlValue&lt;object&gt;(DamlUnit.Instance)</c> returns the unit singleton, not <c>null</c>.</item>
+    /// <item>If <paramref name="value"/> is <see cref="DamlUnit"/>: returns <c>default(TResult)</c>
+    /// — which is <c>null</c> for reference types and <see cref="Nullable{T}"/>. Throws
+    /// <see cref="NotSupportedException"/> for non-nullable value types.</item>
+    /// <item>Primitive unwrapping: <c>string</c> (from <see cref="DamlText"/>, <see cref="DamlParty"/>,
+    /// or <see cref="DamlContractId"/>), <c>long</c>, <c>bool</c>, <c>decimal</c>, <c>DateOnly</c>,
+    /// <c>DateTimeOffset</c>, and <see cref="Party"/>. Each primitive branch also accepts
+    /// <see cref="Nullable{T}"/> of the same underlying type.</item>
+    /// <item><see cref="DamlContractId"/> → <see cref="ContractId{T}"/> via reflection.</item>
+    /// </list>
+    /// Any other combination throws <see cref="NotSupportedException"/>.
+    /// </remarks>
+    [return: MaybeNull]
+    public static TResult FromDamlValue<TResult>(this DamlValue value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        // Assignable check runs first so that FromDamlValue<DamlUnit>(DamlUnit.Instance)
+        // and FromDamlValue<DamlValue>(DamlUnit.Instance) return the instance rather than default.
+        if (typeof(TResult).IsAssignableFrom(value.GetType()))
+            return (TResult)(object)value;
+
+        // Treat Nullable<T> the same as T for the primitive-unwrapping branches.
+        // Unboxing a boxed T to Nullable<T> is a well-defined CLR conversion.
+        var targetType = Nullable.GetUnderlyingType(typeof(TResult)) ?? typeof(TResult);
+
+        if (value is DamlUnit)
+        {
+            // Nullable<T> is a struct but can represent null, so default(T?) is a valid "no value".
+            if (typeof(TResult).IsValueType && Nullable.GetUnderlyingType(typeof(TResult)) is null)
+                throw new NotSupportedException(
+                    $"Cannot convert DamlUnit to value type {typeof(TResult)}. " +
+                    $"Unit represents 'no value' and has no meaningful conversion to {typeof(TResult)}.");
+            return default!;
+        }
+
+        if (targetType == typeof(string))
+        {
+            return value switch
+            {
+                DamlText text => (TResult)(object)text.Value,
+                DamlParty party => (TResult)(object)party.Value,
+                DamlContractId contractId => (TResult)(object)contractId.Value,
+                _ => throw new NotSupportedException(
+                    $"Cannot convert {value.GetType()} to string. " +
+                    $"Only DamlText, DamlParty, and DamlContractId can be unwrapped to string.")
+            };
+        }
+
+        if (targetType == typeof(long) && value is DamlInt64 i64)
+            return (TResult)(object)i64.Value;
+
+        if (targetType == typeof(bool) && value is DamlBool b)
+            return (TResult)(object)b.Value;
+
+        if (targetType == typeof(decimal) && value is DamlNumeric n)
+            return (TResult)(object)n.Value;
+
+        if (targetType == typeof(DateOnly) && value is DamlDate d)
+            return (TResult)(object)d.Value;
+
+        if (targetType == typeof(DateTimeOffset) && value is DamlTimestamp ts)
+            return (TResult)(object)ts.Value;
+
+        if (targetType == typeof(Party) && value is DamlParty p)
+            return (TResult)(object)Party.FromDamlValue(p);
+
+        if (value is DamlContractId cid && targetType.IsGenericType
+            && targetType.GetGenericTypeDefinition() == typeof(ContractId<>))
+        {
+            var instance = Activator.CreateInstance(targetType, cid.Value)
+                ?? throw new InvalidOperationException(
+                    $"Failed to create {targetType} from contract ID '{cid.Value}'. " +
+                    $"Ensure {targetType} has a public constructor accepting a string.");
+            return (TResult)instance;
+        }
+
+        throw new NotSupportedException(
+            $"Cannot convert {value.GetType()} to {typeof(TResult)}. " +
+            $"Use a DamlValue-derived type as TResult for direct access.");
+    }
+}
