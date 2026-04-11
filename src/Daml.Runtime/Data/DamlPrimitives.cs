@@ -147,15 +147,22 @@ internal sealed class PartyJsonConverter : JsonConverter<Party>
             throw new JsonException($"Expected string token for Party, got {reader.TokenType}.");
         }
 
-        // Translate the ArgumentException Party's constructor would throw into a
-        // JsonException, so callers catching serialization errors see the right type.
         var id = reader.GetString()!;
         if (string.IsNullOrWhiteSpace(id))
         {
             throw new JsonException("Party id cannot be null or whitespace.");
         }
 
-        return new Party(id);
+        // Translate any ArgumentException the constructor might grow in the future
+        // into a JsonException, so callers catching serialization errors see the right type.
+        try
+        {
+            return new Party(id);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new JsonException($"Invalid Party id '{id}'.", ex);
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, Party value, JsonSerializerOptions options)

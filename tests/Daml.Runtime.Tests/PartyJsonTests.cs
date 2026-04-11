@@ -99,7 +99,20 @@ public class PartyJsonTests
     }
 
     [Fact]
-    public void Nullable_Party_should_deserialize_null_as_null()
+    public void Party_should_throw_JsonException_when_non_nullable_field_receives_null()
+    {
+        // The actual PQS failure mode we're defending against: a payload where a
+        // required Party field comes back as JSON null. Must fail loudly, not
+        // silently produce default(Party).
+        var json = "{\"operator\":null,\"marketId\":\"BTC-USD\"}";
+
+        var act = () => JsonSerializer.Deserialize<TemplatePayload>(json, CaseInsensitiveOptions);
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Party_should_deserialize_null_inside_nullable_wrapper()
     {
         var json = "{\"delegate\":null,\"note\":\"none\"}";
 
@@ -111,7 +124,7 @@ public class PartyJsonTests
     }
 
     [Fact]
-    public void Nullable_Party_should_deserialize_string_as_party()
+    public void Party_should_deserialize_string_inside_nullable_wrapper()
     {
         var json = "{\"delegate\":\"Alice::122012ab\",\"note\":\"set\"}";
 
@@ -120,5 +133,25 @@ public class PartyJsonTests
         payload.Should().NotBeNull();
         payload!.Delegate.Should().NotBeNull();
         payload!.Delegate!.Value.Id.Should().Be("Alice::122012ab");
+    }
+
+    [Fact]
+    public void Party_should_serialize_null_inside_nullable_wrapper()
+    {
+        // Locks in STJ's Nullable<T> short-circuit: when the field value is null,
+        // STJ writes `null` directly without invoking PartyJsonConverter.Write,
+        // so a default(Party) inside Party? never leaks through as a JsonException.
+        var payload = new OptionalPartyPayload(Delegate: null, Note: "none");
+
+        var json = JsonSerializer.Serialize(payload);
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        root.ValueKind.Should().Be(JsonValueKind.Object);
+        root.TryGetProperty("Delegate", out var @delegate).Should().BeTrue();
+        @delegate.ValueKind.Should().Be(JsonValueKind.Null);
+        root.TryGetProperty("Note", out var note).Should().BeTrue();
+        note.GetString().Should().Be("none");
     }
 }
