@@ -132,6 +132,7 @@ output/
 
 # Coverage reports
 coverage/
+CodeCoverage/
 
 # MSBuild package bundled tools
 src/Daml.Codegen.CSharp.MSBuild/tools/
