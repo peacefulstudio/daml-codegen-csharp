@@ -12,7 +12,21 @@ because they are versioned in lockstep:
 - `Daml.Runtime` — runtime types referenced by generated code
 - `Daml.Codegen.CSharp.MSBuild` — MSBuild integration
 
-## [Unreleased] — 0.1.2
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.2] — 2026-04-24
 
 ### Changed — BREAKING
 
@@ -57,3 +71,7 @@ Historical pre-release dev builds (`0.1.0-*`, `0.1.1-*`) were published to
 the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
+
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.0-alpha.3...v0.1.2
+[0.1.0]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.0-alpha.3
