@@ -8,7 +8,7 @@
     <PackageVersion Include="Grpc.Tools" Version="2.80.0" />
     <!-- CLI tooling -->
     <PackageVersion Include="System.CommandLine" Version="2.0.7" />
-    <PackageVersion Include="Spectre.Console" Version="0.55.0" />
+    <PackageVersion Include="Spectre.Console" Version="0.55.2" />
     <!-- Code generation -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
   </ItemGroup>
