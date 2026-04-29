@@ -30,6 +30,33 @@ public class ContractTypesTests
                 record.GetRequiredField("amount").As<DamlInt64>().Value);
     }
 
+    // Hand-rolled stand-in for a codegen-emitted Daml interface placeholder. Daml-LF
+    // emits one of these for every `interface I where ...` declaration; the codegen
+    // surfaces them as `: ITemplate` with throwing static metadata so that
+    // `ContractId<I>` satisfies the runtime's `where T : ITemplate` constraint while
+    // refusing to pretend an interface has template identity. The shape mirrors what
+    // CSharpCodeGenerator.WriteInterfacePlaceholderRecord produces.
+    private const string PlaceholderThrowMessage =
+        "'TestInterfacePlaceholder' is the C# placeholder for the Daml interface "
+        + "'Test.Module:TestInterfacePlaceholder' and carries no template metadata. "
+        + "Coerce ContractId<TestInterfacePlaceholder> to a typed ContractId<TConcrete> "
+        + "before reading template metadata or exercising commands.";
+
+    private sealed record TestInterfacePlaceholder : ITemplate
+    {
+        public static Identifier TemplateId =>
+            throw new InvalidOperationException(PlaceholderThrowMessage);
+        public static string PackageId =>
+            throw new InvalidOperationException(PlaceholderThrowMessage);
+        public static string PackageName =>
+            throw new InvalidOperationException(PlaceholderThrowMessage);
+        public static Version PackageVersion =>
+            throw new InvalidOperationException(PlaceholderThrowMessage);
+
+        public DamlRecord ToRecord() => DamlRecord.Create();
+        public static TestInterfacePlaceholder FromRecord(DamlRecord record) => new();
+    }
+
     #region ContractId<T> Tests
 
     [Fact]
@@ -103,6 +130,107 @@ public class ContractTypesTests
         // Assert
         id1.Should().Be(id2);
         id1.Should().NotBe(id3);
+    }
+
+    #endregion
+
+    #region Interface Placeholder Tests
+
+    // These tests pin down the contract for codegen-emitted Daml interface placeholders.
+    // The shape of TestInterfacePlaceholder above mirrors what CSharpCodeGenerator emits
+    // for a record whose name matches an interface in the same module — see
+    // WriteInterfacePlaceholderRecord. The expectation is: it satisfies ITemplate well
+    // enough to flow through ContractId<T>, but every metadata accessor throws.
+
+    [Fact]
+    public void InterfacePlaceholder_can_satisfy_ContractId_T_constraint()
+    {
+        // Compile-time check: the line below would not compile if `where T : ITemplate`
+        // were not satisfied by the placeholder. Construction itself must not throw —
+        // a placeholder ContractId is exactly what splice-api-token-allocation-v1's
+        // `Reference.Cid` field carries, and Sample will receive it pre-coercion.
+        var cid = new ContractId<TestInterfacePlaceholder>("placeholder-cid-123");
+
+        cid.Value.Should().Be("placeholder-cid-123");
+        cid.ToString().Should().Be("placeholder-cid-123");
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_TemplateId_access_throws_with_explanatory_message()
+    {
+        // Calling T.TemplateId on a placeholder is always a logic error: the right path
+        // is to coerce the contract id to the underlying template type first. Throw at
+        // the access site, not at silent-null fallback.
+        var act = () => TestInterfacePlaceholder.TemplateId;
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*placeholder for the Daml interface*Coerce ContractId*");
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_PackageId_access_throws()
+    {
+        var act = () => TestInterfacePlaceholder.PackageId;
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_PackageName_access_throws()
+    {
+        var act = () => TestInterfacePlaceholder.PackageName;
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_PackageVersion_access_throws()
+    {
+        var act = () => TestInterfacePlaceholder.PackageVersion;
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_ContractId_ToDamlValue_propagates_throw_through_T_TemplateId()
+    {
+        // ContractId<T>.ToDamlValue() reads T.TemplateId statically — for a placeholder
+        // it throws, which is the *correct* failure mode: nobody should serialize a
+        // placeholder-typed contract id; coerce first. The runtime exception with a
+        // pointer to the right path is more useful than a silent null TemplateId.
+        var cid = new ContractId<TestInterfacePlaceholder>("c-1");
+        var act = () => cid.ToDamlValue();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Coerce ContractId*");
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_round_trips_empty_record()
+    {
+        // ToRecord/FromRecord exist (IDamlValue requires it) but carry no data.
+        // Round-tripping must not throw — those paths are reachable when a
+        // placeholder type appears as a field of a *real* template's record (e.g.
+        // Reference.Cid in splice-api-token-allocation-v1).
+        var placeholder = new TestInterfacePlaceholder();
+        var record = placeholder.ToRecord();
+
+        record.Should().NotBeNull();
+        record.Fields.Should().BeEmpty();
+
+        var recovered = TestInterfacePlaceholder.FromRecord(record);
+        recovered.Should().Be(placeholder);
+    }
+
+    [Fact]
+    public void InterfacePlaceholder_DamlContractId_ToTyped_compiles_and_constructs()
+    {
+        // DamlContractId.ToTyped<T>() also has `where T : ITemplate`. The placeholder
+        // makes that callable for interface-typed contract ids — again, the typical
+        // path is `damlContractId.ToTyped<Reference>()` for some real template; the
+        // placeholder case exists for parity and round-trip correctness.
+        var damlCid = new DamlContractId("placeholder-cid-456");
+
+        var typed = damlCid.ToTyped<TestInterfacePlaceholder>();
+
+        typed.Value.Should().Be("placeholder-cid-456");
     }
 
     #endregion
