@@ -434,8 +434,8 @@ public class TemplateCodeGenTests
         var code = statusFile!.Content;
 
         code.Should().Contain("public static Status FromRecord(DamlRecord record)");
-        code.Should().Contain("IsActive: ((record.GetRequiredField(\"isActive\")).As<DamlBool>()).Value");
-        code.Should().Contain("Amount: ((record.GetRequiredField(\"amount\")).As<DamlNumeric>()).Value");
+        code.Should().Contain("IsActive: record.GetRequiredField(\"isActive\").As<DamlBool>().Value");
+        code.Should().Contain("Amount: record.GetRequiredField(\"amount\").As<DamlNumeric>().Value");
     }
 
     [Fact]
@@ -483,7 +483,9 @@ public class TemplateCodeGenTests
         taggedFile.Should().NotBeNull();
         var code = taggedFile!.Content;
 
-        code.Should().Contain("new DamlList(Tags.Select(x => new DamlText(x)))");
+        // Generated code wraps the Select projection in `(DamlValue)` cast and materializes
+        // it with `.ToList()` so the result is assignable to DamlList(IReadOnlyList<DamlValue>).
+        code.Should().Contain("new DamlList(Tags.Select(x => (DamlValue)new DamlText(x)).ToList())");
     }
 
     [Fact]

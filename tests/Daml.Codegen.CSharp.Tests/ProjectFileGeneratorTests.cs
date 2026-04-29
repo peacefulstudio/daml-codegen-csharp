@@ -198,53 +198,32 @@ public class ProjectFileGeneratorTests
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
             Modules = [],
-            DependencyReferences =
-            [
-                new DamlPackageReference
-                {
-                    PackageId = "dep-id-1",
-                    Name = "my-dependency",
-                    Version = new Version(2, 0, 0)
-                }
-            ]
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "dep-id-1",
+                Name = "my-dependency",
+                Version = new Version(2, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            }
         };
 
         // Act
-        var file = generator.GenerateProjectFile(package);
+        var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
         file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0\" />");
     }
 
-    [Fact]
-    public void GenerateProjectFile_should_handle_dependency_without_name()
-    {
-        // Arrange
-        var options = CreateOptions();
-        var generator = new ProjectFileGenerator(options);
-        var package = new DamlPackage
-        {
-            PackageId = "test-id",
-            Name = "my-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences =
-            [
-                new DamlPackageReference
-                {
-                    PackageId = "abc123456789abcdef"
-                }
-            ]
-        };
-
-        // Act
-        var file = generator.GenerateProjectFile(package);
-
-        // Assert
-        // Should include a comment with the unknown package ID
-        file.Content.Should().Contain("<!-- Unknown dependency: abc123456789abcdef -->");
-    }
+    // Removed test "should_handle_dependency_without_name": no longer applicable.
+    // ProjectFileGenerator now receives a list of resolved DamlPackage instances; the
+    // codegen filters out unknown/unresolved package ids before calling it. The case
+    // a comment-only fallback used to handle simply cannot reach this layer anymore.
 
     [Fact]
     public void GenerateProjectFile_should_sanitize_package_name_with_hyphens()
@@ -294,36 +273,9 @@ public class ProjectFileGeneratorTests
         file.Content.Should().Contain("<PackageId>_123.Numeric.Package</PackageId>");
     }
 
-    [Fact]
-    public void GenerateProjectFile_should_handle_dependency_without_version()
-    {
-        // Arrange
-        var options = CreateOptions();
-        var generator = new ProjectFileGenerator(options);
-        var package = new DamlPackage
-        {
-            PackageId = "test-id",
-            Name = "my-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences =
-            [
-                new DamlPackageReference
-                {
-                    PackageId = "dep-id",
-                    Name = "some-dependency",
-                    Version = null // No version specified
-                }
-            ]
-        };
-
-        // Act
-        var file = generator.GenerateProjectFile(package);
-
-        // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Some.Dependency\" Version=\"*\" />");
-    }
+    // Removed test "should_handle_dependency_without_version": no longer applicable.
+    // External references are passed as concrete DamlPackage instances whose Version is
+    // non-nullable, so the version-missing case cannot arise.
 
     [Fact]
     public void GenerateProjectFile_should_include_package_description()
@@ -394,8 +346,12 @@ public class ProjectFileGeneratorTests
         file.Content.Should().Contain("<ImplicitUsings>enable</ImplicitUsings>");
     }
 
+    // Removed test "should_truncate_long_package_id_in_comment": no longer applicable.
+    // The new generator does not emit per-dependency comments; it only emits the
+    // PackageReference itself. Package id truncation/preview lived only in those comments.
+
     [Fact]
-    public void GenerateProjectFile_should_truncate_long_package_id_in_comment()
+    public void GenerateProjectFile_should_emit_one_PackageReference_per_external_dependency()
     {
         // Arrange
         var options = CreateOptions();
@@ -407,66 +363,35 @@ public class ProjectFileGeneratorTests
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
             Modules = [],
-            DependencyReferences =
-            [
-                new DamlPackageReference
-                {
-                    PackageId = "abc123def456ghi789jkl012mno345pqr678stu901vwx234yz",
-                    Name = "long-id-dependency",
-                    Version = new Version(1, 0, 0)
-                }
-            ]
+            DependencyReferences = []
         };
-
-        // Act
-        var file = generator.GenerateProjectFile(package);
-
-        // Assert
-        // Package ID should be truncated to first 16 characters in the comment
-        file.Content.Should().Contain("<!-- Package: long-id-dependency (abc123def456ghi7) -->");
-    }
-
-    [Fact]
-    public void GenerateProjectFile_should_handle_multiple_dependencies_with_mixed_resolution()
-    {
-        // Arrange
-        var options = CreateOptions();
-        var generator = new ProjectFileGenerator(options);
-        var package = new DamlPackage
+        var externalReferences = new List<DamlPackage>
         {
-            PackageId = "test-id",
-            Name = "my-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences =
-            [
-                new DamlPackageReference
-                {
-                    PackageId = "dep1-id",
-                    Name = "known-dep",
-                    Version = new Version(2, 0, 0)
-                },
-                new DamlPackageReference
-                {
-                    PackageId = "unknown123456789"
-                    // No name or version - unresolved
-                },
-                new DamlPackageReference
-                {
-                    PackageId = "dep3-id",
-                    Name = "another-known-dep",
-                    Version = new Version(3, 0, 0)
-                }
-            ]
+            new()
+            {
+                PackageId = "dep1-id",
+                Name = "known-dep",
+                Version = new Version(2, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            },
+            new()
+            {
+                PackageId = "dep3-id",
+                Name = "another-known-dep",
+                Version = new Version(3, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            }
         };
 
         // Act
-        var file = generator.GenerateProjectFile(package);
+        var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0\" />");
-        file.Content.Should().Contain("<!-- Unknown dependency: unknown123456789 -->");
         file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0\" />");
     }
 }

@@ -18,17 +18,22 @@ public sealed class ProjectFileGenerator
     /// <summary>
     /// Generates a .csproj file for the given package.
     /// </summary>
-    public GeneratedFile GenerateProjectFile(DamlPackage package)
+    /// <param name="package">The main package being generated.</param>
+    /// <param name="externalReferences">
+    /// Other DAR-level packages whose types are referenced by the generated code.
+    /// Each becomes a NuGet PackageReference in the generated csproj.
+    /// </param>
+    public GeneratedFile GenerateProjectFile(DamlPackage package, IReadOnlyList<DamlPackage>? externalReferences = null)
     {
         var packageName = SanitizePackageName(package.Name);
         var projectFileName = $"{packageName}.csproj";
 
-        var content = GenerateProjectFileContent(package, packageName);
+        var content = GenerateProjectFileContent(package, packageName, externalReferences ?? []);
 
         return new GeneratedFile(projectFileName, content);
     }
 
-    private string GenerateProjectFileContent(DamlPackage package, string packageName)
+    private string GenerateProjectFileContent(DamlPackage package, string packageName, IReadOnlyList<DamlPackage> externalReferences)
     {
         var sb = new StringBuilder();
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
@@ -56,34 +61,16 @@ public sealed class ProjectFileGenerator
         var runtimeVersion = _options.RuntimePackageVersion ?? "*";
         sb.AppendLine($"    <PackageReference Include=\"Daml.Runtime\" Version=\"{runtimeVersion}\" />");
 
-        sb.AppendLine("  </ItemGroup>");
-
-        // Add project references for dependencies if they exist
-        if (package.DependencyReferences.Count > 0)
+        // Add cross-DAR package references for any external types referenced in generated code.
+        // Stdlib packages (daml-prim/daml-stdlib) are filtered out by the generator before this
+        // point — those types come from Daml.Runtime.Stdlib.
+        foreach (var dep in externalReferences.OrderBy(p => p.Name, StringComparer.Ordinal))
         {
-            sb.AppendLine();
-            sb.AppendLine("  <!-- Dependency package references -->");
-            sb.AppendLine("  <!-- These can be changed to NuGet PackageReferences once packages are published -->");
-            sb.AppendLine("  <ItemGroup>");
-
-            foreach (var depRef in package.DependencyReferences)
-            {
-                if (depRef.Name != null)
-                {
-                    var depPackageName = SanitizePackageName(depRef.Name);
-                    var depVersion = depRef.Version?.ToString() ?? "*";
-                    sb.AppendLine($"    <!-- Package: {depRef.Name} ({depRef.PackageId[..Math.Min(16, depRef.PackageId.Length)]}) -->");
-                    sb.AppendLine($"    <PackageReference Include=\"{depPackageName}\" Version=\"{depVersion}\" />");
-                }
-                else
-                {
-                    // Unknown dependency - add as comment
-                    sb.AppendLine($"    <!-- Unknown dependency: {depRef.PackageId} -->");
-                }
-            }
-
-            sb.AppendLine("  </ItemGroup>");
+            var depPackageName = SanitizePackageName(dep.Name);
+            sb.AppendLine($"    <PackageReference Include=\"{depPackageName}\" Version=\"{dep.Version}\" />");
         }
+
+        sb.AppendLine("  </ItemGroup>");
 
         sb.AppendLine();
         sb.AppendLine("</Project>");
