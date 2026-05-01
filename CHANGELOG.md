@@ -15,6 +15,8 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-05-01
+
 ### Added
 
 - **`Daml.Ledger.Abstractions` (new package)** — transport-agnostic
@@ -188,6 +190,7 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...v0.1.4
 [0.1.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.0-alpha.3...v0.1.2
 [0.1.0]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.0-alpha.3
