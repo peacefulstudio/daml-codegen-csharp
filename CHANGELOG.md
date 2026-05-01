@@ -5,17 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-This changelog tracks the three packages published from this repo together,
+This changelog tracks the four packages published from this repo together,
 because they are versioned in lockstep:
 
 - `Daml.Codegen.CSharp` — dotnet tool CLI
 - `Daml.Runtime` — runtime types referenced by generated code
+- `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
 - `Daml.Codegen.CSharp.MSBuild` — MSBuild integration
 
 ## [Unreleased]
 
 ### Added
 
+- **`Daml.Ledger.Abstractions` (new package)** — transport-agnostic
+  `ILedgerClient` interface lifted from `canton-ledger-api-csharp`.
+  Implementations live in their respective transport packages:
+  `Canton.Ledger.Grpc.Client` (gRPC) and a planned HTTP REST client.
+  Generated codegen output (projector helpers, `<Choice>Async`
+  extensions) will reference this package instead of the canton-specific
+  one — projector-only consumers no longer transitively pull in a gRPC
+  stack. Versioned in lockstep with `Daml.Runtime` and the codegen tool.
+  The throwing-API variants `CreateAsync` and
+  `SubmitAndWaitForTransactionAsync` (long `[Obsolete]` on canton's
+  interface) are intentionally **not** part of the abstraction; only
+  their outcome-based `Try*` replacements are surfaced. Other methods
+  on the interface (`SubmitAsync`, `ExerciseAsync`, etc.) keep their
+  existing names. Existing callers of the dropped methods migrate to
+  `TryCreateAsync` / `TrySubmitAndWaitForTransactionAsync`.
+  ([#74](https://github.com/peacefulstudio/daml-codegen-csharp/pull/74))
 - **`Daml.Runtime.Streams.ContractStreamEvent<T>`** — transport-agnostic discriminated
   record for typed contract subscription streams. Variants:
   `Created`, `Archived`, `Exercised`, `Assigned`, `Unassigned`, `Checkpoint`,
