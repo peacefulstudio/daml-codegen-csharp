@@ -25,6 +25,23 @@ because they are versioned in lockstep:
   `Grpc.Core.StatusCode` would be cast at the call site) — consumers stay free
   of any transport library. Counterpart in `Canton.Ledger.Grpc.Client` (which
   had the prior owner of this type) is being migrated to consume from here.
+- **`Daml.Runtime.Outcomes.ExerciseOutcome<T>`** — transport-agnostic
+  discriminated record for exercise/create outcomes. Variants: `One`,
+  `None`, `Many`, `DamlError`, `InfraError`. `T` is unconstrained
+  (any payload shape). `InfraError.StatusCode` is `int`
+  (cast `(int)Grpc.Core.StatusCode` at the gRPC client construction site)
+  so this type is dep-free and any ledger client can yield it.
+- **`Daml.Runtime.Outcomes.DamlErrorCategory`** — closed enum mirroring the
+  Canton 3.5 documented error categories. Pre-existing canton type lifted
+  here so it's reachable from generated code without a transport dep.
+- **`Daml.Runtime.Contracts.TransactionResult`** and
+  **`Daml.Runtime.Contracts.CreatedContract`** — pure data records for
+  submitted-transaction results. Lifted from `Canton.Ledger.Grpc.Client`;
+  no transport deps, useful from any ledger client.
+- **`Daml.Runtime.Contracts.TransactionResultExtensions`** with
+  `Single<T>`, `TrySingle<T>`, `All<T>` over `TransactionResult` for
+  template-typed projection of `CreatedContracts`. `(module, entity)`
+  matching tolerates package-id drift.
 - **`Daml.Runtime.Stdlib` namespace** with hand-coded stubs for Daml stdlib
   types that are not generated per package. Currently covers
   `DA.Time.Types.RelTime`. Future stdlib types (`Set`, `Map`, `Tuple2`, ...)
