@@ -16,6 +16,15 @@ because they are versioned in lockstep:
 
 ### Added
 
+- **`Daml.Runtime.Streams.ContractStreamEvent<T>`** — transport-agnostic discriminated
+  record for typed contract subscription streams. Variants:
+  `Created`, `Archived`, `Exercised`, `Assigned`, `Unassigned`, `Checkpoint`,
+  `StreamError`. Lives in `Daml.Runtime` so any ledger client (gRPC, JSON,
+  in-memory) can yield these without dragging the consumer into a
+  transport-specific dep. `StreamError.StatusCode` is `int` (a
+  `Grpc.Core.StatusCode` would be cast at the call site) — consumers stay free
+  of any transport library. Counterpart in `Canton.Ledger.Grpc.Client` (which
+  had the prior owner of this type) is being migrated to consume from here.
 - **`Daml.Runtime.Stdlib` namespace** with hand-coded stubs for Daml stdlib
   types that are not generated per package. Currently covers
   `DA.Time.Types.RelTime`. Future stdlib types (`Set`, `Map`, `Tuple2`, ...)
