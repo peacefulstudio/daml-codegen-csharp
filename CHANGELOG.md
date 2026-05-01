@@ -53,6 +53,13 @@ because they are versioned in lockstep:
   `System.Threading`, `System.Threading.Tasks`) so generated source
   compiles without `<ImplicitUsings>` enabled in the consumer csproj.
 
+### Fixed
+
+- **`WriteChoiceMethod` now skips emission for choices with a fallback
+  `<Choice>Arg` argument type.** Previously emitted code referenced
+  `arg.ToRecord()` against a stub record with no `ToRecord()` method,
+  breaking consumer compilation in those edge cases. Fixes #78.
+
 ## [0.1.4] — 2026-05-01
 
 ### Added

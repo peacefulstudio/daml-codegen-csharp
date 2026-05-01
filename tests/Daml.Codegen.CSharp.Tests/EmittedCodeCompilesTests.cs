@@ -49,6 +49,73 @@ public class EmittedCodeCompilesTests
         new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [inner]);
 
     [Fact]
+    public void Emitted_template_with_fallback_argument_choice_compiles()
+    {
+        // Regression for #78: WriteChoiceMethod previously emitted
+        //   `ArgumentEncoder = arg => arg.ToRecord()`
+        // for any non-Unit, non-external choice argument type. When the type
+        // hits the codegen fallback path (here: a non-Unit DamlPrimitiveType),
+        // WriteChoiceArgumentType emits a stub `<Choice>Arg` record with no
+        // ToRecord() method — so the static `Choice<T,A,R>` field site no
+        // longer compiles in consumer output. The B3 gate already extended to
+        // <Choice>Async emission in #77; this test pins the same gate on
+        // WriteChoiceMethod.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Agreement",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Process",
+                            Consuming = false,
+                            // Non-Unit primitive — routes through the GetChoiceArgumentInfo
+                            // fallback branch (IsFallback=true) and emits a stub ProcessArg
+                            // record with no ToRecord().
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Text),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Agreement",
+                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code for a fallback-argument-type choice should compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_template_with_create_bearing_choice_compiles()
     {
         // Bare ContractId<T> return is the simplest path that exercises:

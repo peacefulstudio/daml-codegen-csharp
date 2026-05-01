@@ -1169,7 +1169,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnType = MapDamlTypeToCSharp(choice.ReturnType);
-        var (argTypeName, argFields, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
+        var (argTypeName, argFields, isExternalRef, isFallback) = GetChoiceArgumentInfo(choice, dataTypes);
+
+        // B3: skip choices whose argument type went through the codegen fallback
+        // path (no recognised record / Unit / external ref). The fallback emits a
+        // field-less <Choice>Arg stub with no ToRecord(), so the static
+        // Choice<T,A,R> field's `ArgumentEncoder = arg => arg.ToRecord()` would
+        // not compile in consumer output. Mirrors the gate applied to
+        // <Choice>Async emission in #77 (see WriteChoiceAsyncExercisersClass).
+        // Fixes #78.
+        if (isFallback)
+        {
+            return;
+        }
 
         indent.AppendLine($"/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");
