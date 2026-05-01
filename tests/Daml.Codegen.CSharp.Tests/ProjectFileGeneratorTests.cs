@@ -351,6 +351,32 @@ public class ProjectFileGeneratorTests
     // PackageReference itself. Package id truncation/preview lived only in those comments.
 
     [Fact]
+    public void GenerateProjectFile_should_include_ledger_abstractions_package_reference()
+    {
+        // Generated code's <Choice>Async extensions reference
+        // Daml.Ledger.Abstractions.ILedgerClient. The csproj must declare that
+        // package as a NuGet reference alongside Daml.Runtime so consumer
+        // builds resolve the type. Emitted unconditionally — pure-projector
+        // consumers absorb the reference at zero transitive cost (interface-
+        // only package).
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<PackageReference Include=\"Daml.Ledger.Abstractions\"");
+    }
+
+    [Fact]
     public void GenerateProjectFile_should_emit_one_PackageReference_per_external_dependency()
     {
         // Arrange

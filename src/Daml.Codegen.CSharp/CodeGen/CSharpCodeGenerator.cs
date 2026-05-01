@@ -470,6 +470,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         indent.Dedent();
         indent.AppendLine("}");
+        indent.AppendLine();
+
+        // Typed <Choice>Result structs + FromCreatedContracts projectors are
+        // emitted at namespace level (sibling of the template) so the static
+        // <TemplateName>Extensions class below can reference them by their
+        // unqualified name. See CSharpCodeGenerator.ChoiceResults.cs.
+        WriteChoiceResultStructs(indent, template, moduleNamespace);
+
+        // Static `<TemplateName>Extensions` class with one `<Choice>Async`
+        // method per create-bearing choice. Lives at the namespace level so
+        // `using` directives bring the extension methods into scope for
+        // `ContractId<TemplateName>` receivers.
+        WriteChoiceAsyncExercisersClass(indent, template, className, dataTypes);
 
         if (!options.UseFileScopedNamespaces)
         {
@@ -802,7 +815,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     {
         var methodName = SanitizeIdentifier(method.Name);
         var returnType = MapDamlTypeToCSharp(method.ReturnType);
-        var (argTypeName, _, _) = GetChoiceArgumentInfo(method, dataTypes);
+        var (argTypeName, _, _, _) = GetChoiceArgumentInfo(method, dataTypes);
 
         if (options.GenerateXmlDocs)
         {
@@ -839,9 +852,24 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteUsings(IndentWriter indent)
     {
+        // BCL usings emitted explicitly so generated code compiles even when a
+        // consumer disables `<ImplicitUsings>` in their csproj. The codegen-emitted
+        // csproj turns ImplicitUsings on, but generated source dropped into a project
+        // without that flag (e.g. someone copying files into a hand-rolled lib) would
+        // otherwise miss `System`, `Collections.Generic`, `Tasks`, and `Threading`.
+        indent.AppendLine("using System;");
+        indent.AppendLine("using System.Collections.Generic;");
+        indent.AppendLine("using System.Threading;");
+        indent.AppendLine("using System.Threading.Tasks;");
+        indent.AppendLine("using Daml.Ledger.Abstractions;");
         indent.AppendLine("using Daml.Runtime.Commands;");
         indent.AppendLine("using Daml.Runtime.Contracts;");
         indent.AppendLine("using Daml.Runtime.Data;");
+        // Outcomes namespace covers ExerciseOutcome<T> referenced by emitted
+        // <Choice>Result.FromCreatedContracts projectors and <Choice>Async
+        // exercisers. Always emitted — even for templates without create-bearing
+        // choices, the cost is one unused-using lint suppression at most.
+        indent.AppendLine("using Daml.Runtime.Outcomes;");
 
         if (options.GenerateJsonSupport)
         {
@@ -1064,7 +1092,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     /// Choice argument types that reference data types are now generated as nested types inside the template,
     /// so we use the choice name (which becomes the nested type name) rather than the data type name.
     /// </summary>
-    private static (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsExternalRef) GetChoiceArgumentInfo(
+    /// <returns>
+    /// A 4-tuple: <c>(TypeName, Fields, IsExternalRef, IsFallback)</c>. <c>IsFallback</c> is
+    /// <c>true</c> when the codegen could not resolve the argument to any of (same-module
+    /// record, Unit, external ref) and is emitting a field-less <c>&lt;Choice&gt;Arg</c>
+    /// stub. Callers that need to emit code referencing <c>argument.ToRecord()</c> must
+    /// skip those choices — the stub doesn't define <c>ToRecord</c>.
+    /// </returns>
+    private static (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsExternalRef, bool IsFallback) GetChoiceArgumentInfo(
         DamlChoice choice,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
@@ -1074,13 +1109,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             var fields = dataType.Definition is DamlRecordDefinition recordDef ? recordDef.Fields : null;
             // Use the choice name since that's the nested type name we generate
-            return (SanitizeIdentifier(choice.Name), fields, false);
+            return (SanitizeIdentifier(choice.Name), fields, false, false);
         }
 
         // Check for Unit type (no arguments)
         if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit })
         {
-            return ("DamlUnit", null, false);
+            return ("DamlUnit", null, false, false);
         }
 
         // Check for external type references (like DA.Internal.Template:Archive)
@@ -1090,19 +1125,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             // Standard Archive choice from daml-prim uses an empty record
             if (externalRef.Name == "Archive")
             {
-                return ("DamlUnit", null, true);
+                return ("DamlUnit", null, true, false);
             }
             // Other external references - fallback to DamlUnit as safe default
-            return ("DamlUnit", null, true);
+            return ("DamlUnit", null, true, false);
         }
 
         // Fallback to generating a nested argument type
-        return ($"{SanitizeIdentifier(choice.Name)}Arg", null, false);
+        return ($"{SanitizeIdentifier(choice.Name)}Arg", null, false, true);
     }
 
     private void WriteChoiceArgumentType(IndentWriter indent, DamlChoice choice, IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        var (argTypeName, _, isExternalRef) = GetChoiceArgumentInfo(choice, dataTypes);
+        var (argTypeName, _, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
 
         // If the argument type is a reference to an existing data type, don't generate a nested class
         // The data type is already generated separately
@@ -1134,7 +1169,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnType = MapDamlTypeToCSharp(choice.ReturnType);
-        var (argTypeName, argFields, isExternalRef) = GetChoiceArgumentInfo(choice, dataTypes);
+        var (argTypeName, argFields, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
 
         indent.AppendLine($"/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");

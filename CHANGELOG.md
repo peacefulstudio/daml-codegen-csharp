@@ -15,6 +15,44 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Added
+
+- **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
+  every Daml choice whose return type carries one or more `ContractId T`
+  references. Choice creates a single template → single field; `Optional` →
+  nullable field; `[…]` (list) → `IReadOnlyList<ContractId<T>>`; tuples are
+  flattened across components. The static `FromCreatedContracts(IEnumerable<CreatedContract>)`
+  projector returns `ExerciseOutcome<<Choice>Result>.One` when every required
+  slot has the expected count, `.None` when a single-cardinality slot's
+  template is missing, and `.Many` when a single- or optional-cardinality
+  slot has more than one. Template matching is by `(ModuleName, EntityName)`
+  only, so package-id drift from upgrades doesn't break projection. Issue
+  #60.
+- **`<Choice>Async(...)` extension methods on `ContractId<TemplateName>`** —
+  one per create-bearing choice on each template, in a per-template static
+  `<TemplateName>Extensions` class. Signature:
+  `(ContractId<T> contractId, ILedgerClient client, [<Choice>Arg argument,] Party actAs, string? workflowId = null, CancellationToken cancellationToken = default)`.
+  Body: builds a `CommandsSubmission`, calls
+  `ILedgerClient.TrySubmitAndWaitForTransactionAsync`, projects success via
+  `<Choice>Result.FromCreatedContracts`. `DamlError` and `InfraError`
+  outcomes pass through with all fields preserved. Workflow id has no
+  default — workflow IDs are correlation keys, and a per-choice constant
+  would bucket every submission of the same choice under one id and break
+  observability.
+- **`Daml.Ledger.Abstractions` `<PackageReference>` in generated csproj** —
+  added unconditionally alongside `Daml.Runtime`. The package is
+  interface-only and lockstep-versioned with the runtime, so pure-projector
+  consumers absorb it at zero transitive weight. Required by the emitted
+  `<Choice>Async` extension methods, which take `ILedgerClient`.
+
+### Changed — generated code shape
+
+- Generated template `.cs` files now declare additional `using` directives
+  unconditionally: `Daml.Ledger.Abstractions`, `Daml.Runtime.Outcomes`,
+  plus the BCL set (`System`, `System.Collections.Generic`,
+  `System.Threading`, `System.Threading.Tasks`) so generated source
+  compiles without `<ImplicitUsings>` enabled in the consumer csproj.
+
 ## [0.1.4] — 2026-05-01
 
 ### Added

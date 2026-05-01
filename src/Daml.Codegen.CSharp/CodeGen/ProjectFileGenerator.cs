@@ -60,6 +60,12 @@ public sealed class ProjectFileGenerator
         // Runtime package reference
         var runtimeVersion = _options.RuntimePackageVersion ?? "*";
         sb.AppendLine($"    <PackageReference Include=\"Daml.Runtime\" Version=\"{runtimeVersion}\" />");
+        // Ledger-abstractions package reference. Required by the codegen-emitted
+        // `<Choice>Async` extension methods (which take `ILedgerClient`). Emitted
+        // unconditionally: the package is interface-only and lockstep-versioned
+        // with Daml.Runtime, so pure-projector consumers absorb it at zero
+        // transitive weight.
+        sb.AppendLine($"    <PackageReference Include=\"Daml.Ledger.Abstractions\" Version=\"{runtimeVersion}\" />");
 
         // Add cross-DAR package references for any external types referenced in generated code.
         // Stdlib packages (daml-prim/daml-stdlib) are filtered out by the generator before this
