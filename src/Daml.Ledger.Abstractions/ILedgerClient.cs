@@ -31,6 +31,37 @@ public interface ILedgerClient : IDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Exercises a choice on an existing contract using a multi-party
+    /// <see cref="SubmitterInfo"/> (combined <c>actAs</c> ∪ <c>readAs</c>).
+    /// </summary>
+    /// <typeparam name="TResult">The result type of the choice.</typeparam>
+    /// <param name="command">The exercise command.</param>
+    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The result of exercising the choice.</returns>
+    /// <remarks>
+    /// The default implementation forwards single-party submissions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="ExerciseAsync{TResult}(ExerciseCommand, string, string, CancellationToken)"/>
+    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party authorization.
+    /// </remarks>
+    Task<TResult> ExerciseAsync<TResult>(
+        ExerciseCommand command,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return ExerciseAsync<TResult>(command, actAs, workflowId, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(ExerciseAsync));
+    }
+
+    /// <summary>
     /// Exercises a choice on an existing contract without returning a result.
     /// </summary>
     /// <param name="command">The exercise command.</param>
@@ -42,6 +73,35 @@ public interface ILedgerClient : IDisposable
         string actAs,
         string? workflowId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Exercises a choice on an existing contract without returning a result,
+    /// using a multi-party <see cref="SubmitterInfo"/>.
+    /// </summary>
+    /// <param name="command">The exercise command.</param>
+    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <remarks>
+    /// The default implementation forwards single-party submissions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="ExerciseAsync(ExerciseCommand, string, string, CancellationToken)"/>
+    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party authorization.
+    /// </remarks>
+    Task ExerciseAsync(
+        ExerciseCommand command,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return ExerciseAsync(command, actAs, workflowId, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(ExerciseAsync));
+    }
 
     /// <summary>
     /// Submits multiple commands as a single atomic transaction.
@@ -82,6 +142,38 @@ public interface ILedgerClient : IDisposable
         where TTemplate : ITemplate;
 
     /// <summary>
+    /// Creates a new contract using a multi-party <see cref="SubmitterInfo"/>
+    /// and projects the result to <see cref="ExerciseOutcome{T}"/> over
+    /// <see cref="ContractId{T}"/>.
+    /// </summary>
+    /// <typeparam name="TTemplate">The template type expected to be created.</typeparam>
+    /// <param name="payload">The template payload.</param>
+    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <remarks>
+    /// The default implementation forwards single-party submissions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="TryCreateAsync{TTemplate}(TTemplate, string, string, CancellationToken)"/>
+    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party authorization.
+    /// </remarks>
+    Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
+        TTemplate payload,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CancellationToken cancellationToken = default)
+        where TTemplate : ITemplate
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return TryCreateAsync<TTemplate>(payload, actAs, workflowId, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(TryCreateAsync));
+    }
+
+    /// <summary>
     /// Exercises a choice and projects the resulting transaction's created contracts to
     /// <see cref="ExerciseOutcome{T}"/> over <see cref="ContractId{T}"/>, expecting
     /// exactly one created contract of type <typeparamref name="TTemplate"/>.
@@ -93,6 +185,39 @@ public interface ILedgerClient : IDisposable
         string? workflowId = null,
         CancellationToken cancellationToken = default)
         where TTemplate : ITemplate;
+
+    /// <summary>
+    /// Exercises a choice using a multi-party <see cref="SubmitterInfo"/> and
+    /// projects the resulting transaction's created contracts to
+    /// <see cref="ExerciseOutcome{T}"/> over <see cref="ContractId{T}"/>, expecting
+    /// exactly one created contract of type <typeparamref name="TTemplate"/>.
+    /// </summary>
+    /// <typeparam name="TTemplate">The template type expected to be created by the choice.</typeparam>
+    /// <param name="command">The exercise command.</param>
+    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <remarks>
+    /// The default implementation forwards single-party submissions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="TryExerciseForCreatedAsync{TTemplate}(ExerciseCommand, string, string, CancellationToken)"/>
+    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party authorization.
+    /// </remarks>
+    Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
+        ExerciseCommand command,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CancellationToken cancellationToken = default)
+        where TTemplate : ITemplate
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return TryExerciseForCreatedAsync<TTemplate>(command, actAs, workflowId, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(TryExerciseForCreatedAsync));
+    }
 
     /// <summary>
     /// Subscribes to the ledger update stream for a single template, projected to
@@ -107,9 +232,10 @@ public interface ILedgerClient : IDisposable
     /// interface markers as well.
     /// </typeparam>
     /// <param name="actAs">
-    /// The party whose visibility scopes the subscription. TODO: replace
-    /// with the multi-party <c>SubmitterInfo</c> type once it ships under
-    /// <c>feat/multi-party-submitters</c> (issue #56).
+    /// The party whose visibility scopes the subscription. For multi-party
+    /// visibility, use the
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>
+    /// overload.
     /// </param>
     /// <param name="fromOffset">
     /// Resume the stream after this absolute offset (exclusive). <c>null</c>
@@ -139,6 +265,39 @@ public interface ILedgerClient : IDisposable
         where T : ITemplate;
 
     /// <summary>
+    /// Subscribes to the ledger update stream using a multi-party
+    /// <see cref="SubmitterInfo"/>. The combined <c>ActAs ∪ ReadAs</c> set
+    /// scopes visibility for the subscription.
+    /// </summary>
+    /// <typeparam name="T">The Daml template to filter by.</typeparam>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="fromOffset">
+    /// Resume the stream after this absolute offset (exclusive). <c>null</c>
+    /// or <c>0</c> begins from the start of the ledger.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <remarks>
+    /// The default implementation forwards single-party subscriptions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="SubscribeAsync{T}(string, long?, CancellationToken)"/>
+    /// overload. Multi-party subscriptions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party visibility.
+    /// </remarks>
+    IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+        SubmitterInfo submitter,
+        long? fromOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : ITemplate
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return SubscribeAsync<T>(actAs, fromOffset, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(SubscribeAsync));
+    }
+
+    /// <summary>
     /// Subscribes to the active-contract-set snapshot for a single template
     /// at the current ledger end, projected to strongly-typed
     /// <see cref="ContractStreamEvent{T}.Created"/> values. Implementations
@@ -146,12 +305,13 @@ public interface ILedgerClient : IDisposable
     /// </summary>
     /// <typeparam name="T">
     /// The Daml template to filter by. (TODO: broaden to <c>IDamlType</c>
-    /// when interface markers ship — see <see cref="SubscribeAsync{T}"/>.)
+    /// when interface markers ship — see <see cref="SubscribeAsync{T}(string, long?, CancellationToken)"/>.)
     /// </typeparam>
     /// <param name="actAs">
-    /// The party whose visibility scopes the snapshot. TODO: replace with
-    /// the multi-party <c>SubmitterInfo</c> type once it ships
-    /// (issue #56).
+    /// The party whose visibility scopes the snapshot. For multi-party
+    /// visibility, use the
+    /// <see cref="SubscribeActiveAsync{T}(SubmitterInfo, CancellationToken)"/>
+    /// overload.
     /// </param>
     /// <param name="cancellationToken">
     /// Cancels the underlying stream cleanly.
@@ -165,14 +325,14 @@ public interface ILedgerClient : IDisposable
     /// create-arguments for contracts that are mid-reassignment and are
     /// required for a complete ACS view in those deployments.
     /// To stay current after the snapshot completes, follow up with
-    /// <see cref="SubscribeAsync{T}"/> using the offset returned by
+    /// <see cref="SubscribeAsync{T}(string, long?, CancellationToken)"/> using the offset returned by
     /// <see cref="GetLedgerEndAsync"/> at the time of the snapshot.
     /// Mid-stream transport failures throw rather than surfacing in-band as
     /// the typed <see cref="ContractStreamEvent{T}.StreamError"/> variant —
     /// the public return type
     /// (<see cref="IAsyncEnumerable{T}"/> of <see cref="ContractStreamEvent{T}.Created"/>) can't carry the variant.
     /// Wrap in <c>try</c>/<c>catch</c> for in-band tolerance, or use
-    /// <see cref="SubscribeAsync{T}"/> directly.
+    /// <see cref="SubscribeAsync{T}(string, long?, CancellationToken)"/> directly.
     /// </remarks>
     IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
         string actAs,
@@ -180,10 +340,38 @@ public interface ILedgerClient : IDisposable
         where T : ITemplate;
 
     /// <summary>
+    /// Subscribes to the active-contract-set snapshot using a multi-party
+    /// <see cref="SubmitterInfo"/>. The combined <c>ActAs ∪ ReadAs</c> set
+    /// scopes visibility for the snapshot.
+    /// </summary>
+    /// <typeparam name="T">The Daml template to filter by.</typeparam>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <remarks>
+    /// The default implementation forwards single-party subscriptions
+    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
+    /// <see cref="SubscribeActiveAsync{T}(string, CancellationToken)"/>
+    /// overload. Multi-party subscriptions throw <see cref="NotSupportedException"/> —
+    /// implementations must override this method to support true multi-party visibility.
+    /// </remarks>
+    IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+        SubmitterInfo submitter,
+        CancellationToken cancellationToken = default)
+        where T : ITemplate
+    {
+        if (TryGetSinglePartyActAs(submitter, out var actAs))
+        {
+            return SubscribeActiveAsync<T>(actAs, cancellationToken);
+        }
+
+        throw NewMultiPartyNotSupported(nameof(SubscribeActiveAsync));
+    }
+
+    /// <summary>
     /// Returns the participant's current ledger-end offset. Compose with
-    /// <see cref="SubscribeActiveAsync{T}"/> for a snapshot-then-subscribe
+    /// <see cref="SubscribeActiveAsync{T}(string, CancellationToken)"/> for a snapshot-then-subscribe
     /// pattern: capture an offset, drain the snapshot, then resume from
-    /// the captured offset via <see cref="SubscribeAsync{T}"/>. Note that
+    /// the captured offset via <see cref="SubscribeAsync{T}(string, long?, CancellationToken)"/>. Note that
     /// the snapshot's exact end offset is not surfaced by this
     /// abstraction, so some duplication near the snapshot boundary is
     /// possible — consumers should handle creates idempotently (by
@@ -192,4 +380,30 @@ public interface ILedgerClient : IDisposable
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The current ledger-end offset on the participant.</returns>
     Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns true and the single act-as party when <paramref name="submitter"/>
+    /// represents a single-party submission (one <c>ActAs</c> party, no <c>ReadAs</c>
+    /// parties); false otherwise.
+    /// </summary>
+    private static bool TryGetSinglePartyActAs(SubmitterInfo submitter, out string actAs)
+    {
+        if (submitter.ActAs.Count == 1 && submitter.ReadAs.Count == 0)
+        {
+            actAs = submitter.ActAs.First().Id;
+            return true;
+        }
+
+        actAs = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Constructs the canonical <see cref="NotSupportedException"/> for callers
+    /// of multi-party <see cref="SubmitterInfo"/> overloads that haven't been
+    /// overridden by the implementation.
+    /// </summary>
+    private static NotSupportedException NewMultiPartyNotSupported(string methodName) =>
+        new($"Multi-party SubmitterInfo requires the ILedgerClient implementation to override the SubmitterInfo overload of {methodName}. " +
+            "The default implementation only supports a single ActAs party with no ReadAs parties.");
 }

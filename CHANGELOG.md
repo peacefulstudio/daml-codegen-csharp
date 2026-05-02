@@ -158,6 +158,17 @@ because they are versioned in lockstep:
   `ActAs` and `ReadAs` from a typed submitter in one call. The preferred
   projection point for code-generated and library callers; mirrors the wire
   shape exactly.
+- **`SubmitterInfo` overloads on `Daml.Ledger.Abstractions.ILedgerClient`**
+  for `ExerciseAsync` (both result and void), `TryCreateAsync`,
+  `TryExerciseForCreatedAsync`, `SubscribeAsync`, and `SubscribeActiveAsync`.
+  Multi-party submitters (`ActAs.Count > 1`) and submitters carrying any
+  `ReadAs` parties become expressible at the abstraction surface alongside
+  the existing single-party `string actAs` overloads. Default-interface-method
+  implementations preserve source compatibility with existing implementers:
+  single-party submissions delegate to the legacy `string actAs` overload,
+  multi-party submissions throw `NotSupportedException` until the implementation
+  overrides the SubmitterInfo overload (replaces an earlier internal change; foundation for
+  named-signatories codegen, issue #68).
 
 ### Changed — generated code shape
 
