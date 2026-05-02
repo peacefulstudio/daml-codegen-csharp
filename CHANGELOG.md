@@ -17,6 +17,14 @@ because they are versioned in lockstep:
 
 ### Added
 
+- **`Daml.Runtime.Data.SynchronizerId`** — `readonly record struct` mirroring
+  `Party`'s shape (null/whitespace-guarded constructor, `Id` accessor with
+  default-uninitialized throw, implicit `→ string` conversion, explicit
+  `string →` cast, JSON converter that round-trips as a plain string).
+  Stored as an opaque string per Canton's documented guidance — does not
+  decompose into name / fingerprint / protocol-version components, so the
+  wrapper is safe across the Canton 3.4 (`name::fingerprint`) → 3.5
+  (`name::fingerprint::protocol-version`) wire-format change. Closes #87.
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →
@@ -66,6 +74,14 @@ because they are versioned in lockstep:
   must update its `ProjectTransaction` / equivalent stream-projection code to
   construct `WitnessParties` as `Party` (currently constructs from proto
   `string` directly) before consuming the new `Daml.Runtime` version.
+- **`ContractStreamEvent<T>.Assigned.{Source, Target}`** and
+  **`Unassigned.{Source, Target}`** change from `string` to
+  `Daml.Runtime.Data.SynchronizerId`. Same migration shape as the
+  `WitnessParties` change above. Closes #87. Same canton-bridge follow-up
+  required: reassignment-event projection in `Canton.Ledger.Grpc.Client` /
+  `Daml.Runtime.Grpc` must construct `Source` / `Target` as `SynchronizerId`
+  (currently constructs from proto `string`) before consuming the new
+  `Daml.Runtime` version.
 
 ### Fixed
 

@@ -61,8 +61,8 @@ public class WitnessPartiesTypedTests
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
             4L,
-            "src",
-            "tgt",
+            new SynchronizerId("src"),
+            new SynchronizerId("tgt"),
             [Alice]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();
@@ -75,8 +75,8 @@ public class WitnessPartiesTypedTests
         var ev = new ContractStreamEvent<TestTemplate>.Unassigned(
             new ContractId<TestTemplate>("c1"),
             5L,
-            "src",
-            "tgt",
+            new SynchronizerId("src"),
+            new SynchronizerId("tgt"),
             [Alice]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();

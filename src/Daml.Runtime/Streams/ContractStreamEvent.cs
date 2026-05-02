@@ -108,8 +108,8 @@ public abstract record ContractStreamEvent<T>
         ContractId<T> ContractId,
         DamlRecord Payload,
         long Offset,
-        string Source,
-        string Target,
+        SynchronizerId Source,
+        SynchronizerId Target,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
@@ -125,8 +125,8 @@ public abstract record ContractStreamEvent<T>
     public sealed record Unassigned(
         ContractId<T> ContractId,
         long Offset,
-        string Source,
-        string Target,
+        SynchronizerId Source,
+        SynchronizerId Target,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
