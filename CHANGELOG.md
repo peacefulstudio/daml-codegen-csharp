@@ -55,6 +55,25 @@ because they are versioned in lockstep:
   in `splice-amulet`, `splice-dso-governance`, `splice-wallet`,
   `splice-wallet-payments`, and `splice-util-featured-app-proxies`.
   Issue #57 (B1).
+- **`Daml.Runtime.Contracts.ExercisedEvent`** — pure-data record describing a
+  choice-exercise event observed in a transaction. Captures the subset of
+  the Ledger API `ExercisedEvent` proto that the C# codegen needs to
+  project typed choice results: wire-level `ChoiceArgument` and
+  `ExerciseResult` (as `DamlValue`) plus `ContractId`, `TemplateId`,
+  `InterfaceId?`, `ChoiceName`, `Consuming`, `ActingParties`, and
+  `WitnessParties`. Other wire fields (event/node identifiers, package
+  name, descendant tracking, implemented-interface lists) are intentionally
+  omitted — they can be added later if a use case appears. Replaces
+  canton#53.
+- **`TransactionResult.ExercisedEvents`** — new
+  `IReadOnlyList<ExercisedEvent>` init-only property, defaults to an empty
+  list. Lets codegen-emitted choice wrappers walk
+  `ExercisedEvent.ExerciseResult` through a typed deserializer to project a
+  typed `ExerciseOutcome<TResult>` for choices whose return type is not a
+  contract id (e.g. `choice GetTrailingTwap : Decimal`). Additive only —
+  existing 4-arg construction continues to compile and the property
+  defaults to empty until the canton-side `Daml.Runtime.Grpc` bridge is
+  updated to populate it (follow-up). Unblocks PR #66 (issue #63).
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →

@@ -16,7 +16,19 @@ public record TransactionResult(
     string UpdateId,
     long CompletionOffset,
     IReadOnlyList<CreatedContract> CreatedContracts,
-    IReadOnlyList<string> ArchivedContractIds);
+    IReadOnlyList<string> ArchivedContractIds)
+{
+    /// <summary>
+    /// Choice-exercise events observed in the transaction, in transaction order.
+    /// Defaults to an empty list — populated by ledger-client bridges (e.g.
+    /// <c>Daml.Runtime.Grpc</c>) when the transaction was requested with
+    /// ledger-effects shape. Codegen-emitted choice wrappers deserialize each
+    /// <see cref="ExercisedEvent.ExerciseResult"/> through the appropriate typed
+    /// projector to surface a typed <c>ExerciseOutcome&lt;TResult&gt;</c> for choices
+    /// whose return type is not a contract id (e.g. <c>choice C : Decimal</c>).
+    /// </summary>
+    public IReadOnlyList<ExercisedEvent> ExercisedEvents { get; init; } = Array.Empty<ExercisedEvent>();
+}
 
 /// <summary>
 /// Information about a contract created by a transaction.
