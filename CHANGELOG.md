@@ -137,6 +137,27 @@ because they are versioned in lockstep:
   `System.ValueTuple` semantics. Distinct from the wire-level
   `Daml.Runtime.Data.DamlUnit`: `Unit` is the typed return; `DamlUnit` is its
   wire encoding.
+- **`Daml.Runtime.Commands.SubmitterInfo`** value type carrying the `actAs`
+  (authorizing) and `readAs` (read-only visibility) party sets that propagate
+  to `Commands.act_as` / `Commands.read_as` on the wire. `ActAs` is validated
+  non-empty (throws `ArgumentException`); each caller-supplied party set is
+  snapshotted into an immutable `FrozenSet<Party>` at construction (so caller
+  mutations after the fact don't bleed in, and a consumer who casts the
+  exposed `IReadOnlySet<Party>` back to a concrete type still can't mutate it),
+  and any default-`Party` entry is rejected at construction time so the
+  invariant fails loud rather than at later serialization.
+  `Equals`/`GetHashCode` are overridden to compare by set contents
+  (order-independent) rather than the record-struct-synthesized reference
+  comparison on the backing fields. Implicit conversions from `string` and
+  `Party` preserve the single-party ergonomic at every call site.
+  Canonical home for the type: `Daml.Runtime` already owns `Party`, so command
+  submitters belong here too. Foundation for the upcoming `SubmitterInfo`
+  overloads on `Daml.Ledger.Abstractions.ILedgerClient` and the named-signatory
+  codegen surface (issue #68).
+- **`CommandsSubmission.WithSubmitter(SubmitterInfo)`** helper — sets both
+  `ActAs` and `ReadAs` from a typed submitter in one call. The preferred
+  projection point for code-generated and library callers; mirrors the wire
+  shape exactly.
 
 ### Changed — generated code shape
 

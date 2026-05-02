@@ -52,4 +52,22 @@ public sealed record CommandsSubmission(
     /// </summary>
     public CommandsSubmission WithReadAs(params Party[] parties) =>
         this with { ReadAs = parties };
+
+    /// <summary>
+    /// Applies a <see cref="SubmitterInfo"/> — sets both <see cref="ActAs"/> and
+    /// <see cref="ReadAs"/> from the submitter's party sets in a single call. The
+    /// preferred way for code-generated and library callers to project a typed
+    /// submitter onto a submission; preserves the property that the wire format
+    /// reflects exactly the parties carried by <paramref name="submitter"/>.
+    /// </summary>
+    public CommandsSubmission WithSubmitter(SubmitterInfo submitter)
+    {
+        var withActAs = this with { ActAs = [.. submitter.ActAs] };
+        // When the submitter carries no readAs parties, clear any pre-existing
+        // ReadAs on the submission so the wire shape reflects exactly the
+        // parties carried by the submitter — both projections fully overwritten.
+        return submitter.ReadAs.Count == 0
+            ? withActAs with { ReadAs = null }
+            : withActAs with { ReadAs = [.. submitter.ReadAs] };
+    }
 }
