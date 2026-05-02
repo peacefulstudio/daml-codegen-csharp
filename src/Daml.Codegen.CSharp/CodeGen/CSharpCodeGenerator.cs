@@ -548,6 +548,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // `ContractId<TemplateName>` receivers.
         WriteChoiceAsyncExercisersClass(indent, template, className, dataTypes);
 
+        // Typed exerciser wrappers for choices whose return type is *not* a bare
+        // ContractId T (Decimal, records, lists, Unit, etc.). Emitted at the
+        // file's top level (sibling to the template class, not nested) so the
+        // extension methods are accessible with a single using of this
+        // namespace. See CSharpCodeGenerator.NonContractChoiceWrappers.cs for
+        // the emission rules.
+        TryWriteNonContractChoiceExtensions(indent, template, dataTypes);
+
         if (!options.UseFileScopedNamespaces)
         {
             indent.Dedent();
@@ -1728,6 +1736,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<DamlDate>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<DamlTimestamp>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"Party.FromDamlValue({valueName}.As<DamlParty>())",
+        // Unit. The wire-level DamlUnit.Instance is the single inhabitant; we
+        // surface it as the field type DamlUnit (matching MapDamlTypeToCSharp).
+        // Without this arm, nested Unit shapes — Optional (), [()], tuples
+        // containing () — fall through to `default!` and produce wrong typed
+        // results at runtime. The bare-`()` return is special-cased upstream;
+        // this arm covers the nested cases.
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{valueName}.As<DamlUnit>()",
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"{valueName}.As<DamlNumeric>().Value",

@@ -208,26 +208,31 @@ public class ChoiceResultStructTests
     [Fact]
     public void Generate_should_skip_result_struct_when_return_type_carries_no_contract_ids()
     {
-        // Choice GetCount : Int — non-creating, codegen should not emit a result struct
+        // Choice GetCount : Int — non-creating, codegen should not emit a public
+        // <Choice>Result record (the slot-based projector type from #60). Non-CID
+        // returns flow through the ExercisedEvents projector added in #63, which
+        // emits a private `Project<Choice>Result` helper instead.
         var module = ModuleWith(
             Template("Counter", new DamlPrimitiveType(DamlPrimitive.Int64), choiceName: "GetCount"));
 
         var code = GenerateAndReadTemplate(module, "Counter");
 
-        code.Should().NotContain("GetCountResult");
+        // The public <Choice>Result record is not emitted.
+        code.Should().NotContain("public sealed record GetCountResult");
+        // The slot-based FromCreatedContracts projector is not emitted.
         code.Should().NotContain("FromCreatedContracts");
     }
 
     [Fact]
     public void Generate_should_skip_result_struct_when_return_type_is_unit()
     {
-        // Archive returns Unit — also non-creating
+        // Archive returns Unit — also non-creating; same rules as above.
         var module = ModuleWith(
             Template("Thing", new DamlPrimitiveType(DamlPrimitive.Unit), choiceName: "Close"));
 
         var code = GenerateAndReadTemplate(module, "Thing");
 
-        code.Should().NotContain("CloseResult");
+        code.Should().NotContain("public sealed record CloseResult");
     }
 
     [Fact]

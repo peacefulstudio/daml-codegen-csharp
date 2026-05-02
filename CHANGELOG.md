@@ -101,14 +101,43 @@ because they are versioned in lockstep:
   interface-only and lockstep-versioned with the runtime, so pure-projector
   consumers absorb it at zero transitive weight. Required by the emitted
   `<Choice>Async` extension methods, which take `ILedgerClient`.
+- **Typed exerciser wrappers for non-contract-id choice returns** (closes
+  [#63](https://github.com/peacefulstudio/daml-codegen-csharp/issues/63)). For
+  every choice whose declared return type carries no `ContractId T` slot at the
+  top level (`Decimal`, `()`, records *via type-ref*, lists/optionals/tuples
+  of primitives, etc.), codegen now emits a
+  `<Choice>Async(this ContractId<TemplateName>, ILedgerClient, <args>, Party actAs, ...)`
+  extension method on a `<TemplateName>NonContractExtensions` static class. The
+  method calls `ILedgerClient.TrySubmitAndWaitForTransactionAsync`, walks the
+  resulting `tx.ExercisedEvents` (added in
+  [#80](https://github.com/peacefulstudio/daml-codegen-csharp/pull/80)) for
+  the matching choice, runs the already-emitted
+  `Choice<Choice>.ResultDecoder` over its `DamlValue` exercise result, and
+  returns `Task<ExerciseOutcome<TReturn>>`. `DamlError` and `InfraError`
+  outcomes pass through unchanged. Returns that expose at least one
+  `ContractId T` slot at the top level — bare `ContractId T`,
+  `Optional (ContractId T)`, `[ContractId T]`, and tuples with `ContractId`
+  components — continue to flow through #77's `<TemplateName>Extensions` class
+  and #60's slot-based projector. Records (referenced by name) whose fields
+  happen to contain `ContractId`s also stay on the new wrapper path because
+  the slot extractor intentionally does not unfold record types.
+- **`Daml.Runtime.Stdlib.Unit`** — single-inhabitant marker (`Unit.Value`) that
+  codegen surfaces at the call site for `()`-returning choices, mirroring
+  `System.ValueTuple` semantics. Distinct from the wire-level
+  `Daml.Runtime.Data.DamlUnit`: `Unit` is the typed return; `DamlUnit` is its
+  wire encoding.
 
 ### Changed — generated code shape
 
 - Generated template `.cs` files now declare additional `using` directives
   unconditionally: `Daml.Ledger.Abstractions`, `Daml.Runtime.Outcomes`,
   plus the BCL set (`System`, `System.Collections.Generic`,
-  `System.Threading`, `System.Threading.Tasks`) so generated source
-  compiles without `<ImplicitUsings>` enabled in the consumer csproj.
+  `System.Threading`, `System.Threading.Tasks`) so generated source compiles
+  without `<ImplicitUsings>` enabled in the consumer csproj. References to
+  the new `Daml.Runtime.Stdlib` types (e.g. `Stdlib.Unit`,
+  `Stdlib.Tuple2<…>`) are written fully qualified at the use site so no
+  `using Daml.Runtime.Stdlib;` is emitted, avoiding spurious IDE0005 / CS8019
+  failures in consumer projects with `TreatWarningsAsErrors`.
 
 ### Changed — BREAKING
 

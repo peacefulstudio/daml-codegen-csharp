@@ -135,16 +135,22 @@ public class ChoiceAsyncExerciserTests
     }
 
     [Fact]
-    public void Generate_should_not_emit_extensions_class_when_no_create_bearing_choices()
+    public void Generate_should_not_emit_create_extensions_class_when_no_create_bearing_choices()
     {
-        // Choices that return Unit / primitives don't get <Choice>Async extensions.
+        // Choices that return Unit / primitives don't go through the create-bearing
+        // <Choice>Async path (which projects via FromCreatedContracts). Non-CID
+        // returns are routed to a separate NonContractExtensions class (#63), which
+        // is verified by NonContractChoiceWrapperTests.
         var module = ModuleWith(
             Template("Counter", new DamlPrimitiveType(DamlPrimitive.Int64), choiceName: "GetCount"));
 
         var code = GenerateAndReadTemplate(module, "Counter");
 
-        code.Should().NotContain("CounterExtensions");
-        code.Should().NotContain("GetCountAsync");
+        // The plain <TemplateName>Extensions class is only emitted for create-bearing
+        // choices; primitive returns get the <TemplateName>NonContractExtensions class.
+        code.Should().NotContain("public static class CounterExtensions");
+        // GetCount's emission lives in CounterNonContractExtensions (issue #63).
+        code.Should().Contain("public static class CounterNonContractExtensions");
     }
 
     [Fact]
@@ -292,8 +298,12 @@ public class ChoiceAsyncExerciserTests
 
         code.Should().Contain("public static async Task<ExerciseOutcome<ExecuteSwapResult>> ExecuteSwapAsync(");
         code.Should().Contain("public static async Task<ExerciseOutcome<CancelResult>> CancelAsync(");
-        // Non-creating choice is skipped.
-        code.Should().NotContain("GetCountAsync");
+        // Non-creating choice (returns Int64, not a ContractId) is routed to the
+        // NonContractExtensions class added in #63 — not skipped — so it does emit
+        // an async wrapper, just via the ExercisedEvents projector path. The
+        // create-bearing AgreementExtensions class still excludes it.
+        code.Should().Contain("public static class AgreementNonContractExtensions");
+        code.Should().Contain("public static async Task<ExerciseOutcome<long>> GetCountAsync(");
     }
 
     [Fact]
