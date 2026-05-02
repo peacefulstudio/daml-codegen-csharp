@@ -235,6 +235,142 @@ public class ContractTypesTests
 
     #endregion
 
+    #region IDamlType / IDamlInterface marker tests
+
+    // Hand-rolled stand-in for a codegen-emitted Daml interface marker. A `interface I`
+    // declaration in Daml is now reified as a C# interface with `: IDamlInterface` and
+    // a static InterfaceId — exactly the shape CSharpCodeGenerator.GenerateInterface
+    // produces. ContractId<IHolding> et al. ride through ContractId<T>'s relaxed
+    // `where T : IDamlType` constraint. Concrete templates implement this marker so
+    // dispatch from a typed transaction projection can find them.
+    private interface ITestInterfaceMarker : IDamlInterface
+    {
+        static Identifier IDamlInterface.InterfaceId => new(TestPackageId, TestModuleName, "ITestInterfaceMarker");
+        static string IDamlInterface.PackageId => TestPackageId;
+        static string IDamlInterface.PackageName => TestPackageName;
+        static Version IDamlInterface.PackageVersion => TestPackageV1;
+    }
+
+    [Fact]
+    public void IDamlType_marker_is_implemented_by_ITemplate()
+    {
+        // ITemplate : IDamlType means every existing template, by virtue of
+        // implementing ITemplate, also satisfies the new shared `where T : IDamlType`
+        // constraint with no codegen change.
+        typeof(IDamlType).IsAssignableFrom(typeof(ITemplate)).Should().BeTrue();
+        typeof(IDamlType).IsAssignableFrom(typeof(TestTemplate)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IDamlType_marker_is_implemented_by_IDamlInterface()
+    {
+        // IDamlInterface : IDamlType means codegen-emitted interface markers slot
+        // directly into ContractId<T> and the typed transaction helpers without a
+        // separate code path.
+        typeof(IDamlType).IsAssignableFrom(typeof(IDamlInterface)).Should().BeTrue();
+        typeof(IDamlType).IsAssignableFrom(typeof(ITestInterfaceMarker)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ContractId_T_accepts_an_interface_marker_as_T()
+    {
+        // The constraint relaxation from `where T : ITemplate` to `where T : IDamlType`
+        // is the entire point of this change — a Daml interface marker (no template id,
+        // no payload) must compile inside ContractId<>.
+        var cid = new ContractId<ITestInterfaceMarker>("interface-cid-1");
+
+        cid.Value.Should().Be("interface-cid-1");
+    }
+
+    [Fact]
+    public void ContractId_ToDamlValue_uses_InterfaceId_for_interface_markers()
+    {
+        // For interface-typed contract ids the embedded identifier is the interface
+        // id, not a template id — that is what flows back when this contract id is
+        // serialised into a choice argument expecting `ContractId I` (e.g.
+        // `cid.exercise (toInterfaceContractId @IHolding) Transfer`).
+        var cid = new ContractId<ITestInterfaceMarker>("interface-cid-2");
+
+        var damlCid = cid.ToDamlValue();
+
+        damlCid.Value.Should().Be("interface-cid-2");
+        damlCid.TemplateId.Should().Be(new Identifier(TestPackageId, TestModuleName, "ITestInterfaceMarker"));
+    }
+
+    [Fact]
+    public void ContractId_ToDamlValue_uses_TemplateId_for_concrete_templates()
+    {
+        // Pin the template branch — same instance method, dispatched on the closed
+        // generic. Regression coverage for the reflection-based id resolver.
+        var cid = new ContractId<TestTemplate>("template-cid-3");
+
+        var damlCid = cid.ToDamlValue();
+
+        damlCid.Value.Should().Be("template-cid-3");
+        damlCid.TemplateId.Should().Be(TestTemplate.TemplateId);
+    }
+
+    [Fact]
+    public void DamlContractId_ToTyped_compiles_for_interface_marker()
+    {
+        // The relaxed `where T : IDamlType` on DamlContractId.ToTyped<T> means
+        // round-tripping a wire-level contract id into a typed interface contract id
+        // is now possible without a placeholder hop.
+        var damlCid = new DamlContractId("interface-cid-4");
+
+        var typed = damlCid.ToTyped<ITestInterfaceMarker>();
+
+        typed.Value.Should().Be("interface-cid-4");
+    }
+
+    // Concrete template that explicitly implements ITestInterfaceMarker via the
+    // codegen-emitted IImplements<I> witness. Mirrors what the codegen produces
+    // for `template MyHolding implements IHolding`.
+    private sealed record MyHolding(Party Owner) : ITemplate, IImplements<ITestInterfaceMarker>
+    {
+        public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(MyHolding));
+        public static string PackageId => TestPackageId;
+        public static string PackageName => TestPackageName;
+        public static Version PackageVersion => TestPackageV1;
+
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("owner", Owner.ToDamlValue()));
+    }
+
+    [Fact]
+    public void ToInterfaceContractId_preserves_value_and_re_types_to_interface_marker()
+    {
+        // Daml's `toInterfaceContractId @I cid` is a no-op at the wire level — the
+        // contract id string does not change. The C# helper mirrors that: same
+        // value, different static type witness so subsequent calls see
+        // `ContractId<IHolding>` for downcast/dispatch purposes.
+        var concreteCid = new ContractId<MyHolding>("template-cid-coerce");
+
+        var interfaceCid = concreteCid.ToInterfaceContractId<MyHolding, ITestInterfaceMarker>();
+
+        interfaceCid.Value.Should().Be("template-cid-coerce");
+        interfaceCid.Should().BeOfType<ContractId<ITestInterfaceMarker>>();
+    }
+
+    [Fact]
+    public void ExerciseCommand_ForInterface_uses_InterfaceId_in_template_id_slot()
+    {
+        // Per Canton commands.proto: "To exercise a choice on an interface, specify
+        // the interface identifier in the template_id field." The runtime helper
+        // honours that — `ExerciseCommand.ForInterface<I>(cid, choice, arg)` should
+        // place the InterfaceId in TemplateId, not any concrete template id.
+        var cid = new ContractId<ITestInterfaceMarker>("interface-cid-exec");
+        var arg = new TestTemplate(new Party("alice"), 42L);
+
+        var cmd = Daml.Runtime.Commands.ExerciseCommand.ForInterface<ITestInterfaceMarker>(
+            cid, "Transfer", arg.ToRecord());
+
+        cmd.TemplateId.Should().Be(new Identifier(TestPackageId, TestModuleName, "ITestInterfaceMarker"));
+        cmd.ContractId.Should().Be("interface-cid-exec");
+        cmd.Choice.Should().Be("Transfer");
+    }
+
+    #endregion
+
     #region DamlContractId Tests
 
     [Fact]

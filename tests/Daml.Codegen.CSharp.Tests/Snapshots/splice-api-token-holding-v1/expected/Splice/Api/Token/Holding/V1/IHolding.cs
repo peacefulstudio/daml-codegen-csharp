@@ -41,3 +41,52 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
     /// </summary>
     // Choice Archive() -> DamlUnit
 }
+
+/// <summary>
+/// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>Holding</c> Daml interface.
+/// One method per choice; each submits an interface-typed
+/// <see cref="Daml.Runtime.Commands.ExerciseCommand"/> built via
+/// <see cref="Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(Daml.Runtime.Contracts.ContractId{TInterface},string,Daml.Runtime.Data.DamlValue)"/>
+/// through <see cref="Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync"/>
+/// and surfaces the raw <see cref="Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
+/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
+/// implementing template (and therefore the produced contracts' shapes) is unknown
+/// at the call site.
+/// </summary>
+public static class IHoldingExtensions
+{
+    /// <summary>
+    /// Exercises the <c>Archive</c> interface choice on this contract id.
+    /// The wire-level <c>template_id</c> slot carries the interface id — Canton's
+    /// ledger API resolves the concrete implementing template at the participant.
+    /// </summary>
+    /// <param name="contractId">The interface-typed contract id to exercise on.</param>
+    /// <param name="client">The ledger client.</param>
+    /// <param name="argument">The choice argument.</param>
+    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+        this ContractId<IHolding> contractId,
+        ILedgerClient client,
+        Archive argument,
+        Party actAs,
+        string? workflowId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(argument);
+        var command = Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, "Archive", argument.ToRecord());
+
+        var submission = CommandsSubmission.Single(command)
+            .WithActAs(actAs)
+            .WithCommandId(Guid.NewGuid().ToString());
+        if (workflowId is not null)
+        {
+            submission = submission.WithWorkflowId(workflowId);
+        }
+
+        return await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);
+    }
+}

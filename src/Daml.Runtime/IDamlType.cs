@@ -13,11 +13,7 @@ namespace Daml.Runtime;
 /// <remarks>
 /// This marker has no members. Helpers that <em>do</em> dispatch on
 /// template-specific static members (e.g. <c>T.TemplateId</c>) continue to
-/// constrain on <see cref="Daml.Runtime.Contracts.ITemplate"/>. Codegen-emitted
-/// interface markers (issue
-/// <see href="https://github.com/peacefulstudio/daml-codegen-csharp/issues/62"/>)
-/// will land in #67 and will satisfy the <c>where T : IDamlType</c> constraint
-/// without changes here.
+/// constrain on <see cref="Daml.Runtime.Contracts.ITemplate"/>.
 /// </remarks>
 public interface IDamlType
 {

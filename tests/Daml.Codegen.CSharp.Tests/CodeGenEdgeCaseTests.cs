@@ -908,6 +908,149 @@ public class CodeGenEdgeCaseTests
         hasRegular.Should().BeTrue("module B's Token must keep its IDamlValue regular-record shape");
     }
 
+    // -------------------------------------------------------------------
+    // Interface choice extension method tests — for every Daml interface
+    // choice, codegen now emits a typed `<Choice>Async`-style helper on
+    // `ContractId<I>` so consumers can do `await cid.TransferAsync(arg)`
+    // without naming the concrete template. The generated extension class
+    // sits beside the interface declaration in the same file.
+    // -------------------------------------------------------------------
+
+    [Fact]
+    public void Generate_should_emit_extension_class_for_interface_choices()
+    {
+        // Arrange — interface with one record-argument choice and one Unit choice.
+        // Both shapes are common: Splice's IHolding has both styles.
+        var module = new DamlModule
+        {
+            Name = "Test.Holding",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition([])
+                },
+                new DamlDataType
+                {
+                    Name = "Transfer",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "Transfer_Result",
+                    Definition = new DamlRecordDefinition([])
+                }
+            ],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Holding",
+                    ViewType = null,
+                    Methods =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", "Test.Holding", "Transfer"),
+                            ReturnType = new DamlTypeRef("", "Test.Holding", "Transfer_Result")
+                        },
+                        new DamlChoice
+                        {
+                            Name = "Lock",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var ifaceFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("IHolding.cs", StringComparison.Ordinal));
+
+        // Assert — the file contains both the interface declaration AND a
+        // sibling static extensions class with one method per choice.
+        ifaceFile.Should().NotBeNull();
+        var code = ifaceFile!.Content;
+
+        // Marker-typed interface declaration is unchanged
+        code.Should().Contain("public interface IHolding : IDamlInterface");
+
+        // Sibling extensions class with one method per choice
+        code.Should().Contain("public static class IHoldingExtensions");
+
+        // Record-argument choice: async signature returning ExerciseOutcome<TransactionResult>
+        // (mirrors the concrete-template <Choice>Async shape from #77). Interface choices
+        // surface the raw ExerciseOutcome<TransactionResult> because the implementing
+        // template — and therefore any typed <Choice>Result projection — is unknown at
+        // the call site.
+        code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        code.Should().Contain("this ContractId<IHolding> contractId,");
+        code.Should().Contain("ILedgerClient client,");
+        code.Should().Contain("Transfer argument,");
+        code.Should().Contain("Party actAs,");
+        // Internally builds the command via the runtime ForInterface helper — the
+        // wire-level template_id slot carries IHolding.InterfaceId, and the choice
+        // argument is serialised via argument.ToRecord().
+        code.Should().Contain("Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, \"Transfer\", argument.ToRecord())");
+        // Submission is funnelled through ILedgerClient.TrySubmitAndWaitForTransactionAsync
+        // — same submission path as concrete-template <Choice>Async.
+        code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
+
+        // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
+        code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> LockAsync(");
+        code.Should().Contain("Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, \"Lock\", DamlUnit.Instance)");
+    }
+
+    [Fact]
+    public void Generate_should_skip_extension_class_when_interface_has_no_methods()
+    {
+        // Arrange — view-only interface with no choices. No exerciser methods to
+        // emit, so the extension class is suppressed (avoids an empty static
+        // class littering the namespace).
+        var module = new DamlModule
+        {
+            Name = "Test.Marker",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Marker",
+                    Definition = new DamlRecordDefinition([])
+                }
+            ],
+            Interfaces =
+            [
+                new DamlInterface { Name = "Marker", Methods = [], ViewType = null }
+            ]
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var ifaceFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("IMarker.cs", StringComparison.Ordinal));
+
+        // Assert
+        ifaceFile.Should().NotBeNull();
+        ifaceFile!.Content.Should().Contain("public interface IMarker : IDamlInterface");
+        ifaceFile.Content.Should().NotContain("IMarkerExtensions");
+    }
+
     #endregion
 
     #region Cross-Package Type Reference Tests

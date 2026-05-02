@@ -681,6 +681,18 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.Dedent();
         indent.AppendLine("}");
 
+        // Sibling static class hosting the typed interface-choice exercisers.
+        // Mirrors the shape Daml expects: `cid.exercise (toInterfaceContractId @I)
+        // Choice with ...` becomes `await cid.ChoiceAsync(client, ...)` in C#.
+        // The `cid` here is a `ContractId<I>` (interface marker), so the wire-level
+        // `template_id` slot carries the interface id per Canton's gRPC semantics —
+        // see ExerciseCommand.ForInterface in Daml.Runtime.
+        if (iface.Methods.Count > 0)
+        {
+            indent.AppendLine();
+            WriteInterfaceChoiceExtensions(indent, package, module, iface, interfaceName, dataTypes);
+        }
+
         if (!options.UseFileScopedNamespaces)
         {
             indent.Dedent();
@@ -688,6 +700,150 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
 
         return sb.ToString();
+    }
+
+    private void WriteInterfaceChoiceExtensions(
+        IndentWriter indent,
+        DamlPackage package,
+        DamlModule module,
+        DamlInterface iface,
+        string interfaceName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>{iface.Name}</c> Daml interface.");
+            indent.AppendLine("/// One method per choice; each submits an interface-typed");
+            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand\"/> built via");
+            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(Daml.Runtime.Contracts.ContractId{{TInterface}},string,Daml.Runtime.Data.DamlValue)\"/>");
+            indent.AppendLine("/// through <see cref=\"Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine($"/// and surfaces the raw <see cref=\"Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
+            indent.AppendLine("/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the");
+            indent.AppendLine("/// implementing template (and therefore the produced contracts' shapes) is unknown");
+            indent.AppendLine("/// at the call site.");
+            indent.AppendLine("/// </summary>");
+        }
+
+        var extensionsClassName = $"{interfaceName}Extensions";
+
+        // Defensive filter mirrors the pattern from #66's non-CID emitter: skip
+        // interface choices whose argument is a non-Archive external `DamlTypeRef`
+        // because `GetChoiceArgumentInfo` cannot resolve cross-package refs to
+        // their fully qualified C# name today, and emitting a wrapper would
+        // silently drop the actual argument and submit an empty unit payload.
+        // A missing wrapper is more diagnosable than a wrong one. Tracked in #99.
+        var emittable = iface.Methods
+            .Where(m => m.ArgumentType is not DamlTypeRef typeRef
+                || typeRef.Name == "Archive"
+                || dataTypes.ContainsKey(typeRef.Name))
+            .ToList();
+
+        if (emittable.Count == 0)
+        {
+            return;
+        }
+
+        indent.AppendLine($"public static class {extensionsClassName}");
+        indent.AppendLine("{");
+        indent.Indent();
+
+        for (var i = 0; i < emittable.Count; i++)
+        {
+            if (i > 0)
+            {
+                indent.AppendLine();
+            }
+            WriteInterfaceChoiceExtensionMethod(indent, emittable[i], interfaceName, dataTypes);
+        }
+
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    private void WriteInterfaceChoiceExtensionMethod(
+        IndentWriter indent,
+        DamlChoice choice,
+        string interfaceName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var methodName = $"{SanitizeIdentifier(choice.Name)}Async";
+        // Resolve the argument type via the same pipeline used everywhere else in
+        // the generator. `GetChoiceArgumentInfo` returns the *choice* name for
+        // same-module DamlTypeRef args because template choices generate nested
+        // arg types named after the choice — interface choices don't, so the
+        // returned name would be a non-existent type when the choice name differs
+        // from the referenced record. `MapDamlTypeToCSharp` resolves the actual
+        // referenced type instead.
+        var argIsUnit = choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
+        var argTypeName = argIsUnit ? "DamlUnit" : MapDamlTypeToCSharp(choice.ArgumentType);
+        var hasArg = !argIsUnit;
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Exercises the <c>{choice.Name}</c> interface choice on this contract id.");
+            indent.AppendLine("/// The wire-level <c>template_id</c> slot carries the interface id — Canton's");
+            indent.AppendLine("/// ledger API resolves the concrete implementing template at the participant.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contractId\">The interface-typed contract id to exercise on.</param>");
+            indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+            indent.AppendLine("/// <param name=\"actAs\">The party submitting the command.</param>");
+            indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
+        }
+
+        // Method signature mirrors the concrete-template <Choice>Async shape from #77,
+        // but skips the typed <Choice>Result projection: interface choices do not know
+        // the implementing template at the call site, so the most useful return shape
+        // is the raw ExerciseOutcome<TransactionResult> the ledger client surfaces.
+        indent.AppendLine($"public static async Task<ExerciseOutcome<TransactionResult>> {methodName}(");
+        indent.Indent();
+        indent.AppendLine($"this ContractId<{interfaceName}> contractId,");
+        indent.AppendLine("ILedgerClient client,");
+        if (hasArg)
+        {
+            indent.AppendLine($"{argTypeName} argument,");
+        }
+        indent.AppendLine("Party actAs,");
+        indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine("CancellationToken cancellationToken = default)");
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
+        if (hasArg && choice.ArgumentType is DamlTypeRef)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
+
+        var argExpr = hasArg
+            ? GetToValueConversion(choice.ArgumentType, "argument")
+            : "DamlUnit.Instance";
+        indent.AppendLine($"var command = Daml.Runtime.Commands.ExerciseCommand.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
+        indent.AppendLine();
+        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.Indent();
+        indent.AppendLine(".WithActAs(actAs)");
+        indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
+        indent.Dedent();
+        indent.AppendLine("if (workflowId is not null)");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine("submission = submission.WithWorkflowId(workflowId);");
+        indent.Dedent();
+        indent.AppendLine("}");
+        indent.AppendLine();
+        indent.AppendLine("return await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);");
+
+        indent.Dedent();
+        indent.AppendLine("}");
     }
 
     /// <summary>

@@ -85,6 +85,28 @@ because they are versioned in lockstep:
   [#73](https://github.com/peacefulstudio/daml-codegen-csharp/pull/73). Unblocks
   the in-flight interface-markers work in
   [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67).
+- **Daml interface markers, first-class** — `ContractId<T>`'s constraint
+  is relaxed from `where T : ITemplate` to `where T : IDamlType` (see above)
+  so codegen-emitted interface markers (e.g. `IHolding` from the Splice
+  token standard) flow through the typed contract id without the placeholder
+  hack. `ContractId<T>.ToDamlValue()` resolves the embedded identifier per
+  closed generic — `TemplateId` for templates, `InterfaceId` for interface
+  markers — via reflection on the static virtual member.
+  `ContractIdInterfaceCoercion.ToInterfaceContractId<TConcrete, TInterface>`
+  extension method mirrors Daml's `toInterfaceContractId @I cid` at the
+  C# type level, gated by `IImplements<TInterface>` on the source template
+  so a coercion to an interface the template doesn't implement does not
+  compile. `ExerciseCommand.ForInterface<TInterface>(cid, choice, arg)`
+  builds an interface-typed exercise command — the wire-level `template_id`
+  slot carries the interface id per Canton's `commands.proto` semantics.
+  ([#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
+- **Codegen-emitted interface choice exercisers** — for every Daml interface
+  with one or more choices, the generated `IFoo.cs` file now also contains a
+  sibling static `IFooExtensions` class with one `<Choice>Async`-style helper
+  per choice. Callers can `cid.TransferAsync(arg)` on a `ContractId<IHolding>`
+  without naming the concrete implementing template. Built via the new
+  `ExerciseCommand.ForInterface<I>` runtime helper. (#62,
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →
@@ -292,10 +314,15 @@ because they are versioned in lockstep:
 
 ### Changed
 
+- **BREAKING:** `ContractId<T>`'s generic constraint relaxed from
+  `where T : ITemplate` to `where T : IDamlType`. Source-compatible for all
+  template-typed callers (`ITemplate : IDamlType`); enables the new
+  interface-marker callers. Same change applied to `DamlContractId.ToTyped<T>`.
+  (#62,
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
 - **`ContractId<T>` typeparam doc** clarifies that `T` may be an interface or
   interface placeholder (in addition to a template), and points at the
-  throwing-stub pattern. Behavior unchanged: the constraint `T : ITemplate`
-  is preserved.
+  throwing-stub pattern.
 - **Record-field deserialization expressions** simplified — redundant outer
   parens stripped (`((val).As<T>()).Value` → `val.As<T>().Value`). Generated
   code is unchanged in behavior.

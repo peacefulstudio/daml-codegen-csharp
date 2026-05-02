@@ -9,8 +9,7 @@ namespace Daml.Runtime.Contracts;
 /// Extends <see cref="IDamlType"/> so that generic helpers which do not require
 /// template-specific static metadata can constrain on the broader marker and
 /// accept either a concrete template or a Daml interface marker (the sibling
-/// <see cref="IDamlInterface"/> defined just below; codegen-emitted interface
-/// markers tracked in issue #62 land in #67).
+/// <see cref="IDamlInterface"/> defined just below).
 /// </remarks>
 public interface ITemplate : IDamlValue, IDamlType
 {
