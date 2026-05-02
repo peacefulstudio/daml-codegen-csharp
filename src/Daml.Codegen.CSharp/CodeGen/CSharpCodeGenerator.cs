@@ -882,6 +882,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // otherwise miss `System`, `Collections.Generic`, `Tasks`, and `Threading`.
         indent.AppendLine("using System;");
         indent.AppendLine("using System.Collections.Generic;");
+        indent.AppendLine("using System.Linq;");
         indent.AppendLine("using System.Threading;");
         indent.AppendLine("using System.Threading.Tasks;");
         indent.AppendLine("using Daml.Ledger.Abstractions;");
@@ -1010,7 +1011,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlField> fields)
     {
-        indent.AppendLine("/// <summary>Converts this template to a DamlRecord.</summary>");
+        // Wording is "this value" rather than "this template" because the same
+        // method is emitted for templates, plain records, and choice argument
+        // records — the noun has to fit all three subjects.
+        indent.AppendLine("/// <summary>Converts this value to a DamlRecord.</summary>");
 
         if (fields.Count == 0)
         {
