@@ -15,11 +15,11 @@ public class ContractStreamEventTests
     {
         ContractStreamEvent<TestTemplate>[] events =
         [
-            new ContractStreamEvent<TestTemplate>.Created(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 1L, ["alice"]),
-            new ContractStreamEvent<TestTemplate>.Archived(new ContractId<TestTemplate>("c1"), 2L, ["alice"]),
-            new ContractStreamEvent<TestTemplate>.Exercised(new ContractId<TestTemplate>("c1"), "Accept", DamlUnit.Instance, DamlUnit.Instance, true, 3L, ["alice"]),
-            new ContractStreamEvent<TestTemplate>.Assigned(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 4L, "src", "tgt", ["alice"]),
-            new ContractStreamEvent<TestTemplate>.Unassigned(new ContractId<TestTemplate>("c1"), 5L, "src", "tgt", ["alice"]),
+            new ContractStreamEvent<TestTemplate>.Created(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 1L, [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Archived(new ContractId<TestTemplate>("c1"), 2L, [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Exercised(new ContractId<TestTemplate>("c1"), "Accept", DamlUnit.Instance, DamlUnit.Instance, true, 3L, [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Assigned(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 4L, "src", "tgt", [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Unassigned(new ContractId<TestTemplate>("c1"), 5L, "src", "tgt", [new Party("alice")]),
             new ContractStreamEvent<TestTemplate>.Checkpoint(6L),
             new ContractStreamEvent<TestTemplate>.StreamError(14, "unavailable"),
         ];

@@ -57,7 +57,7 @@ public abstract record ContractStreamEvent<T>
         ContractId<T> ContractId,
         DamlRecord Payload,
         long Offset,
-        IReadOnlyList<string> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was archived.
@@ -68,7 +68,7 @@ public abstract record ContractStreamEvent<T>
     public sealed record Archived(
         ContractId<T> ContractId,
         long Offset,
-        IReadOnlyList<string> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A choice was exercised on a contract of type <typeparamref name="T"/>.
@@ -89,7 +89,7 @@ public abstract record ContractStreamEvent<T>
         DamlValue ExerciseResult,
         bool Consuming,
         long Offset,
-        IReadOnlyList<string> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was assigned to a
@@ -110,7 +110,7 @@ public abstract record ContractStreamEvent<T>
         long Offset,
         string Source,
         string Target,
-        IReadOnlyList<string> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was unassigned from a
@@ -127,7 +127,7 @@ public abstract record ContractStreamEvent<T>
         long Offset,
         string Source,
         string Target,
-        IReadOnlyList<string> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A participant-emitted offset checkpoint with no template-matching

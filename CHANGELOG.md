@@ -53,6 +53,20 @@ because they are versioned in lockstep:
   `System.Threading`, `System.Threading.Tasks`) so generated source
   compiles without `<ImplicitUsings>` enabled in the consumer csproj.
 
+### Changed — BREAKING
+
+- **`Daml.Runtime.Streams.ContractStreamEvent<T>.{Created, Archived, Exercised, Assigned, Unassigned}.WitnessParties`**
+  changes from `IReadOnlyList<string>` to `IReadOnlyList<Party>` for sibling
+  consistency with `Daml.Runtime.Contracts.{CreatedEvent, ArchivedEvent,
+  ExercisedEvent}` and the broader project trend toward typed party values
+  (`Party` instead of bare `string`). Consumers comparing or pattern-matching
+  on these collections need to migrate `string` accesses to `Party.Id` (or
+  use the `Party` value directly via `Equals`). Closes #86. **Bridge
+  follow-up required**: `Canton.Ledger.Grpc.Client` / `Daml.Runtime.Grpc`
+  must update its `ProjectTransaction` / equivalent stream-projection code to
+  construct `WitnessParties` as `Party` (currently constructs from proto
+  `string` directly) before consuming the new `Daml.Runtime` version.
+
 ### Fixed
 
 - **`WriteChoiceMethod` now skips emission for choices with a fallback
