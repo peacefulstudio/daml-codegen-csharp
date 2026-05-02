@@ -15,6 +15,23 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- **Contract-key `Key` property is now a `partial` declaration** instead of a stub that throws `NotImplementedException` at runtime ([#65](https://github.com/peacefulstudio/daml-codegen-csharp/pull/65)). The codegen still detects keys and emits `: IHasKey<TKey>`, but the property body is now supplied by a hand-rolled `partial` in the consuming project until the full DALF key-expression analysis (mapping the template's `key` Daml expression back to template fields) lands. This shifts the failure mode from runtime (throwing on first `Key` access) to compile time (Roslyn `CS9248` on the consumer build until the implementing partial is supplied) — impossible to ship to production unnoticed. Consumers must add an implementing partial alongside the generated template, **inside whatever namespace the generated `Foo.cs` declares**. By default that namespace is derived from the Daml package name (e.g. `My.Daml.Package`); if you override it with `--namespace` (CLI) or `CodeGenOptions.RootNamespace` (library), match the override exactly. Open the generated `Foo.cs` to confirm the namespace before writing your partial:
+  ```csharp
+  // In your project, alongside the generated Foo.cs.
+  // Namespace MUST match whatever the generated file declares. Default is
+  // package-derived, but `--namespace` / `RootNamespace` overrides it —
+  // open the generated Foo.cs and copy the namespace from there.
+  namespace My.Daml.Package;
+
+  public sealed partial record Foo
+  {
+      public partial string Key => Owner.Id;  // or whatever your key expression is
+  }
+  ```
+  The implementing partial's type kind must match the generated type kind: if you configure the codegen with `UseRecordTypes=false`, the generated template is a `public sealed partial class` and the implementing partial must also be a `partial class` (not `partial record`). Requires C# 13 on the consumer side, which means **.NET 9 SDK or later on the build machine** even when the consumer's `<TargetFramework>` is `net8.0` — the C# compiler is shipped with the SDK, not the target runtime, so a build host with only the .NET 8 SDK installed cannot parse the generated partial-property syntax. The codegen-emitted `.csproj` pins `<LangVersion>13</LangVersion>` only for packages that actually contain a key-bearing template, so key-less DARs continue to build with whatever LangVersion the consumer's SDK defaults supply. Unblocks Sample to opt into typed key fetch / exercise wrappers (`Foo.FetchByKeyAsync`, `Foo.<Choice>ByKeyAsync` against `IPqsClient` / `ILedgerClient`) without inheriting a throwing default. Full ByKey wrapper emission is tracked in [#64](https://github.com/peacefulstudio/daml-codegen-csharp/issues/64).
+
 ### Added
 
 - **`Daml.Runtime.Data.SynchronizerId`** — `readonly record struct` mirroring

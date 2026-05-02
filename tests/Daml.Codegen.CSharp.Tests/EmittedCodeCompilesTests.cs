@@ -20,7 +20,7 @@ namespace Daml.Codegen.CSharp.Tests;
 /// </summary>
 public class EmittedCodeCompilesTests
 {
-    private static CSharpCodeGenerator CreateGenerator()
+    private static CSharpCodeGenerator CreateGenerator(bool useRecordTypes = true)
     {
         var options = new CodeGenOptions
         {
@@ -28,8 +28,8 @@ public class EmittedCodeCompilesTests
             GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true
+            UseRecordTypes = useRecordTypes,
+            UsePrimaryConstructors = useRecordTypes,
         };
         var logger = new ConsoleLogger(0);
         return new CSharpCodeGenerator(options, logger);
@@ -175,6 +175,196 @@ public class EmittedCodeCompilesTests
         errors.Should().BeEmpty(
             "emitted code should compile against Daml.Runtime + Daml.Ledger.Abstractions, but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_template_with_key_fails_to_compile_without_implementing_partial()
+    {
+        // PR #65 contract: a template with a key emits `public partial T Key { get; }`
+        // — a body-less defining partial property. By design, the consumer MUST supply
+        // an implementing partial declaration. If they don't, Roslyn reports CS9248
+        // "Partial property '...Key' must have an implementation part." This test pins
+        // that contract: a regression that emits a body (e.g. a throwing fallback or an
+        // auto-property setter) would let the emitted source compile standalone, hiding
+        // the deferred-work gap from consumers who would only discover it at runtime.
+        var files = GenerateKeyBearingTemplate();
+
+        var diagnostics = CompileEmittedFiles(files);
+
+        diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Should().Contain(d => d.Id == "CS9248",
+                "the body-less partial Key declaration must surface at compile time so consumers can't ship without supplying an implementing partial");
+    }
+
+    [Fact]
+    public void Emitted_template_with_key_compiles_when_consumer_supplies_implementing_partial()
+    {
+        // The other half of the PR #65 contract: when the consumer DOES supply an
+        // implementing partial declaration in the same compilation, the emitted code
+        // compiles cleanly. Locks in the "extension point" half of the partial-property
+        // shape — a regression that rejected valid implementing partials would block
+        // every consumer of key-bearing templates.
+        var files = GenerateKeyBearingTemplate();
+
+        // Synthesise the implementing partial that a consuming project would write
+        // by hand alongside the generated AssetWithKey.cs.
+        // Namespace must match the codegen-emitted partial — the codegen uses the
+        // package name (`Test.Package`), not the module name. Mismatched namespaces
+        // are silently treated as different types, so neither partial finds its
+        // counterpart and Roslyn emits CS9248 + CS9249 simultaneously.
+        var consumerPartial = new GeneratedFile(
+            RelativePath: "AssetWithKey.Consumer.cs",
+            Content: """
+                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                using Daml.Runtime.Data;
+                namespace Test.Package;
+                public sealed partial record AssetWithKey
+                {
+                    public partial string Key => Owner.Id;
+                }
+                """);
+
+        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        errors.Should().BeEmpty(
+            "emitted code with a consumer-supplied implementing partial should compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Generate_should_emit_csharp13_marker_when_output_contains_partial_property()
+    {
+        // The MSBuild integration package (Daml.Codegen.CSharp.MSBuild) checks
+        // for `.daml-needs-csharp13` in the output directory and bumps the
+        // consumer project's <LangVersion> to 13. Without the marker, MSBuild
+        // consumers (rather than --generate-project users) inherit their
+        // project's default LangVersion and silently fail to compile the
+        // partial-property syntax. This test pins that the marker is emitted
+        // alongside any key-bearing generation.
+        var files = GenerateKeyBearingTemplate();
+
+        files.Should().Contain(f => f.RelativePath == ".daml-needs-csharp13",
+            "the MSBuild integration relies on this sentinel to bump LangVersion to 13");
+    }
+
+    [Fact]
+    public void Generate_should_not_emit_csharp13_marker_for_keyless_output()
+    {
+        // Belt-and-braces: a keyless emission must not write the marker; the
+        // MSBuild consumer would otherwise see a phantom LangVersion bump on a
+        // project that has no actual C#-13 needs.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "NoKey",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                    Key = null,
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "NoKey",
+                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().NotContain(f => f.RelativePath == ".daml-needs-csharp13");
+    }
+
+    [Fact]
+    public void Emitted_class_template_with_key_compiles_when_consumer_supplies_implementing_partial_class()
+    {
+        // CHANGELOG documents `UseRecordTypes=false` as a supported configuration:
+        // the generator emits a `partial class` (instead of `partial record`) and
+        // the consumer's implementing partial must match the type kind. This test
+        // pins that combination end-to-end through Roslyn so a class-mode
+        // regression doesn't slip through CI while only the record case is
+        // covered above.
+        var files = GenerateKeyBearingTemplate(useRecordTypes: false);
+
+        // Implementing partial declared as `partial class` to match the
+        // generator's class-mode output. `Owner` is a regular property on the
+        // generated class body (not a primary-constructor parameter).
+        var consumerPartial = new GeneratedFile(
+            RelativePath: "AssetWithKey.Consumer.cs",
+            Content: """
+                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                using Daml.Runtime.Data;
+                namespace Test.Package;
+                public sealed partial class AssetWithKey
+                {
+                    public partial string Key => Owner.Id;
+                }
+                """);
+
+        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        errors.Should().BeEmpty(
+            "emitted class-mode code with a consumer-supplied `partial class` implementing partial should compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    private static IReadOnlyList<GeneratedFile> GenerateKeyBearingTemplate(bool useRecordTypes = true)
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "AssetWithKey",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                    Key = new DamlPrimitiveType(DamlPrimitive.Text),
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "AssetWithKey",
+                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        return CreateGenerator(useRecordTypes).Generate(dar);
     }
 
     private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)

@@ -85,7 +85,30 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 externalRefs.Add(pkg);
             }
             var projectGenerator = new ProjectFileGenerator(options);
-            files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage, externalRefs));
+            // Pass the actually-emitted file set (post-RootFilter, post-IncludeDependencies)
+            // so the LangVersion pin tracks what's in this project, not what's in the
+            // unfiltered main package — see ProjectFileGenerator.RequiresCSharp13.
+            files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage, externalRefs, files));
+        }
+
+        // Emit a sentinel marker file when the generated code contains the
+        // partial-property `Key` syntax (which requires C# 13). The MSBuild
+        // integration package (Daml.Codegen.CSharp.MSBuild) checks for this marker
+        // in `DamlPinLangVersionForKeyBearing` and bumps the consumer project's
+        // <LangVersion> to 13 — without this, consumers using the MSBuild
+        // integration (rather than --generate-project) would silently inherit
+        // their project's default LangVersion and fail to compile the emitted
+        // partial-property syntax. The marker has no .cs extension so MSBuild's
+        // <Compile Include="**/*.cs"> glob doesn't pick it up.
+        if (files.Any(f =>
+                f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
+                && ProjectFileGenerator.ContentRequiresCSharp13(f.Content)))
+        {
+            files.Add(new GeneratedFile(
+                ".daml-needs-csharp13",
+                "Sentinel: this directory's generated code contains C#-13 partial-property syntax. "
+                + "The Daml.Codegen.CSharp.MSBuild targets check for this file and bump <LangVersion> "
+                + "to 13. See daml-codegen-csharp#65.\n"));
         }
 
         return files;
@@ -440,7 +463,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // Key property (if template has a key)
         if (template.Key is not null)
         {
-            WriteKeyProperty(indent, template.Key, fields);
+            WriteKeyProperty(indent, template.Key);
         }
 
         // Properties (if not using primary constructor)
@@ -912,59 +935,42 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
     }
 
-    private void WriteKeyProperty(IndentWriter indent, DamlType keyType, IReadOnlyList<DamlField> fields)
+    private void WriteKeyProperty(IndentWriter indent, DamlType keyType)
     {
         var csharpKeyType = MapDamlTypeToCSharp(keyType);
+        // cref attribute syntax escapes generic angle brackets as { }. Apply the
+        // same transform to the rendered key type so generic key types don't
+        // produce an invalid cref (CS1574 under <GenerateDocumentationFile>true</>).
+        var crefKeyType = csharpKeyType.Replace('<', '{').Replace('>', '}');
 
-        indent.AppendLine("/// <summary>Gets the contract key.</summary>");
-
-        // Check if key type matches a single field (simple key)
-        // Or if it's a tuple/record type (compound key)
-        switch (keyType)
+        // Full DALF key-expression analysis (mapping the template's `key` Daml
+        // expression back to template fields, including tuple/record builders) is
+        // tracked in peacefulstudio/daml-codegen-csharp#64. Until that lands, two
+        // options exist for the codegen-emitted Key accessor:
+        //   (1) emit a body that throws NotImplementedException — silent at compile,
+        //       loud at runtime;
+        //   (2) emit a partial property declaration that REQUIRES the consumer to
+        //       supply an implementing partial — loud at compile (CS9248
+        //       "Partial property must have an implementation part") and impossible
+        //       to ship to production unnoticed.
+        // We pick (2). Trade-off: consumers must use C# 13+ (partial-property
+        // syntax) and add a hand-rolled partial declaration alongside the generated
+        // template, satisfying the IHasKey<TKey> contract.
+        if (options.GenerateXmlDocs)
         {
-            case DamlPrimitiveType:
-            case DamlTypeApp { Base: DamlPrimitiveType }:
-                // Simple key - try to find corresponding field
-                // For now, generate a key construction from fields
-                indent.AppendLine($"public {csharpKeyType} Key => GetKey();");
-                indent.AppendLine();
-                indent.AppendLine($"private {csharpKeyType} GetKey()");
-                indent.AppendLine("{");
-                indent.Indent();
-                indent.AppendLine($"// TODO: Implement key extraction based on template key definition");
-                indent.AppendLine($"throw new NotImplementedException(\"Contract key extraction not yet implemented\");");
-                indent.Dedent();
-                indent.AppendLine("}");
-                break;
-
-            case DamlTypeRef typeRef:
-                // Key is a record type - generate construction from fields
-                indent.AppendLine($"public {csharpKeyType} Key => new {csharpKeyType}");
-                indent.AppendLine("{");
-                indent.Indent();
-                indent.AppendLine($"// Key fields should be mapped from template fields");
-                indent.AppendLine($"// This requires key expression analysis from DALF");
-                indent.Dedent();
-                indent.AppendLine("};");
-                break;
-
-            default:
-                // Tuple or complex key - generate a property that builds the tuple
-                indent.AppendLine($"public {csharpKeyType} Key");
-                indent.AppendLine("{");
-                indent.Indent();
-                indent.AppendLine("get");
-                indent.AppendLine("{");
-                indent.Indent();
-                indent.AppendLine("// Complex key - requires key expression from DALF");
-                indent.AppendLine("throw new NotImplementedException(\"Complex contract key not yet implemented\");");
-                indent.Dedent();
-                indent.AppendLine("}");
-                indent.Dedent();
-                indent.AppendLine("}");
-                break;
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{{{crefKeyType}}}\"/>.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <remarks>");
+            indent.AppendLine("/// The body is supplied by a hand-rolled <c>partial</c> declaration in the");
+            indent.AppendLine("/// consuming project until the full DALF key-expression analysis lands");
+            indent.AppendLine("/// (see <see href=\"https://github.com/peacefulstudio/daml-codegen-csharp/issues/64\">daml-codegen-csharp#64</see>).");
+            indent.AppendLine("/// Failure to supply the implementing partial is a compile-time error");
+            indent.AppendLine("/// (Roslyn <c>CS9248</c>) — that is intentional and indicates the consuming");
+            indent.AppendLine("/// project must opt in. Requires C# 13 or later on the consumer side.");
+            indent.AppendLine("/// </remarks>");
         }
-
+        indent.AppendLine($"public partial {csharpKeyType} Key {{ get; }}");
         indent.AppendLine();
     }
 

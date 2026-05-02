@@ -99,7 +99,18 @@ public class NewFeaturesCodeGenTests
         var code = assetFile!.Content;
 
         code.Should().Contain("IHasKey<string>");
-        code.Should().Contain("public string Key =>");
+        // Codegen emits the Key property as a body-less `partial` declaration so
+        // consuming projects fill in the body until DALF key-expression analysis
+        // lands (daml-codegen-csharp#64). The literal `{ get; }` shape (no setter,
+        // no body) is load-bearing — consumers' hand-rolled implementing partial
+        // mates against this exact signature. See WriteKeyProperty in
+        // CSharpCodeGenerator.
+        code.Should().Contain("public partial string Key { get; }");
+        // The whole point of the PR: no throwing body. A regression that emits
+        // both a partial and a throwing fallback (or removes `partial` and
+        // restores the old throw) must fail this assertion.
+        code.Should().NotContain("NotImplementedException");
+        code.Should().NotContain("throw new ");
     }
 
     [Fact]
@@ -151,7 +162,8 @@ public class NewFeaturesCodeGenTests
 
         // Party maps to Party, so key should be Party
         code.Should().Contain("IHasKey<Party>");
-        code.Should().Contain("public Party Key =>");
+        code.Should().Contain("public partial Party Key { get; }");
+        code.Should().NotContain("NotImplementedException");
     }
 
     [Fact]
@@ -211,7 +223,65 @@ public class NewFeaturesCodeGenTests
         var code = templateFile!.Content;
 
         code.Should().Contain("IHasKey<AssetKey>");
-        code.Should().Contain("public AssetKey Key =>");
+        code.Should().Contain("public partial AssetKey Key { get; }");
+        code.Should().NotContain("NotImplementedException");
+    }
+
+    [Fact]
+    public void Generate_should_emit_valid_cref_when_key_type_contains_angle_brackets()
+    {
+        // Pins the cref-escape transform on a key type whose mapped C# form
+        // contains generic angle brackets. `[Text]` (List Text) maps to
+        // `IReadOnlyList<string>`, and cref-attribute syntax requires the angle
+        // brackets be rendered as `{ }` — without the escape, the emitted XML
+        // doc reads `cref="...IHasKey<IReadOnlyList<string>>"/>` which is
+        // malformed XML and breaks consumer builds with
+        // <GenerateDocumentationFile>true</> + TreatWarningsAsErrors.
+        // The string-key test above doesn't exercise this path because `string`
+        // contains no angle brackets to escape.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "ListKeyTemplate",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                    Key = new DamlTypeApp(
+                        new DamlPrimitiveType(DamlPrimitive.List),
+                        [new DamlPrimitiveType(DamlPrimitive.Text)]),
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "ListKeyTemplate",
+                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("ListKeyTemplate.cs", StringComparison.Ordinal));
+
+        templateFile.Should().NotBeNull();
+        var code = templateFile!.Content;
+
+        // Property signature uses real C# generic syntax.
+        code.Should().Contain("public partial IReadOnlyList<string> Key { get; }");
+        // cref must use cref-escape `{ }` instead of `< >` — both nested levels.
+        code.Should().Contain("/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{IReadOnlyList{string}}\"/>");
+        // Belt-and-braces: the malformed unescaped form must not appear in the
+        // doc. Using a regex anchored to the `cref="` prefix so the structural
+        // angle brackets in the property signature don't trip the assertion.
+        code.Should().NotMatchRegex(@"cref=""[^""]*<[^""]*""");
     }
 
     [Fact]
@@ -260,7 +330,15 @@ public class NewFeaturesCodeGenTests
         var code = templateFile!.Content;
 
         code.Should().NotContain("IHasKey");
-        code.Should().NotContain("public string Key =>");
+        // Belt-and-braces: no Key emission of any shape for a key-less template.
+        // The `IHasKey` check is the load-bearing one; this catches a Key
+        // emission of ANY type form — generic (`IReadOnlyList<string>`),
+        // nullable (`string?`), qualified (`Foo.Bar`), or bare identifier —
+        // followed by the standalone `Key` token (so `IHasKey<...>` in the
+        // type declaration doesn't trip a false positive). The character class
+        // excludes `{`, `;`, `=` so the match can't span across the type
+        // declaration's own opening brace and into the property body.
+        code.Should().NotMatchRegex(@"\bpartial\s+[^;{=]+?\s+Key\b");
     }
 
     [Fact]
@@ -308,7 +386,18 @@ public class NewFeaturesCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        code.Should().Contain("/// <summary>Gets the contract key.</summary>");
+        // Multi-line XML doc emitted by the new partial-Key shape. Assert on the
+        // doc-comment line itself (with the `///` prefix and the `<see cref>` to
+        // the closed-generic IHasKey<string>): a bare `Contain("IHasKey")` would
+        // pass from the type declaration `: IHasKey<string>` even if the doc
+        // breadcrumb were dropped. The cref uses cref-attribute syntax (`{string}`
+        // instead of `<string>`) so it survives <GenerateDocumentationFile> on
+        // consumer projects without a CS1574 warning.
+        code.Should().Contain("/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{string}\"/>");
+        // Doc must point at the tracking issue so the deferred-work pointer
+        // doesn't silently rot — this is the only in-source signal explaining
+        // why the property has no body.
+        code.Should().Contain("daml-codegen-csharp#64");
     }
 
     #endregion

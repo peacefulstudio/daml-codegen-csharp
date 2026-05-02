@@ -420,4 +420,141 @@ public class ProjectFileGeneratorTests
         file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0\" />");
         file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0\" />");
     }
+
+    [Fact]
+    public void GenerateProjectFile_should_pin_LangVersion_13_when_emitted_files_contain_partial_property()
+    {
+        // Pinning LangVersion=13 is load-bearing for `--generate-project` builds
+        // whose emission contains the partial-property syntax: the codegen's
+        // partial-property `Key` accessor requires C# 13 to parse. Without this
+        // pin, `--target-framework net8.0` builds would fail on a syntax error
+        // before reaching the intentional CS9248 missing-implementation
+        // diagnostic.
+        //
+        // The decision is anchored to the EMITTED file set rather than the
+        // package's templates, so a key-bearing template added via
+        // `IncludeDependencies` still pins LangVersion correctly — see
+        // daml-codegen-csharp#65 round-5 review.
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "any-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+        var emittedFiles = new[]
+        {
+            new GeneratedFile(
+                RelativePath: "Foo.cs",
+                Content: "namespace Test; public sealed partial record Foo { public partial string Key { get; } }"),
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences: null, emittedFiles: emittedFiles);
+
+        file.Content.Should().Contain("<LangVersion>13</LangVersion>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_not_pin_LangVersion_when_emitted_files_contain_no_partial_property()
+    {
+        // The pin is opt-in based on actually needing C# 13 syntax. Key-less
+        // emissions don't contain partial-property syntax and so shouldn't have
+        // their SDK floor raised — they continue to build with whatever
+        // LangVersion the consumer's project / SDK defaults supply. This also
+        // covers the `RootFilter` case: a keyed template that's filtered out of
+        // emission must not force the pin.
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "any-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+        var emittedFiles = new[]
+        {
+            new GeneratedFile(
+                RelativePath: "Foo.cs",
+                Content: "namespace Test; public sealed partial record Foo(Party Owner) : ITemplate;"),
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences: null, emittedFiles: emittedFiles);
+
+        file.Content.Should().NotContain("<LangVersion>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_pin_LangVersion_when_emittedFiles_omitted_but_package_has_key_bearing_template()
+    {
+        // Back-compat for older callers that pass only `package` (no emission
+        // set). Without this fallback, an old caller with a key-bearing package
+        // would silently produce a `.csproj` lacking <LangVersion>13</> and the
+        // build would fail on a syntax error in the emitted partial property.
+        // The fallback is less precise than the emission-set scan (it can't see
+        // IncludeDependencies or RootFilter) but is functionally safe for the
+        // simple case.
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "keyed-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "Test.Module",
+                    Templates =
+                    [
+                        new DamlTemplate
+                        {
+                            Name = "KeyedTemplate",
+                            Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                            Choices = [],
+                            Key = new DamlPrimitiveType(DamlPrimitive.Text),
+                        },
+                    ],
+                    DataTypes = [],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<LangVersion>13</LangVersion>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_not_pin_LangVersion_when_emittedFiles_omitted_and_package_has_no_key_bearing_template()
+    {
+        // The back-compat fallback only triggers when the package itself has
+        // key-bearing templates. A key-less package with no emission set
+        // continues to build without a LangVersion pin (consumer SDK defaults).
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "keyless-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().NotContain("<LangVersion>");
+    }
 }
