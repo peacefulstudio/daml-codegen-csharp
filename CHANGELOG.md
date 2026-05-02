@@ -34,6 +34,21 @@ because they are versioned in lockstep:
 
 ### Added
 
+- **Per-template `<TemplateName>SubmissionExtensions`** static class emitted
+  alongside every generated template. Provides a typed `CreateAsync` extension
+  that lifts the static-analyzer's signatory analysis into the C# call site.
+  When every Daml signatory is a payload-field reference (the canonical
+  `signatory platform, initiator, counterparty` shape against same-named
+  `Party` fields), the generated `CreateAsync` takes only the payload and an
+  `ILedgerClient` — the wrapper builds a `SubmitterInfo` from the payload's
+  `Party` properties so the caller never restates a party that's already in
+  the record. When the analyzer can't statically resolve the signatory
+  expression, the wrapper takes an explicit `SubmitterInfo submitter`
+  parameter (which implicitly converts from `string` / `Party`). Templates
+  whose `observer` expression is statically resolvable also expose an
+  `Observers(payload)` helper returning the derived observer party set from
+  the payload. Closes
+  [#68](https://github.com/peacefulstudio/daml-codegen-csharp/issues/68).
 - **`Daml.Runtime.Data.SynchronizerId`** — `readonly record struct` mirroring
   `Party`'s shape (null/whitespace-guarded constructor, `Id` accessor with
   default-uninitialized throw, implicit `→ string` conversion, explicit
@@ -120,11 +135,17 @@ because they are versioned in lockstep:
   #60.
 - **`<Choice>Async(...)` extension methods on `ContractId<TemplateName>`** —
   one per create-bearing choice on each template, in a per-template static
-  `<TemplateName>Extensions` class. Signature:
-  `(ContractId<T> contractId, ILedgerClient client, [<Choice>Arg argument,] Party actAs, string? workflowId = null, CancellationToken cancellationToken = default)`.
-  Body: builds a `CommandsSubmission`, calls
-  `ILedgerClient.TrySubmitAndWaitForTransactionAsync`, projects success via
-  `<Choice>Result.FromCreatedContracts`. `DamlError` and `InfraError`
+  `<TemplateName>Extensions` class. The static-analyzer drives the parameter
+  shape: when every controller is a payload-field reference, one named
+  `Party` parameter per controller (declaration order) appears on the method,
+  and the wrapper unions them into a `SubmitterInfo.actAs` set; when the
+  template's `observer` clause (and/or the choice's `observer`) is also
+  statically resolvable, those parties are added to `SubmitterInfo.readAs`
+  so the submission carries the correct read-as set. When the controllers
+  aren't statically resolvable, the wrapper falls back to a single
+  `SubmitterInfo submitter` parameter. Body builds a `CommandsSubmission`,
+  calls `ILedgerClient.TrySubmitAndWaitForTransactionAsync`, projects success
+  via `<Choice>Result.FromCreatedContracts`. `DamlError` and `InfraError`
   outcomes pass through with all fields preserved. Workflow id has no
   default — workflow IDs are correlation keys, and a per-choice constant
   would bucket every submission of the same choice under one id and break
@@ -134,6 +155,27 @@ because they are versioned in lockstep:
   interface-only and lockstep-versioned with the runtime, so pure-projector
   consumers absorb it at zero transitive weight. Required by the emitted
   `<Choice>Async` extension methods, which take `ILedgerClient`.
+- **`PartyExpressionAnalyzer`** in `DarReader` — walks a Daml-LF expression
+  rooted at a `List Party`-typed value (the shape carried by template
+  `signatories` / `observers` and choice `controllers` / `observers`) and
+  resolves it to an ordered list of payload-field references. Falls back to
+  a single `Dynamic` marker on any unsupported shape (function calls,
+  variable references, key projections), which surfaces as an explicit
+  `SubmitterInfo` parameter in the generated wrapper. Recognizes `Cons`
+  chains of `RecProj(template_param, fieldName)` and dereferences
+  interned-expression nodes (LF 2.dev+). Distinguishes a static empty list
+  (`[]`) from a `Dynamic` verdict so codegen can skip emission of helpers
+  whose result would always be empty.
+- **`DamlPartyAnalysis` / `DamlPartyReference`** model types on
+  `DamlTemplate.Signatories`, `DamlTemplate.Observers`,
+  `DamlChoice.Controllers`, and `DamlChoice.Observers`. Public so consumers
+  (and tests) can inspect the analyzer's verdict before codegen runs.
+  `DamlPartyPayloadField(string FieldName)` is the only resolved shape
+  today; future shapes (constants, key projection) live behind their own
+  records.
+- **`PackageContext.GetInternedExpr(int)`** — resolves an interned-expression
+  index against the package's `InternedExprs` table. Used by the static
+  analyzer to dereference nodes in LF 2.dev+ packages.
 - **Typed exerciser wrappers for non-contract-id choice returns** (closes
   [#63](https://github.com/peacefulstudio/daml-codegen-csharp/issues/63)). For
   every choice whose declared return type carries no `ContractId T` slot at the
@@ -314,6 +356,18 @@ because they are versioned in lockstep:
 
 ### Changed
 
+- **BREAKING (codegen consumers): generated template files now emit a
+  `<TemplateName>SubmissionExtensions` static class** with typed `CreateAsync`
+  and `<Choice>Async` extensions on `ILedgerClient` / `ContractId<T>`. Method
+  signatures and parameter shapes change vs. consumers using their own
+  hand-rolled wrappers around the lower-level `Choice<T,A,R>` property:
+  payload-derived signatories no longer require an explicit `actAs` argument,
+  and per-controller named `Party` parameters appear on choice exercisers.
+  Single-controller / single-signatory cases stay one-liners via
+  `SubmitterInfo`'s implicit conversion from `string` / `Party`.
+  `SubmitterInfo` is sourced from `Daml.Runtime.Commands` — the generated
+  files do not import `Canton.Ledger.Grpc.Client`. See
+  [#68](https://github.com/peacefulstudio/daml-codegen-csharp/issues/68).
 - **BREAKING:** `ContractId<T>`'s generic constraint relaxed from
   `where T : ITemplate` to `where T : IDamlType`. Source-compatible for all
   template-typed callers (`ITemplate : IDamlType`); enables the new

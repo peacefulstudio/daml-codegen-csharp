@@ -156,6 +156,10 @@ public class ChoiceAsyncExerciserTests
     [Fact]
     public void Generate_should_emit_async_extension_with_contract_id_receiver()
     {
+        // Default Controllers = Dynamic on the helper template — the analyzer
+        // couldn't resolve them, so the wrapper falls back to a single
+        // SubmitterInfo parameter (which implicitly converts from string /
+        // Party for single-party callers).
         var module = ModuleWith(
             Template("Agreement", ContractIdOf("Agreement"), choiceName: "Renew"));
 
@@ -164,8 +168,10 @@ public class ChoiceAsyncExerciserTests
         code.Should().Contain("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(");
         code.Should().Contain("this ContractId<Agreement> contractId");
         code.Should().Contain("ILedgerClient client");
-        // actAs is a typed Party (B2): no string-typed parameter, no (Party) cast at the call site.
-        code.Should().Contain("Party actAs");
+        // Dynamic-controller fallback shape: the wrapper takes a SubmitterInfo
+        // parameter, never a string. Single-party callers stay one-liners via
+        // SubmitterInfo's implicit conversion from string / Party.
+        code.Should().Contain("SubmitterInfo submitter");
         code.Should().NotContain("string actAs");
         code.Should().NotContain("(Party)actAs");
     }

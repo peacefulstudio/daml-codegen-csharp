@@ -545,8 +545,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // Static `<TemplateName>Extensions` class with one `<Choice>Async`
         // method per create-bearing choice. Lives at the namespace level so
         // `using` directives bring the extension methods into scope for
-        // `ContractId<TemplateName>` receivers.
-        WriteChoiceAsyncExercisersClass(indent, template, className, dataTypes);
+        // `ContractId<TemplateName>` receivers. The exerciser threads the
+        // typed-controller analysis (named Party params per controller when
+        // statically resolvable) and the union of template-level + choice-level
+        // observers (contributed to SubmitterInfo.readAs) into each method.
+        WriteChoiceAsyncExercisersClass(indent, template, className, fields, dataTypes);
+
+        // Named-submitter extensions: per-template static class that exposes
+        // CreateAsync and a <Choice>Async per choice, with one Party parameter
+        // per Daml signatory/controller that the static analyzer couldn't
+        // derive from the payload. Lives at the file's top level (sibling to
+        // the template record) so the extensions resolve with a single using
+        // of this namespace. See CSharpCodeGenerator.NamedSubmitters.cs.
+        TryWriteNamedSubmitterExtensions(indent, template, fields, dataTypes);
 
         // Typed exerciser wrappers for choices whose return type is *not* a bare
         // ContractId T (Decimal, records, lists, Unit, etc.). Emitted at the

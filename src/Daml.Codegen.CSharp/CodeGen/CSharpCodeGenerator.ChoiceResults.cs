@@ -219,17 +219,42 @@ internal sealed partial class CSharpCodeGenerator
     /// namespace level so the methods extend <c>ContractId&lt;TemplateName&gt;</c> in
     /// every consumer that imports the module's namespace. Skips emission entirely
     /// when no choice qualifies (avoids stranded empty classes).
+    ///
+    /// <para>
+    /// The exerciser's parameter shape is driven by the static analyzer:
+    /// <list type="bullet">
+    ///   <item>When every controller is a payload-field reference, one
+    ///   <c>Party</c> parameter per controller (declaration order) appears on
+    ///   the method, and the wrapper unions them into <c>SubmitterInfo.actAs</c>.</item>
+    ///   <item>When the template-level <c>observer</c> clause and/or the
+    ///   choice's <c>observer</c> clause is statically resolvable, those
+    ///   parties are added to <c>SubmitterInfo.readAs</c>, deduplicated.</item>
+    ///   <item>When controllers are not statically resolvable, the wrapper
+    ///   falls back to a single <c>SubmitterInfo submitter</c> parameter and
+    ///   passes it through unchanged — caller takes responsibility for both
+    ///   <c>actAs</c> and <c>readAs</c>.</item>
+    /// </list>
+    /// </para>
     /// </summary>
     private void WriteChoiceAsyncExercisersClass(
         IndentWriter indent,
         DamlTemplate template,
         string templateClassName,
+        IReadOnlyList<DamlField> fields,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         if (!TemplateHasEmittableAsyncExercisers(template, dataTypes))
         {
             return;
         }
+
+        var partyFields = fields
+            .Where(f => f.Type is DamlPrimitiveType { Primitive: DamlPrimitive.Party })
+            .ToDictionary(f => f.Name, f => f, StringComparer.Ordinal);
+
+        // Re-validate template-level observers against actual payload fields
+        // — same defensive check the SubmissionExtensions emitter does.
+        var templateObservers = ValidatePayloadParties(template.Observers, partyFields);
 
         indent.AppendLine();
         if (options.GenerateXmlDocs)
@@ -268,7 +293,11 @@ internal sealed partial class CSharpCodeGenerator
             {
                 indent.AppendLine();
             }
-            WriteSingleChoiceAsyncExerciser(indent, choice, templateClassName, dataTypes);
+            var controllers = ValidatePayloadParties(choice.Controllers, partyFields);
+            var choiceObservers = ValidatePayloadParties(choice.Observers, partyFields);
+            var effectiveReadAs = UnionStaticParties(templateObservers, choiceObservers);
+            WriteSingleChoiceAsyncExerciser(
+                indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
             first = false;
         }
 
@@ -276,21 +305,96 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine("}");
     }
 
+    /// <summary>
+    /// Computes the effective <c>readAs</c> set for a choice as the union of
+    /// the template-level observers and the choice-level observers, preserving
+    /// declaration order and deduplicating by payload field name. Returns a
+    /// <see cref="DamlPartySource.Static"/> result iff both inputs are static
+    /// (a <see cref="DamlPartySource.Dynamic"/> verdict on either side is
+    /// contagious for the <em>readAs</em> projection — the choice exerciser
+    /// continues to emit named controller params off the controller analysis,
+    /// but no <c>readAs</c> params are emitted because the dynamic component
+    /// can't be synthesized at compile time).
+    /// </summary>
+    private static DamlPartyAnalysis UnionStaticParties(
+        DamlPartyAnalysis a,
+        DamlPartyAnalysis b)
+    {
+        if (a.Source != DamlPartySource.Static || b.Source != DamlPartySource.Static)
+        {
+            return DamlPartyAnalysis.Dynamic;
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var union = new List<DamlPartyReference>();
+        foreach (var p in a.Parties)
+        {
+            if (p is DamlPartyPayloadField pf && seen.Add(pf.FieldName))
+            {
+                union.Add(p);
+            }
+        }
+        foreach (var p in b.Parties)
+        {
+            if (p is DamlPartyPayloadField pf && seen.Add(pf.FieldName))
+            {
+                union.Add(p);
+            }
+        }
+        return DamlPartyAnalysis.Static(union);
+    }
+
     private void WriteSingleChoiceAsyncExerciser(
         IndentWriter indent,
         DamlChoice choice,
         string templateClassName,
-        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        DamlPartyAnalysis controllers,
+        DamlPartyAnalysis observers)
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var resultName = $"{choiceName}Result";
         var (argTypeName, _, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
         var hasArg = argTypeName != "DamlUnit" && !isExternalRef;
 
+        var staticControllers = controllers.Source == DamlPartySource.Static
+                                 && controllers.Parties.Count > 0;
+
+        // Observers-only (payload fields named in the observer clauses but NOT
+        // also named as controllers). The choice receiver is a ContractId, so
+        // we have no payload in scope — observer parties only become emittable
+        // as named Party params. We surface them in declaration order on top
+        // of the controller params; the body then routes controllers into
+        // SubmitterInfo.actAs and observers into SubmitterInfo.readAs.
+        var (controllerParams, readAsParams) = staticControllers
+            ? PartitionControllersAndObservers(controllers, observers)
+            : (new List<string>(), new List<string>());
+
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Exercises the {choice.Name} choice and projects the resulting transaction's created contracts to a typed <see cref=\"{resultName}\"/>.");
+            if (staticControllers && readAsParams.Count > 0)
+            {
+                indent.AppendLine("/// One <c>Party</c> parameter is emitted per Daml controller (declaration order),");
+                indent.AppendLine("/// followed by one parameter per Daml observer that is not also a controller.");
+                indent.AppendLine("/// The wrapper builds a <see cref=\"SubmitterInfo\"/> with controllers in <c>actAs</c>");
+                indent.AppendLine("/// and observers in <c>readAs</c>, so the wire format reflects Daml's stakeholder");
+                indent.AppendLine("/// model exactly.");
+            }
+            else if (staticControllers)
+            {
+                indent.AppendLine("/// One <c>Party</c> parameter is emitted per Daml controller (declaration order).");
+                indent.AppendLine("/// The wrapper builds a <see cref=\"SubmitterInfo\"/> from those parties before");
+                indent.AppendLine("/// dispatching to <c>ILedgerClient</c>.");
+            }
+            else
+            {
+                indent.AppendLine("/// The submitter is passed explicitly via <paramref name=\"submitter\"/> — the static");
+                indent.AppendLine("/// analyzer could not resolve the Daml <c>controller</c> clause to payload-field");
+                indent.AppendLine("/// references. <see cref=\"SubmitterInfo\"/> implicitly converts from <c>string</c> /");
+                indent.AppendLine("/// <c>Party</c>, so the single-party call site stays a one-liner.");
+            }
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
             indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");
@@ -298,7 +402,10 @@ internal sealed partial class CSharpCodeGenerator
             {
                 indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
             }
-            indent.AppendLine("/// <param name=\"actAs\">The party submitting the command.</param>");
+            if (!staticControllers)
+            {
+                indent.AppendLine("/// <param name=\"submitter\">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>");
+            }
             indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
@@ -315,7 +422,22 @@ internal sealed partial class CSharpCodeGenerator
             // extension class at namespace level resolves the type.
             indent.AppendLine($"{templateClassName}.{argTypeName} argument,");
         }
-        indent.AppendLine("Party actAs,");
+
+        if (staticControllers)
+        {
+            foreach (var paramName in controllerParams)
+            {
+                indent.AppendLine($"Party {paramName},");
+            }
+            foreach (var paramName in readAsParams)
+            {
+                indent.AppendLine($"Party {paramName},");
+            }
+        }
+        else
+        {
+            indent.AppendLine("SubmitterInfo submitter,");
+        }
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -324,7 +446,41 @@ internal sealed partial class CSharpCodeGenerator
 
         indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
+        if (hasArg)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
 
+        // When controllers are statically resolvable, build the SubmitterInfo
+        // locally — actAs from the named Party params, readAs from the
+        // observer-only Party params (if any).
+        if (staticControllers)
+        {
+            indent.AppendLine();
+            if (controllerParams.Count == 1 && readAsParams.Count == 0)
+            {
+                // Single controller, no extra readAs — rely on Party ->
+                // SubmitterInfo implicit conversion. Avoids a HashSet allocation.
+                indent.AppendLine($"SubmitterInfo submitter = {controllerParams[0]};");
+            }
+            else if (readAsParams.Count == 0)
+            {
+                indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
+                indent.AppendLine($"var submitter = new SubmitterInfo(new HashSet<Party> {{ {string.Join(", ", controllerParams)} }});");
+            }
+            else
+            {
+                indent.AppendLine("// actAs unions every named controller; readAs unions every observer that is");
+                indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
+                indent.AppendLine("var submitter = new SubmitterInfo(");
+                indent.Indent();
+                indent.AppendLine($"actAs: new HashSet<Party> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new HashSet<Party> {{ {string.Join(", ", readAsParams)} }});");
+                indent.Dedent();
+            }
+        }
+
+        indent.AppendLine();
         var argExpr = hasArg ? "argument.ToRecord()" : "DamlUnit.Instance";
         indent.AppendLine("var command = new ExerciseCommand(");
         indent.Indent();
@@ -337,7 +493,7 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine();
         indent.AppendLine("var submission = CommandsSubmission.Single(command)");
         indent.Indent();
-        indent.AppendLine(".WithActAs(actAs)");
+        indent.AppendLine(".WithSubmitter(submitter)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
         indent.Dedent();
         indent.AppendLine("if (workflowId is not null)");
@@ -361,6 +517,51 @@ internal sealed partial class CSharpCodeGenerator
 
         indent.Dedent();
         indent.AppendLine("}");
+    }
+
+    /// <summary>
+    /// Splits the analyzed controllers and observers into two ordered lists of
+    /// camelCased Party parameter names: one for controllers (which feed
+    /// <c>SubmitterInfo.actAs</c>) and one for observer-only parties (which
+    /// feed <c>SubmitterInfo.readAs</c>). Observer parties that are also
+    /// controllers are NOT duplicated in the readAs list — the deduplication
+    /// is by payload-field name, mirroring the Daml semantics.
+    /// </summary>
+    /// <returns>
+    /// <c>(controllerParams, readAsParams)</c>, both in declaration order.
+    /// When <paramref name="observers"/> is dynamic or empty, the second list
+    /// is empty.
+    /// </returns>
+    private static (List<string> controllerParams, List<string> readAsParams)
+        PartitionControllersAndObservers(DamlPartyAnalysis controllers, DamlPartyAnalysis observers)
+    {
+        var controllerParams = new List<string>();
+        var controllerFieldNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var p in controllers.Parties)
+        {
+            if (p is DamlPartyPayloadField pf && controllerFieldNames.Add(pf.FieldName))
+            {
+                controllerParams.Add(ToCamelCaseParam(pf.FieldName));
+            }
+        }
+
+        var readAsParams = new List<string>();
+        if (observers.Source == DamlPartySource.Static)
+        {
+            var seenObservers = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var p in observers.Parties)
+            {
+                if (p is DamlPartyPayloadField pf
+                    && !controllerFieldNames.Contains(pf.FieldName)
+                    && seenObservers.Add(pf.FieldName))
+                {
+                    readAsParams.Add(ToCamelCaseParam(pf.FieldName));
+                }
+            }
+        }
+
+        return (controllerParams, readAsParams);
     }
 
     private void WriteSingleChoiceResultStruct(

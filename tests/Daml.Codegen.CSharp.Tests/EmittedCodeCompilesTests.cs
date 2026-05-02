@@ -520,6 +520,88 @@ public class EmittedCodeCompilesTests
         return CreateGenerator(useRecordTypes).Generate(dar);
     }
 
+    [Fact]
+    public void Emitted_template_with_payload_derived_observers_compiles()
+    {
+        // End-to-end: template with payload-derived signatories, controllers,
+        // AND observers. The codegen should emit:
+        //   - SubmissionExtensions.CreateAsync (payload-only)
+        //   - SubmissionExtensions.Observers(payload) doc helper
+        //   - <Template>Extensions.<Choice>Async with Party params for both
+        //     controllers (actAs) and non-controller observers (readAs)
+        //   - SubmitterInfo built locally with both actAs and readAs
+        //   - submission.WithSubmitter(submitter) projection
+        // All three concerns compile cleanly against the real
+        // Daml.Runtime + Daml.Ledger.Abstractions surface.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Agreement",
+                    Fields =
+                    [
+                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Renew",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Agreement"),
+                            Controllers = DamlPartyAnalysis.Static(
+                                [new DamlPartyPayloadField("platform")]),
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                    Signatories = DamlPartyAnalysis.Static(
+                        [new DamlPartyPayloadField("platform")]),
+                    Observers = DamlPartyAnalysis.Static(
+                        [new DamlPartyPayloadField("holder"), new DamlPartyPayloadField("issuer")]),
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Agreement",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "observer-aware emitted code should compile cleanly, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
     private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)
     {
         var trees = files
