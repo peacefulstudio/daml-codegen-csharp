@@ -74,6 +74,17 @@ because they are versioned in lockstep:
   existing 4-arg construction continues to compile and the property
   defaults to empty until the canton-side `Daml.Runtime.Grpc` bridge is
   updated to populate it (follow-up). Unblocks PR #66 (issue #63).
+- **`Daml.Runtime.IDamlType` marker interface** — common base for Daml-derived
+  C# types. `Daml.Runtime.Contracts.ITemplate` and
+  `Daml.Runtime.Contracts.IDamlInterface` both extend it. Lets generic helpers
+  that don't dispatch on template-specific static metadata (`T.TemplateId`)
+  constrain on the broader marker and accept either a concrete template or an
+  interface marker. Additive only — existing `where T : ITemplate` constraints
+  continue to compile unchanged. Replaces an earlier internal change, which became
+  stale-by-relocation when these types lifted to `Daml.Runtime` in
+  [#73](https://github.com/peacefulstudio/daml-codegen-csharp/pull/73). Unblocks
+  the in-flight interface-markers work in
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67).
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →

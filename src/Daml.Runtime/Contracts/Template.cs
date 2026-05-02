@@ -5,7 +5,14 @@ namespace Daml.Runtime.Contracts;
 /// <summary>
 /// Marker interface for all Daml templates.
 /// </summary>
-public interface ITemplate : IDamlValue
+/// <remarks>
+/// Extends <see cref="IDamlType"/> so that generic helpers which do not require
+/// template-specific static metadata can constrain on the broader marker and
+/// accept either a concrete template or a Daml interface marker (the sibling
+/// <see cref="IDamlInterface"/> defined just below; codegen-emitted interface
+/// markers tracked in issue #62 land in #67).
+/// </remarks>
+public interface ITemplate : IDamlValue, IDamlType
 {
     /// <summary>
     /// Gets the template identifier for this template type.
@@ -60,7 +67,13 @@ public interface ITemplateCompanion<T> where T : ITemplate
 /// <summary>
 /// Marker interface for all Daml interfaces.
 /// </summary>
-public interface IDamlInterface : IDamlValue
+/// <remarks>
+/// Extends <see cref="IDamlType"/> as a sibling of <see cref="ITemplate"/>, so
+/// generic helpers constrained on the broader marker accept both concrete
+/// templates and Daml interface markers without dispatching on template-specific
+/// static metadata.
+/// </remarks>
+public interface IDamlInterface : IDamlValue, IDamlType
 {
     /// <summary>
     /// Gets the interface identifier for this interface type.
