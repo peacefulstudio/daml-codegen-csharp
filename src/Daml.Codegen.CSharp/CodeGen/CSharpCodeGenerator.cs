@@ -133,8 +133,49 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     private static string? MapStdlibType(string module, string typeName) => (module, typeName) switch
     {
         ("DA.Time.Types", "RelTime") => "Daml.Runtime.Stdlib.RelTime",
+        ("DA.Types", "Tuple2") => "Daml.Runtime.Stdlib.Tuple2",
+        ("DA.Types", "Tuple3") => "Daml.Runtime.Stdlib.Tuple3",
+        ("DA.Set.Types", "Set") => "Daml.Runtime.Stdlib.Set",
+        ("DA.NonEmpty.Types", "NonEmpty") => "Daml.Runtime.Stdlib.NonEmpty",
+        ("DA.Map.Types", "Map") => "Daml.Runtime.Stdlib.Map",
+        ("DA.Internal.Map", "Map") => "Daml.Runtime.Stdlib.Map",
         _ => null,
     };
+
+    /// <summary>
+    /// Returns true if a stdlib reference points at one of the parameterised
+    /// stdlib types whose <c>ToRecord</c>/<c>FromRecord</c> need caller-supplied
+    /// converters per type argument (delegate-based round-trip).
+    /// </summary>
+    private static bool IsParametricStdlibType(string module, string typeName) => (module, typeName) switch
+    {
+        ("DA.Types", "Tuple2") or ("DA.Types", "Tuple3") => true,
+        ("DA.Set.Types", "Set") => true,
+        ("DA.NonEmpty.Types", "NonEmpty") => true,
+        ("DA.Map.Types", "Map") or ("DA.Internal.Map", "Map") => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Returns true if a type reference resolves to a parametric stdlib type
+    /// in a known stdlib package. Gating on package id matters because user
+    /// packages can legally define a module named e.g. <c>DA.Types</c> with
+    /// a type <c>Tuple2</c>; without the package check the codegen would
+    /// route those through <c>Daml.Runtime.Stdlib.*</c> and emit broken code.
+    /// </summary>
+    private bool IsParametricStdlibTypeRef(DamlTypeRef typeRef)
+    {
+        if (!IsParametricStdlibType(typeRef.Module, typeRef.Name))
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(typeRef.PackageId) || _currentArchive is null)
+        {
+            return false;
+        }
+        var foreignPkg = _currentArchive.GetPackageById(typeRef.PackageId);
+        return foreignPkg is not null && IsStdlibPackage(foreignPkg.Name);
+    }
 
     /// <summary>
     /// Resolves a DamlTypeRef to a C# identifier or fully qualified name.
@@ -1620,12 +1661,63 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             $"new DamlTextMap({fieldName}.ToDictionary(kv => kv.Key, kv => (DamlValue){GetToValueConversion(app.Arguments[0], "kv.Value")}))",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app =>
             $"new DamlGenMap({fieldName}.Select(kv => ((DamlValue){GetToValueConversion(app.Arguments[0], "kv.Key")}, (DamlValue){GetToValueConversion(app.Arguments[1], "kv.Value")})).ToList())",
+        // Parametric stdlib types — Tuple2/3, Set, NonEmpty, Map. These all live in
+        // Daml.Runtime.Stdlib and round-trip via delegate-based ToRecord/FromRecord
+        // because their generic arguments may be CLR primitives (long, string, Party)
+        // rather than IDamlValue. The codegen knows the concrete arg types here so
+        // it inlines a conversion lambda per arg.
+        DamlTypeApp { Base: DamlTypeRef typeRef } app
+            when IsParametricStdlibTypeRef(typeRef) =>
+            EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName),
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
         DamlTypeVar => $"Daml.Runtime.Stdlib.GenericStub.NotImplemented<DamlValue>(\"{fieldName}\")",
         _ => $"{fieldName}.ToRecord()"
     };
+
+    private string EmitParametricStdlibFromValue(
+        DamlTypeRef typeRef,
+        IReadOnlyList<DamlType> arguments,
+        string valueName,
+        IReadOnlyDictionary<string, DamlDataType>? dataTypes)
+    {
+        var stdlibName = MapStdlibType(typeRef.Module, typeRef.Name)
+            ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}");
+        var typeArgs = string.Join(", ", arguments.Select(MapDamlTypeToCSharp));
+        var lambdas = arguments.Select((arg, i) =>
+            $"__v{i} => {GetFromValueConversion(arg, $"__v{i}", dataTypes)}");
+        return (typeRef.Module, typeRef.Name) switch
+        {
+            // Set/NonEmpty take a single converter (over the element type).
+            ("DA.Set.Types", "Set") =>
+                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
+            ("DA.NonEmpty.Types", "NonEmpty") =>
+                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
+            // Tuple2/3 and Map take one converter per generic argument.
+            _ => $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {string.Join(", ", lambdas)})",
+        };
+    }
+
+    private string EmitParametricStdlibToValue(DamlTypeRef typeRef, IReadOnlyList<DamlType> arguments, string fieldName)
+    {
+        // Each conversion lambda must yield a DamlValue. We always cast through
+        // (DamlValue) because some inner expressions (e.g. `new DamlBool(...)`) are
+        // typed as a more specific subtype that the helper signature won't accept
+        // implicitly.
+        var converters = arguments.Select((arg, i) =>
+            $"(DamlValue)({GetToValueConversion(arg, $"__t{i}")})").ToList();
+        var lambdas = arguments.Select((_, i) =>
+            $"__t{i} => {converters[i]}");
+        return (typeRef.Module, typeRef.Name) switch
+        {
+            ("DA.Set.Types", "Set") =>
+                $"{fieldName}.ToRecord({lambdas.First()})",
+            ("DA.NonEmpty.Types", "NonEmpty") =>
+                $"{fieldName}.ToRecord({lambdas.First()})",
+            _ => $"{fieldName}.ToRecord({string.Join(", ", lambdas)})",
+        };
+    }
 
     private string GetFromValueConversion(DamlType type, string valueName, IReadOnlyDictionary<string, DamlDataType>? dataTypes = null) => type switch
     {
@@ -1654,6 +1746,12 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // ContractId type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
             $"new ContractId<{MapDamlTypeToCSharp(arg)}>({valueName}.As<DamlContractId>().Value)",
+        // Parametric stdlib types — see GetToValueConversion for the matching
+        // serialization arm. The conversion lambdas decode each generic arg from a
+        // DamlValue back into its CLR shape.
+        DamlTypeApp { Base: DamlTypeRef typeRef } app
+            when IsParametricStdlibTypeRef(typeRef) =>
+            EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
         // Type reference — enum dispatch keyed by module:name so a same-name record in a
         // different module doesn't accidentally route through *Extensions.FromRecord.
         DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>

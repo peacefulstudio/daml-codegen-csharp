@@ -1116,6 +1116,225 @@ public class CodeGenEdgeCaseTests
         csproj.Content.Should().NotContain("daml-stdlib");
     }
 
+    [Fact]
+    public void Generate_should_route_stdlib_Tuple2_through_Daml_Runtime_Stdlib_namespace()
+    {
+        // Arrange — Tuple2 lives in daml-prim's DA.Types module. The codegen must
+        // route it to Daml.Runtime.Stdlib.Tuple2 with the parameterised arguments
+        // preserved, and emit delegate-based ToRecord / FromRecord.
+        const string DamlPrimPackageId = "daml-prim-id";
+
+        var stdlibModule = new DamlModule
+        {
+            Name = "DA.Types",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Tuple2",
+                    TypeParams = ["a", "b"],
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("_1", new DamlTypeVar("a")),
+                        new DamlField("_2", new DamlTypeVar("b"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var stdlibPkg = CreateTestPackage(DamlPrimPackageId, "daml-prim-DA-Types", stdlibModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Pair",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("p", new DamlTypeApp(
+                            new DamlTypeRef(DamlPrimPackageId, "DA.Types", "Tuple2"),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Int64),
+                                new DamlPrimitiveType(DamlPrimitive.Text)
+                            ]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, stdlibPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = false
+        };
+        var generator = CreateGenerator(options);
+
+        // Act
+        var files = generator.Generate(dar).ToList();
+        var pair = files.FirstOrDefault(f => f.RelativePath.EndsWith("Pair.cs", StringComparison.Ordinal));
+
+        // Assert — type uses the stdlib name, FromRecord uses delegate-based decoder.
+        pair.Should().NotBeNull();
+        pair!.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>");
+        pair.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>.FromRecord(");
+    }
+
+    [Fact]
+    public void Generate_should_route_stdlib_Set_through_Daml_Runtime_Stdlib_namespace()
+    {
+        // Arrange — Set lives in daml-stdlib's DA.Set.Types module. Wire shape is
+        // a record wrapping `Map k ()`, exposed as Daml.Runtime.Stdlib.Set<k>.
+        const string SetPackageId = "stdlib-set-types";
+
+        var stdlibModule = new DamlModule
+        {
+            Name = "DA.Set.Types",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Set",
+                    TypeParams = ["k"],
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("map", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [new DamlTypeVar("k"), new DamlPrimitiveType(DamlPrimitive.Unit)]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var stdlibPkg = CreateTestPackage(SetPackageId, "daml-stdlib-DA-Set-Types", stdlibModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Roster",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("members", new DamlTypeApp(
+                            new DamlTypeRef(SetPackageId, "DA.Set.Types", "Set"),
+                            [new DamlPrimitiveType(DamlPrimitive.Party)]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, stdlibPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = false
+        };
+        var generator = CreateGenerator(options);
+
+        // Act
+        var files = generator.Generate(dar).ToList();
+        var roster = files.FirstOrDefault(f => f.RelativePath.EndsWith("Roster.cs", StringComparison.Ordinal));
+
+        // Assert
+        roster.Should().NotBeNull();
+        roster!.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>");
+        roster.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>.FromRecord(");
+    }
+
+    [Fact]
+    public void Generate_should_not_route_user_defined_DA_Types_Tuple2_through_Daml_Runtime_Stdlib()
+    {
+        const string UserPackageId = "user-pkg-id";
+
+        var userTuplesModule = new DamlModule
+        {
+            Name = "DA.Types",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Tuple2",
+                    TypeParams = ["a", "b"],
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("_1", new DamlTypeVar("a")),
+                        new DamlField("_2", new DamlTypeVar("b"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var userTuplesPkg = CreateTestPackage(UserPackageId, "my-cheeky-package", userTuplesModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Pair",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("p", new DamlTypeApp(
+                            new DamlTypeRef(UserPackageId, "DA.Types", "Tuple2"),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Int64),
+                                new DamlPrimitiveType(DamlPrimitive.Text)
+                            ]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, userTuplesPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = false
+        };
+        var generator = CreateGenerator(options);
+
+        var files = generator.Generate(dar).ToList();
+        var pair = files.FirstOrDefault(f => f.RelativePath.EndsWith("Pair.cs", StringComparison.Ordinal));
+
+        pair.Should().NotBeNull();
+        pair!.Content.Should().NotContain("Daml.Runtime.Stdlib.Tuple2");
+    }
+
     #endregion
 
     #region Module-Qualified Enum Dispatch Tests

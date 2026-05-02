@@ -42,6 +42,19 @@ because they are versioned in lockstep:
   decompose into name / fingerprint / protocol-version components, so the
   wrapper is safe across the Canton 3.4 (`name::fingerprint`) → 3.5
   (`name::fingerprint::protocol-version`) wire-format change. Closes #87.
+- **`Daml.Runtime.Stdlib` stubs for `DA.Types.Tuple2` / `Tuple3`,
+  `DA.Set.Types.Set`, `DA.NonEmpty.Types.NonEmpty`, and
+  `DA.Map.Types.Map` / `DA.Internal.Map.Map`.** Each stub is a generic
+  `record` with delegate-based `ToRecord` / `FromRecord` so the codegen
+  can round-trip arbitrary CLR generic arguments (e.g. `Tuple2<Party, long>`)
+  through the Daml-LF wire shape. The codegen now routes references to
+  these types in `daml-prim` / `daml-stdlib` packages to the
+  `Daml.Runtime.Stdlib.*` types and emits inline conversion lambdas at
+  the call site. Unblocks `splice-token-test-trading-app` end-to-end and
+  removes the `default! /* TODO */` decoder fallbacks for these types
+  in `splice-amulet`, `splice-dso-governance`, `splice-wallet`,
+  `splice-wallet-payments`, and `splice-util-featured-app-proxies`.
+  Issue #57 (B1).
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →
