@@ -17,6 +17,15 @@ internal sealed class IndentWriter(StringBuilder sb)
 
     public void Append(string text) => sb.Append(text);
 
+    // Emit LF explicitly rather than via `StringBuilder.AppendLine` (which uses
+    // `Environment.NewLine`). Generated source is published in NuGet packages
+    // and compared by `DriftDetectionTests` byte-for-byte; OS-dependent line
+    // endings would make a Windows codegen run produce different bytes from a
+    // macOS/Linux one for no behaviour change. LF is the conventional choice
+    // for cross-platform source distribution and matches what `.editorconfig`
+    // pins repo-wide.
+    private const char Newline = '\n';
+
     public void AppendLine(string? line = null)
     {
         if (line is not null)
@@ -25,11 +34,8 @@ internal sealed class IndentWriter(StringBuilder sb)
             {
                 sb.Append(IndentString);
             }
-            sb.AppendLine(line);
+            sb.Append(line);
         }
-        else
-        {
-            sb.AppendLine();
-        }
+        sb.Append(Newline);
     }
 }

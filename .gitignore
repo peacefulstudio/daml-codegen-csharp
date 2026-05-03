@@ -120,6 +120,8 @@ BenchmarkDotNet.Artifacts/
 # Daml specific
 .daml/
 *.dar
+# Vendored DAR fixtures used by drift-detection / snapshot tests are an exception.
+!tests/Daml.Codegen.CSharp.Tests/Snapshots/**/*.dar
 
 # OS specific
 .DS_Store

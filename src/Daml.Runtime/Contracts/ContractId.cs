@@ -5,8 +5,15 @@ namespace Daml.Runtime.Contracts;
 /// <summary>
 /// Represents a contract ID that references a contract of type T on the ledger.
 /// </summary>
-/// <typeparam name="T">The template type this contract ID refers to.</typeparam>
-public record ContractId<T>(string Value) where T : ITemplate
+/// <typeparam name="T">
+/// The Daml template or interface this contract ID refers to. The constraint is the
+/// shared marker <see cref="IDamlType"/>, satisfied by both <see cref="ITemplate"/>
+/// (concrete templates) and <see cref="IDamlInterface"/> (codegen-emitted interface
+/// markers). Daml allows <c>ContractId I</c> where <c>I</c> is an interface — e.g.
+/// <c>ContractId Holding</c> across the Splice token standard — and that flows here as
+/// <c>ContractId&lt;IHolding&gt;</c>.
+/// </typeparam>
+public record ContractId<T>(string Value) where T : IDamlType
 {
     public static implicit operator string(ContractId<T> id) => id.Value;
     public static explicit operator ContractId<T>(string value) => new(value);
@@ -14,9 +21,18 @@ public record ContractId<T>(string Value) where T : ITemplate
     public override string ToString() => Value;
 
     /// <summary>
-    /// Converts to a DamlValue for serialization.
+    /// Converts to a <see cref="DamlContractId"/> for serialization, including the
+    /// static type identifier of <typeparamref name="T"/>:
+    /// <see cref="ITemplate.TemplateId"/> for templates, or
+    /// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
     /// </summary>
-    public DamlContractId ToDamlValue() => new(Value, T.TemplateId);
+    /// <remarks>
+    /// Resolved via reflection because instance-method generic constraints cannot
+    /// be specialised by sub-interface in C#. Errors from the underlying static
+    /// getter (e.g. an interface placeholder that throws on <c>TemplateId</c>
+    /// access) propagate to the caller — that is the intended failure mode.
+    /// </remarks>
+    public DamlContractId ToDamlValue() => new(Value, ContractIdMetadata.Resolve<T>());
 }
 
 /// <summary>
@@ -24,7 +40,143 @@ public record ContractId<T>(string Value) where T : ITemplate
 /// </summary>
 public sealed record DamlContractId(string Value, Identifier? TemplateId = null) : DamlValue
 {
-    public ContractId<T> ToTyped<T>() where T : ITemplate => new(Value);
+    public ContractId<T> ToTyped<T>() where T : IDamlType => new(Value);
 
     public override string ToString() => Value;
+}
+
+/// <summary>
+/// Coercion helpers between concrete-template and interface-typed contract ids.
+/// </summary>
+/// <remarks>
+/// Mirrors Daml's <c>toInterfaceContractId @I cid</c> at the C# type level. The
+/// underlying ledger contract id string is unchanged — only the static type
+/// witness changes, so the result can be used with helpers constrained on
+/// <see cref="IDamlInterface"/> (e.g. interface choice exercisers, the
+/// interface-view dispatch in <c>tx.Single&lt;I&gt;()</c>). The
+/// <see cref="IImplements{TInterface}"/> constraint at the call site enforces
+/// that the concrete template actually implements the interface — codegen
+/// emits the marker on every <c>template T implements I where ...</c>.
+/// </remarks>
+public static class ContractIdInterfaceCoercion
+{
+    /// <summary>
+    /// Reinterprets a template-typed contract id as an interface-typed one.
+    /// The runtime contract id string is preserved.
+    /// </summary>
+    /// <typeparam name="TConcrete">The concrete template type.</typeparam>
+    /// <typeparam name="TInterface">The interface marker type.</typeparam>
+    public static ContractId<TInterface> ToInterfaceContractId<TConcrete, TInterface>(
+        this ContractId<TConcrete> id)
+        where TConcrete : ITemplate, IImplements<TInterface>
+        where TInterface : IDamlInterface
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return new ContractId<TInterface>(id.Value);
+    }
+}
+
+/// <summary>
+/// Resolves the static type identifier carried by a closed
+/// <see cref="ContractId{T}"/>: <see cref="ITemplate.TemplateId"/> for templates,
+/// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
+/// </summary>
+internal static class ContractIdMetadata
+{
+    public static Identifier Resolve<T>() where T : IDamlType
+    {
+        if (typeof(ITemplate).IsAssignableFrom(typeof(T)))
+        {
+            return ResolveStaticIdentifier(typeof(T), nameof(ITemplate.TemplateId));
+        }
+
+        if (typeof(IDamlInterface).IsAssignableFrom(typeof(T)))
+        {
+            return ResolveStaticIdentifier(typeof(T), nameof(IDamlInterface.InterfaceId));
+        }
+
+        throw new InvalidOperationException(
+            $"Type '{typeof(T).FullName}' implements IDamlType but exposes neither "
+            + "ITemplate.TemplateId nor IDamlInterface.InterfaceId statically.");
+    }
+
+    // Walks T and its interfaces looking for a static `Identifier`-returning property
+    // named `propertyName`. Codegen emits the metadata in three shapes:
+    //
+    //  1. Concrete template:           `public static Identifier TemplateId => ...`
+    //  2. Interface placeholder:       `public static Identifier TemplateId => throw ...`
+    //  3. Interface marker (`I<Name>`): explicit `static Identifier IDamlInterface.InterfaceId => ...`
+    //
+    // (1) and (2) are reachable by short-name GetProperty on the closed type. (3) is
+    // an explicit static-virtual interface implementation; reflection surfaces it on
+    // the implementing type only under the full-namespace name (e.g.
+    // `Daml.Runtime.Contracts.IDamlInterface.InterfaceId`). Scan that path too.
+    private static Identifier ResolveStaticIdentifier(Type type, string propertyName)
+    {
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+            | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy;
+
+        // (1) and (2): direct short-name lookup on the type. Skips abstract-only
+        // declarations on the marker base, which would dispatch to a no-impl getter.
+        var prop = type.GetProperty(propertyName, flags);
+        if (prop is not null && prop.PropertyType == typeof(Identifier) && prop.GetMethod is { IsAbstract: false })
+        {
+            return (Identifier)InvokeStaticGetter(prop)!;
+        }
+
+        // (3): explicit static-virtual implementation, exposed under the full
+        // qualified name on either `type` itself (codegen-emitted I<Name>) or any
+        // interface it derives from.
+        foreach (var candidateType in EnumerateTypeAndInterfaces(type))
+        {
+            foreach (var p in candidateType.GetProperties(flags))
+            {
+                if (p.PropertyType != typeof(Identifier))
+                {
+                    continue;
+                }
+                if (p.GetMethod is null || p.GetMethod.IsAbstract)
+                {
+                    continue;
+                }
+                // Match by trailing segment so both "InterfaceId" and
+                // "Daml.Runtime.Contracts.IDamlInterface.InterfaceId" resolve.
+                var lastDot = p.Name.LastIndexOf('.');
+                var shortName = lastDot >= 0 ? p.Name[(lastDot + 1)..] : p.Name;
+                if (string.Equals(shortName, propertyName, StringComparison.Ordinal))
+                {
+                    return (Identifier)InvokeStaticGetter(p)!;
+                }
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Type '{type.FullName}' exposes no static Identifier {propertyName} property.");
+    }
+
+    private static IEnumerable<Type> EnumerateTypeAndInterfaces(Type type)
+    {
+        yield return type;
+        foreach (var iface in type.GetInterfaces())
+        {
+            yield return iface;
+        }
+    }
+
+    // Unwraps TargetInvocationException so a throwing static getter (e.g. a Daml
+    // interface placeholder) surfaces its inner InvalidOperationException directly,
+    // preserving the explanatory message that points the caller at the right path.
+    private static object? InvokeStaticGetter(System.Reflection.PropertyInfo prop)
+    {
+        try
+        {
+            return prop.GetValue(null);
+        }
+        catch (System.Reflection.TargetInvocationException tie) when (tie.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(tie.InnerException).Throw();
+            throw; // unreachable
+        }
+    }
 }

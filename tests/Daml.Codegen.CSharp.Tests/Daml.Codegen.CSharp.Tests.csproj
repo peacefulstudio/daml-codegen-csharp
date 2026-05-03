@@ -14,6 +14,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="coverlet.collector">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -22,6 +23,24 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Daml.Codegen.CSharp\Daml.Codegen.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Daml.Runtime\Daml.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Snapshot fixtures for drift-detection tests. The DAR + expected/ tree are
+      copied alongside the test assembly so the test does not depend on the
+      repo source layout at runtime. The .cs files under Snapshots/ are
+      generated codegen output to compare against, NOT source — exclude them
+      from the test assembly's Compile item set. Refresh procedure: see
+      Snapshots/splice-api-token-holding-v1/README.md.
+    -->
+    <Compile Remove="Snapshots\**\*.cs" />
+    <None Remove="Snapshots\**\*" />
+    <Content Include="Snapshots\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

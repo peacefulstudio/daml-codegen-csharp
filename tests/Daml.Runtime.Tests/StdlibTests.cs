@@ -1,0 +1,441 @@
+using Daml.Runtime.Data;
+using Daml.Runtime.Stdlib;
+using FluentAssertions;
+using Xunit;
+
+namespace Daml.Runtime.Tests;
+
+/// <summary>
+/// Tests for the hand-coded Daml.Runtime.Stdlib types — the stand-ins for Daml
+/// stdlib types that we cannot, or do not want to, generate per consumer package.
+/// </summary>
+public class StdlibTests
+{
+    #region RelTime
+
+    [Fact]
+    public void RelTime_should_round_trip_through_ToRecord_FromRecord()
+    {
+        // Arrange
+        var original = new RelTime(60_000_000); // 60 seconds, in microseconds
+
+        // Act
+        var record = original.ToRecord();
+        var recovered = RelTime.FromRecord(record);
+
+        // Assert
+        recovered.Should().Be(original);
+        recovered.Microseconds.Should().Be(60_000_000);
+    }
+
+    [Fact]
+    public void RelTime_ToRecord_uses_microseconds_field_name()
+    {
+        // The Daml stdlib type is `RelTime { microseconds : Int }`. The field name
+        // must match the wire shape exactly — anything else would fail to round-trip
+        // through DamlRecord-encoded payloads coming from the ledger.
+        var rel = new RelTime(123);
+
+        var record = rel.ToRecord();
+
+        record.Fields.Should().HaveCount(1);
+        record.Fields[0].Label.Should().Be("microseconds");
+        record.Fields[0].Value.Should().BeOfType<DamlInt64>().Which.Value.Should().Be(123L);
+    }
+
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(1L)]
+    [InlineData(-1L)]                  // Daml RelTime is signed; negatives represent "in the past".
+    [InlineData(long.MaxValue)]
+    [InlineData(long.MinValue)]
+    public void RelTime_should_round_trip_signed_int64_boundaries(long microseconds)
+    {
+        var rel = new RelTime(microseconds);
+
+        var recovered = RelTime.FromRecord(rel.ToRecord());
+
+        recovered.Microseconds.Should().Be(microseconds);
+    }
+
+    [Fact]
+    public void RelTime_FromRecord_should_throw_when_microseconds_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => RelTime.FromRecord(emptyRecord);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*microseconds*");
+    }
+
+    #endregion
+
+    #region Tuple2
+
+    [Fact]
+    public void Tuple2_should_round_trip_with_primitive_arguments()
+    {
+        var original = new Tuple2<long, string>(42L, "hello");
+
+        var record = original.ToRecord(
+            i => new DamlInt64(i),
+            s => new DamlText(s));
+        var recovered = Tuple2<long, string>.FromRecord(
+            record,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlText>().Value);
+
+        recovered.Should().Be(original);
+    }
+
+    [Fact]
+    public void Tuple2_ToRecord_should_emit_underscore_one_underscore_two_field_names()
+    {
+        // The Daml stdlib type is `data Tuple2 a b = Tuple2 { _1 : a, _2 : b }`.
+        // The field names must match exactly to round-trip with the Ledger API.
+        var t = new Tuple2<long, long>(1L, 2L);
+
+        var record = t.ToRecord(i => new DamlInt64(i), i => new DamlInt64(i));
+
+        record.Fields.Should().HaveCount(2);
+        record.Fields[0].Label.Should().Be("_1");
+        record.Fields[1].Label.Should().Be("_2");
+    }
+
+    [Fact]
+    public void Tuple2_FromRecord_should_throw_when_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => Tuple2<long, long>.FromRecord(
+            emptyRecord,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlInt64>().Value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*_1*");
+    }
+
+    [Fact]
+    public void Tuple2_should_round_trip_with_party_argument()
+    {
+        // Realistic shape — Splice DARs use `Tuple2 Party Int` in beneficiary lists.
+        var original = new Tuple2<Party, long>(new Party("Alice"), 100L);
+
+        var record = original.ToRecord(
+            p => p.ToDamlValue(),
+            i => new DamlInt64(i));
+        var recovered = Tuple2<Party, long>.FromRecord(
+            record,
+            v => Party.FromDamlValue(v.As<DamlParty>()),
+            v => v.As<DamlInt64>().Value);
+
+        recovered.Should().Be(original);
+    }
+
+    #endregion
+
+    #region Tuple3
+
+    [Fact]
+    public void Tuple3_should_round_trip_three_components()
+    {
+        var original = new Tuple3<long, string, bool>(42L, "hello", true);
+
+        var record = original.ToRecord(
+            i => new DamlInt64(i),
+            s => new DamlText(s),
+            b => new DamlBool(b));
+        var recovered = Tuple3<long, string, bool>.FromRecord(
+            record,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlText>().Value,
+            v => v.As<DamlBool>().Value);
+
+        recovered.Should().Be(original);
+    }
+
+    [Fact]
+    public void Tuple3_ToRecord_should_emit_underscore_indexed_field_names()
+    {
+        var t = new Tuple3<long, long, long>(1L, 2L, 3L);
+
+        var record = t.ToRecord(
+            i => new DamlInt64(i),
+            i => new DamlInt64(i),
+            i => new DamlInt64(i));
+
+        record.Fields.Select(f => f.Label).Should().Equal("_1", "_2", "_3");
+    }
+
+    [Fact]
+    public void Tuple3_FromRecord_should_throw_when_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => Tuple3<long, long, long>.FromRecord(
+            emptyRecord,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlInt64>().Value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*_1*");
+    }
+
+    #endregion
+
+    #region Set
+
+    [Fact]
+    public void Set_should_round_trip_an_empty_collection()
+    {
+        var original = new Set<string>([]);
+
+        var record = original.ToRecord(s => new DamlText(s));
+        var recovered = Set<string>.FromRecord(record, v => v.As<DamlText>().Value);
+
+        recovered.Elements.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Set_should_round_trip_a_populated_collection()
+    {
+        var original = new Set<string>(["a", "b", "c"]);
+
+        var record = original.ToRecord(s => new DamlText(s));
+        var recovered = Set<string>.FromRecord(record, v => v.As<DamlText>().Value);
+
+        recovered.Elements.Should().BeEquivalentTo(original.Elements);
+    }
+
+    [Fact]
+    public void Set_ToRecord_should_wrap_a_GenMap_under_field_named_map()
+    {
+        // Per the Daml-LF spec the wire shape is `Set { map : Map k () }`. The single
+        // wrapping field must be named exactly `map`, and each entry must pair the
+        // element with DamlUnit.
+        var s = new Set<string>(["a"]);
+
+        var record = s.ToRecord(x => new DamlText(x));
+
+        record.Fields.Should().HaveCount(1);
+        record.Fields[0].Label.Should().Be("map");
+        var map = record.Fields[0].Value.As<DamlGenMap>();
+        map.Entries.Should().ContainSingle();
+        map.Entries[0].Value.Should().BeOfType<DamlUnit>();
+    }
+
+    [Fact]
+    public void Set_Contains_should_use_default_equality()
+    {
+        var s = new Set<long>([1L, 2L, 3L]);
+
+        s.Contains(2L).Should().BeTrue();
+        s.Contains(99L).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Set_constructor_should_deduplicate_input()
+    {
+        // The Daml stdlib Set is a set, not a multiset. Constructing from a
+        // sequence with duplicates must collapse them so the wire representation
+        // never emits duplicate keys in the inner Map.
+        var s = new Set<long>([1L, 1L, 2L, 2L, 3L]);
+
+        s.Count.Should().Be(3);
+        s.Elements.Order().Should().Equal(1L, 2L, 3L);
+
+        var record = s.ToRecord(i => new DamlInt64(i));
+        var map = record.Fields[0].Value.As<DamlGenMap>();
+        map.Entries.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Set_FromRecord_should_throw_when_map_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => Set<string>.FromRecord(emptyRecord, v => v.As<DamlText>().Value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*map*");
+    }
+
+    #endregion
+
+    #region NonEmpty
+
+    [Fact]
+    public void NonEmpty_should_round_trip_singleton()
+    {
+        var original = new NonEmpty<long>(42L, []);
+
+        var record = original.ToRecord(i => new DamlInt64(i));
+        var recovered = NonEmpty<long>.FromRecord(record, v => v.As<DamlInt64>().Value);
+
+        // Record equality on the wrapping IReadOnlyList<T> is reference-based, so
+        // we compare the structural contents instead.
+        recovered.Hd.Should().Be(42L);
+        recovered.Tl.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NonEmpty_should_round_trip_with_tail_elements()
+    {
+        var original = new NonEmpty<long>(1L, [2L, 3L, 4L]);
+
+        var record = original.ToRecord(i => new DamlInt64(i));
+        var recovered = NonEmpty<long>.FromRecord(record, v => v.As<DamlInt64>().Value);
+
+        recovered.Hd.Should().Be(original.Hd);
+        recovered.Tl.Should().Equal(original.Tl);
+        recovered.All.Should().Equal(1L, 2L, 3L, 4L);
+    }
+
+    [Fact]
+    public void NonEmpty_ToRecord_should_emit_hd_and_tl_field_names()
+    {
+        var n = new NonEmpty<long>(1L, [2L]);
+
+        var record = n.ToRecord(i => new DamlInt64(i));
+
+        record.Fields.Select(f => f.Label).Should().Equal("hd", "tl");
+        record.Fields[1].Value.Should().BeOfType<DamlList>();
+    }
+
+    [Fact]
+    public void NonEmpty_FromRecord_should_throw_when_hd_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => NonEmpty<long>.FromRecord(emptyRecord, v => v.As<DamlInt64>().Value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*hd*");
+    }
+
+    #endregion
+
+    #region Map
+
+    [Fact]
+    public void Map_should_round_trip_with_string_keys_and_int_values()
+    {
+        var original = new Map<string, long>([
+            new KeyValuePair<string, long>("alice", 1L),
+            new KeyValuePair<string, long>("bob", 2L),
+        ]);
+
+        var record = original.ToRecord(
+            s => new DamlText(s),
+            i => new DamlInt64(i));
+        var recovered = Map<string, long>.FromRecord(
+            record,
+            v => v.As<DamlText>().Value,
+            v => v.As<DamlInt64>().Value);
+
+        // Record equality on IReadOnlyList<KeyValuePair<...>> is reference-based,
+        // so we compare contents.
+        recovered.Entries.Should().Equal(original.Entries);
+    }
+
+    [Fact]
+    public void Map_ToRecord_should_wrap_a_GenMap_under_field_named_map()
+    {
+        var m = new Map<string, long>([new KeyValuePair<string, long>("k", 1L)]);
+
+        var record = m.ToRecord(s => new DamlText(s), i => new DamlInt64(i));
+
+        record.Fields.Should().HaveCount(1);
+        record.Fields[0].Label.Should().Be("map");
+        record.Fields[0].Value.Should().BeOfType<DamlGenMap>();
+    }
+
+    [Fact]
+    public void Map_should_preserve_entry_order()
+    {
+        // GenMap is order-preserving on the wire. The Map wrapper must round-trip
+        // entries in their original order (callers building from a sorted source
+        // depend on it).
+        var original = new Map<long, long>([
+            new KeyValuePair<long, long>(3L, 30L),
+            new KeyValuePair<long, long>(1L, 10L),
+            new KeyValuePair<long, long>(2L, 20L),
+        ]);
+
+        var record = original.ToRecord(i => new DamlInt64(i), i => new DamlInt64(i));
+        var recovered = Map<long, long>.FromRecord(
+            record,
+            v => v.As<DamlInt64>().Value,
+            v => v.As<DamlInt64>().Value);
+
+        recovered.Entries.Select(kv => kv.Key).Should().Equal(3L, 1L, 2L);
+    }
+
+    [Fact]
+    public void Map_FromRecord_should_throw_when_map_field_missing()
+    {
+        var emptyRecord = DamlRecord.Create();
+
+        var act = () => Map<string, long>.FromRecord(
+            emptyRecord,
+            v => v.As<DamlText>().Value,
+            v => v.As<DamlInt64>().Value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*map*");
+    }
+
+    #endregion
+
+    #region GenericStub
+
+    [Fact]
+    public void GenericStub_NotImplemented_should_throw_with_context_in_message()
+    {
+        var act = () => GenericStub.NotImplemented<string>("amulet");
+
+        act.Should().Throw<NotImplementedException>()
+            .WithMessage("*amulet*")
+            .And.Message.Should().Contain("issues/57",
+                because: "the message must point at the tracking issue so consumers can find the workaround status");
+    }
+
+    [Fact]
+    public void GenericStub_NotImplemented_should_throw_for_any_type_parameter()
+    {
+        // The signature returns T so the call can sit in expression position. Verify
+        // the throw is unconditional regardless of the type parameter.
+        var actString = () => GenericStub.NotImplemented<string>("ctx");
+        var actInt = () => GenericStub.NotImplemented<int>("ctx");
+        var actRecord = () => GenericStub.NotImplemented<DamlRecord>("ctx");
+
+        actString.Should().Throw<NotImplementedException>();
+        actInt.Should().Throw<NotImplementedException>();
+        actRecord.Should().Throw<NotImplementedException>();
+    }
+
+    #endregion
+
+    #region Unit
+
+    [Fact]
+    public void Unit_Value_should_be_a_singleton()
+    {
+        // Mirrors System.ValueTuple semantics: every reference to Unit.Value is the
+        // same instance. Codegen relies on this invariant when emitting
+        // `new ExerciseOutcome<Unit>.One(Unit.Value)` for `()`-returning choices.
+        Unit.Value.Should().BeSameAs(Unit.Value);
+    }
+
+    [Fact]
+    public void Unit_should_be_value_equal()
+    {
+        // Unit is a sealed class (not a record) so `with`-expression clones can't
+        // break the singleton invariant. Equality / GetHashCode / == / != are
+        // overridden manually in Stdlib/Unit.cs so any two Unit references compare
+        // equal. Pinning it because consumers may switch on Unit in choice-result
+        // projections.
+        Unit.Value.Should().Be(Unit.Value);
+        (Unit.Value == Unit.Value).Should().BeTrue();
+    }
+
+    #endregion
+}
