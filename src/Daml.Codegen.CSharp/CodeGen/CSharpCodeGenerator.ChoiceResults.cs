@@ -203,7 +203,7 @@ internal sealed partial class CSharpCodeGenerator
             {
                 continue;
             }
-            var (_, _, _, isFallback) = GetChoiceArgumentInfo(choice, dataTypes);
+            var (_, _, isFallback, _) = GetChoiceArgumentInfo(choice, dataTypes);
             if (isFallback)
             {
                 continue;
@@ -279,11 +279,7 @@ internal sealed partial class CSharpCodeGenerator
                 continue;
             }
 
-            // B3: skip choices whose argument type went through the codegen fallback
-            // path (no recognised record / Unit / external ref). The fallback emits a
-            // field-less <Choice>Arg stub with no ToRecord(), so the Async exerciser's
-            // `argument.ToRecord()` would not compile in consumer output.
-            var (_, _, _, isFallback) = GetChoiceArgumentInfo(choice, dataTypes);
+            var (_, _, isFallback, _) = GetChoiceArgumentInfo(choice, dataTypes);
             if (isFallback)
             {
                 continue;
@@ -354,8 +350,8 @@ internal sealed partial class CSharpCodeGenerator
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var resultName = $"{choiceName}Result";
-        var (argTypeName, _, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
-        var hasArg = argTypeName != "DamlUnit" && !isExternalRef;
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
 
         var staticControllers = controllers.Source == DamlPartySource.Static
                                  && controllers.Parties.Count > 0;
@@ -417,10 +413,10 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine("ILedgerClient client,");
         if (hasArg)
         {
-            // Argument types remain nested inside the template class (e.g.
-            // `Agreement.Renew`) — qualify with the template name so the
-            // extension class at namespace level resolves the type.
-            indent.AppendLine($"{templateClassName}.{argTypeName} argument,");
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"{argParamType} argument,");
         }
 
         if (staticControllers)

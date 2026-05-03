@@ -48,6 +48,25 @@ public class NonContractChoiceWrapperTests
             Dependencies = [],
         };
 
+    private static string ExtractNonContractExtensionsClass(string fileContent)
+    {
+        var marker = "NonContractExtensions";
+        var classKeywordIndex = fileContent.IndexOf("public static class ", StringComparison.Ordinal);
+        while (classKeywordIndex >= 0)
+        {
+            var lineEnd = fileContent.IndexOf('\n', classKeywordIndex);
+            var declarationLine = lineEnd >= 0
+                ? fileContent[classKeywordIndex..lineEnd]
+                : fileContent[classKeywordIndex..];
+            if (declarationLine.Contains(marker, StringComparison.Ordinal))
+            {
+                return fileContent[classKeywordIndex..];
+            }
+            classKeywordIndex = fileContent.IndexOf("public static class ", classKeywordIndex + 1, StringComparison.Ordinal);
+        }
+        throw new InvalidOperationException("No NonContractExtensions class found in generated file content");
+    }
+
     [Fact]
     public void Generate_emits_async_wrapper_for_decimal_returning_choice()
     {
@@ -209,6 +228,148 @@ public class NonContractChoiceWrapperTests
         // same namespace can't shadow the runtime marker.
         sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Daml.Runtime.Stdlib.Unit>> DoNothingAsync(");
         sink.Content.Should().Contain("new ExerciseOutcome<Daml.Runtime.Stdlib.Unit>.One(Daml.Runtime.Stdlib.Unit.Value)");
+    }
+
+    [Fact]
+    public void Generate_emits_async_wrapper_for_optional_unit_using_Stdlib_Unit_in_signature_and_decoder()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Sink",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Sink",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MaybeNothing",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.Optional),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Sink",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
+
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Daml.Runtime.Stdlib.Unit?>> MaybeNothingAsync(");
+        sink.Content.Should().Contain("new ExerciseOutcome<Daml.Runtime.Stdlib.Unit?>.One(");
+        sink.Content.Should().Contain(".As<DamlOptional>().HasValue ? Daml.Runtime.Stdlib.Unit.Value : null");
+        var nonContractSection = ExtractNonContractExtensionsClass(sink.Content);
+        nonContractSection.Should().NotContain("DamlUnit?",
+            "the public-surface NonContractExtensions class must not leak the wire-level DamlUnit type for nested Unit shapes");
+    }
+
+    [Fact]
+    public void Generate_emits_async_wrapper_for_list_of_unit_using_Stdlib_Unit()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Sink",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Sink",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "ListOfUnits",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.List),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Sink",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
+
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyList<Daml.Runtime.Stdlib.Unit>>> ListOfUnitsAsync(");
+        sink.Content.Should().Contain(".As<DamlList>().Values.Select(x => Daml.Runtime.Stdlib.Unit.Value).ToList()");
+        var nonContractSection = ExtractNonContractExtensionsClass(sink.Content);
+        nonContractSection.Should().NotContain("IReadOnlyList<DamlUnit>",
+            "the public-surface NonContractExtensions class must not leak the wire-level DamlUnit type for list-of-Unit");
+    }
+
+    [Fact]
+    public void Generate_emits_async_wrapper_for_textmap_of_unit_using_Stdlib_Unit()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Sink",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Sink",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MapOfUnits",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.TextMap),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Sink",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
+
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<string, Daml.Runtime.Stdlib.Unit>>> MapOfUnitsAsync(");
+        sink.Content.Should().Contain(".As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => Daml.Runtime.Stdlib.Unit.Value)");
     }
 
     [Fact]
@@ -430,16 +591,331 @@ public class NonContractChoiceWrapperTests
     }
 
     [Fact]
-    public void Generate_should_skip_choice_with_non_archive_external_ref_argument()
+    public void Generate_should_emit_wrapper_with_resolved_type_for_non_archive_cross_package_argument()
     {
-        // Regression: a choice whose argument type is a non-Archive external
-        // DamlTypeRef (e.g. an imported record from another package) currently
-        // resolves through GetChoiceArgumentInfo as ("DamlUnit", isExternalRef=true)
-        // because the helper lacks the archive context to fully qualify the
-        // cross-package name. Emitting a wrapper anyway would silently drop the
-        // choice's actual argument and submit an empty unit payload. The filter
-        // skips these choices until proper cross-package arg qualification
-        // lands; tracked in a separate follow-up issue.
+        var foreignModule = new DamlModule
+        {
+            Name = "Other.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "OrderRequest",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "other-pkg-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Trader",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Submit",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("other-pkg-id", "Other.Module", "OrderRequest"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Numeric),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Trader",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var files = CreateGenerator().Generate(dar);
+        var trader = files.First(f => f.RelativePath.EndsWith("Trader.cs", StringComparison.Ordinal));
+
+        trader.Content.Should().Contain("TraderNonContractExtensions");
+        trader.Content.Should().Contain("SubmitAsync(");
+        trader.Content.Should().Contain("Other.Pkg.OrderRequest argument,");
+        trader.Content.Should().Contain("argument.ToRecord()");
+    }
+
+    [Fact]
+    public void Generate_should_emit_interface_choice_extension_with_resolved_type_for_cross_package_argument()
+    {
+        var foreignModule = new DamlModule
+        {
+            Name = "Other.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "TransferRequest",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "other-pkg-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes = [],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Transferable",
+                    Methods =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("other-pkg-id", "Other.Module", "TransferRequest"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                    ViewType = null,
+                },
+            ],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var files = CreateGenerator().Generate(dar);
+        var iface = files.First(f => f.RelativePath.EndsWith("ITransferable.cs", StringComparison.Ordinal));
+
+        iface.Content.Should().Contain("public static class ITransferableExtensions");
+        iface.Content.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        iface.Content.Should().Contain("Other.Pkg.TransferRequest argument,");
+        iface.Content.Should().Contain("argument.ToRecord()");
+    }
+
+    [Fact]
+    public void Generate_should_emit_interface_choice_extension_with_primitive_argument()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes = [],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Quotable",
+                    Methods =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Quote",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Text),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                    ViewType = null,
+                },
+            ],
+        };
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var iface = files.First(f => f.RelativePath.EndsWith("IQuotable.cs", StringComparison.Ordinal));
+
+        iface.Content.Should().Contain("public static class IQuotableExtensions");
+        iface.Content.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> QuoteAsync(");
+        iface.Content.Should().Contain("string argument,");
+        iface.Content.Should().NotContain("QuoteArg argument,",
+            "primitive args must not route through the GetChoiceArgumentInfo fallback that emits a non-existent <Choice>Arg type at namespace scope");
+    }
+
+    [Fact]
+    public void Generate_should_resolve_cross_package_arg_when_simple_name_collides_with_local_record()
+    {
+        var foreignModule = new DamlModule
+        {
+            Name = "Other.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Quote",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("text", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "other-pkg-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Trader",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Submit",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("other-pkg-id", "Other.Module", "Quote"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Numeric),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Trader",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Quote",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("local", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var files = CreateGenerator().Generate(dar);
+        var trader = files.First(f => f.RelativePath.EndsWith("Trader.cs", StringComparison.Ordinal));
+
+        trader.Content.Should().Contain("Other.Pkg.Quote argument,",
+            "the cross-package Quote ref must be resolved to its foreign namespace, not silently classified as the locally-named Quote record");
+        trader.Content.Should().NotContain("Trader.Submit argument,",
+            "a simple-name collision with a local record must not cause the cross-package ref to be qualified as a nested template arg");
+    }
+
+    [Fact]
+    public void Generate_should_throw_for_nested_optional_return_type()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Sink",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MaybeMaybe",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.Optional),
+                                [new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.Optional),
+                                    [new DamlPrimitiveType(DamlPrimitive.Text)])]),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Sink",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var generator = CreateGenerator();
+        var act = () => generator.Generate(CreateDar(module));
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*nested Optional*Optional (Optional t)*");
+    }
+
+    [Fact]
+    public void Generate_should_throw_at_codegen_time_for_unresolvable_cross_package_ref()
+    {
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -455,8 +931,50 @@ public class NonContractChoiceWrapperTests
                         {
                             Name = "Submit",
                             Consuming = false,
-                            // Cross-package import — not Archive.
-                            ArgumentType = new DamlTypeRef("other-pkg", "Other.Module", "OrderRequest"),
+                            ArgumentType = new DamlTypeRef("missing-pkg-id", "Other.Module", "OrderRequest"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Numeric),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Trader",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var generator = CreateGenerator();
+        var act = () => generator.Generate(CreateDar(module));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Other.Module:OrderRequest*missing-pkg-id*not present in the DAR*");
+    }
+
+    [Fact]
+    public void Generate_should_skip_non_contract_wrapper_for_choice_with_fallback_argument_shape()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Trader",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Quote",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Text),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Numeric),
                         }
                     ]
@@ -477,10 +995,8 @@ public class NonContractChoiceWrapperTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var trader = files.First(f => f.RelativePath.EndsWith("Trader.cs", StringComparison.Ordinal));
 
-        // No wrapper for Submit — better to skip than to emit a wrapper that
-        // silently drops the OrderRequest argument and submits empty unit.
         trader.Content.Should().NotContain("TraderNonContractExtensions");
-        trader.Content.Should().NotContain("SubmitAsync(");
+        trader.Content.Should().NotContain("QuoteAsync(");
     }
 
     [Fact]

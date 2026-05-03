@@ -56,19 +56,52 @@ internal sealed partial class CSharpCodeGenerator
         string.Equals(choice.Name, "Archive", StringComparison.Ordinal)
         && choice.ArgumentType is DamlTypeRef { Module: "DA.Internal.Template", Name: "Archive" };
 
-    /// <summary>
-    /// Maps a non-CID return type to the C# return type used in
-    /// <c>ExerciseOutcome&lt;TReturn&gt;</c>. Identical to
-    /// <see cref="MapDamlTypeToCSharp"/> except that the Daml unit type maps to
-    /// <c>Daml.Runtime.Stdlib.Unit</c> at the call site (rather than
-    /// <c>DamlUnit</c>, which is the wire-level representation). Mirrors
-    /// <c>System.ValueTuple</c> semantics: a single-inhabitant marker for the
-    /// "no meaningful payload" shape.
-    /// </summary>
     private string MapNonContractReturnType(DamlType returnType) => returnType switch
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "Daml.Runtime.Stdlib.Unit",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
+                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
+            throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
+            $"{MapNonContractReturnType(arg)}?",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
+            $"IReadOnlyList<{MapNonContractReturnType(arg)}>",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
+            $"IReadOnlyDictionary<string, {MapNonContractReturnType(arg)}>",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
+            $"IReadOnlyDictionary<{MapNonContractReturnType(keyArg)}, {MapNonContractReturnType(valueArg)}>",
         _ => MapDamlTypeToCSharp(returnType),
+    };
+
+    private static bool ReturnTypeNeedsStdlibUnitDecoder(DamlType type) => type switch
+    {
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => true,
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
+            ReturnTypeNeedsStdlibUnitDecoder(arg),
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
+            ReturnTypeNeedsStdlibUnitDecoder(arg),
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
+            ReturnTypeNeedsStdlibUnitDecoder(arg),
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
+            ReturnTypeNeedsStdlibUnitDecoder(keyArg) || ReturnTypeNeedsStdlibUnitDecoder(valueArg),
+        _ => false,
+    };
+
+    private string RenderNonContractReturnDecoder(
+        DamlType returnType,
+        string valueExpr,
+        IReadOnlyDictionary<string, DamlDataType>? dataTypes) => returnType switch
+    {
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "Daml.Runtime.Stdlib.Unit.Value",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
+            $"{valueExpr}.As<DamlOptional>().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.As<DamlOptional>().Value!", dataTypes)} : null",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
+            $"{valueExpr}.As<DamlList>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x", dataTypes)}).ToList()",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
+            $"{valueExpr}.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => {RenderNonContractReturnDecoder(arg, "kv.Value", dataTypes)})",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
+            $"{valueExpr}.As<DamlGenMap>().Entries.ToDictionary(kv => {RenderNonContractReturnDecoder(keyArg, "kv.Key", dataTypes)}, kv => {RenderNonContractReturnDecoder(valueArg, "kv.Value", dataTypes)})",
+        _ => GetFromValueConversion(returnType, valueExpr, dataTypes),
     };
 
     /// <summary>
@@ -100,18 +133,8 @@ internal sealed partial class CSharpCodeGenerator
                 {
                     return false;
                 }
-                var (_, _, isExternalRef, isFallback) = GetChoiceArgumentInfo(c, dataTypes);
-                // Non-Archive external-ref arguments resolve to "DamlUnit" today
-                // because GetChoiceArgumentInfo lacks the archive context to fully
-                // qualify cross-package type refs. Emitting a wrapper for them
-                // would silently drop the choice's actual argument and submit an
-                // empty unit payload. Skip until proper cross-package arg
-                // qualification lands (tracked as a follow-up).
-                if (isExternalRef || isFallback)
-                {
-                    return false;
-                }
-                return true;
+                var (_, _, isFallback, _) = GetChoiceArgumentInfo(c, dataTypes);
+                return !isFallback;
             })
             .ToList();
 
@@ -149,7 +172,7 @@ internal sealed partial class CSharpCodeGenerator
         foreach (var choice in emittable)
         {
             indent.AppendLine();
-            WriteExerciseProjector(indent, choice, className);
+            WriteExerciseProjector(indent, choice, className, dataTypes);
         }
 
         indent.Dedent();
@@ -166,8 +189,8 @@ internal sealed partial class CSharpCodeGenerator
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
-        var (argTypeName, _, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
-        var hasArg = argTypeName != "DamlUnit" && !isExternalRef;
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
 
         if (options.GenerateXmlDocs)
         {
@@ -193,10 +216,10 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine("ILedgerClient client,");
         if (hasArg)
         {
-            // Argument types are nested inside the template class (e.g.
-            // `Oracle.GetTrailingTwap`) — qualify with the template name so the
-            // extension class at namespace level resolves the type.
-            indent.AppendLine($"{templateClassName}.{argTypeName} argument,");
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"{argParamType} argument,");
         }
         indent.AppendLine("Party actAs,");
         indent.AppendLine("string? workflowId = null,");
@@ -257,11 +280,15 @@ internal sealed partial class CSharpCodeGenerator
     /// present (mirrors the cardinality semantics of upstream's
     /// <c>tx.ExerciseResult&lt;T&gt;(choiceName)</c>).
     /// </summary>
-    private void WriteExerciseProjector(IndentWriter indent, DamlChoice choice, string templateClassName)
+    private void WriteExerciseProjector(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
-        var isUnit = choice.ReturnType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
+        var needsStdlibUnitDecoder = ReturnTypeNeedsStdlibUnitDecoder(choice.ReturnType);
 
         indent.AppendLine($"private static ExerciseOutcome<{returnTypeName}> Project{choiceName}Result(TransactionResult tx, string contractId)");
         indent.AppendLine("{");
@@ -283,20 +310,16 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine("{");
         indent.Indent();
 
-        if (isUnit)
+        if (needsStdlibUnitDecoder)
         {
-            // The wire payload for () is DamlUnit; we surface the Stdlib singleton
-            // so the typed wrapper has a stable single-inhabitant return. Both the
-            // type and the singleton accessor are fully qualified to avoid being
-            // shadowed by a user-defined Unit type in the same Daml namespace.
-            indent.AppendLine($"return new ExerciseOutcome<{returnTypeName}>.One(Daml.Runtime.Stdlib.Unit.Value);");
+            var decoderExpr = RenderNonContractReturnDecoder(
+                choice.ReturnType,
+                "exercised.ExerciseResult",
+                dataTypes);
+            indent.AppendLine($"return new ExerciseOutcome<{returnTypeName}>.One({decoderExpr});");
         }
         else
         {
-            // Reuse the codegen-emitted ResultDecoder. It handles every shape
-            // ExerciseAsync<TReturn> handles today (records, enums, lists,
-            // optionals, primitives) — the typed wrapper just plugs that decoder
-            // into the outcome-typed surface.
             indent.AppendLine($"var decoded = {templateClassName}.Choice{choiceName}.ResultDecoder!(exercised.ExerciseResult);");
             indent.AppendLine($"return new ExerciseOutcome<{returnTypeName}>.One(decoded);");
         }

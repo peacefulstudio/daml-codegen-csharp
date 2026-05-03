@@ -31,6 +31,21 @@ because they are versioned in lockstep:
   }
   ```
   The implementing partial's type kind must match the generated type kind: if you configure the codegen with `UseRecordTypes=false`, the generated template is a `public sealed partial class` and the implementing partial must also be a `partial class` (not `partial record`). Requires C# 13 on the consumer side, which means **.NET 9 SDK or later on the build machine** even when the consumer's `<TargetFramework>` is `net8.0` — the C# compiler is shipped with the SDK, not the target runtime, so a build host with only the .NET 8 SDK installed cannot parse the generated partial-property syntax. The codegen-emitted `.csproj` pins `<LangVersion>13</LangVersion>` only for packages that actually contain a key-bearing template, so key-less DARs continue to build with whatever LangVersion the consumer's SDK defaults supply. Unblocks Sample to opt into typed key fetch / exercise wrappers (`Foo.FetchByKeyAsync`, `Foo.<Choice>ByKeyAsync` against `IPqsClient` / `ILedgerClient`) without inheriting a throwing default. Full ByKey wrapper emission is tracked in [#64](https://github.com/peacefulstudio/daml-codegen-csharp/issues/64).
+- **Unresolvable cross-package type references now throw at codegen time
+  instead of warning and emitting unqualified names.** `ResolveTypeRefName`
+  used to log a warning and return the bare sanitised name when the
+  referenced foreign package was missing from the DAR (or no archive
+  context was available); the consumer's `dotnet build` then surfaced a
+  generic CS0246 with no pointer back to the cause. Codegen now throws
+  `InvalidOperationException` naming the offending module / package id
+  and suggesting a remediation (rebuild the DAR with the missing package
+  included, or pass a multi-DAR input that resolves it). **Migration:**
+  consumers who previously got a successful codegen run with warnings,
+  then a downstream CS0246 build failure, will now get a codegen-time
+  exception instead. The fix is the same — bundle the missing foreign
+  package — only the failure point moves earlier. The unmapped-stdlib
+  fallback (`MapStdlibType` returns null for an unknown stdlib type)
+  still warns and returns unqualified pending #57. Companion to #99.
 
 ### Added
 
@@ -274,6 +289,73 @@ because they are versioned in lockstep:
   `<Choice>Arg` argument type.** Previously emitted code referenced
   `arg.ToRecord()` against a stub record with no `ToRecord()` method,
   breaking consumer compilation in those edge cases. Fixes #78.
+- **Cross-package choice argument types now resolve to their fully-qualified
+  C# name instead of being silently dropped to `DamlUnit`.** Pre-#99 a choice
+  whose argument was a `DamlTypeRef` pointing into a neighbouring package
+  (e.g. a Splice DAR's choice taking a record imported from another splice
+  package) ran through `GetChoiceArgumentInfo`'s "Other external references —
+  fallback to DamlUnit as safe default" branch — the wrapper compiled, but
+  the encoded payload was an empty unit and the user's record was lost on
+  the wire. The defensive filters added in #66 (non-CID exerciser) and #67
+  (interface choice extension) skipped emission entirely for those choices,
+  so callers got a missing wrapper instead of a wrong one — better, but
+  still wrong. `GetChoiceArgumentInfo` is now instance-level and routes
+  non-Archive `DamlTypeRef` arguments through the same `ResolveTypeRefName`
+  pipeline already used for record fields and return types. Wrappers across
+  all five emit sites (`WriteSingleChoiceAsyncExerciser`,
+  `WriteSingleNonContractChoiceAsyncExerciser`,
+  `WriteInterfaceChoiceExtensionMethod`, `WriteChoiceArgumentType`,
+  `WriteChoiceMethod`) now emit `{ResolvedNs}.{Record} argument` and
+  `argument.ToRecord()` for cross-package shapes, and the defensive filters
+  are gone. Consumers must run codegen on every package referenced by a
+  choice argument so the resolved C# name is available at compile time —
+  the standard multi-DAR codegen flow already does this. Fixes #99. The
+  companion behaviour change — `ResolveTypeRefName` now throws on
+  unresolvable cross-package refs instead of warning and silently
+  emitting unqualified names — is captured under `Changed — BREAKING`
+  above.
+- **Nested `()` in non-CID choice returns now surfaces as
+  `Daml.Runtime.Stdlib.Unit` end-to-end.** Previously, a choice declared as
+  `choice Foo : Optional ()`, `choice Foo : [()]`, or `choice Foo : TextMap ()`
+  produced an async wrapper signed as `ExerciseOutcome<DamlUnit?>` /
+  `ExerciseOutcome<IReadOnlyList<DamlUnit>>` / etc. — leaking the wire-level
+  `DamlUnit` into the public API. The codegen now recurses through Optional,
+  List, TextMap, and GenMap nesting and substitutes
+  `Daml.Runtime.Stdlib.Unit` at every Unit slot. The projector emits a
+  parallel inline decoder so the wire-typed `Choice<T,A,R>.ResultDecoder`
+  doesn't type-mismatch against the public-surface signature. Limitation:
+  parametric stdlib types (`Tuple2 a ()`, etc.) and user-defined parametric
+  records with `()` components are not rewritten — those decode through
+  `FromRecord`, which isn't pluggable per type-arg. Their public-surface
+  type still names `DamlUnit` in the type-args, so consumers who pattern-
+  match against `Daml.Runtime.Stdlib.Unit` for those positions will see a
+  compile-time type mismatch at the call site. Very rare in practice;
+  documented in `MapNonContractReturnType`'s doc-comment. Fixes #100.
+- **Generated `.cs` files no longer trip CS8019 in consumers with
+  `<TreatWarningsAsErrors>`.** `WriteUsings` emits a fixed BCL set
+  unconditionally so generated code compiles against consumers with
+  `<ImplicitUsings>` disabled — but record-only files don't reference every
+  using, and Roslyn doesn't suppress CS8019 ("unnecessary using directive")
+  on `<auto-generated>` sources, so warnings-as-errors builds failed on the
+  generator's own output. The file header now declares
+  `#pragma warning disable CS8019` to mute the warning at source. Fixes #97.
+  Per-file conditional using emission (so the pragma can eventually be
+  dropped) is tracked in #102 — non-urgent.
+- **MSBuild `<LangVersion>` bump now self-clears when keys are removed.**
+  Previously the codegen wrote a `.daml-needs-csharp13` sentinel only when a
+  key-bearing template was present, but never deleted it on a regen that
+  produced no key-bearing types — so a project that initially generated keys,
+  then refactored them away, kept inheriting `<LangVersion>13</LangVersion>`
+  forever. The marker is now renamed `.daml-langversion` and is **always**
+  emitted: empty content means no bump, a numeric value (e.g. `13`) means the
+  generated code requires that LangVersion. The MSBuild target reads the
+  content via `<ReadLinesFromFile>` and only bumps `<LangVersion>` when the
+  value is non-empty. Fixes #92. Consumers who track the old
+  `.daml-needs-csharp13` file directly (none expected — it was an internal
+  contract between codegen and `Daml.Codegen.CSharp.MSBuild`) should switch to
+  `.daml-langversion`. The old file can be deleted from generated output dirs
+  on first re-gen with the new codegen; both files are conventionally
+  gitignored.
 
 ## [0.1.4] — 2026-05-01
 

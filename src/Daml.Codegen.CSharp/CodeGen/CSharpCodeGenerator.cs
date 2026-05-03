@@ -91,25 +91,12 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage, externalRefs, files));
         }
 
-        // Emit a sentinel marker file when the generated code contains the
-        // partial-property `Key` syntax (which requires C# 13). The MSBuild
-        // integration package (Daml.Codegen.CSharp.MSBuild) checks for this marker
-        // in `DamlPinLangVersionForKeyBearing` and bumps the consumer project's
-        // <LangVersion> to 13 — without this, consumers using the MSBuild
-        // integration (rather than --generate-project) would silently inherit
-        // their project's default LangVersion and fail to compile the emitted
-        // partial-property syntax. The marker has no .cs extension so MSBuild's
-        // <Compile Include="**/*.cs"> glob doesn't pick it up.
-        if (files.Any(f =>
-                f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
-                && ProjectFileGenerator.ContentRequiresCSharp13(f.Content)))
-        {
-            files.Add(new GeneratedFile(
-                ".daml-needs-csharp13",
-                "Sentinel: this directory's generated code contains C#-13 partial-property syntax. "
-                + "The Daml.Codegen.CSharp.MSBuild targets check for this file and bump <LangVersion> "
-                + "to 13. See daml-codegen-csharp#65.\n"));
-        }
+        var requiresCSharp13 = files.Any(f =>
+            f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
+            && ProjectFileGenerator.ContentRequiresCSharp13(f.Content));
+        files.Add(new GeneratedFile(
+            ".daml-langversion",
+            requiresCSharp13 ? "13\n" : string.Empty));
 
         return files;
     }
@@ -177,6 +164,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         return foreignPkg is not null && IsStdlibPackage(foreignPkg.Name);
     }
 
+    private bool IsLocalTypeRef(DamlTypeRef typeRef) =>
+        string.IsNullOrEmpty(typeRef.PackageId)
+        || _currentPackage is null
+        || typeRef.PackageId == _currentPackage.PackageId;
+
     /// <summary>
     /// Resolves a DamlTypeRef to a C# identifier or fully qualified name.
     /// Local refs return the bare sanitized name; cross-package refs return a
@@ -187,29 +179,22 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     {
         var sanitized = SanitizeIdentifier(typeRef.Name);
 
-        if (string.IsNullOrEmpty(typeRef.PackageId)
-            || _currentPackage is null
-            || typeRef.PackageId == _currentPackage.PackageId)
+        if (IsLocalTypeRef(typeRef))
         {
             return sanitized;
         }
 
-        // Each remaining fallback returns the unqualified name. That fails loudly at
-        // C# compile time (CS0246), but only after a long detour through `dotnet
-        // build` output. Warn here so the gap surfaces at codegen time too — without
-        // a warning each fallback was previously silent, hiding the cause behind a
-        // generic "type or namespace not found" further downstream.
         if (_currentArchive is null)
         {
-            logger.Warning($"Cross-package type ref {typeRef.Module}:{typeRef.Name} (package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}…) cannot be resolved — no archive context. Generated code will not compile.");
-            return sanitized;
+            throw new InvalidOperationException(
+                $"Cross-package type ref {typeRef.Module}:{typeRef.Name} (package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}…) cannot be resolved — no archive context. Codegen requires a DarArchive that includes every transitively-referenced package.");
         }
 
         var foreignPkg = _currentArchive.GetPackageById(typeRef.PackageId);
         if (foreignPkg is null)
         {
-            logger.Warning($"Cross-package type ref {typeRef.Module}:{typeRef.Name} points at package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}… which is not present in the DAR. Generated code will not compile.");
-            return sanitized;
+            throw new InvalidOperationException(
+                $"Cross-package type ref {typeRef.Module}:{typeRef.Name} points at package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}… which is not present in the DAR. Rebuild the DAR with the missing package included, or pass a multi-DAR input that resolves it.");
         }
 
         if (IsStdlibPackage(foreignPkg.Name))
@@ -738,17 +723,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         var extensionsClassName = $"{interfaceName}Extensions";
 
-        // Defensive filter mirrors the pattern from #66's non-CID emitter: skip
-        // interface choices whose argument is a non-Archive external `DamlTypeRef`
-        // because `GetChoiceArgumentInfo` cannot resolve cross-package refs to
-        // their fully qualified C# name today, and emitting a wrapper would
-        // silently drop the actual argument and submit an empty unit payload.
-        // A missing wrapper is more diagnosable than a wrong one. Tracked in #99.
-        var emittable = iface.Methods
-            .Where(m => m.ArgumentType is not DamlTypeRef typeRef
-                || typeRef.Name == "Archive"
-                || dataTypes.ContainsKey(typeRef.Name))
-            .ToList();
+        var emittable = iface.Methods.ToList();
 
         if (emittable.Count == 0)
         {
@@ -779,16 +754,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         var methodName = $"{SanitizeIdentifier(choice.Name)}Async";
-        // Resolve the argument type via the same pipeline used everywhere else in
-        // the generator. `GetChoiceArgumentInfo` returns the *choice* name for
-        // same-module DamlTypeRef args because template choices generate nested
-        // arg types named after the choice — interface choices don't, so the
-        // returned name would be a non-existent type when the choice name differs
-        // from the referenced record. `MapDamlTypeToCSharp` resolves the actual
-        // referenced type instead.
-        var argIsUnit = choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
-        var argTypeName = argIsUnit ? "DamlUnit" : MapDamlTypeToCSharp(choice.ArgumentType);
-        var hasArg = !argIsUnit;
+        var (argTypeName, hasArg) = ResolveInterfaceChoiceArgType(choice);
 
         if (options.GenerateXmlDocs)
         {
@@ -855,6 +821,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         indent.Dedent();
         indent.AppendLine("}");
+    }
+
+    private (string TypeName, bool HasArg) ResolveInterfaceChoiceArgType(DamlChoice choice)
+    {
+        if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit })
+        {
+            return ("DamlUnit", false);
+        }
+        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" })
+        {
+            return ("DamlUnit", false);
+        }
+        return (MapDamlTypeToCSharp(choice.ArgumentType), true);
     }
 
     /// <summary>
@@ -1058,9 +1037,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (options.GenerateXmlDocs)
         {
-            indent.AppendLine($"/// <summary>");
+            indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Interface method {method.Name}.");
-            indent.AppendLine($"/// </summary>");
+            indent.AppendLine("/// </summary>");
         }
 
         // Generate method signature
@@ -1080,6 +1059,12 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine("// This code was generated by daml-codegen-csharp.");
         indent.AppendLine("// Do not edit this file manually.");
         indent.AppendLine("// </auto-generated>");
+        indent.AppendLine();
+
+        // Roslyn does not suppress CS8019 ("unnecessary using directive") for
+        // <auto-generated> sources, so consumers with TreatWarningsAsErrors
+        // would fail to build the over-emitted usings.
+        indent.AppendLine("#pragma warning disable CS8019");
         indent.AppendLine();
 
         if (options.EnableNullableReferenceTypes)
@@ -1313,73 +1298,44 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine();
     }
 
-    /// <summary>
-    /// Gets the argument type info for a choice, including the C# type name and whether it's a data type reference.
-    /// Choice argument types that reference data types are now generated as nested types inside the template,
-    /// so we use the choice name (which becomes the nested type name) rather than the data type name.
-    /// </summary>
-    /// <returns>
-    /// A 4-tuple: <c>(TypeName, Fields, IsExternalRef, IsFallback)</c>. <c>IsFallback</c> is
-    /// <c>true</c> when the codegen could not resolve the argument to any of (same-module
-    /// record, Unit, external ref) and is emitting a field-less <c>&lt;Choice&gt;Arg</c>
-    /// stub. Callers that need to emit code referencing <c>argument.ToRecord()</c> must
-    /// skip those choices — the stub doesn't define <c>ToRecord</c>.
-    /// </returns>
-    private static (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsExternalRef, bool IsFallback) GetChoiceArgumentInfo(
+    private (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsFallback, bool IsNestedTemplateArg) GetChoiceArgumentInfo(
         DamlChoice choice,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        // Check if the argument type is a reference to a data type in the same module
-        // These are now generated as nested types inside the template using the choice name
-        if (choice.ArgumentType is DamlTypeRef typeRef && dataTypes.TryGetValue(typeRef.Name, out var dataType))
+        if (choice.ArgumentType is DamlTypeRef typeRef
+            && IsLocalTypeRef(typeRef)
+            && dataTypes.TryGetValue(typeRef.Name, out var dataType))
         {
             var fields = dataType.Definition is DamlRecordDefinition recordDef ? recordDef.Fields : null;
-            // Use the choice name since that's the nested type name we generate
-            return (SanitizeIdentifier(choice.Name), fields, false, false);
+            return (SanitizeIdentifier(choice.Name), fields, false, true);
         }
 
-        // Check for Unit type (no arguments)
         if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit })
         {
             return ("DamlUnit", null, false, false);
         }
 
-        // Check for external type references (like DA.Internal.Template:Archive)
-        // These are typically empty argument records, so we use DamlUnit
         if (choice.ArgumentType is DamlTypeRef externalRef)
         {
-            // Standard Archive choice from daml-prim uses an empty record
-            if (externalRef.Name == "Archive")
+            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" })
             {
-                return ("DamlUnit", null, true, false);
+                return ("DamlUnit", null, false, false);
             }
-            // Other external references - fallback to DamlUnit as safe default
-            return ("DamlUnit", null, true, false);
+            return (ResolveTypeRefName(externalRef), null, false, false);
         }
 
-        // Fallback to generating a nested argument type
-        return ($"{SanitizeIdentifier(choice.Name)}Arg", null, false, true);
+        return ($"{SanitizeIdentifier(choice.Name)}Arg", null, true, true);
     }
 
     private void WriteChoiceArgumentType(IndentWriter indent, DamlChoice choice, IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        var (argTypeName, _, isExternalRef, _) = GetChoiceArgumentInfo(choice, dataTypes);
+        var (_, _, isFallback, _) = GetChoiceArgumentInfo(choice, dataTypes);
 
-        // If the argument type is a reference to an existing data type, don't generate a nested class
-        // The data type is already generated separately
-        if (choice.ArgumentType is DamlTypeRef typeRef && dataTypes.ContainsKey(typeRef.Name))
-        {
-            // No nested class needed - we'll reference the existing data type
-            return;
-        }
-
-        // If it's Unit or external reference (like Archive), no argument type needed
-        if (choice.ArgumentType is DamlPrimitiveType { Primitive: DamlPrimitive.Unit } || isExternalRef)
+        if (!isFallback)
         {
             return;
         }
 
-        // For other cases (shouldn't happen often), generate a simple argument type
         var choiceName = SanitizeIdentifier(choice.Name);
         indent.AppendLine($"/// <summary>Arguments for the {choice.Name} choice.</summary>");
         indent.AppendLine($"public sealed record {choiceName}Arg");
@@ -1395,27 +1351,20 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnType = MapDamlTypeToCSharp(choice.ReturnType);
-        var (argTypeName, argFields, isExternalRef, isFallback) = GetChoiceArgumentInfo(choice, dataTypes);
+        var (argTypeName, _, isFallback, _) = GetChoiceArgumentInfo(choice, dataTypes);
 
-        // B3: skip choices whose argument type went through the codegen fallback
-        // path (no recognised record / Unit / external ref). The fallback emits a
-        // field-less <Choice>Arg stub with no ToRecord(), so the static
-        // Choice<T,A,R> field's `ArgumentEncoder = arg => arg.ToRecord()` would
-        // not compile in consumer output. Mirrors the gate applied to
-        // <Choice>Async emission in #77 (see WriteChoiceAsyncExercisersClass).
-        // Fixes #78.
         if (isFallback)
         {
             return;
         }
 
-        indent.AppendLine($"/// <summary>");
+        indent.AppendLine("/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");
         if (choice.Consuming)
         {
-            indent.AppendLine($"/// This choice is consuming and will archive the contract.");
+            indent.AppendLine("/// This choice is consuming and will archive the contract.");
         }
-        indent.AppendLine($"/// </summary>");
+        indent.AppendLine("/// </summary>");
 
         // Generate the Choice property with proper encoder/decoder
         indent.AppendLine($"public static Choice<{indent.CurrentTypeName}, {argTypeName}, {returnType}> Choice{choiceName} {{ get; }} = new()");
@@ -1424,14 +1373,12 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine($"Name = \"{choice.Name}\",");
         indent.AppendLine($"Consuming = {(choice.Consuming ? "true" : "false")},");
 
-        // Generate ArgumentEncoder
-        if (argTypeName == "DamlUnit" || isExternalRef)
+        if (argTypeName == "DamlUnit")
         {
             indent.AppendLine("ArgumentEncoder = _ => DamlUnit.Instance,");
         }
         else
         {
-            // The argument type has ToRecord() method
             indent.AppendLine("ArgumentEncoder = arg => arg.ToRecord(),");
         }
 
@@ -1784,6 +1731,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
             $"ContractId<{MapDamlTypeToCSharp(arg)}>",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
+                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
+            throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapDamlTypeToCSharp(arg)}?",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>

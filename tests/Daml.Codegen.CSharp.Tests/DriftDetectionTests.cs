@@ -80,14 +80,11 @@ public class DriftDetectionTests
         var dar = await DarArchive.ReadAsync(darPath);
         var allGenerated = generator.Generate(dar);
 
-        // Sentinel `.daml-needs-csharp13` is emitted by CSharpCodeGenerator only
-        // when the output contains partial-property `Key` syntax (key-bearing
-        // template). This canonical DAR is interface-only — no keys — so the
-        // marker must be absent. Pin it explicitly so a future codegen change
-        // can't add the marker for an interface-only emission without being
-        // caught (the `*.cs` filter below would otherwise hide non-.cs drift).
-        allGenerated.Should().NotContain(f => f.RelativePath.EndsWith(".daml-needs-csharp13", StringComparison.Ordinal),
-            "the snapshot DAR has no key-bearing templates, so no C#-13 sentinel marker should be emitted");
+        var langVersionMarker = allGenerated.Should().ContainSingle(
+                f => f.RelativePath.EndsWith(".daml-langversion", StringComparison.Ordinal),
+                "the codegen always emits the LangVersion state file").Subject;
+        langVersionMarker.Content.Should().BeEmpty(
+            "the snapshot DAR has no key-bearing templates, so no LangVersion bump is required");
 
         var actualFiles = allGenerated
             .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal))

@@ -44,7 +44,16 @@ public class ChoiceAsyncExerciserTests
             Modules = [module],
             DependencyReferences = []
         };
-        return new DarArchive { MainPackage = package, Dependencies = [] };
+        var damlPrim = new DamlPackage
+        {
+            PackageId = "daml-prim",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        return new DarArchive { MainPackage = package, Dependencies = [damlPrim] };
     }
 
     private static DamlType TupleType(params DamlType[] componentTypes) =>

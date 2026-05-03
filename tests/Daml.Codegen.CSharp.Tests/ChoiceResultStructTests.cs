@@ -46,10 +46,20 @@ public class ChoiceResultStructTests
             DependencyReferences = []
         };
 
+        var damlPrim = new DamlPackage
+        {
+            PackageId = "daml-prim",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
         return new DarArchive
         {
             MainPackage = package,
-            Dependencies = []
+            Dependencies = [damlPrim]
         };
     }
 

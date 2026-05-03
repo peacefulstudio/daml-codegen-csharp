@@ -234,27 +234,186 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Generate_should_emit_csharp13_marker_when_output_contains_partial_property()
+    public void Emitted_choice_with_cross_package_argument_compiles_against_both_packages()
     {
-        // The MSBuild integration package (Daml.Codegen.CSharp.MSBuild) checks
-        // for `.daml-needs-csharp13` in the output directory and bumps the
-        // consumer project's <LangVersion> to 13. Without the marker, MSBuild
-        // consumers (rather than --generate-project users) inherit their
-        // project's default LangVersion and silently fail to compile the
-        // partial-property syntax. This test pins that the marker is emitted
-        // alongside any key-bearing generation.
-        var files = GenerateKeyBearingTemplate();
+        var foreignModule = new DamlModule
+        {
+            Name = "Other.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "OrderRequest",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "other-pkg-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
 
-        files.Should().Contain(f => f.RelativePath == ".daml-needs-csharp13",
-            "the MSBuild integration relies on this sentinel to bump LangVersion to 13");
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Trader",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Submit",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("other-pkg-id", "Other.Module", "OrderRequest"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Numeric),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Trader",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            GenerateJsonSupport = true,
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            IncludeDependencies = true,
+        };
+        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var files = generator.Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "cross-package choice arg wrappers must compile alongside the foreign package's emission, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
     [Fact]
-    public void Generate_should_not_emit_csharp13_marker_for_keyless_output()
+    public void Emitted_non_contract_wrapper_with_nested_unit_return_compiles()
     {
-        // Belt-and-braces: a keyless emission must not write the marker; the
-        // MSBuild consumer would otherwise see a phantom LangVersion bump on a
-        // project that has no actual C#-13 needs.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Sink",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MaybeNothing",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.Optional),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        },
+                        new DamlChoice
+                        {
+                            Name = "ListOfUnits",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.List),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        },
+                        new DamlChoice
+                        {
+                            Name = "MapOfUnits",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.TextMap),
+                                [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Sink",
+                    Definition = new DamlRecordDefinition([new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "non-CID wrappers with nested Unit returns must compile end-to-end, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Generate_should_emit_langversion_marker_with_value_13_when_output_contains_partial_property()
+    {
+        var files = GenerateKeyBearingTemplate();
+
+        var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion",
+            "the MSBuild integration reads this state file to bump LangVersion").Subject;
+        marker.Content.Trim().Should().Be("13",
+            "key-bearing output requires C# 13 partial-property syntax");
+    }
+
+    [Fact]
+    public void Generate_should_emit_empty_langversion_marker_for_keyless_output()
+    {
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -290,7 +449,9 @@ public class EmittedCodeCompilesTests
         var dar = new DarArchive { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
-        files.Should().NotContain(f => f.RelativePath == ".daml-needs-csharp13");
+        var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion").Subject;
+        marker.Content.Should().BeEmpty(
+            "keyless output records no required version, so the MSBuild bump is skipped");
     }
 
     [Fact]
