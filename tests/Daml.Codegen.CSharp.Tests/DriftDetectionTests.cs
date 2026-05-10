@@ -135,9 +135,14 @@ public class DriftDetectionTests
             var actualBytes = System.Text.Encoding.UTF8.GetBytes(actual.Content);
             var expectedBytes = await File.ReadAllBytesAsync(expected.AbsolutePath);
 
-            actualBytes.Should().Equal(
-                expectedBytes,
-                because: $"`{actual.RelativePath}` must match the snapshot byte-for-byte. {RefreshHint}");
+            if (!actualBytes.SequenceEqual(expectedBytes))
+            {
+                var diff = UnifiedDiff.Render(expectedBytes, actualBytes)
+                    ?? "(files differ in encoding or BOM but produce identical text)";
+                throw new Xunit.Sdk.XunitException(
+                    $"`{actual.RelativePath}` does not match the snapshot byte-for-byte.\n\n" +
+                    $"{diff}\n{RefreshHint}");
+            }
         }
     }
 }
