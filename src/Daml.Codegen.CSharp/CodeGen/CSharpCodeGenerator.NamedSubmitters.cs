@@ -80,6 +80,8 @@ internal sealed partial class CSharpCodeGenerator
         // as a known-empty set.
         var observers = ValidatePayloadParties(template.Observers, partyFields);
 
+        RequireAsyncExerciserNamespaces(indent);
+
         indent.AppendLine();
         if (options.GenerateXmlDocs)
         {
@@ -132,6 +134,7 @@ internal sealed partial class CSharpCodeGenerator
             return;
         }
 
+        indent.Require("System.Collections.Generic");
         indent.AppendLine();
         if (options.GenerateXmlDocs)
         {
@@ -210,6 +213,11 @@ internal sealed partial class CSharpCodeGenerator
         var staticParties = signatories.Source == DamlPartySource.Static
                             && signatories.Parties.Count > 0;
         var multipleStatic = staticParties && signatories.Parties.Count > 1;
+
+        if (multipleStatic)
+        {
+            indent.Require("System.Collections.Generic");
+        }
 
         if (options.GenerateXmlDocs)
         {

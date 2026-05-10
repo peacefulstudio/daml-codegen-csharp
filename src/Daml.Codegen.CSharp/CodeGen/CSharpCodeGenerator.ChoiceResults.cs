@@ -248,6 +248,8 @@ internal sealed partial class CSharpCodeGenerator
             return;
         }
 
+        RequireAsyncExerciserNamespaces(indent);
+
         var partyFields = fields
             .Where(f => f.Type is DamlPrimitiveType { Primitive: DamlPrimitive.Party })
             .ToDictionary(f => f.Name, f => f, StringComparer.Ordinal);
@@ -461,11 +463,13 @@ internal sealed partial class CSharpCodeGenerator
             }
             else if (readAsParams.Count == 0)
             {
+                indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
                 indent.AppendLine($"var submitter = new SubmitterInfo(new HashSet<Party> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
+                indent.Require("System.Collections.Generic");
                 indent.AppendLine("// actAs unions every named controller; readAs unions every observer that is");
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
                 indent.AppendLine("var submitter = new SubmitterInfo(");
@@ -566,6 +570,9 @@ internal sealed partial class CSharpCodeGenerator
         IReadOnlyList<ChoiceCreatedSlot> slots,
         string moduleNamespace)
     {
+        RequireAsyncExerciserNamespaces(indent);
+        indent.Require("System.Collections.Generic");
+
         var choiceName = SanitizeIdentifier(choice.Name);
         var resultName = $"{choiceName}Result";
 

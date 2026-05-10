@@ -15,6 +15,10 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Changed
+
+- Generated files now emit only the `using` directives their body actually references, tracked per-file at codegen time — each namespace is required at its actual emit site (e.g. `System.Collections.Generic` only when a list/map field appears, `Daml.Runtime.Contracts` only when a template, interface, or contract-ID type is emitted, `System` only when `Version`, `DateTimeOffset`, etc. appear). The `#pragma warning disable CS8019` header that previously suppressed unused-using warnings in every file has been removed; no generated file emits an unused `using`. Consumers with `<TreatWarningsAsErrors>` no longer need a workaround, and IDEs get accurate import lists (#102).
+
 ### Fixed
 
 - **Choice-argument types are now emitted fully qualified when referenced by sibling records or variant constructors** ([#111](https://github.com/peacefulstudio/daml-codegen-csharp/issues/111)). Choice-arg types (e.g. `MergeDelegation_Merge`, `DsoRules_AddSv`) are nested inside their parent template class in the generated output; any reference from outside that template — a sibling record field, a variant constructor parameter, or a cross-package variant — was previously emitted as a bare or namespace-only name that the C# compiler could not resolve (CS0246 / CS0234). The codegen now qualifies such references as `TemplateName.ChoiceArgTypeName` (same-package) or `ForeignNamespace.TemplateName.ChoiceArgTypeName` (cross-package). No consumer action required beyond re-running the codegen; the fix closes the Splice `MergeDelegationCall` and `DsoRules_ActionRequiringConfirmation` compilation failures reported in the issue.

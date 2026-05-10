@@ -465,16 +465,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
+        RequireCommonNamespaces(indent);
 
-        // Usings
-        WriteUsings(indent);
-
-        // Namespace
         if (options.UseFileScopedNamespaces)
         {
             indent.AppendLine($"namespace {moduleNamespace};");
@@ -602,7 +597,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     /// <summary>
@@ -615,11 +610,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         string moduleNamespace,
         IReadOnlyDictionary<string, DamlDataType>? allDataTypes = null)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        WriteFileHeader(indent);
-        WriteUsings(indent);
+        RequireCommonNamespaces(indent);
 
         if (options.UseFileScopedNamespaces)
         {
@@ -652,7 +646,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     /// <summary>
@@ -665,14 +659,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
-
-        // Usings
-        WriteUsings(indent);
+        RequireCommonNamespaces(indent);
 
         // Namespace
         if (options.UseFileScopedNamespaces)
@@ -739,7 +729,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     private void WriteInterfaceChoiceExtensions(
@@ -773,6 +763,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             return;
         }
+
+        RequireAsyncExerciserNamespaces(indent);
 
         indent.AppendLine($"public static class {extensionsClassName}");
         indent.AppendLine("{");
@@ -888,16 +880,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyList<(DamlModule Module, DamlTemplate Template)> templates,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
-
-        // Usings - include static import for TemplateExtensions.GetTemplateId
-        indent.AppendLine("using Daml.Runtime.Contracts;");
-        indent.AppendLine("using static Daml.Runtime.Contracts.TemplateExtensions;");
-        indent.AppendLine();
+        indent.Require("Daml.Runtime.Contracts");
+        indent.Require("static Daml.Runtime.Contracts.TemplateExtensions");
 
         // Namespace
         if (options.UseFileScopedNamespaces)
@@ -962,7 +949,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         var parentPath = Path.GetDirectoryName(namespacePath) ?? string.Empty;
         var path = Path.Combine(parentPath, "ContractIdentifiers.cs");
 
-        return new GeneratedFile(path, sb.ToString());
+        return new GeneratedFile(path, BuildFileContent(indent, bodySb));
     }
 
     /// <summary>
@@ -977,16 +964,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         string moduleNamespace,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
+        RequireCommonNamespaces(indent);
 
-        // Usings
-        WriteUsings(indent);
-
-        // Namespace
         if (options.UseFileScopedNamespaces)
         {
             indent.AppendLine($"namespace {moduleNamespace};");
@@ -1047,7 +1029,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     private void WriteInterfaceMetadata(
@@ -1056,6 +1038,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlModule module,
         DamlInterface iface)
     {
+        indent.Require("System");
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Gets the interface identifier.</summary>");
         indent.AppendLine($"static Identifier IDamlInterface.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
         indent.AppendLine();
@@ -1105,12 +1089,6 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine("// </auto-generated>");
         indent.AppendLine();
 
-        // Roslyn does not suppress CS8019 ("unnecessary using directive") for
-        // <auto-generated> sources, so consumers with TreatWarningsAsErrors
-        // would fail to build the over-emitted usings.
-        indent.AppendLine("#pragma warning disable CS8019");
-        indent.AppendLine();
-
         if (options.EnableNullableReferenceTypes)
         {
             indent.AppendLine("#nullable enable");
@@ -1118,34 +1096,72 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
     }
 
-    private void WriteUsings(IndentWriter indent)
+    private static void WriteTrackedUsings(IndentWriter headerIndent, IndentWriter bodyIndent)
     {
-        // BCL usings emitted explicitly so generated code compiles even when a
-        // consumer disables `<ImplicitUsings>` in their csproj. The codegen-emitted
-        // csproj turns ImplicitUsings on, but generated source dropped into a project
-        // without that flag (e.g. someone copying files into a hand-rolled lib) would
-        // otherwise miss `System`, `Collections.Generic`, `Tasks`, and `Threading`.
-        indent.AppendLine("using System;");
-        indent.AppendLine("using System.Collections.Generic;");
-        indent.AppendLine("using System.Linq;");
-        indent.AppendLine("using System.Threading;");
-        indent.AppendLine("using System.Threading.Tasks;");
-        indent.AppendLine("using Daml.Ledger.Abstractions;");
-        indent.AppendLine("using Daml.Runtime.Commands;");
-        indent.AppendLine("using Daml.Runtime.Contracts;");
-        indent.AppendLine("using Daml.Runtime.Data;");
-        // Outcomes namespace covers ExerciseOutcome<T> referenced by emitted
-        // <Choice>Result.FromCreatedContracts projectors and <Choice>Async
-        // exercisers. Always emitted — even for templates without create-bearing
-        // choices, the cost is one unused-using lint suppression at most.
-        indent.AppendLine("using Daml.Runtime.Outcomes;");
-
-        if (options.GenerateJsonSupport)
+        foreach (var ns in bodyIndent.RequiredUsings)
         {
-            indent.AppendLine("using Daml.Runtime.Serialization;");
+            headerIndent.AppendLine($"using {ns};");
         }
+        headerIndent.AppendLine();
+    }
 
-        indent.AppendLine();
+    private string BuildFileContent(IndentWriter bodyIndent, StringBuilder bodySb)
+    {
+        var headerSb = new StringBuilder();
+        var headerIndent = new IndentWriter(headerSb);
+        WriteFileHeader(headerIndent);
+        WriteTrackedUsings(headerIndent, bodyIndent);
+        headerSb.Append(bodySb);
+        return headerSb.ToString();
+    }
+
+    private void RequireCommonNamespaces(IndentWriter indent)
+    {
+        indent.Require("Daml.Runtime.Data");
+    }
+
+    private static void RequireAsyncExerciserNamespaces(IndentWriter indent)
+    {
+        indent.Require("System");
+        indent.Require("System.Threading");
+        indent.Require("System.Threading.Tasks");
+        indent.Require("Daml.Ledger.Abstractions");
+        indent.Require("Daml.Runtime.Commands");
+        indent.Require("Daml.Runtime.Contracts");
+        indent.Require("Daml.Runtime.Outcomes");
+    }
+
+    private static void RequireForFieldType(IndentWriter indent, DamlType type)
+    {
+        switch (type)
+        {
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app:
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                RequireForFieldType(indent, app.Arguments[1]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } }:
+                indent.Require("Daml.Runtime.Contracts");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Date }:
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp }:
+                indent.Require("System");
+                break;
+        }
     }
 
     private void WriteTemplateMetadata(
@@ -1154,6 +1170,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlModule module,
         DamlTemplate template)
     {
+        indent.Require("System");
         var templateId = $"{module.Name}:{template.Name}";
 
         indent.AppendLine($"/// <summary>Gets the template identifier.</summary>");
@@ -1183,6 +1200,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteKeyProperty(IndentWriter indent, DamlType keyType)
     {
+        indent.Require("Daml.Runtime.Contracts");
+        RequireForFieldType(indent, keyType);
         var csharpKeyType = MapDamlTypeToCSharp(keyType);
         // cref attribute syntax escapes generic angle brackets as { }. Apply the
         // same transform to the rendered key type so generic key types don't
@@ -1233,6 +1252,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
             var csharpType = MapDamlTypeToCSharp(field.Type);
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            RequireForFieldType(indent, field.Type);
             indent.Append($"{csharpType} {fieldName}");
         }
     }
@@ -1243,6 +1263,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             var csharpType = MapDamlTypeToCSharp(field.Type);
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            RequireForFieldType(indent, field.Type);
 
             if (options.GenerateXmlDocs)
             {
@@ -1278,6 +1299,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
             var conversion = GetToValueConversion(field.Type, fieldName);
             var comma = i < fields.Count - 1 ? "," : "";
+            RequireForFieldType(indent, field.Type);
 
             indent.AppendLine($"DamlField.Create(\"{field.Name}\", {conversion}){comma}");
         }
@@ -1296,6 +1318,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine($"public static {className} FromRecord(DamlRecord record) => new {className}();");
             indent.AppendLine();
             return;
+        }
+
+        foreach (var field in fields)
+        {
+            RequireForFieldType(indent, field.Type);
         }
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors)
@@ -1402,6 +1429,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             return;
         }
 
+        indent.Require("Daml.Runtime.Commands");
+        RequireForFieldType(indent, choice.ReturnType);
+
         indent.AppendLine("/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");
         if (choice.Consuming)
@@ -1462,6 +1492,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteContractIdClass(IndentWriter indent, string className)
     {
+        indent.Require("Daml.Runtime.Commands");
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Contract ID for {className}.</summary>");
         indent.AppendLine($"public sealed record ContractId(string Value) : ContractId<{className}>(Value), IExercises<{className}>");
         indent.AppendLine("{");
@@ -1476,6 +1508,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteContractClass(IndentWriter indent, string className)
     {
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Active contract for {className}.</summary>");
         indent.AppendLine($"public sealed record Contract(ContractId Id, {className} Data) : IContract<ContractId, {className}>");
         indent.AppendLine("{");
@@ -1549,6 +1582,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     /// </summary>
     private void WriteInterfacePlaceholderRecord(IndentWriter indent, DamlModule module, DamlDataType dataType)
     {
+        indent.Require("System");
+        indent.Require("Daml.Runtime.Contracts");
         var className = SanitizeIdentifier(dataType.Name);
         var qualifiedDamlName = $"{module.Name}:{dataType.Name}";
         var throwMessage =
@@ -1685,6 +1720,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteEnumType(IndentWriter indent, DamlDataType dataType, DamlEnumDefinition enumDef)
     {
+        indent.Require("System");
         var enumName = SanitizeIdentifier(dataType.Name);
 
         if (options.GenerateXmlDocs)

@@ -143,6 +143,8 @@ internal sealed partial class CSharpCodeGenerator
             return false;
         }
 
+        RequireAsyncExerciserNamespaces(indent);
+
         indent.AppendLine();
         if (options.GenerateXmlDocs)
         {
@@ -191,6 +193,8 @@ internal sealed partial class CSharpCodeGenerator
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
         var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
         var hasArg = argTypeName != "DamlUnit";
+
+        RequireForFieldType(indent, choice.ReturnType);
 
         if (options.GenerateXmlDocs)
         {
