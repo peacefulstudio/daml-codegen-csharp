@@ -34,6 +34,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     // accommodating Daml interface-typed contract ids.
     private readonly HashSet<string> _interfacePlaceholderQualifiedNames = [];
 
+    private readonly Dictionary<string, string> _localChoiceArgToTemplate = [];
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
+
     /// <summary>
     /// Generates C# code for all types in the DAR.
     /// </summary>
@@ -113,6 +116,35 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         || packageName.StartsWith("ghc-stdlib", StringComparison.Ordinal);
 
     /// <summary>
+    /// Builds a mapping of choice-argument type name to parent template name for the
+    /// given package. Used by <see cref="ResolveTypeRefName"/> to qualify cross-package
+    /// refs that point at a type nested inside a foreign template. See issue #111.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> BuildForeignChoiceArgToTemplate(DamlPackage pkg)
+    {
+        var allTypeNames = pkg.Modules
+            .SelectMany(m => m.DataTypes)
+            .Select(dt => dt.Name)
+            .ToHashSet();
+
+        var result = new Dictionary<string, string>();
+        foreach (var module in pkg.Modules)
+        {
+            foreach (var template in module.Templates)
+            {
+                foreach (var choice in template.Choices)
+                {
+                    if (choice.ArgumentType is DamlTypeRef typeRef && allTypeNames.Contains(typeRef.Name))
+                    {
+                        result[typeRef.Name] = template.Name;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Maps a stdlib type reference to its hand-coded Daml.Runtime.Stdlib equivalent,
     /// or null if there is no known mapping (the codegen will fall back to an unqualified
     /// name and the build will fail loudly so the gap is visible).
@@ -171,8 +203,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     /// <summary>
     /// Resolves a DamlTypeRef to a C# identifier or fully qualified name.
-    /// Local refs return the bare sanitized name; cross-package refs return a
-    /// fully qualified name and record the package id so a PackageReference can be
+    /// Local refs return the bare sanitized name (qualified with the parent template
+    /// name when the type is a nested choice-argument type); cross-package refs return
+    /// a fully qualified name and record the package id so a PackageReference can be
     /// emitted for it.
     /// </summary>
     private string ResolveTypeRefName(DamlTypeRef typeRef)
@@ -181,6 +214,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (IsLocalTypeRef(typeRef))
         {
+            if (_localChoiceArgToTemplate.TryGetValue(typeRef.Name, out var parentTemplate))
+            {
+                return $"{SanitizeIdentifier(parentTemplate)}.{sanitized}";
+            }
             return sanitized;
         }
 
@@ -212,6 +249,15 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         _externalPackageIds.Add(typeRef.PackageId);
         var foreignNs = DeriveNamespace(foreignPkg.Name);
+        if (!_foreignChoiceArgCache.TryGetValue(typeRef.PackageId, out var foreignChoiceArgMap))
+        {
+            foreignChoiceArgMap = BuildForeignChoiceArgToTemplate(foreignPkg);
+            _foreignChoiceArgCache[typeRef.PackageId] = foreignChoiceArgMap;
+        }
+        if (foreignChoiceArgMap.TryGetValue(typeRef.Name, out var foreignParentTemplate))
+        {
+            return $"{foreignNs}.{SanitizeIdentifier(foreignParentTemplate)}.{sanitized}";
+        }
         return $"{foreignNs}.{sanitized}";
     }
 
@@ -242,6 +288,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         var allDataTypesInGroup = new Dictionary<string, DamlDataType>();
         _localEnumQualifiedNames.Clear();
         _interfacePlaceholderQualifiedNames.Clear();
+        _localChoiceArgToTemplate.Clear();
+        _foreignChoiceArgCache.Clear();
         foreach (var module in package.Modules)
         {
             // Every Daml interface in the module declares a same-named record placeholder
@@ -270,9 +318,6 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             .Select(t => t.Name)
             .ToHashSet();
 
-        // Build a mapping of choice argument type names to their parent template
-        // This maps choiceArgTypeName -> (templateName, choiceName)
-        var choiceArgTypeToTemplate = new Dictionary<string, (string TemplateName, string ChoiceName)>();
         foreach (var module in package.Modules)
         {
             foreach (var template in module.Templates)
@@ -281,8 +326,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 {
                     if (choice.ArgumentType is DamlTypeRef typeRef && allDataTypesInGroup.ContainsKey(typeRef.Name))
                     {
-                        // This choice's argument type is a data type that should be nested
-                        choiceArgTypeToTemplate[typeRef.Name] = (template.Name, choice.Name);
+                        _localChoiceArgToTemplate[typeRef.Name] = template.Name;
                     }
                 }
             }
@@ -327,7 +371,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 }
 
                 // Skip data types that are choice argument types - they're generated as nested types in the template
-                if (choiceArgTypeToTemplate.ContainsKey(dataType.Name))
+                if (_localChoiceArgToTemplate.ContainsKey(dataType.Name))
                 {
                     continue;
                 }

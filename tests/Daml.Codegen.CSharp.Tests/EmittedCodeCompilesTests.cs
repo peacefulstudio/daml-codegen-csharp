@@ -837,6 +837,253 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
+    [Fact]
+    public void Emitted_sibling_record_referencing_nested_choice_arg_type_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "MergeDelegation",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MergeDelegation_Merge",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MergeDelegation",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "MergeDelegation_Merge",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("quantity", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                },
+                new DamlDataType
+                {
+                    Name = "MergeDelegationCall",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("delegationCid", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.ContractId),
+                            [new DamlTypeRef("", "Test.Module", "MergeDelegation")])),
+                        new DamlField("choiceArg", new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a sibling record referencing a same-package nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_variant_constructor_referencing_nested_choice_arg_type_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "DsoRules",
+                    Fields = [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "DsoRules_AddSv",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "DsoRules_AddSv"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "DsoRules",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "DsoRules_AddSv",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("svParty", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "DsoRules_ActionRequiringConfirmation",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("SRARC_AddSv",
+                            new DamlTypeRef("", "Test.Module", "DsoRules_AddSv")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant constructor referencing a same-package nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_cross_package_variant_constructor_referencing_nested_choice_arg_type_compiles()
+    {
+        var foreignModule = new DamlModule
+        {
+            Name = "Splice.Amulet",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "AmuletRules",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "AmuletRules_MiningRound_Archive",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("foreign-pkg-id", "Splice.Amulet", "AmuletRules_MiningRound_Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "AmuletRules",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "AmuletRules_MiningRound_Archive",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("roundId", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "foreign-pkg-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Governance",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "AmuletRules_ActionRequiringConfirmation",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("CRARC_MiningRound_Archive",
+                            new DamlTypeRef("foreign-pkg-id", "Splice.Amulet", "AmuletRules_MiningRound_Archive")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "main-pkg-id",
+            Name = "test-governance",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            GenerateJsonSupport = true,
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            IncludeDependencies = true,
+        };
+        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var files = generator.Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a cross-package variant constructor referencing a nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
     private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)
     {
         var trees = files
