@@ -15,6 +15,10 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Fixed
+
+- **`FromRecord` for `TextMap`/`GenMap`-of-`List` fields no longer emits a non-compilable `Dictionary<K, List<V>>`** — the value projection lambda is now cast to `IReadOnlyList<V>` so `ToDictionary` infers `Dictionary<K, IReadOnlyList<V>>`, which does implement `IReadOnlyDictionary<K, IReadOnlyList<V>>`. Without the cast, C# generic invariance caused CS1503 in consumer builds whenever a generated record had a field of Daml type `TextMap (List a)` or `GenMap k (List v)` (surfaces in, for example, `WalletUserProxy_BatchTransferResult.SenderChangeMap`). The same cast is also emitted for top-level `List` fields and `Choice` result decoders, ensuring consistency across all deserialization paths. Closes [#110](https://github.com/peacefulstudio/daml-codegen-csharp/issues/110).
+
 ## [0.1.5] — 2026-05-03
 
 ### Changed — BREAKING

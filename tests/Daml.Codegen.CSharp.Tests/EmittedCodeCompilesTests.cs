@@ -401,6 +401,80 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_record_with_genmap_of_list_field_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "InstrumentId",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text)),
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "BatchResult",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("senderChangeMap", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [
+                                new DamlTypeRef("", "Test.Module", "InstrumentId"),
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.List),
+                                    [new DamlTypeApp(
+                                        new DamlPrimitiveType(DamlPrimitive.ContractId),
+                                        [new DamlTypeRef("", "Test.Module", "Holding")])])
+                            ])),
+                    ])
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "GenMap-of-List FromRecord must compile without CS1503 against IReadOnlyDictionary<K,IReadOnlyList<V>>, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Generate_should_emit_langversion_marker_with_value_13_when_output_contains_partial_property()
     {
         var files = GenerateKeyBearingTemplate();
