@@ -48,13 +48,29 @@ internal sealed partial class CSharpCodeGenerator
 {
     /// <summary>
     /// Returns <c>true</c> when the choice is the synthetic <c>Archive</c>
-    /// imported from <c>DA.Internal.Template</c>. Archive's choice machinery is
-    /// already exposed via the existing <c>Choice&lt;Choice&gt;</c> property; a
-    /// typed exerciser would add nothing.
+    /// imported from <c>DA.Internal.Template</c> in a Daml stdlib package.
+    /// Archive's choice machinery is already exposed via the existing
+    /// <c>Choice&lt;Choice&gt;</c> property; a typed exerciser would add nothing.
+    /// Gating on the stdlib package id prevents a user-defined choice named
+    /// <c>Archive</c> with the same module path from being falsely suppressed.
     /// </summary>
-    private static bool IsArchiveChoice(DamlChoice choice) =>
-        string.Equals(choice.Name, "Archive", StringComparison.Ordinal)
-        && choice.ArgumentType is DamlTypeRef { Module: "DA.Internal.Template", Name: "Archive" };
+    private bool IsArchiveChoice(DamlChoice choice)
+    {
+        if (!string.Equals(choice.Name, "Archive", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (choice.ArgumentType is not DamlTypeRef { Module: "DA.Internal.Template", Name: "Archive" } archiveTypeRef)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(archiveTypeRef.PackageId) || _currentArchive is null)
+        {
+            return false;
+        }
+        var pkg = _currentArchive.GetPackageById(archiveTypeRef.PackageId);
+        return pkg is not null && IsStdlibPackage(pkg.Name);
+    }
 
     private string MapNonContractReturnType(DamlType returnType) => returnType switch
     {

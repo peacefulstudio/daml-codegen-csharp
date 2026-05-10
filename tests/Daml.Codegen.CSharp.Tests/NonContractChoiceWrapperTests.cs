@@ -33,6 +33,16 @@ public class NonContractChoiceWrapperTests
         return new CSharpCodeGenerator(options, logger);
     }
 
+    private static readonly DamlPackage StdlibStub = new()
+    {
+        PackageId = "daml-prim-pkg-id",
+        Name = "daml-prim",
+        Version = new Version(1, 0, 0),
+        LfVersion = "2.1",
+        Modules = [],
+        DependencyReferences = [],
+    };
+
     private static DarArchive CreateDar(DamlModule module) =>
         new()
         {
@@ -45,7 +55,7 @@ public class NonContractChoiceWrapperTests
                 Modules = [module],
                 DependencyReferences = [],
             },
-            Dependencies = [],
+            Dependencies = [StdlibStub],
         };
 
     private static string ExtractNonContractExtensionsClass(string fileContent)
@@ -564,7 +574,7 @@ public class NonContractChoiceWrapperTests
                         {
                             Name = "Archive",
                             Consuming = true,
-                            ArgumentType = new DamlTypeRef("daml-prim", "DA.Internal.Template", "Archive"),
+                            ArgumentType = new DamlTypeRef(StdlibStub.PackageId, "DA.Internal.Template", "Archive"),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
                         }
                     ]
@@ -588,6 +598,243 @@ public class NonContractChoiceWrapperTests
         // No extensions class because the only choice (Archive) is filtered out.
         item.Content.Should().NotContain("ItemNonContractExtensions");
         item.Content.Should().NotContain("ArchiveAsync(");
+    }
+
+    [Fact]
+    public void Generate_should_not_filter_user_Archive_choice_from_non_stdlib_package()
+    {
+        var userPkg = new DamlPackage
+        {
+            PackageId = "user-pkg-id",
+            Name = "user-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+
+        var module = new DamlModule
+        {
+            Name = "Test.Archive",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Item",
+                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Archive",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef(userPkg.PackageId, "DA.Internal.Template", "Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Item",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var dar = new DarArchive
+        {
+            MainPackage = new DamlPackage
+            {
+                PackageId = "test-pkg",
+                Name = "test-package",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                Modules = [module],
+                DependencyReferences = [],
+            },
+            Dependencies = [StdlibStub, userPkg],
+        };
+
+        var files = CreateGenerator().Generate(dar);
+        var item = files.First(f => f.RelativePath.EndsWith("Item.cs", StringComparison.Ordinal));
+
+        item.Content.Should().Contain("ItemNonContractExtensions");
+        item.Content.Should().Contain("ArchiveAsync(");
+    }
+
+    [Fact]
+    public void Generate_user_Archive_choice_gets_actual_argument_type_not_DamlUnit()
+    {
+        var userPkg = new DamlPackage
+        {
+            PackageId = "user-pkg-id",
+            Name = "user-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Internal.Template",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Archive",
+                            Definition = new DamlRecordDefinition(
+                                [new DamlField("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        }
+                    ],
+                    Interfaces = [],
+                }
+            ],
+            DependencyReferences = [],
+        };
+
+        var module = new DamlModule
+        {
+            Name = "Test.Archive",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Item",
+                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Archive",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef(userPkg.PackageId, "DA.Internal.Template", "Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Item",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                }
+            ],
+            Interfaces = [],
+        };
+
+        var dar = new DarArchive
+        {
+            MainPackage = new DamlPackage
+            {
+                PackageId = "test-pkg",
+                Name = "test-package",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                Modules = [module],
+                DependencyReferences = [],
+            },
+            Dependencies = [StdlibStub, userPkg],
+        };
+
+        var files = CreateGenerator().Generate(dar);
+        var item = files.First(f => f.RelativePath.EndsWith("Item.cs", StringComparison.Ordinal));
+
+        item.Content.Should().Contain("ItemNonContractExtensions");
+        item.Content.Should().Contain("ArchiveAsync(");
+        item.Content.Should().Contain("User.Package.Archive argument,",
+            "a user-defined Archive choice must use its actual argument type, not be silently mapped to DamlUnit");
+        item.Content.Should().Contain("argument.ToRecord()",
+            "the argument encoder must call ToRecord() on the user's actual Archive type, not submit DamlUnit.Instance");
+        item.Content.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance",
+            "the Choice property must not use DamlUnit for the argument encoder when the Archive argument is a user type");
+    }
+
+    [Fact]
+    public void Generate_user_Archive_interface_choice_gets_actual_argument_type_not_DamlUnit()
+    {
+        var userPkg = new DamlPackage
+        {
+            PackageId = "user-pkg-id",
+            Name = "user-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Internal.Template",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Archive",
+                            Definition = new DamlRecordDefinition(
+                                [new DamlField("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        }
+                    ],
+                    Interfaces = [],
+                }
+            ],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes = [],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Archivable",
+                    Methods =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Archive",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef(userPkg.PackageId, "DA.Internal.Template", "Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                    ViewType = null,
+                },
+            ],
+        };
+
+        var dar = new DarArchive
+        {
+            MainPackage = new DamlPackage
+            {
+                PackageId = "test-pkg",
+                Name = "test-package",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                Modules = [mainModule],
+                DependencyReferences = [],
+            },
+            Dependencies = [StdlibStub, userPkg],
+        };
+
+        var files = CreateGenerator().Generate(dar);
+        var iface = files.First(f => f.RelativePath.EndsWith("IArchivable.cs", StringComparison.Ordinal));
+
+        iface.Content.Should().Contain("IArchivableExtensions");
+        iface.Content.Should().Contain("ArchiveAsync(");
+        iface.Content.Should().Contain("User.Package.Archive argument,",
+            "a user-defined Archive interface choice must use its actual argument type, not be silently mapped to DamlUnit");
+        iface.Content.Should().Contain("argument.ToRecord()",
+            "the argument encoder must call ToRecord() on the user's actual Archive type, not submit DamlUnit.Instance");
     }
 
     [Fact]

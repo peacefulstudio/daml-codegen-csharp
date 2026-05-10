@@ -865,7 +865,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             return ("DamlUnit", false);
         }
-        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" })
+        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" } archiveRef
+            && !string.IsNullOrEmpty(archiveRef.PackageId)
+            && _currentArchive is not null
+            && _currentArchive.GetPackageById(archiveRef.PackageId) is { } archivePkg
+            && IsStdlibPackage(archivePkg.Name))
         {
             return ("DamlUnit", false);
         }
@@ -1388,7 +1392,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (choice.ArgumentType is DamlTypeRef externalRef)
         {
-            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" })
+            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" }
+                && !string.IsNullOrEmpty(externalRef.PackageId)
+                && _currentArchive is not null
+                && _currentArchive.GetPackageById(externalRef.PackageId) is { } archivePkg
+                && IsStdlibPackage(archivePkg.Name))
             {
                 return ("DamlUnit", null, false, false);
             }
