@@ -24,29 +24,11 @@ longer needed because no file emits an unused using (issue #102).
 
 ## Refreshing the `expected/` snapshot
 
-POSIX shell (run from the repo root). Windows maintainers should use WSL or
-adapt the `rm -rf` step to PowerShell `Remove-Item -Recurse -Force`.
+Run from the repo root. This script requires a POSIX shell; on Windows, use
+WSL or Git Bash rather than plain PowerShell/cmd:
 
 ```bash
-# 1. Build the codegen tool from the current source tree.
-dotnet build src/Daml.Codegen.CSharp -c Release
-
-# 2. Wipe the previous expected output so removed files don't linger.
-rm -rf tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/expected
-
-# 3. Regenerate. `dotnet run --project ...` is preferred over invoking the
-#    DLL directly so the path is target-framework-agnostic.
-dotnet run --project src/Daml.Codegen.CSharp -c Release -- \
-  tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/splice-api-token-holding-v1.dar \
-  -o tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/expected \
-  --target-framework net10.0 --verbosity 1
-
-# 4. Verify the test passes against the new snapshot.
-dotnet test --filter FullyQualifiedName~DriftDetectionTests
-
-# 5. Stage the new expected/ tree (newly-emitted files are untracked) and
-#    commit alongside the codegen change so the diff is reviewable in one PR.
-git add tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/expected
+<run the snapshot refresh script for splice-api-token-holding-v1>
 ```
 
 ## Refreshing the DAR itself
