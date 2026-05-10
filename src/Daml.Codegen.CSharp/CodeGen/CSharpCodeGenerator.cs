@@ -1643,6 +1643,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteVariantType(IndentWriter indent, DamlDataType dataType, DamlVariantDefinition variant)
     {
+        indent.Require("System");
         var className = SanitizeIdentifier(dataType.Name);
         var typeParams = GetTypeParametersDeclaration(dataType.TypeParams);
         var fullClassName = $"{className}{typeParams}";
