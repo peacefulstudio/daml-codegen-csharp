@@ -12,7 +12,7 @@
     <!-- Package metadata -->
     <Authors>Peaceful Studio</Authors>
     <Company>Peaceful Studio</Company>
-    <Copyright>Copyright © 2026 Peaceful Studio</Copyright>
+    <Copyright>Copyright © 2026 Peaceful Studio OÜ</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/peacefulstudio/daml-codegen-csharp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/peacefulstudio/daml-codegen-csharp</RepositoryUrl>
