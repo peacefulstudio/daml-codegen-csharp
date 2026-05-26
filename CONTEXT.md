@@ -55,12 +55,16 @@ _Avoid_: "signature decode", "lite parse"
 The dpm component that runs the codegen pipeline end-to-end: invokes the bundled JVM
 helper on the input DAR, hands the Intermediate DAR to the bundled C# emitter, writes
 `.cs` to the configured output directory. Distributed as a multi-platform OCI artifact
-(`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64`); dpm fetches the right
-RID lazily on first invocation (requires `DPM_AUTO_INSTALL=true` and an `image-tag:`
-entry under `override-components:` in `dpm.local.yaml`) and dispatches to its launcher
-at `dpm codegen-cs` invocation time. The supply chain is the OCI registry plus dpm —
-the codegen toolchain is not distributed as a `dotnet tool`, a Docker image, or a
-NuGet package.
+(`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64`); stock `dpm` fetches the
+right RID lazily on first invocation (requires `DPM_AUTO_INSTALL=true`) and dispatches
+to its launcher at `dpm codegen-cs` invocation time. Users opt in by listing every
+component they need — SDK ones and `codegen-cs` — under `components:` in `daml.yaml`,
+with no `sdk-version` key (the two are mutually exclusive by upstream design; see
+ADR-0001). At M1 the supply chain is the OCI registry plus stock dpm — the codegen
+toolchain will not be distributed as a `dotnet tool`, a Docker image, or a NuGet
+package. (Today's shape, pre-M1, ships `Daml.Codegen.CSharp` as a `dotnet tool` /
+NuGet package; that distribution is retired at the F6 dpm cutover. See the project guide's
+"Packages" target-vs-current note.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
 ## Example dialogue
