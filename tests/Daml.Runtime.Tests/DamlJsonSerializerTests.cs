@@ -368,6 +368,7 @@ public class DamlJsonSerializerTests
         { "DamlBool_false", new DamlBool(false), "false" },
         { "DamlParty", new DamlParty("Alice::12345"), "\"Alice::12345\"" },
         { "DamlDate", new DamlDate(new DateOnly(2023, 12, 25)), "\"2023-12-25\"" },
+        { "DamlUnit", DamlUnit.Instance, "{}" },
         { "DamlGenMap", DamlGenMap.Create(
             (new DamlText("k1"), new DamlInt64(1)),
             (new DamlText("k2"), new DamlInt64(2))), "[[\"k1\",1],[\"k2\",2]]" },
@@ -414,6 +415,7 @@ public class DamlJsonSerializerTests
             DamlJsonSerializer.Serialize(new DamlDate(new DateOnly(2024, 1, 1)));
             DamlJsonSerializer.Serialize(new DamlTimestamp(DateTimeOffset.UnixEpoch));
             DamlJsonSerializer.Serialize(new DamlContractId("cid"));
+            DamlJsonSerializer.Serialize((DamlValue)DamlUnit.Instance);
             DamlJsonSerializer.Serialize(DamlOptional.Some(new DamlInt64(1)));
             DamlJsonSerializer.Serialize(DamlOptional.None);
             DamlJsonSerializer.Serialize(DamlList.Create(new DamlInt64(1)));
@@ -429,11 +431,24 @@ public class DamlJsonSerializerTests
     }
 
     [Fact]
-    public void Issue_159_Serialize_value_overload_currently_throws_for_DamlUnit()
+    public void Serialize_value_overload_should_handle_DamlUnit()
     {
-        Action act = () => DamlJsonSerializer.Serialize((DamlValue)DamlUnit.Instance);
+        var valueJson = DamlJsonSerializer.Serialize((DamlValue)DamlUnit.Instance);
+        var recordJson = DamlJsonSerializer.Serialize(
+            DamlRecord.Create(DamlField.Create("u", DamlUnit.Instance)));
 
-        act.Should().Throw<ArgumentException>();
+        valueJson.Should().Be("{}");
+        recordJson.Should().Be($"{{\"u\":{valueJson}}}");
+    }
+
+    [Fact]
+    public void RoundTrip_value_overload_decodes_DamlUnit_as_empty_DamlRecord()
+    {
+        var json = DamlJsonSerializer.Serialize((DamlValue)DamlUnit.Instance);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().BeOfType<DamlRecord>();
+        deserialized.As<DamlRecord>().Fields.Should().BeEmpty();
     }
 
     [Fact]

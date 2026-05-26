@@ -87,7 +87,7 @@ public static class DamlJsonSerializer
         DamlNumeric n => JsonValue.Create(n.Value.ToString("G", CultureInfo.InvariantCulture)),
         DamlText t => JsonValue.Create(t.Value),
         DamlBool b => JsonValue.Create(b.Value),
-        DamlUnit => JsonValue.Create(new JsonObject()),
+        DamlUnit => new JsonObject(),
         DamlDate d => JsonValue.Create(d.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
         DamlTimestamp ts => JsonValue.Create(ts.Value.ToString("O", CultureInfo.InvariantCulture)),
         DamlParty p => JsonValue.Create(p.Value),

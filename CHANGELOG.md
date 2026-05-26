@@ -15,6 +15,10 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Fixed
+
+- **`DamlJsonSerializer.Serialize(DamlUnit.Instance)` no longer throws `ArgumentException`** and now returns `"{}"` per the Daml-LF JSON encoding for Unit. The serializer's `ValueToJsonNode` branch for `DamlUnit` wrapped a `JsonObject` in `JsonValue.Create(...)`, which only accepts primitive values and rejects any `JsonNode` — every attempt to serialize a `DamlUnit` (standalone or via the `DamlValueJsonConverter` path used by the top-level `Serialize(DamlValue)` entry point) threw at runtime. Closes [#159](https://github.com/peacefulstudio/daml-codegen-csharp/issues/159) ([#163](https://github.com/peacefulstudio/daml-codegen-csharp/pull/163)).
+
 ### Changed
 
 - Generated files now emit only the `using` directives their body actually references, tracked per-file at codegen time — each namespace is required at its actual emit site (e.g. `System.Collections.Generic` only when a list/map field appears, `Daml.Runtime.Contracts` only when a template, interface, or contract-ID type is emitted, `System` only when `Version`, `DateTimeOffset`, etc. appear). The `#pragma warning disable CS8019` header that previously suppressed unused-using warnings in every file has been removed; no generated file emits an unused `using`. Consumers with `<TreatWarningsAsErrors>` no longer need a workaround, and IDEs get accurate import lists (#102).
