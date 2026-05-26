@@ -138,3 +138,9 @@ CodeCoverage/
 
 # MSBuild package bundled tools
 src/Daml.Codegen.CSharp.MSBuild/tools/
+
+# JVM helper (Scala / sbt) build artefacts
+jvm-helper/target/
+jvm-helper/project/target/
+jvm-helper/project/project/
+jvm-helper/.bsp/
