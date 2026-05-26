@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
 using FluentAssertions;
@@ -234,19 +235,13 @@ public class DamlJsonSerializerTests
     [Fact]
     public void Serialize_should_handle_DamlNumeric_with_precision()
     {
-        // Arrange
         var record = DamlRecord.Create(
             DamlField.Create("amount", new DamlNumeric(123.456789m, 10))
         );
 
-        // Act
         var json = DamlJsonSerializer.Serialize(record);
 
-        // Assert - Numeric is serialized as string for precision, locale-independent
-        json.Should().Contain("\"amount\":");
-        // The decimal value is serialized using G format which is locale-aware
-        // Just verify the field exists and contains the digits
-        json.Should().MatchRegex("\"amount\":\"123[,.]456789\"");
+        json.Should().Contain("\"amount\":\"123.456789\"");
     }
 
     [Fact]
@@ -382,5 +377,149 @@ public class DamlJsonSerializerTests
         deserialized.GetField("name")!.As<DamlText>().Value.Should().Be("Alice");
         deserialized.GetField("age")!.As<DamlInt64>().Value.Should().Be(30);
         deserialized.GetField("active")!.As<DamlBool>().Value.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Serialize_should_render_DamlGenMap_as_array_of_two_element_arrays()
+    {
+        var genMap = DamlGenMap.Create(
+            (new DamlParty("Alice"), new DamlInt64(1)),
+            (new DamlParty("Bob"), new DamlInt64(2))
+        );
+        var record = DamlRecord.Create(DamlField.Create("entries", genMap));
+
+        var json = DamlJsonSerializer.Serialize(record);
+
+        json.Should().Contain("\"entries\":[[\"Alice\",1],[\"Bob\",2]]");
+    }
+
+    [Fact]
+    public void RoundTrip_should_preserve_DamlGenMap_entries()
+    {
+        var original = DamlGenMap.Create(
+            (new DamlParty("Alice"), new DamlInt64(1)),
+            (new DamlParty("Bob"), new DamlInt64(2))
+        );
+        var record = DamlRecord.Create(DamlField.Create("entries", original));
+
+        var json = DamlJsonSerializer.Serialize(record);
+        var deserialized = DamlJsonSerializer.DeserializeRecord(json);
+
+        var entries = deserialized.GetField("entries")!;
+        entries.Should().BeOfType<DamlGenMap>();
+        entries.As<DamlGenMap>().Entries.Should().BeEquivalentTo(original.Entries);
+    }
+
+    [Fact]
+    public void RoundTrip_top_level_Deserialize_should_preserve_DamlGenMap()
+    {
+        var original = DamlGenMap.Create(
+            (new DamlParty("Alice"), new DamlInt64(1)),
+            (new DamlParty("Bob"), new DamlInt64(2))
+        );
+
+        var json = DamlJsonSerializer.Serialize(original);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().BeOfType<DamlGenMap>();
+        deserialized.As<DamlGenMap>().Entries.Should().BeEquivalentTo(original.Entries);
+    }
+
+    [Fact]
+    public void Deserialize_empty_array_should_resolve_to_DamlList_per_documented_contract()
+    {
+        var deserialized = DamlJsonSerializer.Deserialize("[]");
+
+        deserialized.Should().BeOfType<DamlList>();
+        deserialized.As<DamlList>().Values.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Deserialize_pair_with_null_key_should_surface_array_null_error_not_GenMap_error()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("[[null, 5]]");
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("Null array elements not supported");
+    }
+
+    [Fact]
+    public void Deserialize_pair_with_null_value_should_surface_array_null_error_not_GenMap_error()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("[[5, null]]");
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("Null array elements not supported");
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_should_be_locale_independent()
+    {
+        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+
+            var record = DamlRecord.Create(
+                DamlField.Create("amount", new DamlNumeric(123.456789m, 10))
+            );
+
+            var json = DamlJsonSerializer.Serialize(record);
+
+            json.Should().Contain("\"amount\":\"123.456789\"");
+            json.Should().NotContain("\"amount\":\"123,456789\"");
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void Serialize_DamlDate_should_be_locale_independent()
+    {
+        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo("ar-SA");
+
+            var record = DamlRecord.Create(
+                DamlField.Create("createdDate", new DamlDate(new DateOnly(2024, 3, 15)))
+            );
+
+            var json = DamlJsonSerializer.Serialize(record);
+
+            json.Should().Contain("\"createdDate\":\"2024-03-15\"");
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void Serialize_DamlTimestamp_should_be_locale_independent()
+    {
+        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo("ar-SA");
+
+            var timestamp = new DateTimeOffset(2024, 3, 15, 9, 8, 7, TimeSpan.Zero);
+            var record = DamlRecord.Create(
+                DamlField.Create("updatedAt", new DamlTimestamp(timestamp))
+            );
+
+            var json = DamlJsonSerializer.Serialize(record);
+
+            json.Should().Contain("\"updatedAt\":\"2024-03-15T09:08:07.0000000");
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
     }
 }
