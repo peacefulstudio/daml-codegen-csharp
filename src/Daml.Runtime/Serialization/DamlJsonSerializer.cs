@@ -206,19 +206,16 @@ public static class DamlJsonSerializer
 
     private static DamlValue InferStringValue(string s)
     {
-        // Try to parse as date
-        if (DateOnly.TryParse(s, out var date))
+        if (DateOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
             return new DamlDate(date);
         }
 
-        // Try to parse as timestamp
-        if (DateTimeOffset.TryParse(s, out var ts))
+        if (DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
         {
             return new DamlTimestamp(ts);
         }
 
-        // Default to text
         return new DamlText(s);
     }
 }

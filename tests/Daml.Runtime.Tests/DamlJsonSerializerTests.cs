@@ -689,4 +689,74 @@ public class DamlJsonSerializerTests
             System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
         }
     }
+
+    [Fact]
+    public void RoundTrip_value_overload_should_preserve_DamlDate()
+    {
+        var original = new DamlDate(new DateOnly(2026, 5, 26));
+
+        var json = DamlJsonSerializer.Serialize((DamlValue)original);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().BeOfType<DamlDate>();
+        deserialized.As<DamlDate>().Value.Should().Be(original.Value);
+    }
+
+    [Fact]
+    public void RoundTrip_value_overload_should_preserve_DamlTimestamp()
+    {
+        var original = new DamlTimestamp(new DateTimeOffset(2026, 5, 26, 14, 30, 45, TimeSpan.Zero));
+
+        var json = DamlJsonSerializer.Serialize((DamlValue)original);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().BeOfType<DamlTimestamp>();
+        deserialized.As<DamlTimestamp>().Value.Should().Be(original.Value);
+    }
+
+    [Fact]
+    public void RoundTrip_value_overload_should_preserve_DamlDate_under_non_invariant_culture()
+    {
+        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo("th-TH");
+
+            var original = new DamlDate(new DateOnly(2026, 5, 26));
+
+            var json = DamlJsonSerializer.Serialize((DamlValue)original);
+            var deserialized = DamlJsonSerializer.Deserialize(json);
+
+            deserialized.Should().BeOfType<DamlDate>();
+            deserialized.As<DamlDate>().Value.Should().Be(original.Value);
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void RoundTrip_value_overload_should_preserve_DamlTimestamp_under_non_invariant_culture()
+    {
+        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo("th-TH");
+
+            var original = new DamlTimestamp(new DateTimeOffset(2026, 5, 26, 14, 30, 45, TimeSpan.Zero));
+
+            var json = DamlJsonSerializer.Serialize((DamlValue)original);
+            var deserialized = DamlJsonSerializer.Deserialize(json);
+
+            deserialized.Should().BeOfType<DamlTimestamp>();
+            deserialized.As<DamlTimestamp>().Value.Should().Be(original.Value);
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
+    }
 }
