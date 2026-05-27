@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 

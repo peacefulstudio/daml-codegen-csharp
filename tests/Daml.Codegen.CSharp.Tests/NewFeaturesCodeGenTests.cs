@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -418,7 +419,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -452,7 +453,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Lockable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -486,7 +487,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Holdable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -537,7 +538,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Asset",
-                    Methods = [],
+                    Choices = [],
                     ViewType = new DamlTypeRef("", "Test.Module", "AssetView")
                 }
             ]
@@ -571,8 +572,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods =
-                    [
+                    Choices =                     [
                         new DamlChoice
                         {
                             Name = "Transfer",
@@ -614,7 +614,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Documented",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -661,13 +661,13 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "IncludeMe",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 },
                 new DamlInterface
                 {
                     Name = "ExcludeMe",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -1172,7 +1172,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]

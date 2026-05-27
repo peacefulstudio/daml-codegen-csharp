@@ -1,19 +1,19 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
 /// Generates C# code from Daml packages.
 /// </summary>
-internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, ConsoleLogger logger)
+public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegenLogger logger)
 {
     private readonly Regex? _rootFilter = options.RootFilter is not null
         ? new Regex(options.RootFilter, RegexOptions.Compiled)
         : null;
 
-    private DarArchive? _currentArchive;
+    private IDarSource? _currentArchive;
     private DamlPackage? _currentPackage;
     private readonly HashSet<string> _externalPackageIds = [];
 
@@ -40,7 +40,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     /// <summary>
     /// Generates C# code for all types in the DAR.
     /// </summary>
-    public IReadOnlyList<GeneratedFile> Generate(DarArchive dar)
+    public IReadOnlyList<GeneratedFile> Generate(IDarSource dar)
     {
         var files = new List<GeneratedFile>();
 
@@ -703,7 +703,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         WriteInterfaceMetadata(indent, package, module, iface);
 
         // Generate method signatures for each choice
-        foreach (var method in iface.Methods)
+        foreach (var method in iface.Choices)
         {
             WriteInterfaceMethod(indent, method, dataTypes);
         }
@@ -717,7 +717,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // The `cid` here is a `ContractId<I>` (interface marker), so the wire-level
         // `template_id` slot carries the interface id per Canton's gRPC semantics —
         // see ExerciseCommand.ForInterface in Daml.Runtime.
-        if (iface.Methods.Count > 0)
+        if (iface.Choices.Count > 0)
         {
             indent.AppendLine();
             WriteInterfaceChoiceExtensions(indent, package, module, iface, interfaceName, dataTypes);
@@ -757,7 +757,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         var extensionsClassName = $"{interfaceName}Extensions";
 
-        var emittable = iface.Methods.ToList();
+        var emittable = iface.Choices.ToList();
 
         if (emittable.Count == 0)
         {
@@ -1698,7 +1698,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         foreach (var ctor in variant.Constructors)
         {
             var ctorName = SanitizeIdentifier(ctor.Name);
-            var argType = ctor.ArgumentType is not null ? MapDamlTypeToCSharp(ctor.ArgumentType) : null;
+            var hasArg = ctor.ArgumentType is not null
+                && ctor.ArgumentType is not DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
+            var argType = hasArg ? MapDamlTypeToCSharp(ctor.ArgumentType!) : null;
 
             if (argType is not null)
             {

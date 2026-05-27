@@ -25,6 +25,11 @@ message IntermediatePackage {
   // `.`) — load-bearing for determinism (see ADR 0002 and
   // AstToIntermediate.translatePackage).
   repeated IntermediateModule modules = 5;
+  // Set when this package is an upgrade of another package; carries the
+  // package id of the predecessor. Empty means "no upgrade predecessor".
+  // Surfaced by the C# emitter as `package.UpgradedPackageId` and embedded
+  // in generated identifiers metadata.
+  string upgraded_package_id = 6;
 }
 
 message IntermediateModule {

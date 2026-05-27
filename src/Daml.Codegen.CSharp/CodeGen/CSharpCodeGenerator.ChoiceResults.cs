@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -12,7 +12,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// projector that walks a transaction's created contracts and validates cardinality
 /// per declared template field. See issue #60.
 /// </summary>
-internal sealed partial class CSharpCodeGenerator
+public sealed partial class CSharpCodeGenerator
 {
     /// <summary>
     /// Cardinality of an expected created contract slot in a choice's return type.

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -44,7 +44,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// its typed result.
 /// </para>
 /// </summary>
-internal sealed partial class CSharpCodeGenerator
+public sealed partial class CSharpCodeGenerator
 {
     /// <summary>
     /// Returns <c>true</c> when the choice is the synthetic <c>Archive</c>

@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -797,8 +798,7 @@ public class NonContractChoiceWrapperTests
                 new DamlInterface
                 {
                     Name = "Archivable",
-                    Methods =
-                    [
+                    Choices =                    [
                         new DamlChoice
                         {
                             Name = "Archive",
@@ -955,8 +955,7 @@ public class NonContractChoiceWrapperTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods =
-                    [
+                    Choices =                    [
                         new DamlChoice
                         {
                             Name = "Transfer",
@@ -1002,8 +1001,7 @@ public class NonContractChoiceWrapperTests
                 new DamlInterface
                 {
                     Name = "Quotable",
-                    Methods =
-                    [
+                    Choices =                    [
                         new DamlChoice
                         {
                             Name = "Quote",

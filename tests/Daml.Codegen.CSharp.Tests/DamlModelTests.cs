@@ -1,4 +1,5 @@
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -384,13 +385,13 @@ public class DamlModelTests
         var iface = new DamlInterface
         {
             Name = "Holdable",
-            Methods = methods,
+            Choices = methods,
             ViewType = new DamlTypeRef("", "Module", "HoldableView")
         };
 
         // Assert
         iface.Name.Should().Be("Holdable");
-        iface.Methods.Should().HaveCount(1);
+        iface.Choices.Should().HaveCount(1);
         iface.ViewType.Should().NotBeNull();
     }
 
@@ -401,7 +402,7 @@ public class DamlModelTests
         var iface = new DamlInterface
         {
             Name = "Viewless",
-            Methods = []
+            Choices = []
         };
 
         // Assert
@@ -464,7 +465,7 @@ public class DamlModelTests
         };
         var interfaces = new[]
         {
-            new DamlInterface { Name = "Interface1", Methods = [] }
+            new DamlInterface { Name = "Interface1", Choices = [] }
         };
 
         // Act
@@ -529,7 +530,7 @@ public class DamlModelTests
         };
 
         // Assert
-        var allPackages = dar.AllPackages.ToList();
+        var allPackages = ((IDarSource)dar).AllPackages.ToList();
         allPackages.Should().HaveCount(3);
         allPackages[0].Should().Be(mainPackage);
         allPackages[1].Should().Be(dep1);
@@ -558,7 +559,7 @@ public class DamlModelTests
         };
 
         // Assert
-        var allPackages = dar.AllPackages.ToList();
+        var allPackages = ((IDarSource)dar).AllPackages.ToList();
         allPackages.Should().HaveCount(1);
         allPackages[0].Should().Be(mainPackage);
     }

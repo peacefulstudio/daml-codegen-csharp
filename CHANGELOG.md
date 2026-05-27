@@ -15,6 +15,17 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Added
+
+- `Daml.Codegen.CSharp.IntermediateDarReader.Read(IntermediateDar)` — proto-to-model adapter; the new public API surface for emitter consumers (#147). Throws `InvalidDataException` fail-fast on malformed input (missing data-type shape, missing choice `argument_type` / `return_type`, unknown proto sort, `BUILTIN_TYPE_UNSPECIFIED`) and `NotSupportedException` on intentionally-deferred builtins; no silent fallback to `Unit` or empty record.
+- `Daml.Codegen.CSharp.Model.DarModel` and `Daml.Codegen.CSharp.Model.IDarSource` — the emitter input contract. `CSharpCodeGenerator.Generate` now takes `IDarSource`, satisfied by both `DarModel` (proto-direct) and `DarArchive` (parser-direct, `Daml.Codegen.DarParser`).
+- `Daml.Codegen.CSharp.ICodegenLogger` — minimal logging contract that `CSharpCodeGenerator` now depends on. `ConsoleLogger` implements it; tests and host applications can supply alternative implementations without taking a console dependency (#168).
+- `scripts/codegen-pipeline.sh` — orchestration shim that chains the JVM helper JAR + the C# CLI end-to-end. Stands in for the `dpm codegen-cs` OCI bundle entry point until F6 / #136 lands.
+
+### Changed — BREAKING
+
+- **Package split per [ADR 0003](docs/adr/0003-package-split-dar-parser-side-pocket.md) (#147).** `Daml.Codegen.CSharp` is now a pure emitter library — it consumes an `IntermediateDar` proto (produced by the JVM helper from #146) and emits `.cs`. The legacy `dotnet tool` CLI surface (`PackAsTool`, `daml-codegen-csharp` command) is removed from `Daml.Codegen.CSharp`. DAR/DALF parsing moves into a new internal-only package `Daml.Codegen.DarParser` (excluded from the public OSS mirror). A new thin CLI project `Daml.Codegen.CSharp.Cli` produces the binary `daml-codegen-csharp`; it accepts either `--intermediate <proto-path>` (the post-#147 primary path) or one-or-more positional `<dar-files>` (legacy direct path retained for local dev). The CLI publishes as a self-contained single-file native binary per RID — `dotnet publish src/Daml.Codegen.CSharp.Cli -c Release -r <rid> --self-contained true -p:PublishSingleFile=true`.
+
 ### Fixed
 
 - **`DamlJsonSerializer.Serialize(DamlUnit.Instance)` no longer throws `ArgumentException`** and now returns `"{}"` per the Daml-LF JSON encoding for Unit. The serializer's `ValueToJsonNode` branch for `DamlUnit` wrapped a `JsonObject` in `JsonValue.Create(...)`, which only accepts primitive values and rejects any `JsonNode` — every attempt to serialize a `DamlUnit` (standalone or via the `DamlValueJsonConverter` path used by the top-level `Serialize(DamlValue)` entry point) threw at runtime. Closes [#159](https://github.com/peacefulstudio/daml-codegen-csharp/issues/159) ([#163](https://github.com/peacefulstudio/daml-codegen-csharp/pull/163)).

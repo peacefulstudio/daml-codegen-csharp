@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackageId>Daml.Codegen.CSharp.Cli</PackageId>
+    <Description>Thin CLI wiring the IntermediateDar proto reader (or the legacy DAR-direct path) into the C# emitter. Bundled inside the dpm codegen-cs OCI artifact (#136). Internal-only.</Description>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
+    <AssemblyName>daml-codegen-csharp</AssemblyName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Daml.Codegen.CSharp\Daml.Codegen.CSharp.csproj" />
+    <ProjectReference Include="..\Daml.Codegen.DarParser\Daml.Codegen.DarParser.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -768,7 +769,7 @@ public class CodeGenEdgeCaseTests
                 new DamlInterface
                 {
                     Name = "Holding",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -856,7 +857,7 @@ public class CodeGenEdgeCaseTests
             ],
             Interfaces =
             [
-                new DamlInterface { Name = "Token", Methods = [], ViewType = null }
+                new DamlInterface { Name = "Token", Choices = [], ViewType = null }
             ]
         };
         var modB = new DamlModule
@@ -952,8 +953,7 @@ public class CodeGenEdgeCaseTests
                 {
                     Name = "Holding",
                     ViewType = null,
-                    Methods =
-                    [
+                    Choices =                     [
                         new DamlChoice
                         {
                             Name = "Transfer",
@@ -1034,7 +1034,7 @@ public class CodeGenEdgeCaseTests
             ],
             Interfaces =
             [
-                new DamlInterface { Name = "Marker", Methods = [], ViewType = null }
+                new DamlInterface { Name = "Marker", Choices = [], ViewType = null }
             ]
         };
 

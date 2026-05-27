@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
