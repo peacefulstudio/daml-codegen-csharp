@@ -83,10 +83,11 @@ _TeamCity*
 .axoCover/*
 !.axoCover/settings.json
 
-# Coverlet
+# Coverlet / MTP coverage
 coverage*.json
 coverage*.xml
 coverage*.info
+!coverage.settings.xml
 
 # Visual Studio code coverage results
 *.coverage

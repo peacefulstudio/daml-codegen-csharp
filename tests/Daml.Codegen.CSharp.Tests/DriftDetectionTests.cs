@@ -125,7 +125,7 @@ public class DriftDetectionTests
         foreach (var (actual, expected) in actualFiles.Zip(expectedFiles))
         {
             var actualBytes = System.Text.Encoding.UTF8.GetBytes(actual.Content);
-            var expectedBytes = await File.ReadAllBytesAsync(expected.AbsolutePath);
+            var expectedBytes = await File.ReadAllBytesAsync(expected.AbsolutePath, TestContext.Current.CancellationToken);
 
             if (!actualBytes.SequenceEqual(expectedBytes))
             {
