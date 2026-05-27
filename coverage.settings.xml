@@ -4,24 +4,29 @@
     <ModulePaths>
       <Exclude>
         <ModulePath>.*\.Tests\.dll$</ModulePath>
+        <ModulePath>.*[/\\]testhost\.dll$</ModulePath>
         <ModulePath>.*Daml\.Codegen\.CSharp\.MSBuild\.dll$</ModulePath>
       </Exclude>
     </ModulePaths>
     <Sources>
       <Exclude>
-        <Source>.*[\\/]DarReader[\\/]Proto[\\/].*</Source>
-        <Source>.*[\\/]obj[\\/].*</Source>
+        <Source>.*[/\\]obj[/\\].*</Source>
+        <Source>.*[/\\]Proto[/\\]com[/\\]digitalasset[/\\].*</Source>
       </Exclude>
     </Sources>
     <Attributes>
       <Exclude>
+        <Attribute>^System\.Diagnostics\.DebuggerHiddenAttribute$</Attribute>
+        <Attribute>^System\.Diagnostics\.DebuggerNonUserCodeAttribute$</Attribute>
         <Attribute>^System\.ObsoleteAttribute$</Attribute>
         <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
         <Attribute>^System\.Runtime\.CompilerServices\.CompilerGeneratedAttribute$</Attribute>
       </Exclude>
     </Attributes>
     <SkipAutoProps>True</SkipAutoProps>
-    <CollectFromChildProcesses>True</CollectFromChildProcesses>
     <UseVerifiableInstrumentation>False</UseVerifiableInstrumentation>
+    <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
+    <CollectFromChildProcesses>True</CollectFromChildProcesses>
+    <CollectAspDotNet>False</CollectAspDotNet>
   </CodeCoverage>
 </Configuration>
