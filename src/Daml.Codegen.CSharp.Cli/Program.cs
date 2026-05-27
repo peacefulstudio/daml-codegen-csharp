@@ -127,6 +127,33 @@ public static class Program
             DefaultValueFactory = _ => true
         };
 
+        var emitterCounterOption = new Option<int>("--emitter-counter")
+        {
+            Description = "4th segment of the generated NuGet version (M.m.p.r per ADR 0002). Defaults to 0; the Splice publish CI passes a monotonic counter from the emitter-version mapping table.",
+            DefaultValueFactory = _ => 0
+        };
+        emitterCounterOption.Validators.Add(result =>
+        {
+            if (result.GetValue(emitterCounterOption) < 0)
+            {
+                result.AddError("--emitter-counter must be a non-negative integer (ADR 0002 segment 4 is a monotonic counter).");
+            }
+        });
+
+        var packageLicenseOption = new Option<string>("--package-license")
+        {
+            Description = "SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0 (correct for the Splice publish path).",
+            DefaultValueFactory = _ => "Apache-2.0"
+        };
+        packageLicenseOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(packageLicenseOption);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("--package-license must be a non-empty SPDX license expression (e.g. Apache-2.0, MIT, BSD-3-Clause).");
+            }
+        });
+
         rootCommand.Arguments.Add(darFilesArg);
         rootCommand.Options.Add(intermediateOption);
         rootCommand.Options.Add(outputOption);
@@ -140,6 +167,8 @@ public static class Program
         rootCommand.Options.Add(targetFrameworkOption);
         rootCommand.Options.Add(runtimeVersionOption);
         rootCommand.Options.Add(contractIdentifiersOption);
+        rootCommand.Options.Add(emitterCounterOption);
+        rootCommand.Options.Add(packageLicenseOption);
 
         Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, _) =>
             RunCodegen(new CodegenArgs(
@@ -155,7 +184,9 @@ public static class Program
                 parseResult.GetValue(includeDepsOption),
                 parseResult.GetValue(targetFrameworkOption)!,
                 parseResult.GetValue(runtimeVersionOption),
-                parseResult.GetValue(contractIdentifiersOption)));
+                parseResult.GetValue(contractIdentifiersOption),
+                parseResult.GetValue(emitterCounterOption),
+                parseResult.GetValue(packageLicenseOption)!));
         rootCommand.SetAction(action);
 
         var parseResult = rootCommand.Parse(args);
@@ -189,7 +220,9 @@ public static class Program
                 IncludeDependencies = args.IncludeDependencies,
                 TargetFramework = args.TargetFramework,
                 RuntimePackageVersion = args.RuntimePackageVersion,
-                GenerateContractIdentifiers = args.GenerateContractIdentifiers
+                GenerateContractIdentifiers = args.GenerateContractIdentifiers,
+                EmitterCounter = args.EmitterCounter,
+                PackageLicenseExpression = args.PackageLicenseExpression
             };
 
             if (args.IntermediateFile is not null)
@@ -313,4 +346,6 @@ internal sealed record CodegenArgs(
     bool IncludeDependencies,
     string TargetFramework,
     string? RuntimePackageVersion,
-    bool GenerateContractIdentifiers);
+    bool GenerateContractIdentifiers,
+    int EmitterCounter,
+    string PackageLicenseExpression);

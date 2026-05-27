@@ -117,9 +117,8 @@ public class ProjectFileGeneratorTests
     }
 
     [Fact]
-    public void GenerateProjectFile_should_include_package_version()
+    public void GenerateProjectFile_should_emit_4_part_version_with_r0_by_default()
     {
-        // Arrange
         var options = CreateOptions();
         var generator = new ProjectFileGenerator(options);
         var package = new DamlPackage
@@ -132,11 +131,83 @@ public class ProjectFileGeneratorTests
             DependencyReferences = []
         };
 
-        // Act
         var file = generator.GenerateProjectFile(package);
 
-        // Assert
-        file.Content.Should().Contain("<Version>2.3.4</Version>");
+        file.Content.Should().Contain("<Version>2.3.4.0</Version>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_throw_on_negative_EmitterCounter()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            EmitterCounter = -1,
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var act = () => generator.GenerateProjectFile(package);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*EmitterCounter*ADR 0002*");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_throw_on_two_part_dar_version()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var act = () => generator.GenerateProjectFile(package);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*3-part*ADR 0002*");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_use_EmitterCounter_as_4th_version_segment()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            EmitterCounter = 7,
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(0, 1, 17),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<Version>0.1.17.7</Version>");
     }
 
     [Fact]
@@ -299,6 +370,80 @@ public class ProjectFileGeneratorTests
 
         // Assert
         file.Content.Should().Contain("<Description>C# bindings for Daml package my-package</Description>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_emit_apache_2_0_license_expression_by_default()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_use_configured_license_expression()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            PackageLicenseExpression = "MIT",
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<PackageLicenseExpression>MIT</PackageLicenseExpression>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_xml_escape_license_expression()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            PackageLicenseExpression = "MIT & Apache-2.0 <or> later",
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<PackageLicenseExpression>MIT &amp; Apache-2.0 &lt;or&gt; later</PackageLicenseExpression>",
+            "user-supplied SPDX values flow into csproj XML and must be escaped to keep the generated project parseable");
     }
 
     [Fact]
