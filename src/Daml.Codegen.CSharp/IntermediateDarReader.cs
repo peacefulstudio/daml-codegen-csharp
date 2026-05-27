@@ -9,6 +9,7 @@ using PbField = Daml.Codegen.Intermediate.Field;
 using PbInterface = Daml.Codegen.Intermediate.Interface;
 using PbModule = Daml.Codegen.Intermediate.IntermediateModule;
 using PbPackage = Daml.Codegen.Intermediate.IntermediatePackage;
+using PbPartyAnalysis = Daml.Codegen.Intermediate.PartyAnalysis;
 using PbTemplate = Daml.Codegen.Intermediate.Template;
 using PbType = Daml.Codegen.Intermediate.Type;
 using PbTypeConName = Daml.Codegen.Intermediate.TypeConName;
@@ -19,13 +20,13 @@ namespace Daml.Codegen.CSharp;
 /// Maps a <see cref="PbDar"/> protobuf message (produced by the JVM helper,
 /// per ADR 0003 and the schema in <c>proto/intermediate_dar.proto</c>) into
 /// the emitter's in-memory <see cref="DarModel"/>. Static party analysis
-/// (<c>signatories</c>, <c>observers</c>, <c>controllers</c>) is
-/// intentionally absent from the proto — schema-mode decode strips
-/// expression bodies — so this adapter sets
-/// <see cref="DamlPartyAnalysis.Dynamic"/> on every template and choice.
-/// Callers that need static analysis must drive the emitter via the
-/// parser-direct path (<c>DarArchive.ReadAsync</c>) in
-/// <c>Daml.Codegen.DarParser</c> instead.
+/// (<c>signatories</c>, <c>observers</c>, <c>controllers</c>,
+/// <c>choiceObservers</c>) is preserved through the proto when the JVM
+/// helper runs in its default full-decode mode (per the ADR 0003 amendment
+/// of 2026-05-27 — issue #171). When the helper runs with
+/// <c>--schema-only</c>, the proto carries <see cref="DamlPartyAnalysis.Dynamic"/>
+/// on every template and choice and the typed-<c>actAs</c> codegen path
+/// in [#68] falls back to an explicit <c>SubmitterInfo</c> parameter.
 /// </summary>
 public static class IntermediateDarReader
 {
@@ -125,6 +126,8 @@ public static class IntermediateDarReader
             Choices = template.Choices.Select(ConvertChoice).ToList(),
             Key = template.KeyType is not null ? ConvertType(template.KeyType) : null,
             Implements = template.Implements.Select(FormatTypeConName).ToList(),
+            Signatories = ConvertPartyAnalysis(template.Signatories),
+            Observers = ConvertPartyAnalysis(template.Observers),
         };
     }
 
@@ -143,6 +146,41 @@ public static class IntermediateDarReader
             Consuming = choice.Consuming,
             ArgumentType = ConvertType(choice.ArgumentType),
             ReturnType = ConvertType(choice.ReturnType),
+            Controllers = ConvertPartyAnalysis(choice.Controllers),
+            Observers = ConvertPartyAnalysis(choice.Observers),
+        };
+    }
+
+    /// <summary>
+    /// Maps a proto <see cref="PbPartyAnalysis"/> into the model
+    /// <see cref="DamlPartyAnalysis"/>. An absent or unset analysis (the
+    /// proto field defaults to none on the wire when the helper ran in
+    /// <c>--schema-only</c> mode) is read as <see cref="DamlPartyAnalysis.Dynamic"/>.
+    /// <para>
+    /// Interface-choice party analysis is currently always <c>Dynamic</c>:
+    /// <c>PartyAnalyses.compute</c> on the JVM side iterates
+    /// <c>mod.templates</c> only, and <c>translateInterface</c> stamps
+    /// <c>ChoicePartyAnalysis.dynamic</c> on every interface choice. Adding
+    /// typed-<c>actAs</c> derivation for interface choices is a separate
+    /// follow-up.
+    /// </para>
+    /// </summary>
+    private static DamlPartyAnalysis ConvertPartyAnalysis(PbPartyAnalysis? analysis)
+    {
+        if (analysis is null)
+            return DamlPartyAnalysis.Dynamic;
+
+        return analysis.ShapeCase switch
+        {
+            PbPartyAnalysis.ShapeOneofCase.Static =>
+                DamlPartyAnalysis.Static(analysis.Static.PayloadFields
+                    .Select(field => (DamlPartyReference)new DamlPartyPayloadField(field))
+                    .ToList()),
+            PbPartyAnalysis.ShapeOneofCase.Dynamic => DamlPartyAnalysis.Dynamic,
+            PbPartyAnalysis.ShapeOneofCase.None => DamlPartyAnalysis.Dynamic,
+            _ => throw new InvalidDataException(
+                $"IntermediateDar PartyAnalysis has unknown shape '{analysis.ShapeCase}'. " +
+                "Update IntermediateDarReader.ConvertPartyAnalysis to handle the new shape, alongside the proto schema and the JVM helper."),
         };
     }
 

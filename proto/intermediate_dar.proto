@@ -81,6 +81,15 @@ message Template {
   repeated Choice choices = 2;
   Type key_type = 3;
   repeated TypeConName implements = 4;
+  // Static analysis of the `signatory ...` clause from the Daml source.
+  // Absent / unset means `Dynamic` — the JVM helper either ran in
+  // `--schema-only` mode (no analyzer at all) or could not statically
+  // resolve the expression. Present + `Static` means every signatory is
+  // a payload-field reference and codegen can derive `actAs` from the
+  // payload. See ADR 0003 amendment (2026-05-27).
+  PartyAnalysis signatories = 5;
+  // Same shape as `signatories` but for the `observer ...` clause.
+  PartyAnalysis observers = 6;
 }
 
 message Interface {
@@ -100,6 +109,34 @@ message Choice {
   bool consuming = 2;
   Type argument_type = 3;
   Type return_type = 4;
+  // Static analysis of the `controller ...` clause from the Daml source.
+  // Absent / unset means `Dynamic` — the JVM helper either ran in
+  // `--schema-only` mode or could not statically resolve the expression.
+  // Choice controllers can additionally project the choice argument record
+  // (the `arg` binder); that case is reported as `Dynamic` because the
+  // codegen would need to invent a name for the argument value. See
+  // ADR 0003 amendment (2026-05-27).
+  PartyAnalysis controllers = 5;
+  // Same shape as `controllers` but for the choice-level `observer ...`
+  // clause.
+  PartyAnalysis observers = 6;
+}
+
+message PartyAnalysis {
+  oneof shape {
+    StaticParties static = 1;
+    DynamicParties dynamic = 2;
+  }
+}
+
+message StaticParties {
+  // Payload field names in declaration order (lower-camel-case, matching
+  // the Daml source). An empty list is a valid Static verdict — it means
+  // the Daml source's expression is a literal `[]`.
+  repeated string payload_fields = 1;
+}
+
+message DynamicParties {
 }
 
 message Type {
