@@ -1165,6 +1165,12 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             case DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp }:
                 indent.Require("System");
                 break;
+            case DamlTypeApp app:
+                foreach (var arg in app.Arguments)
+                {
+                    RequireForFieldType(indent, arg);
+                }
+                break;
         }
     }
 
@@ -1704,6 +1710,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
             if (argType is not null)
             {
+                RequireForFieldType(indent, ctor.ArgumentType!);
                 indent.AppendLine($"/// <summary>{ctor.Name} constructor.</summary>");
                 indent.AppendLine($"public sealed record {ctorName}({argType} Value) : {fullClassName}");
             }

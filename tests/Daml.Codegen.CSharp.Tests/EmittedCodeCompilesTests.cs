@@ -1085,6 +1085,169 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
+    [Fact]
+    public void Emitted_variant_constructor_with_contract_id_argument_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "AnyValue",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("AnyContractId", ContractIdOf("Asset")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant constructor whose argument type is ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void RequireForFieldType_recurses_into_arguments_when_base_is_a_nested_type_app()
+    {
+        var sb = new System.Text.StringBuilder();
+        var indent = new IndentWriter(sb);
+
+        var nestedBase = new DamlTypeApp(
+            new DamlTypeRef("test-pkg", "Test.Module", "Wrapper"),
+            [new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var nestedAppCarryingContractId = new DamlTypeApp(
+            nestedBase,
+            [ContractIdOf("Asset")]);
+
+        var method = typeof(CSharpCodeGenerator).GetMethod(
+            "RequireForFieldType",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("RequireForFieldType not found");
+        method.Invoke(null, [indent, nestedAppCarryingContractId]);
+
+        indent.RequiredUsings.Should().Contain(
+            "Daml.Runtime.Contracts",
+            "any DamlTypeApp shape that transitively wraps a ContractId must add the runtime-contracts using, regardless of what the head's Base is (TypeRef, nested TypeApp, TypeVar) — otherwise a future MapDamlTypeToCSharp arm that learns to render the head type would emit `ContractId<...>` without the import.");
+    }
+
+    [Fact]
+    public void Emitted_record_with_tuple_field_wrapping_contract_id_compiles()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Tuple2",
+                            TypeParams = ["a", "b"],
+                            Definition = new DamlRecordDefinition([]),
+                        },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var contractIdTimesInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple2"),
+            [ContractIdOf("Asset"), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Holder",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("pair", contractIdTimesInt)]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field typed as a parametric stdlib type wrapping ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
     private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)
     {
         var trees = files
