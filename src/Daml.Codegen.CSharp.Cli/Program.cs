@@ -4,6 +4,7 @@ using System.CommandLine;
 using Daml.Codegen.CSharp;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.CSharp.Versioning;
 using Daml.Codegen.DarParser;
 using Daml.Codegen.Intermediate;
 using Spectre.Console;
@@ -140,6 +141,11 @@ public static class Program
             }
         });
 
+        var releaseCountersOption = new Option<FileInfo?>("--release-counters")
+        {
+            Description = "Path to a JSON release-counter store (JsonReleaseCounterStore). REQUIRES --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store via SpliceNuGetVersion.Compute — overriding --emitter-counter. The store is created on first use and atomically updated on each run; per ADR 0004 the Splice publish CI loads / saves it as a GitHub Actions repo variable across runs."
+        };
+
         var packageLicenseOption = new Option<string>("--package-license")
         {
             Description = "SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0 (correct for the Splice publish path).",
@@ -168,6 +174,7 @@ public static class Program
         rootCommand.Options.Add(runtimeVersionOption);
         rootCommand.Options.Add(contractIdentifiersOption);
         rootCommand.Options.Add(emitterCounterOption);
+        rootCommand.Options.Add(releaseCountersOption);
         rootCommand.Options.Add(packageLicenseOption);
 
         Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, _) =>
@@ -186,6 +193,7 @@ public static class Program
                 parseResult.GetValue(runtimeVersionOption),
                 parseResult.GetValue(contractIdentifiersOption),
                 parseResult.GetValue(emitterCounterOption),
+                parseResult.GetValue(releaseCountersOption),
                 parseResult.GetValue(packageLicenseOption)!));
         rootCommand.SetAction(action);
 
@@ -208,31 +216,20 @@ public static class Program
                 logger.Debug($"Created output directory: {args.OutputDirectory.FullName}");
             }
 
-            var options = new CodeGenOptions
+            if (args.ReleaseCountersFile is not null && args.IntermediateFile is null)
             {
-                OutputDirectory = args.OutputDirectory.FullName,
-                RootNamespace = args.RootNamespace,
-                RootFilter = args.RootFilter,
-                GenerateJsonSupport = args.GenerateJson,
-                EnableNullableReferenceTypes = args.EnableNullable,
-                Verbosity = args.Verbosity,
-                GenerateProjectFile = args.GenerateProjectFile,
-                IncludeDependencies = args.IncludeDependencies,
-                TargetFramework = args.TargetFramework,
-                RuntimePackageVersion = args.RuntimePackageVersion,
-                GenerateContractIdentifiers = args.GenerateContractIdentifiers,
-                EmitterCounter = args.EmitterCounter,
-                PackageLicenseExpression = args.PackageLicenseExpression
-            };
+                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash (see ADR 0002 / ADR 0004); the DAR-direct path does not expose the deterministic proto bytes.");
+                return 1;
+            }
 
             if (args.IntermediateFile is not null)
             {
-                await GenerateFromIntermediate(args.IntermediateFile, options, args, logger);
+                await GenerateFromIntermediate(args.IntermediateFile, args, logger);
                 return 0;
             }
             if (args.DarFiles.Length > 0)
             {
-                await GenerateFromDarFiles(args.DarFiles, options, args, logger);
+                await GenerateFromDarFiles(args.DarFiles, BuildOptions(args, args.EmitterCounter), args, logger);
                 return 0;
             }
 
@@ -250,7 +247,7 @@ public static class Program
         }
     }
 
-    private static async Task GenerateFromIntermediate(FileInfo file, CodeGenOptions options, CodegenArgs args, ConsoleLogger logger)
+    private static async Task GenerateFromIntermediate(FileInfo file, CodegenArgs args, ConsoleLogger logger)
     {
         logger.Info($"Reading IntermediateDar: {file.Name}");
         IntermediateDar proto;
@@ -264,10 +261,49 @@ public static class Program
         logger.Info($"  Modules: {dar.MainPackage.Modules.Count}");
         logger.Debug($"  Dependencies: {dar.Dependencies.Count}");
 
-        var generator = new CSharpCodeGenerator(options, logger);
+        var effectiveCounter = args.ReleaseCountersFile is not null
+            ? ResolveReleaseCounter(args.ReleaseCountersFile, proto, dar.MainPackage.Name, dar.MainPackage.Version, logger)
+            : args.EmitterCounter;
+
+        var generator = new CSharpCodeGenerator(BuildOptions(args, effectiveCounter), logger);
         var generatedFiles = generator.Generate(dar);
         await WriteGeneratedFiles(generatedFiles, args, logger);
     }
+
+    private static int ResolveReleaseCounter(
+        FileInfo storeFile,
+        IntermediateDar proto,
+        string packageName,
+        Version packageVersion,
+        ConsoleLogger logger)
+    {
+        var hash = IntermediatePackageContentHash.Compute(proto.Main);
+        var store = JsonReleaseCounterStore.OpenOrCreate(storeFile.FullName);
+        var version = SpliceNuGetVersion.Compute(packageName, packageVersion, hash, store);
+
+        var truncated = hash[..Math.Min(12, hash.Length)];
+        logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… version={version}");
+
+        return version.Revision;
+    }
+
+    private static CodeGenOptions BuildOptions(CodegenArgs args, int emitterCounter) =>
+        new()
+        {
+            OutputDirectory = args.OutputDirectory.FullName,
+            RootNamespace = args.RootNamespace,
+            RootFilter = args.RootFilter,
+            GenerateJsonSupport = args.GenerateJson,
+            EnableNullableReferenceTypes = args.EnableNullable,
+            Verbosity = args.Verbosity,
+            GenerateProjectFile = args.GenerateProjectFile,
+            IncludeDependencies = args.IncludeDependencies,
+            TargetFramework = args.TargetFramework,
+            RuntimePackageVersion = args.RuntimePackageVersion,
+            GenerateContractIdentifiers = args.GenerateContractIdentifiers,
+            EmitterCounter = emitterCounter,
+            PackageLicenseExpression = args.PackageLicenseExpression,
+        };
 
     private static async Task GenerateFromDarFiles(FileInfo[] darFiles, CodeGenOptions options, CodegenArgs args, ConsoleLogger logger)
     {
@@ -348,4 +384,5 @@ internal sealed record CodegenArgs(
     string? RuntimePackageVersion,
     bool GenerateContractIdentifiers,
     int EmitterCounter,
+    FileInfo? ReleaseCountersFile,
     string PackageLicenseExpression);
