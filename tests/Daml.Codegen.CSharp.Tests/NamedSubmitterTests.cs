@@ -145,7 +145,7 @@ public class NamedSubmitterTests
         // the SubmitterInfo's HashSet<Party>. We assert on the property names
         // (PascalCased) rather than the surrounding HashSet boilerplate, which
         // could be polished later without breaking consumers.
-        content.Should().Contain("new SubmitterInfo(new HashSet<Party>");
+        content.Should().Contain("new SubmitterInfo(new HashSet<global::Daml.Runtime.Data.Party>");
         content.Should().Contain("payload.Platform");
         content.Should().Contain("payload.Initiator");
         content.Should().Contain("payload.Counterparty");
@@ -168,7 +168,7 @@ public class NamedSubmitterTests
 
         // Single-party fast-path: SubmitterInfo submitter = payload.Platform;
         content.Should().Contain("SubmitterInfo submitter = payload.Platform;");
-        content.Should().NotContain("new HashSet<Party>");
+        content.Should().NotContain("new HashSet<global::Daml.Runtime.Data.Party>");
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class NamedSubmitterTests
         // wrapper signature carries one named Party parameter — no string actAs,
         // no SubmitterInfo fallback.
         offer.Should().Contain("public static async Task<ExerciseOutcome<AcceptResult>> AcceptAsync(");
-        offer.Should().Contain("Party counterparty,");
+        offer.Should().Contain("global::Daml.Runtime.Data.Party counterparty,");
         offer.Should().NotContain("string actAs,");
         offer.Should().NotContain("SubmitterInfo submitter,");
     }
@@ -370,14 +370,14 @@ public class NamedSubmitterTests
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
         // Both controllers surface as named parameters in declaration order.
-        content.Should().Contain("Party initiator,");
-        content.Should().Contain("Party counterparty,");
+        content.Should().Contain("global::Daml.Runtime.Data.Party initiator,");
+        content.Should().Contain("global::Daml.Runtime.Data.Party counterparty,");
         // Order: initiator must appear before counterparty in the signature.
-        var idxInit = content.IndexOf("Party initiator,", StringComparison.Ordinal);
-        var idxCp = content.IndexOf("Party counterparty,", StringComparison.Ordinal);
+        var idxInit = content.IndexOf("global::Daml.Runtime.Data.Party initiator,", StringComparison.Ordinal);
+        var idxCp = content.IndexOf("global::Daml.Runtime.Data.Party counterparty,", StringComparison.Ordinal);
         idxInit.Should().BeLessThan(idxCp);
         // SubmitterInfo unions both controllers in actAs.
-        content.Should().Contain("new SubmitterInfo(new HashSet<Party> { initiator, counterparty });");
+        content.Should().Contain("new SubmitterInfo(new HashSet<global::Daml.Runtime.Data.Party> { initiator, counterparty });");
     }
 
     [Fact]
@@ -587,11 +587,11 @@ public class NamedSubmitterTests
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
         // Helper signature plus payload-derived body — declaration order preserved.
-        content.Should().Contain("public static IReadOnlyList<Party> Observers(Agreement payload)");
+        content.Should().Contain("public static IReadOnlyList<global::Daml.Runtime.Data.Party> Observers(Agreement payload)");
         content.Should().Contain("payload.Holder");
         content.Should().Contain("payload.Issuer");
         // Helper returns a Party[] literal, not a SubmitterInfo.
-        content.Should().Contain("return new Party[]");
+        content.Should().Contain("return new global::Daml.Runtime.Data.Party[]");
     }
 
     [Fact]
@@ -652,13 +652,13 @@ public class NamedSubmitterTests
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
         // Method signature carries the controller and both observer parties.
-        content.Should().Contain("Party platform,");
-        content.Should().Contain("Party holder,");
-        content.Should().Contain("Party issuer,");
+        content.Should().Contain("global::Daml.Runtime.Data.Party platform,");
+        content.Should().Contain("global::Daml.Runtime.Data.Party holder,");
+        content.Should().Contain("global::Daml.Runtime.Data.Party issuer,");
         // Body builds a SubmitterInfo that routes platform into actAs and
         // holder/issuer into readAs.
-        content.Should().Contain("actAs: new HashSet<Party> { platform }");
-        content.Should().Contain("readAs: new HashSet<Party> { holder, issuer }");
+        content.Should().Contain("actAs: new HashSet<global::Daml.Runtime.Data.Party> { platform }");
+        content.Should().Contain("readAs: new HashSet<global::Daml.Runtime.Data.Party> { holder, issuer }");
         // The submission projects the SubmitterInfo via WithSubmitter.
         content.Should().Contain(".WithSubmitter(submitter)");
     }
@@ -682,7 +682,7 @@ public class NamedSubmitterTests
 
         // Both observer-only parties surface as readAs entries (declaration order:
         // template-level first, then choice-level).
-        content.Should().Contain("readAs: new HashSet<Party> { holder, issuer }");
+        content.Should().Contain("readAs: new HashSet<global::Daml.Runtime.Data.Party> { holder, issuer }");
     }
 
     [Fact]

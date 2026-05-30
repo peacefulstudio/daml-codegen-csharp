@@ -250,8 +250,8 @@ public class CodeGenEdgeCaseTests
         contractFile.Should().NotBeNull();
         var code = contractFile!.Content;
 
-        code.Should().Contain("Choice<Contract, DamlUnit, Party> ChoiceGetOwner");
-        code.Should().Contain("ResultDecoder = val => Party.FromDamlValue(val.As<DamlParty>())");
+        code.Should().Contain("Choice<Contract, DamlUnit, global::Daml.Runtime.Data.Party> ChoiceGetOwner");
+        code.Should().Contain("ResultDecoder = val => global::Daml.Runtime.Data.Party.FromDamlValue(val.As<DamlParty>())");
     }
 
     [Fact]
@@ -358,7 +358,7 @@ public class CodeGenEdgeCaseTests
         var code = assetFile!.Content;
 
         // Should have fields from the data type
-        code.Should().Contain("Party Owner");
+        code.Should().Contain("global::Daml.Runtime.Data.Party Owner");
         code.Should().Contain("decimal Value");
     }
 
@@ -1000,7 +1000,7 @@ public class CodeGenEdgeCaseTests
         code.Should().Contain("this ContractId<IHolding> contractId,");
         code.Should().Contain("ILedgerClient client,");
         code.Should().Contain("Transfer argument,");
-        code.Should().Contain("Party actAs,");
+        code.Should().Contain("global::Daml.Runtime.Data.Party actAs,");
         // Internally builds the command via the runtime ForInterface helper — the
         // wire-level template_id slot carries IHolding.InterfaceId, and the choice
         // argument is serialised via argument.ToRecord().
@@ -1404,8 +1404,8 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         roster.Should().NotBeNull();
-        roster!.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>");
-        roster.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>.FromRecord(");
+        roster!.Content.Should().Contain("Daml.Runtime.Stdlib.Set<global::Daml.Runtime.Data.Party>");
+        roster.Content.Should().Contain("Daml.Runtime.Stdlib.Set<global::Daml.Runtime.Data.Party>.FromRecord(");
     }
 
     [Fact]

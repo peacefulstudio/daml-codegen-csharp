@@ -1249,6 +1249,101 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_party()
+    {
+        // Regression for B3: the runtime type Daml.Runtime.Data.Party was emitted
+        // as the bare identifier `Party`. When the package name derives a C# namespace
+        // whose tail segment is `Party` (real DAR: canton-party-replication-alpha),
+        // that namespace shadows the type and Roslyn reports CS0118. Every emitted
+        // Party TYPE site must be global::-qualified. This exercises the field type,
+        // the contract-key type + IHasKey<> argument, the choice actAs/controller
+        // params, the signatory-derived CreateAsync, and the Observers(payload) helper.
+        var module = new DamlModule
+        {
+            Name = "Replication",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields =
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                    ],
+                    Key = new DamlPrimitiveType(DamlPrimitive.Party),
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
+                    Observers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Holding"),
+                            Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "canton-party-id",
+            Name = "canton-party",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .Party");
+
+        // The key-bearing template emits a body-less `public partial ... Key { get; }`;
+        // the consumer must supply the implementing partial. Declaring it in the
+        // shadowing namespace also exercises the key type's global:: qualification.
+        var consumerPartial = new GeneratedFile(
+            RelativePath: "Holding.Consumer.cs",
+            Content: """
+                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                namespace Canton.Party;
+                public sealed partial record Holding
+                {
+                    public partial global::Daml.Runtime.Data.Party Key => Issuer;
+                }
+                """);
+
+        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .Party must global::-qualify the runtime Party type, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_record_with_either_field_compiles()
     {
         var stdlibPackage = new DamlPackage

@@ -824,7 +824,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         {
             indent.AppendLine($"{argTypeName} argument,");
         }
-        indent.AppendLine("Party actAs,");
+        indent.AppendLine("global::Daml.Runtime.Data.Party actAs,");
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -1826,7 +1826,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => "string",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "Party",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "global::Daml.Runtime.Data.Party",
         // Numeric with scale argument (Numeric n) - maps to decimal
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
@@ -1956,7 +1956,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"{valueName}.As<DamlText>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<DamlDate>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<DamlTimestamp>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"Party.FromDamlValue({valueName}.As<DamlParty>())",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"global::Daml.Runtime.Data.Party.FromDamlValue({valueName}.As<DamlParty>())",
         // Unit. The wire-level DamlUnit.Instance is the single inhabitant; we
         // surface it as the field type DamlUnit (matching MapDamlTypeToCSharp).
         // Without this arm, nested Unit shapes — Optional (), [()], tuples

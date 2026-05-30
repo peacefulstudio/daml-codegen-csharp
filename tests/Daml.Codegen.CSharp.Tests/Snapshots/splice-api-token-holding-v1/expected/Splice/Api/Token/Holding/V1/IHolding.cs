@@ -65,7 +65,7 @@ public static class IHoldingExtensions
     public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
         this ContractId<IHolding> contractId,
         ILedgerClient client,
-        Party actAs,
+        global::Daml.Runtime.Data.Party actAs,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
     {

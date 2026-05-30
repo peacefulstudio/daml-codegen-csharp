@@ -425,11 +425,11 @@ public sealed partial class CSharpCodeGenerator
         {
             foreach (var paramName in controllerParams)
             {
-                indent.AppendLine($"Party {paramName},");
+                indent.AppendLine($"global::Daml.Runtime.Data.Party {paramName},");
             }
             foreach (var paramName in readAsParams)
             {
-                indent.AppendLine($"Party {paramName},");
+                indent.AppendLine($"global::Daml.Runtime.Data.Party {paramName},");
             }
         }
         else
@@ -465,7 +465,7 @@ public sealed partial class CSharpCodeGenerator
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
-                indent.AppendLine($"var submitter = new SubmitterInfo(new HashSet<Party> {{ {string.Join(", ", controllerParams)} }});");
+                indent.AppendLine($"var submitter = new SubmitterInfo(new HashSet<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
@@ -474,8 +474,8 @@ public sealed partial class CSharpCodeGenerator
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
                 indent.AppendLine("var submitter = new SubmitterInfo(");
                 indent.Indent();
-                indent.AppendLine($"actAs: new HashSet<Party> {{ {string.Join(", ", controllerParams)} }},");
-                indent.AppendLine($"readAs: new HashSet<Party> {{ {string.Join(", ", readAsParams)} }});");
+                indent.AppendLine($"actAs: new HashSet<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new HashSet<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", readAsParams)} }});");
                 indent.Dedent();
             }
         }

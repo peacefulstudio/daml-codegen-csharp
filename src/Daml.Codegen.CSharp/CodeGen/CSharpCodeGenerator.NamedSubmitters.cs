@@ -149,11 +149,11 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <param name=\"payload\">The contract payload.</param>");
         }
 
-        indent.AppendLine($"public static IReadOnlyList<Party> Observers({className} payload)");
+        indent.AppendLine($"public static IReadOnlyList<global::Daml.Runtime.Data.Party> Observers({className} payload)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("ArgumentNullException.ThrowIfNull(payload);");
-        indent.AppendLine("return new Party[]");
+        indent.AppendLine("return new global::Daml.Runtime.Data.Party[]");
         indent.AppendLine("{");
         indent.Indent();
         for (var i = 0; i < observers.Parties.Count; i++)
@@ -271,7 +271,7 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("// from those Party properties so the caller never restates a party.");
             if (multipleStatic)
             {
-                indent.AppendLine("var submitter = new SubmitterInfo(new HashSet<Party>");
+                indent.AppendLine("var submitter = new SubmitterInfo(new HashSet<global::Daml.Runtime.Data.Party>");
                 indent.AppendLine("{");
                 indent.Indent();
                 for (var i = 0; i < signatories.Parties.Count; i++)

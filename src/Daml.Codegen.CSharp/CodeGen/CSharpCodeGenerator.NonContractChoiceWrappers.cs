@@ -241,7 +241,7 @@ public sealed partial class CSharpCodeGenerator
                 : argTypeName;
             indent.AppendLine($"{argParamType} argument,");
         }
-        indent.AppendLine("Party actAs,");
+        indent.AppendLine("global::Daml.Runtime.Data.Party actAs,");
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();

@@ -40,6 +40,7 @@ because they are versioned in lockstep:
 
 ### Fixed
 
+- **Generated code now references the runtime `Party` type as `global::Daml.Runtime.Data.Party`**, so a Daml package or module whose name derives a C# namespace ending in `Party` (e.g. `canton-party-replication-alpha`) no longer shadows the runtime struct. Previously such a namespace bound the bare `Party` identifier to the namespace rather than `Daml.Runtime.Data.Party`, failing the consumer build with `CS0118: 'Party' is a namespace but is used like a type`. Every emitted runtime-`Party` type position is now global-qualified (field/record/key types, `IHasKey<>`, choice exerciser `actAs` params, controller/observer `Party` params and `HashSet<Party>` submitter sets, and the `FromDamlValue` conversion).
 - **`DamlJsonSerializer.Serialize(DamlUnit.Instance)` no longer throws `ArgumentException`** and now returns `"{}"` per the Daml-LF JSON encoding for Unit. The serializer's `ValueToJsonNode` branch for `DamlUnit` wrapped a `JsonObject` in `JsonValue.Create(...)`, which only accepts primitive values and rejects any `JsonNode` — every attempt to serialize a `DamlUnit` (standalone or via the `DamlValueJsonConverter` path used by the top-level `Serialize(DamlValue)` entry point) threw at runtime. Closes [#159](https://github.com/peacefulstudio/daml-codegen-csharp/issues/159) ([#163](https://github.com/peacefulstudio/daml-codegen-csharp/pull/163)).
 
 ### Changed
