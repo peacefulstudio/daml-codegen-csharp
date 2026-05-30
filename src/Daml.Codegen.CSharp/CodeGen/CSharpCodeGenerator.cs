@@ -154,6 +154,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         ("DA.Time.Types", "RelTime") => "Daml.Runtime.Stdlib.RelTime",
         ("DA.Types", "Tuple2") => "Daml.Runtime.Stdlib.Tuple2",
         ("DA.Types", "Tuple3") => "Daml.Runtime.Stdlib.Tuple3",
+        ("DA.Types", "Either") => "Daml.Runtime.Stdlib.Either",
         ("DA.Set.Types", "Set") => "Daml.Runtime.Stdlib.Set",
         ("DA.NonEmpty.Types", "NonEmpty") => "Daml.Runtime.Stdlib.NonEmpty",
         ("DA.Map.Types", "Map") => "Daml.Runtime.Stdlib.Map",
@@ -169,6 +170,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     private static bool IsParametricStdlibType(string module, string typeName) => (module, typeName) switch
     {
         ("DA.Types", "Tuple2") or ("DA.Types", "Tuple3") => true,
+        ("DA.Types", "Either") => true,
         ("DA.Set.Types", "Set") => true,
         ("DA.NonEmpty.Types", "NonEmpty") => true,
         ("DA.Map.Types", "Map") or ("DA.Internal.Map", "Map") => true,
@@ -1917,6 +1919,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
             ("DA.NonEmpty.Types", "NonEmpty") =>
                 $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
+            ("DA.Types", "Either") =>
+                $"{stdlibName}<{typeArgs}>.FromValue({valueName}, {string.Join(", ", lambdas)})",
             // Tuple2/3 and Map take one converter per generic argument.
             _ => $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {string.Join(", ", lambdas)})",
         };
@@ -1938,6 +1942,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 $"{fieldName}.ToRecord({lambdas.First()})",
             ("DA.NonEmpty.Types", "NonEmpty") =>
                 $"{fieldName}.ToRecord({lambdas.First()})",
+            ("DA.Types", "Either") =>
+                $"{fieldName}.ToValue({string.Join(", ", lambdas)})",
             _ => $"{fieldName}.ToRecord({string.Join(", ", lambdas)})",
         };
     }

@@ -1248,6 +1248,84 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
+    [Fact]
+    public void Emitted_record_with_either_field_compiles()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Either",
+                            TypeParams = ["a", "b"],
+                            Definition = new DamlVariantDefinition([]),
+                        },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var eitherTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Either"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Decision",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("outcome", eitherTextInt)]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field typed as DA.Types:Either must map to Daml.Runtime.Stdlib.Either and compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+
+        var emitted = string.Join("\n", files.Select(f => f.Content));
+        emitted.Should().Contain(
+            ".ToValue(",
+            "the emitted Decision.ToValue must wire DA.Types:Either through Either.ToValue (EmitParametricStdlibToValue)");
+        emitted.Should().Contain(
+            "Either<string, long>.FromValue(",
+            "the emitted decoder must wire DA.Types:Either through Either.FromValue (EmitParametricStdlibFromValue)");
+    }
+
     private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)
     {
         var trees = files
