@@ -1570,21 +1570,32 @@ public class EmittedCodeCompilesTests
     [InlineData("acme-IHasView", "Acme.IHasView")]
     [InlineData("acme-IDamlInterface", "Acme.IDamlInterface")]
     [InlineData("acme-ExerciseCommand", "Acme.ExerciseCommand")]
+    [InlineData("daml", "Daml")]
     public void Emitted_interface_code_compiles_when_package_namespace_shadows_a_runtime_type(
         string packageName,
         string expectedNamespace)
     {
-        // The interface-emission sites — the interface header
-        // `: IDamlInterface, IHasView<view>`, the explicit-interface static
-        // members, and the interface-choice `ExerciseCommand.ForInterface<...>`
-        // extension — all route their runtime type names through the central
-        // qualifier. The splice snapshot only covers the BARE direction; this
-        // pins the SHADOWING direction (CS0118) for the three runtime types
-        // those sites name: IHasView, IDamlInterface, and ExerciseCommand.
         var module = new DamlModule
         {
             Name = "Holdings",
-            Templates = [],
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Reissue",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Party),
+                            ReturnType = ContractIdOf("Asset"),
+                        },
+                    ],
+                },
+            ],
             DataTypes =
             [
                 new DamlDataType
@@ -1638,6 +1649,17 @@ public class EmittedCodeCompilesTests
         iface.Content.Should().Contain(
             "ExerciseCommand.ForInterface<",
             "the interface-choice site still calls ExerciseCommand.ForInterface, qualified by the central qualifier (bare or global::-prefixed depending on the surrounding namespace)");
+        iface.Content.Should().NotContain(
+            "cref=\"Daml.Runtime.",
+            "interface doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root (e.g. package 'daml' -> namespace Daml.*)");
+        iface.Content.Should().NotContain(
+            "cref=\"Daml.Ledger.",
+            "interface doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root (e.g. package 'daml' -> namespace Daml.*)");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().NotContain(
+            "cref=\"Daml.Ledger.",
+            "template extension doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root");
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();

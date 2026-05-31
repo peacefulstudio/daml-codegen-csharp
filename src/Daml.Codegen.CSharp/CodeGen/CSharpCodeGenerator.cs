@@ -755,10 +755,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>{iface.Name}</c> Daml interface.");
             indent.AppendLine("/// One method per choice; each submits an interface-typed");
-            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand\"/> built via");
-            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(Daml.Runtime.Contracts.ContractId{{TInterface}},string,Daml.Runtime.Data.DamlValue)\"/>");
-            indent.AppendLine("/// through <see cref=\"Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
-            indent.AppendLine($"/// and surfaces the raw <see cref=\"Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
+            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> built via");
+            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(global::Daml.Runtime.Contracts.ContractId{{TInterface}},string,global::Daml.Runtime.Data.DamlValue)\"/>");
+            indent.AppendLine("/// through <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine($"/// and surfaces the raw <see cref=\"global::Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
             indent.AppendLine("/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the");
             indent.AppendLine("/// implementing template (and therefore the produced contracts' shapes) is unknown");
             indent.AppendLine("/// at the call site.");

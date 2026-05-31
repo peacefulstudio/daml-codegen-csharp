@@ -42,10 +42,10 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
 /// <summary>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>Holding</c> Daml interface.
 /// One method per choice; each submits an interface-typed
-/// <see cref="Daml.Runtime.Commands.ExerciseCommand"/> built via
-/// <see cref="Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(Daml.Runtime.Contracts.ContractId{TInterface},string,Daml.Runtime.Data.DamlValue)"/>
-/// through <see cref="Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync"/>
-/// and surfaces the raw <see cref="Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},string,global::Daml.Runtime.Data.DamlValue)"/>
+/// through <see cref="global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync"/>
+/// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
 /// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
 /// implementing template (and therefore the produced contracts' shapes) is unknown
 /// at the call site.

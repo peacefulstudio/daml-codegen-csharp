@@ -264,7 +264,7 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for <see cref=\"{templateClassName}\"/>.");
             indent.AppendLine("/// One method per create-bearing choice; each delegates to");
-            indent.AppendLine("/// <see cref=\"Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine("/// <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
             indent.AppendLine($"/// and projects success via <c>&lt;Choice&gt;Result.FromCreatedContracts</c>.");
             indent.AppendLine("/// </summary>");
         }
