@@ -1251,8 +1251,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         timer.Should().NotBeNull();
-        timer!.Content.Should().Contain("Daml.Runtime.Stdlib.RelTime D");
-        timer.Content.Should().Contain("Daml.Runtime.Stdlib.RelTime.FromRecord");
+        timer!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        timer.Content.Should().Contain("RelTime D");
+        timer.Content.Should().Contain("RelTime.FromRecord");
         // No <PackageReference> for stdlib packages — they're served by the runtime stub.
         csproj.Should().NotBeNull();
         csproj!.Content.Should().NotContain("Daml.Stdlib");
@@ -1331,8 +1332,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert — type uses the stdlib name, FromRecord uses delegate-based decoder.
         pair.Should().NotBeNull();
-        pair!.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>");
-        pair.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>.FromRecord(");
+        pair!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        pair.Content.Should().Contain("Tuple2<long, string>");
+        pair.Content.Should().Contain("Tuple2<long, string>.FromRecord(");
     }
 
     [Fact]
@@ -1404,8 +1406,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         roster.Should().NotBeNull();
-        roster!.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>");
-        roster.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>.FromRecord(");
+        roster!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        roster.Content.Should().Contain("Set<Party>");
+        roster.Content.Should().Contain("Set<Party>.FromRecord(");
     }
 
     [Fact]
@@ -1476,6 +1479,7 @@ public class CodeGenEdgeCaseTests
 
         pair.Should().NotBeNull();
         pair!.Content.Should().NotContain("Daml.Runtime.Stdlib.Tuple2");
+        pair.Content.Should().NotContain("using Daml.Runtime.Stdlib;");
     }
 
     #endregion

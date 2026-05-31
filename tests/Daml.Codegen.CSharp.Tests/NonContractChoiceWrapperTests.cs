@@ -233,12 +233,14 @@ public class NonContractChoiceWrapperTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
 
-        // Unit returns must surface Daml.Runtime.Stdlib.Unit at the call site —
-        // not the wire-level DamlUnit. Both the type and the singleton accessor
-        // are fully qualified so a user-defined Daml type named `Unit` in the
-        // same namespace can't shadow the runtime marker.
-        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Daml.Runtime.Stdlib.Unit>> DoNothingAsync(");
-        sink.Content.Should().Contain("new ExerciseOutcome<Daml.Runtime.Stdlib.Unit>.One(Daml.Runtime.Stdlib.Unit.Value)");
+        // Unit returns must surface the runtime Unit marker at the call site —
+        // not the wire-level DamlUnit. The type and the singleton accessor are
+        // routed through the central qualifier (bare Unit + `using
+        // Daml.Runtime.Stdlib;`), or global::-prefixed when the surrounding
+        // namespace shadows the name.
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Unit>> DoNothingAsync(");
+        sink.Content.Should().Contain("new ExerciseOutcome<Unit>.One(Unit.Value)");
+        sink.Content.Should().Contain("using Daml.Runtime.Stdlib;");
     }
 
     [Fact]
@@ -282,9 +284,10 @@ public class NonContractChoiceWrapperTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
 
-        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Daml.Runtime.Stdlib.Unit?>> MaybeNothingAsync(");
-        sink.Content.Should().Contain("new ExerciseOutcome<Daml.Runtime.Stdlib.Unit?>.One(");
-        sink.Content.Should().Contain(".As<DamlOptional>().HasValue ? Daml.Runtime.Stdlib.Unit.Value : null");
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Unit?>> MaybeNothingAsync(");
+        sink.Content.Should().Contain("new ExerciseOutcome<Unit?>.One(");
+        sink.Content.Should().Contain(".As<DamlOptional>().HasValue ? Unit.Value : null");
+        sink.Content.Should().Contain("using Daml.Runtime.Stdlib;");
         var nonContractSection = ExtractNonContractExtensionsClass(sink.Content);
         nonContractSection.Should().NotContain("DamlUnit?",
             "the public-surface NonContractExtensions class must not leak the wire-level DamlUnit type for nested Unit shapes");
@@ -331,8 +334,9 @@ public class NonContractChoiceWrapperTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
 
-        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyList<Daml.Runtime.Stdlib.Unit>>> ListOfUnitsAsync(");
-        sink.Content.Should().Contain(".As<DamlList>().Values.Select(x => Daml.Runtime.Stdlib.Unit.Value).ToList()");
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyList<Unit>>> ListOfUnitsAsync(");
+        sink.Content.Should().Contain(".As<DamlList>().Values.Select(x => Unit.Value).ToList()");
+        sink.Content.Should().Contain("using Daml.Runtime.Stdlib;");
         var nonContractSection = ExtractNonContractExtensionsClass(sink.Content);
         nonContractSection.Should().NotContain("IReadOnlyList<DamlUnit>",
             "the public-surface NonContractExtensions class must not leak the wire-level DamlUnit type for list-of-Unit");
@@ -379,8 +383,9 @@ public class NonContractChoiceWrapperTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var sink = files.First(f => f.RelativePath.EndsWith("Sink.cs", StringComparison.Ordinal));
 
-        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<string, Daml.Runtime.Stdlib.Unit>>> MapOfUnitsAsync(");
-        sink.Content.Should().Contain(".As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => Daml.Runtime.Stdlib.Unit.Value)");
+        sink.Content.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<string, Unit>>> MapOfUnitsAsync(");
+        sink.Content.Should().Contain(".As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => Unit.Value)");
+        sink.Content.Should().Contain("using Daml.Runtime.Stdlib;");
     }
 
     [Fact]

@@ -74,7 +74,7 @@ public sealed partial class CSharpCodeGenerator
 
     private string MapNonContractReturnType(DamlType returnType) => returnType switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "Daml.Runtime.Stdlib.Unit",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => _qualifier.Qualify("Unit", _currentNamespace),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
                       Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
             throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
@@ -108,7 +108,7 @@ public sealed partial class CSharpCodeGenerator
         string valueExpr,
         IReadOnlyDictionary<string, DamlDataType>? dataTypes) => returnType switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "Daml.Runtime.Stdlib.Unit.Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => _qualifier.Qualify("Unit", _currentNamespace) + ".Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().Value!", dataTypes)} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>

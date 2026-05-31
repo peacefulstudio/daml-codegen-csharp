@@ -148,20 +148,21 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     }
 
     /// <summary>
-    /// Maps a stdlib type reference to its hand-coded Daml.Runtime.Stdlib equivalent,
-    /// or null if there is no known mapping (the codegen will fall back to an unqualified
-    /// name and the build will fail loudly so the gap is visible).
+    /// Maps a stdlib type reference to its simple Daml.Runtime.Stdlib type name (no namespace),
+    /// or null if there is no known mapping (callers route a non-null result through the central
+    /// qualifier and require <c>using Daml.Runtime.Stdlib;</c>; a null result drives the
+    /// build-fails-loudly path so the gap is visible).
     /// </summary>
     private static string? MapStdlibType(string module, string typeName) => (module, typeName) switch
     {
-        ("DA.Time.Types", "RelTime") => "Daml.Runtime.Stdlib.RelTime",
-        ("DA.Types", "Tuple2") => "Daml.Runtime.Stdlib.Tuple2",
-        ("DA.Types", "Tuple3") => "Daml.Runtime.Stdlib.Tuple3",
-        ("DA.Types", "Either") => "Daml.Runtime.Stdlib.Either",
-        ("DA.Set.Types", "Set") => "Daml.Runtime.Stdlib.Set",
-        ("DA.NonEmpty.Types", "NonEmpty") => "Daml.Runtime.Stdlib.NonEmpty",
-        ("DA.Map.Types", "Map") => "Daml.Runtime.Stdlib.Map",
-        ("DA.Internal.Map", "Map") => "Daml.Runtime.Stdlib.Map",
+        ("DA.Time.Types", "RelTime") => "RelTime",
+        ("DA.Types", "Tuple2") => "Tuple2",
+        ("DA.Types", "Tuple3") => "Tuple3",
+        ("DA.Types", "Either") => "Either",
+        ("DA.Set.Types", "Set") => "Set",
+        ("DA.NonEmpty.Types", "NonEmpty") => "NonEmpty",
+        ("DA.Map.Types", "Map") => "Map",
+        ("DA.Internal.Map", "Map") => "Map",
         _ => null,
     };
 
@@ -181,18 +182,20 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     };
 
     /// <summary>
-    /// Returns true if a type reference resolves to a parametric stdlib type
+    /// Returns true if <paramref name="typeRef"/> resolves to a known stdlib type
     /// in a known stdlib package. Gating on package id matters because user
     /// packages can legally define a module named e.g. <c>DA.Types</c> with
     /// a type <c>Tuple2</c>; without the package check the codegen would
     /// route those through <c>Daml.Runtime.Stdlib.*</c> and emit broken code.
     /// </summary>
-    private bool IsParametricStdlibTypeRef(DamlTypeRef typeRef)
+    private bool IsStdlibTypeRef(DamlTypeRef typeRef, bool parametric) =>
+        IsInStdlibPackage(typeRef)
+        && (parametric
+            ? IsParametricStdlibType(typeRef.Module, typeRef.Name)
+            : MapStdlibType(typeRef.Module, typeRef.Name) is not null);
+
+    private bool IsInStdlibPackage(DamlTypeRef typeRef)
     {
-        if (!IsParametricStdlibType(typeRef.Module, typeRef.Name))
-        {
-            return false;
-        }
         if (string.IsNullOrEmpty(typeRef.PackageId) || _currentArchive is null)
         {
             return false;
@@ -244,7 +247,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             var mapped = MapStdlibType(typeRef.Module, typeRef.Name);
             if (mapped is not null)
             {
-                return mapped;
+                return _qualifier.Qualify(mapped, _currentNamespace);
             }
             // Unknown stdlib type — leave unqualified so the build error points at the gap.
             // Tracked in https://github.com/peacefulstudio/daml-codegen-csharp/issues/57.
@@ -1142,7 +1145,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Require("Daml.Runtime.Outcomes");
     }
 
-    private static void RequireForFieldType(IndentWriter indent, DamlType type)
+    private void RequireForFieldType(IndentWriter indent, DamlType type)
     {
         switch (type)
         {
@@ -1171,6 +1174,20 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             case DamlPrimitiveType { Primitive: DamlPrimitive.Date }:
             case DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp }:
                 indent.Require("System");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
+                indent.Require("Daml.Runtime.Stdlib");
+                break;
+            case DamlTypeApp { Base: DamlTypeRef typeRef } app
+                when IsStdlibTypeRef(typeRef, parametric: true):
+                indent.Require("Daml.Runtime.Stdlib");
+                foreach (var arg in app.Arguments)
+                {
+                    RequireForFieldType(indent, arg);
+                }
+                break;
+            case DamlTypeRef typeRef when IsStdlibTypeRef(typeRef, parametric: false):
+                indent.Require("Daml.Runtime.Stdlib");
                 break;
             case DamlTypeApp app:
                 foreach (var arg in app.Arguments)
@@ -1902,12 +1919,12 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // rather than IDamlValue. The codegen knows the concrete arg types here so
         // it inlines a conversion lambda per arg.
         DamlTypeApp { Base: DamlTypeRef typeRef } app
-            when IsParametricStdlibTypeRef(typeRef) =>
+            when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName),
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
-        DamlTypeVar => $"Daml.Runtime.Stdlib.GenericStub.NotImplemented<{_qualifier.Qualify("DamlValue", _currentNamespace)}>(\"{fieldName}\")",
+        DamlTypeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<{_qualifier.Qualify("DamlValue", _currentNamespace)}>(\"{fieldName}\")",
         _ => $"{fieldName}.ToRecord()"
     };
 
@@ -1917,8 +1934,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         string valueName,
         IReadOnlyDictionary<string, DamlDataType>? dataTypes)
     {
-        var stdlibName = MapStdlibType(typeRef.Module, typeRef.Name)
-            ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}");
+        var stdlibName = _qualifier.Qualify(
+            MapStdlibType(typeRef.Module, typeRef.Name)
+                ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}"),
+            _currentNamespace);
         var typeArgs = string.Join(", ", arguments.Select(MapDamlTypeToCSharp));
         var lambdas = arguments.Select((arg, i) =>
             $"__v{i} => {GetFromValueConversion(arg, $"__v{i}", dataTypes)}");
@@ -1996,7 +2015,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // serialization arm. The conversion lambdas decode each generic arg from a
         // DamlValue back into its CLR shape.
         DamlTypeApp { Base: DamlTypeRef typeRef } app
-            when IsParametricStdlibTypeRef(typeRef) =>
+            when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
         // Type reference — enum dispatch keyed by module:name so a same-name record in a
         // different module doesn't accidentally route through *Extensions.FromRecord.
@@ -2006,7 +2025,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>())",
         // Daml type variable — same treatment as ToValue: emit a runtime-throwing stub
         // typed as the generic placeholder so generics-bearing records still compile.
-        DamlTypeVar typeVar => $"Daml.Runtime.Stdlib.GenericStub.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
+        DamlTypeVar typeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
         _ => $"default! /* TODO: Implement deserialization for {type} */"
     };
 

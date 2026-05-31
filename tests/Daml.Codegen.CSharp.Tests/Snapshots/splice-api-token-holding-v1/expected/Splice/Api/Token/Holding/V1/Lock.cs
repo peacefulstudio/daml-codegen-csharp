@@ -6,6 +6,7 @@
 #nullable enable
 
 using Daml.Runtime.Data;
+using Daml.Runtime.Stdlib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record Lock
 /// </summary>
-public sealed record Lock(IReadOnlyList<Party> Holders, DateTimeOffset? ExpiresAt, Daml.Runtime.Stdlib.RelTime? ExpiresAfter, string? Context) : IDamlValue
+public sealed record Lock(IReadOnlyList<Party> Holders, DateTimeOffset? ExpiresAt, RelTime? ExpiresAfter, string? Context) : IDamlValue
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
@@ -29,7 +30,7 @@ public sealed record Lock(IReadOnlyList<Party> Holders, DateTimeOffset? ExpiresA
     public static Lock FromRecord(DamlRecord record) => new Lock(
         Holders: (IReadOnlyList<Party>)record.GetRequiredField("holders").As<DamlList>().Values.Select(x => Party.FromDamlValue(x.As<DamlParty>())).ToList(),
         ExpiresAt: record.GetRequiredField("expiresAt").As<DamlOptional>().HasValue ? record.GetRequiredField("expiresAt").As<DamlOptional>().Value!.As<DamlTimestamp>().Value : null,
-        ExpiresAfter: record.GetRequiredField("expiresAfter").As<DamlOptional>().HasValue ? Daml.Runtime.Stdlib.RelTime.FromRecord(record.GetRequiredField("expiresAfter").As<DamlOptional>().Value!.As<DamlRecord>()) : null,
+        ExpiresAfter: record.GetRequiredField("expiresAfter").As<DamlOptional>().HasValue ? RelTime.FromRecord(record.GetRequiredField("expiresAfter").As<DamlOptional>().Value!.As<DamlRecord>()) : null,
         Context: record.GetRequiredField("context").As<DamlOptional>().HasValue ? record.GetRequiredField("context").As<DamlOptional>().Value!.As<DamlText>().Value : null
     );
 

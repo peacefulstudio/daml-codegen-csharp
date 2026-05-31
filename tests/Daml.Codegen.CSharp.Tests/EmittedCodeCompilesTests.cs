@@ -1153,11 +1153,12 @@ public class EmittedCodeCompilesTests
             nestedBase,
             [ContractIdOf("Asset")]);
 
+        var generator = CreateGenerator();
         var method = typeof(CSharpCodeGenerator).GetMethod(
             "RequireForFieldType",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
             ?? throw new InvalidOperationException("RequireForFieldType not found");
-        method.Invoke(null, [indent, nestedAppCarryingContractId]);
+        method.Invoke(generator, [indent, nestedAppCarryingContractId]);
 
         indent.RequiredUsings.Should().Contain(
             "Daml.Runtime.Contracts",
@@ -2229,6 +2230,208 @@ public class EmittedCodeCompilesTests
         crefDiagnostics.Should().BeEmpty(
             "a nested-generic key over an imported type must produce a well-formed cref under DocumentationMode.Diagnose, but got: {0}",
             string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Theory]
+    [InlineData("acme-Daml")]
+    [InlineData("acme-Stdlib-V1")]
+    [InlineData("acme-Either-V1")]
+    [InlineData("acme-RelTime-V1")]
+    [InlineData("acme-Unit-V1")]
+    [InlineData("acme-Set-V1")]
+    [InlineData("acme-Map-V1")]
+    [InlineData("acme-Tuple2-V1")]
+    [InlineData("acme-Tuple3-V1")]
+    [InlineData("acme-NonEmpty-V1")]
+    public void Emitted_stdlib_types_compile_when_package_namespace_shadows_a_stdlib_type(string packageName)
+    {
+        // Phase 2 of routing Daml.Runtime.Stdlib.* through the central qualifier:
+        // a record field typed as RelTime plus parametric stdlib types
+        // (Either/Tuple2/Set/Map/NonEmpty) and a Unit-returning choice, all emitted
+        // into a namespace whose tail segment shadows a stdlib simple name. The
+        // qualifier must global::-qualify the shadowed names and the file must carry
+        // `using Daml.Runtime.Stdlib;`, so the emitted code compiles with no CS0118.
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Time.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "RelTime", Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Tuple2", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                        new DamlDataType { Name = "Tuple3", TypeParams = ["a", "b", "c"], Definition = new DamlRecordDefinition([]) },
+                        new DamlDataType { Name = "Either", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Set.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Set", TypeParams = ["a"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Map.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Map", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Internal.Map",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Map", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.NonEmpty.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "NonEmpty", TypeParams = ["a"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var relTime = new DamlTypeRef("daml-prim-id", "DA.Time.Types", "RelTime");
+        var eitherTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Either"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var tuple2TextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple2"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var setText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Set.Types", "Set"),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+        var mapTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Map.Types", "Map"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var nonEmptyText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.NonEmpty.Types", "NonEmpty"),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+        var tuple3TextIntText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple3"),
+            [
+                new DamlPrimitiveType(DamlPrimitive.Text),
+                new DamlPrimitiveType(DamlPrimitive.Int64),
+                new DamlPrimitiveType(DamlPrimitive.Text),
+            ]);
+        var internalMapTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Internal.Map", "Map"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var listOfEither = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.List),
+            [eitherTextInt]);
+        var setOfTuple2 = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Set.Types", "Set"),
+            [tuple2TextInt]);
+
+        var module = new DamlModule
+        {
+            Name = "Holdings",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Lock",
+                    Fields =
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("duration", relTime),
+                    ],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Release",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Lock",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("duration", relTime),
+                    ]),
+                },
+                new DamlDataType
+                {
+                    Name = "Bag",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("outcome", eitherTextInt),
+                        new DamlField("pair", tuple2TextInt),
+                        new DamlField("tags", setText),
+                        new DamlField("scores", mapTextInt),
+                        new DamlField("required", nonEmptyText),
+                        new DamlField("triple", tuple3TextIntText),
+                        new DamlField("internalScores", internalMapTextInt),
+                        new DamlField("outcomes", listOfEither),
+                        new DamlField("pairSet", setOfTuple2),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "main-pkg-id",
+            Name = packageName,
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted stdlib types must global::-qualify (no CS0118) and import Daml.Runtime.Stdlib when the namespace shadows a stdlib simple name, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
     private static IReadOnlyList<Diagnostic> CompileEmittedFilesWithDocDiagnostics(IReadOnlyList<GeneratedFile> files) =>

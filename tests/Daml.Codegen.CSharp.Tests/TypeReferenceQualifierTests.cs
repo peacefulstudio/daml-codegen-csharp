@@ -91,4 +91,42 @@ public class TypeReferenceQualifierTests
         qualifier.Qualify(simpleName, "Splice.Api.Token.Holding.V1")
             .Should().Be(simpleName);
     }
+
+    [Theory]
+    [InlineData("RelTime")]
+    [InlineData("Tuple2")]
+    [InlineData("Tuple3")]
+    [InlineData("Either")]
+    [InlineData("Set")]
+    [InlineData("NonEmpty")]
+    [InlineData("Map")]
+    [InlineData("Unit")]
+    [InlineData("GenericStub")]
+    public void qualify_global_qualifies_stdlib_names_when_a_namespace_segment_shadows_it(
+        string simpleName)
+    {
+        var qualifier = new TypeReferenceQualifier([$"Acme.{simpleName}.V1"]);
+
+        qualifier.Qualify(simpleName, $"Acme.{simpleName}.V1")
+            .Should().Be($"global::Daml.Runtime.Stdlib.{simpleName}");
+    }
+
+    [Theory]
+    [InlineData("RelTime")]
+    [InlineData("Tuple2")]
+    [InlineData("Tuple3")]
+    [InlineData("Either")]
+    [InlineData("Set")]
+    [InlineData("NonEmpty")]
+    [InlineData("Map")]
+    [InlineData("Unit")]
+    [InlineData("GenericStub")]
+    public void qualify_leaves_stdlib_names_bare_when_no_namespace_segment_shadows_it(
+        string simpleName)
+    {
+        var qualifier = new TypeReferenceQualifier(["My.Package.Module"]);
+
+        qualifier.Qualify(simpleName, "My.Package.Module")
+            .Should().Be(simpleName);
+    }
 }
