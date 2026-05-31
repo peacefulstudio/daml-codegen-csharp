@@ -81,11 +81,11 @@ public sealed partial class CSharpCodeGenerator
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapNonContractReturnType(arg)}?",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"IReadOnlyList<{MapNonContractReturnType(arg)}>",
+            $"{_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{MapNonContractReturnType(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"IReadOnlyDictionary<string, {MapNonContractReturnType(arg)}>",
+            $"{_qualifier.Qualify("IReadOnlyDictionary", _currentNamespace)}<string, {MapNonContractReturnType(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"IReadOnlyDictionary<{MapNonContractReturnType(keyArg)}, {MapNonContractReturnType(valueArg)}>",
+            $"{_qualifier.Qualify("IReadOnlyDictionary", _currentNamespace)}<{MapNonContractReturnType(keyArg)}, {MapNonContractReturnType(valueArg)}>",
         _ => MapDamlTypeToCSharp(returnType),
     };
 
@@ -110,13 +110,13 @@ public sealed partial class CSharpCodeGenerator
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "Daml.Runtime.Stdlib.Unit.Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<DamlOptional>().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.As<DamlOptional>().Value!", dataTypes)} : null",
+            $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().Value!", dataTypes)} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<DamlList>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x", dataTypes)}).ToList()",
+            $"{valueExpr}.As<{_qualifier.Qualify("DamlList", _currentNamespace)}>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x", dataTypes)}).ToList()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => {RenderNonContractReturnDecoder(arg, "kv.Value", dataTypes)})",
+            $"{valueExpr}.As<{_qualifier.Qualify("DamlTextMap", _currentNamespace)}>().Values.ToDictionary(kv => kv.Key, kv => {RenderNonContractReturnDecoder(arg, "kv.Value", dataTypes)})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"{valueExpr}.As<DamlGenMap>().Entries.ToDictionary(kv => {RenderNonContractReturnDecoder(keyArg, "kv.Key", dataTypes)}, kv => {RenderNonContractReturnDecoder(valueArg, "kv.Value", dataTypes)})",
+            $"{valueExpr}.As<{_qualifier.Qualify("DamlGenMap", _currentNamespace)}>().Entries.ToDictionary(kv => {RenderNonContractReturnDecoder(keyArg, "kv.Key", dataTypes)}, kv => {RenderNonContractReturnDecoder(valueArg, "kv.Value", dataTypes)})",
         _ => GetFromValueConversion(returnType, valueExpr, dataTypes),
     };
 
@@ -230,10 +230,10 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
-        indent.AppendLine($"public static async Task<ExerciseOutcome<{returnTypeName}>> {choiceName}Async(");
+        indent.AppendLine($"public static async Task<{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this ContractId<{templateClassName}> contractId,");
-        indent.AppendLine("ILedgerClient client,");
+        indent.AppendLine($"this {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{_qualifier.Qualify("ILedgerClient", _currentNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -251,7 +251,7 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
 
-        var argExpr = hasArg ? "argument.ToRecord()" : "DamlUnit.Instance";
+        var argExpr = hasArg ? "argument.ToRecord()" : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
         indent.AppendLine();
         indent.AppendLine("var command = new ExerciseCommand(");
         indent.Indent();
@@ -280,9 +280,9 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine("return outcome switch");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.One success => Project{choiceName}Result(success.Result, contractId.Value),");
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.DamlError damlError => new ExerciseOutcome<{returnTypeName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.InfraError infraError => new ExerciseOutcome<{returnTypeName}>.InfraError(infraError.StatusCode, infraError.Message),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.One success => Project{choiceName}Result(success.Result, contractId.Value),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.DamlError damlError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.InfraError infraError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}>.InfraError(infraError.StatusCode, infraError.Message),");
         indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
         indent.Dedent();
         indent.AppendLine("};");
@@ -310,7 +310,7 @@ public sealed partial class CSharpCodeGenerator
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
         var needsStdlibUnitDecoder = ReturnTypeNeedsStdlibUnitDecoder(choice.ReturnType);
 
-        indent.AppendLine($"private static ExerciseOutcome<{returnTypeName}> Project{choiceName}Result(TransactionResult tx, string contractId)");
+        indent.AppendLine($"private static {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}> Project{choiceName}Result({_qualifier.Qualify("TransactionResult", _currentNamespace)} tx, string contractId)");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -336,12 +336,12 @@ public sealed partial class CSharpCodeGenerator
                 choice.ReturnType,
                 "exercised.ExerciseResult",
                 dataTypes);
-            indent.AppendLine($"return new ExerciseOutcome<{returnTypeName}>.One({decoderExpr});");
+            indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}>.One({decoderExpr});");
         }
         else
         {
             indent.AppendLine($"var decoded = {templateClassName}.Choice{choiceName}.ResultDecoder!(exercised.ExerciseResult);");
-            indent.AppendLine($"return new ExerciseOutcome<{returnTypeName}>.One(decoded);");
+            indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{returnTypeName}>.One(decoded);");
         }
 
         indent.Dedent();
