@@ -241,7 +241,7 @@ public sealed partial class CSharpCodeGenerator
                 : argTypeName;
             indent.AppendLine($"{argParamType} argument,");
         }
-        indent.AppendLine("global::Daml.Runtime.Data.Party actAs,");
+        indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} actAs,");
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -253,7 +253,7 @@ public sealed partial class CSharpCodeGenerator
 
         var argExpr = hasArg ? "argument.ToRecord()" : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
         indent.AppendLine();
-        indent.AppendLine("var command = new ExerciseCommand(");
+        indent.AppendLine($"var command = new {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId.Value,");
@@ -262,7 +262,7 @@ public sealed partial class CSharpCodeGenerator
         indent.Dedent();
 
         indent.AppendLine();
-        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithActAs(actAs)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");

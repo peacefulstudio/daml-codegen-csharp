@@ -162,8 +162,8 @@ public class NewFeaturesCodeGenTests
         var code = profileFile!.Content;
 
         // Party maps to Party, so key should be Party
-        code.Should().Contain("IHasKey<global::Daml.Runtime.Data.Party>");
-        code.Should().Contain("public partial global::Daml.Runtime.Data.Party Key { get; }");
+        code.Should().Contain("IHasKey<Party>");
+        code.Should().Contain("public partial Party Key { get; }");
         code.Should().NotContain("NotImplementedException");
     }
 
@@ -1189,7 +1189,7 @@ public class NewFeaturesCodeGenTests
         // Template should exist with key and upgrade support
         var assetFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         assetFile.Should().NotBeNull();
-        assetFile!.Content.Should().Contain("IHasKey<global::Daml.Runtime.Data.Party>");
+        assetFile!.Content.Should().Contain("IHasKey<Party>");
         assetFile.Content.Should().Contain("IUpgradeable");
 
         // Generic data type should exist

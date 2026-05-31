@@ -12,7 +12,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record HoldingView
 /// </summary>
-public sealed record HoldingView(global::Daml.Runtime.Data.Party Owner, InstrumentId InstrumentId, decimal Amount, Lock? @lock, Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlValue
+public sealed record HoldingView(Party Owner, InstrumentId InstrumentId, decimal Amount, Lock? @lock, Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlValue
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
@@ -25,7 +25,7 @@ public sealed record HoldingView(global::Daml.Runtime.Data.Party Owner, Instrume
 
     /// <summary>Creates an instance from a DamlRecord.</summary>
     public static HoldingView FromRecord(DamlRecord record) => new HoldingView(
-        Owner: global::Daml.Runtime.Data.Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
+        Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
         InstrumentId: InstrumentId.FromRecord(record.GetRequiredField("instrumentId").As<DamlRecord>()),
         Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value,
         @lock: record.GetRequiredField("lock").As<DamlOptional>().HasValue ? Lock.FromRecord(record.GetRequiredField("lock").As<DamlOptional>().Value!.As<DamlRecord>()) : null,

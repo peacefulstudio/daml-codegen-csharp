@@ -149,11 +149,11 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <param name=\"payload\">The contract payload.</param>");
         }
 
-        indent.AppendLine($"public static {_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<global::Daml.Runtime.Data.Party> Observers({className} payload)");
+        indent.AppendLine($"public static {_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> Observers({className} payload)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("ArgumentNullException.ThrowIfNull(payload);");
-        indent.AppendLine("return new global::Daml.Runtime.Data.Party[]");
+        indent.AppendLine($"return new {_qualifier.Qualify("Party", _currentNamespace)}[]");
         indent.AppendLine("{");
         indent.Indent();
         for (var i = 0; i < observers.Parties.Count; i++)
@@ -271,7 +271,7 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("// from those Party properties so the caller never restates a party.");
             if (multipleStatic)
             {
-                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<global::Daml.Runtime.Data.Party>");
+                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}>");
                 indent.AppendLine("{");
                 indent.Indent();
                 for (var i = 0; i < signatories.Parties.Count; i++)

@@ -1565,6 +1565,86 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
+    [Theory]
+    [InlineData("acme-IHasView", "Acme.IHasView")]
+    [InlineData("acme-IDamlInterface", "Acme.IDamlInterface")]
+    [InlineData("acme-ExerciseCommand", "Acme.ExerciseCommand")]
+    public void Emitted_interface_code_compiles_when_package_namespace_shadows_a_runtime_type(
+        string packageName,
+        string expectedNamespace)
+    {
+        // The interface-emission sites — the interface header
+        // `: IDamlInterface, IHasView<view>`, the explicit-interface static
+        // members, and the interface-choice `ExerciseCommand.ForInterface<...>`
+        // extension — all route their runtime type names through the central
+        // qualifier. The splice snapshot only covers the BARE direction; this
+        // pins the SHADOWING direction (CS0118) for the three runtime types
+        // those sites name: IHasView, IDamlInterface, and ExerciseCommand.
+        var module = new DamlModule
+        {
+            Name = "Holdings",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "HoldingView",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Holding",
+                    ViewType = new DamlTypeRef("", "Holdings", "HoldingView"),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Party),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-iface-shadow-id",
+            Name = packageName,
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains($"namespace {expectedNamespace}", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in the runtime type name");
+
+        var iface = files.First(f => f.RelativePath.EndsWith("IHolding.cs", StringComparison.Ordinal));
+        iface.Content.Should().NotContain(
+            "  Daml.Runtime.Commands.ExerciseCommand.ForInterface<",
+            "the interface-choice ExerciseCommand head must route through the qualifier, never the hard-coded non-global fully-qualified form");
+        iface.Content.Should().Contain(
+            "ExerciseCommand.ForInterface<",
+            "the interface-choice site still calls ExerciseCommand.ForInterface, qualified by the central qualifier (bare or global::-prefixed depending on the surrounding namespace)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted interface code whose namespace shadows a runtime type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
     [Fact]
     public void Emitted_arity_protected_generic_heads_are_global_qualified_when_namespace_collides()
     {

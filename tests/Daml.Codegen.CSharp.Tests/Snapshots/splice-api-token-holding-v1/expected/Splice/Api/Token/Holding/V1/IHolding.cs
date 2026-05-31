@@ -65,13 +65,13 @@ public static class IHoldingExtensions
     public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
         this ContractId<IHolding> contractId,
         ILedgerClient client,
-        global::Daml.Runtime.Data.Party actAs,
+        Party actAs,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
-        var command = Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, "Archive", DamlUnit.Instance);
+        var command = ExerciseCommand.ForInterface<IHolding>(contractId, "Archive", DamlUnit.Instance);
 
         var submission = CommandsSubmission.Single(command)
             .WithActAs(actAs)

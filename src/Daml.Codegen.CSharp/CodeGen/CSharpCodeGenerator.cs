@@ -699,8 +699,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // Determine view interface
         var viewType = iface.ViewType is not null ? MapDamlTypeToCSharp(iface.ViewType) : null;
         var interfaces = viewType is not null
-            ? $"IDamlInterface, IHasView<{viewType}>"
-            : "IDamlInterface";
+            ? $"{_qualifier.Qualify("IDamlInterface", _currentNamespace)}, {_qualifier.Qualify("IHasView", _currentNamespace)}<{viewType}>"
+            : _qualifier.Qualify("IDamlInterface", _currentNamespace);
 
         indent.AppendLine($"public interface {interfaceName} : {interfaces}");
         indent.AppendLine("{");
@@ -829,7 +829,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         {
             indent.AppendLine($"{argTypeName} argument,");
         }
-        indent.AppendLine("global::Daml.Runtime.Data.Party actAs,");
+        indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} actAs,");
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -846,9 +846,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         var argExpr = hasArg
             ? GetToValueConversion(choice.ArgumentType, "argument")
             : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
-        indent.AppendLine($"var command = Daml.Runtime.Commands.ExerciseCommand.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
+        indent.AppendLine($"var command = {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
         indent.AppendLine();
-        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithActAs(actAs)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
@@ -1052,19 +1052,19 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Require("System");
         indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Gets the interface identifier.</summary>");
-        indent.AppendLine($"static {_qualifier.Qualify("Identifier", _currentNamespace)} IDamlInterface.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
+        indent.AppendLine($"static {_qualifier.Qualify("Identifier", _currentNamespace)} {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package ID.</summary>");
-        indent.AppendLine($"static string IDamlInterface.PackageId => \"{package.PackageId}\";");
+        indent.AppendLine($"static string {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageId => \"{package.PackageId}\";");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package name.</summary>");
-        indent.AppendLine($"static string IDamlInterface.PackageName => \"{package.Name}\";");
+        indent.AppendLine($"static string {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageName => \"{package.Name}\";");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package version.</summary>");
-        indent.AppendLine($"static Version IDamlInterface.PackageVersion => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
+        indent.AppendLine($"static Version {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageVersion => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
         indent.AppendLine();
     }
 
@@ -1541,7 +1541,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Indent();
 
         indent.AppendLine("/// <summary>Creates a Contract from a CreatedEvent.</summary>");
-        indent.AppendLine("public static Contract FromCreatedEvent(CreatedEvent @event) =>");
+        indent.AppendLine($"public static Contract FromCreatedEvent({_qualifier.Qualify("CreatedEvent", _currentNamespace)} @event) =>");
         indent.Indent();
         indent.AppendLine($"new(new ContractId(@event.ContractId), {className}.FromRecord(@event.CreateArguments));");
         indent.Dedent();
@@ -1836,7 +1836,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => "string",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "global::Daml.Runtime.Data.Party",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => _qualifier.Qualify("Party", _currentNamespace),
         // Numeric with scale argument (Numeric n) - maps to decimal
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
@@ -1966,7 +1966,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"{valueName}.As<{_qualifier.Qualify("DamlText", _currentNamespace)}>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<{_qualifier.Qualify("DamlDate", _currentNamespace)}>().Value",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<{_qualifier.Qualify("DamlTimestamp", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"global::Daml.Runtime.Data.Party.FromDamlValue({valueName}.As<{_qualifier.Qualify("DamlParty", _currentNamespace)}>())",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{_qualifier.Qualify("Party", _currentNamespace)}.FromDamlValue({valueName}.As<{_qualifier.Qualify("DamlParty", _currentNamespace)}>())",
         // Unit. The wire-level DamlUnit.Instance is the single inhabitant; we
         // surface it as the field type DamlUnit (matching MapDamlTypeToCSharp).
         // Without this arm, nested Unit shapes — Optional (), [()], tuples

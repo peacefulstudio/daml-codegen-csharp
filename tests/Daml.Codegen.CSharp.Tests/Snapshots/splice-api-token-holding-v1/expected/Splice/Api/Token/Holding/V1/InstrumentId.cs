@@ -12,7 +12,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record InstrumentId
 /// </summary>
-public sealed record InstrumentId(global::Daml.Runtime.Data.Party Admin, string Id) : IDamlValue
+public sealed record InstrumentId(Party Admin, string Id) : IDamlValue
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
@@ -22,7 +22,7 @@ public sealed record InstrumentId(global::Daml.Runtime.Data.Party Admin, string 
 
     /// <summary>Creates an instance from a DamlRecord.</summary>
     public static InstrumentId FromRecord(DamlRecord record) => new InstrumentId(
-        Admin: global::Daml.Runtime.Data.Party.FromDamlValue(record.GetRequiredField("admin").As<DamlParty>()),
+        Admin: Party.FromDamlValue(record.GetRequiredField("admin").As<DamlParty>()),
         Id: record.GetRequiredField("id").As<DamlText>().Value
     );
 

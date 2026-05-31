@@ -425,11 +425,11 @@ public sealed partial class CSharpCodeGenerator
         {
             foreach (var paramName in controllerParams)
             {
-                indent.AppendLine($"global::Daml.Runtime.Data.Party {paramName},");
+                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
             }
             foreach (var paramName in readAsParams)
             {
-                indent.AppendLine($"global::Daml.Runtime.Data.Party {paramName},");
+                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
             }
         }
         else
@@ -465,7 +465,7 @@ public sealed partial class CSharpCodeGenerator
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
-                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", controllerParams)} }});");
+                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
@@ -474,15 +474,15 @@ public sealed partial class CSharpCodeGenerator
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
                 indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(");
                 indent.Indent();
-                indent.AppendLine($"actAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", controllerParams)} }},");
-                indent.AppendLine($"readAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<global::Daml.Runtime.Data.Party> {{ {string.Join(", ", readAsParams)} }});");
+                indent.AppendLine($"actAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", readAsParams)} }});");
                 indent.Dedent();
             }
         }
 
         indent.AppendLine();
         var argExpr = hasArg ? "argument.ToRecord()" : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
-        indent.AppendLine("var command = new ExerciseCommand(");
+        indent.AppendLine($"var command = new {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId.Value,");
@@ -491,7 +491,7 @@ public sealed partial class CSharpCodeGenerator
         indent.Dedent();
 
         indent.AppendLine();
-        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithSubmitter(submitter)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");

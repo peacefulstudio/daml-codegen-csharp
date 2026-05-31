@@ -61,4 +61,34 @@ public class TypeReferenceQualifierTests
         qualifier.Qualify("Replication", "Canton.Party.Replication")
             .Should().Be("Replication");
     }
+
+    [Theory]
+    [InlineData("ExerciseCommand", "Daml.Runtime.Commands")]
+    [InlineData("CommandsSubmission", "Daml.Runtime.Commands")]
+    [InlineData("IDamlInterface", "Daml.Runtime.Contracts")]
+    [InlineData("IHasView", "Daml.Runtime.Contracts")]
+    [InlineData("CreatedEvent", "Daml.Runtime.Contracts")]
+    public void qualify_global_qualifies_command_and_contract_names_when_a_namespace_segment_shadows_it(
+        string simpleName, string owningNamespace)
+    {
+        var qualifier = new TypeReferenceQualifier([$"Acme.{simpleName}.V1"]);
+
+        qualifier.Qualify(simpleName, $"Acme.{simpleName}.V1")
+            .Should().Be($"global::{owningNamespace}.{simpleName}");
+    }
+
+    [Theory]
+    [InlineData("ExerciseCommand")]
+    [InlineData("CommandsSubmission")]
+    [InlineData("IDamlInterface")]
+    [InlineData("IHasView")]
+    [InlineData("CreatedEvent")]
+    public void qualify_leaves_command_and_contract_names_bare_when_no_namespace_segment_shadows_it(
+        string simpleName)
+    {
+        var qualifier = new TypeReferenceQualifier(["Splice.Api.Token.Holding.V1"]);
+
+        qualifier.Qualify(simpleName, "Splice.Api.Token.Holding.V1")
+            .Should().Be(simpleName);
+    }
 }
