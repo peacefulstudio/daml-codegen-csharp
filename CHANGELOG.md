@@ -17,6 +17,14 @@ because they are versioned in lockstep:
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.6] — 2026-06-01
+
+### Added
+
 - **`Daml.Runtime.Stdlib.Either<TL, TR>` runtime type, and codegen now maps `DA.Types.Either a b` onto it.** Previously a Daml field or choice type of `Either a b` emitted a bare `Either<TL, TR>` with no definition or `using`, so any DAR using `Either` (e.g. `canton-ping`) failed to compile (`CS0246`). `Either` is now a parametric stdlib type: `Either<TL, TR>` is an abstract record with `Left`/`Right` cases, round-tripping through `DamlVariant` via `ToValue`/`FromValue`. Generated code references it as `Daml.Runtime.Stdlib.Either<…>`.
 - **`ghcr.io/peacefulstudio/dpm-codegen-cs` OCI bundle contract is now codified in [ADR 0005](docs/adr/0005-oci-component-bundle-contract.md)** ([#194](https://github.com/peacefulstudio/daml-codegen-csharp/pull/194), [#195](https://github.com/peacefulstudio/daml-codegen-csharp/pull/195), [#196](https://github.com/peacefulstudio/daml-codegen-csharp/pull/196), [#197](https://github.com/peacefulstudio/daml-codegen-csharp/pull/197), [#198](https://github.com/peacefulstudio/daml-codegen-csharp/pull/198), [#199](https://github.com/peacefulstudio/daml-codegen-csharp/pull/199), [#200](https://github.com/peacefulstudio/daml-codegen-csharp/pull/200), [#201](https://github.com/peacefulstudio/daml-codegen-csharp/pull/201)). Anyone integrating with the artifact directly — not via `dpm` — gets a versioned contract for the bundle layout (top-level `component.yaml`, `bin/<exe>`, `bin/<jar>`), the per-layer OCI media type (`application/vnd.component.file`), the required `network.canton.dpm.file-{mode,modtime,name}` annotations (`file-name` is the relative path inside the bundle, not the basename), and the consumer `daml.yaml` shape (`components: ["oci://…"]`, no `sdk-version:` alongside, never the dead-code `override-components: <name>: image-tag:`). Stock `dpm ≥ 1.0.12` required on the consumer side; `dpm 1.0.16` is what our workflows pin. Public-package consumers must NOT `docker login ghcr.io` with `${{ secrets.GITHUB_TOKEN }}` — anonymous pull is the supported path.
 - **`daml-codegen-csharp --release-counters <path>` resolves the 4th NuGet version segment from a `JsonReleaseCounterStore`** ([#137](https://github.com/peacefulstudio/daml-codegen-csharp/pull/137)). When the flag is supplied the CLI computes the content hash of the `IntermediateDar` proto, opens the store at `<path>`, resolves the revision via `SpliceNuGetVersion.Compute`, and uses that as `CodeGenOptions.EmitterCounter` — replacing the explicit `--emitter-counter <int>` static override for CI-driven publishing. The `Canton.Splice.*` publish workflow now wires this flag end-to-end: the counter store is the source of truth for the 4th segment, and consumers see monotonically increasing `M.m.p.r` versions across re-emissions of the same DAR-intrinsic version when emitter output content changes. The store lives in a GitHub Actions repo variable per [ADR 0004](docs/adr/0004-release-counter-store-placement.md); local-dev invocations omit `--release-counters` and continue to default to `r=0`.
@@ -598,7 +606,8 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...v0.1.4
 [0.1.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.0-alpha.3...v0.1.2
