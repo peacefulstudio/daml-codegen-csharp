@@ -17,6 +17,8 @@ because they are versioned in lockstep:
 
 ### Added
 
+- **`dpm-codegen-cs.cmd` (Windows bundle entrypoint) now supports `--publish-nuget --nuget-config <path> --nuget-source <name>`** ([#222](https://github.com/peacefulstudio/daml-codegen-csharp/pull/222)). When `--publish-nuget` is set, the script injects `--generate-project` into the emitter call, runs `dotnet pack`, and pushes the resulting `.nupkg` via `dotnet nuget push --skip-duplicate`. All three flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version).
+
 ### Changed
 
 ### Fixed
