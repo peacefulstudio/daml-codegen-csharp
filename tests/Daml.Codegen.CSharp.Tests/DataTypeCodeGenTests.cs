@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -703,9 +704,8 @@ public class DataTypeCodeGenTests
     }
 
     [Fact]
-    public void Generate_should_include_json_serialization_using_when_enabled()
+    public void Generate_should_not_emit_serialization_using_when_body_has_no_json_references()
     {
-        // Arrange
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -727,15 +727,12 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
         var simpleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Simple.cs", StringComparison.Ordinal));
 
-        // Assert
         simpleFile.Should().NotBeNull();
-        var code = simpleFile!.Content;
-
-        code.Should().Contain("using Daml.Runtime.Serialization;");
+        simpleFile!.Content.Should().NotContain("using Daml.Runtime.Serialization;",
+            "conditional using emission must not emit Daml.Runtime.Serialization when the body contains no JSON-serialization references");
     }
 
     [Fact]

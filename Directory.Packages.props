@@ -4,10 +4,10 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Core dependencies -->
-    <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
+    <PackageVersion Include="Google.Protobuf" Version="3.35.0" />
     <PackageVersion Include="Grpc.Tools" Version="2.80.0" />
     <!-- CLI tooling -->
-    <PackageVersion Include="System.CommandLine" Version="2.0.7" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.8" />
     <PackageVersion Include="Spectre.Console" Version="0.55.2" />
     <!-- Code generation -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />

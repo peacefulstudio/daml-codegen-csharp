@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -38,6 +39,16 @@ public class NamedSubmitterTests
         return new CSharpCodeGenerator(options, logger);
     }
 
+    private static readonly DamlPackage StdlibStub = new()
+    {
+        PackageId = "daml-prim-pkg-id",
+        Name = "daml-prim",
+        Version = new Version(1, 0, 0),
+        LfVersion = "2.1",
+        Modules = [],
+        DependencyReferences = [],
+    };
+
     private static DarArchive CreateDar(DamlModule module) =>
         new()
         {
@@ -50,7 +61,7 @@ public class NamedSubmitterTests
                 Modules = [module],
                 DependencyReferences = [],
             },
-            Dependencies = [],
+            Dependencies = [StdlibStub],
         };
 
     /// <summary>
@@ -445,7 +456,7 @@ public class NamedSubmitterTests
                             Name = "Archive",
                             Consuming = true,
                             ArgumentType = new DamlTypeRef(
-                                "ghc-stdlib-DA-Internal-Template",
+                                StdlibStub.PackageId,
                                 "DA.Internal.Template",
                                 "Archive"),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),

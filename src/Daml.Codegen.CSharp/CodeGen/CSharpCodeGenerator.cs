@@ -1,19 +1,19 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
 /// Generates C# code from Daml packages.
 /// </summary>
-internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, ConsoleLogger logger)
+public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegenLogger logger)
 {
     private readonly Regex? _rootFilter = options.RootFilter is not null
         ? new Regex(options.RootFilter, RegexOptions.Compiled)
         : null;
 
-    private DarArchive? _currentArchive;
+    private IDarSource? _currentArchive;
     private DamlPackage? _currentPackage;
     private readonly HashSet<string> _externalPackageIds = [];
 
@@ -34,10 +34,16 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     // accommodating Daml interface-typed contract ids.
     private readonly HashSet<string> _interfacePlaceholderQualifiedNames = [];
 
+    private readonly Dictionary<string, string> _localChoiceArgToTemplate = [];
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
+
+    private TypeReferenceQualifier _qualifier = new([]);
+    private string _currentNamespace = string.Empty;
+
     /// <summary>
     /// Generates C# code for all types in the DAR.
     /// </summary>
-    public IReadOnlyList<GeneratedFile> Generate(DarArchive dar)
+    public IReadOnlyList<GeneratedFile> Generate(IDarSource dar)
     {
         var files = new List<GeneratedFile>();
 
@@ -113,19 +119,50 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         || packageName.StartsWith("ghc-stdlib", StringComparison.Ordinal);
 
     /// <summary>
-    /// Maps a stdlib type reference to its hand-coded Daml.Runtime.Stdlib equivalent,
-    /// or null if there is no known mapping (the codegen will fall back to an unqualified
-    /// name and the build will fail loudly so the gap is visible).
+    /// Builds a mapping of choice-argument type name to parent template name for the
+    /// given package. Used by <see cref="ResolveTypeRefName"/> to qualify cross-package
+    /// refs that point at a type nested inside a foreign template. See issue #111.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> BuildForeignChoiceArgToTemplate(DamlPackage pkg)
+    {
+        var allTypeNames = pkg.Modules
+            .SelectMany(m => m.DataTypes)
+            .Select(dt => dt.Name)
+            .ToHashSet();
+
+        var result = new Dictionary<string, string>();
+        foreach (var module in pkg.Modules)
+        {
+            foreach (var template in module.Templates)
+            {
+                foreach (var choice in template.Choices)
+                {
+                    if (choice.ArgumentType is DamlTypeRef typeRef && allTypeNames.Contains(typeRef.Name))
+                    {
+                        result[typeRef.Name] = template.Name;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Maps a stdlib type reference to its simple Daml.Runtime.Stdlib type name (no namespace),
+    /// or null if there is no known mapping (callers route a non-null result through the central
+    /// qualifier and require <c>using Daml.Runtime.Stdlib;</c>; a null result drives the
+    /// build-fails-loudly path so the gap is visible).
     /// </summary>
     private static string? MapStdlibType(string module, string typeName) => (module, typeName) switch
     {
-        ("DA.Time.Types", "RelTime") => "Daml.Runtime.Stdlib.RelTime",
-        ("DA.Types", "Tuple2") => "Daml.Runtime.Stdlib.Tuple2",
-        ("DA.Types", "Tuple3") => "Daml.Runtime.Stdlib.Tuple3",
-        ("DA.Set.Types", "Set") => "Daml.Runtime.Stdlib.Set",
-        ("DA.NonEmpty.Types", "NonEmpty") => "Daml.Runtime.Stdlib.NonEmpty",
-        ("DA.Map.Types", "Map") => "Daml.Runtime.Stdlib.Map",
-        ("DA.Internal.Map", "Map") => "Daml.Runtime.Stdlib.Map",
+        ("DA.Time.Types", "RelTime") => "RelTime",
+        ("DA.Types", "Tuple2") => "Tuple2",
+        ("DA.Types", "Tuple3") => "Tuple3",
+        ("DA.Types", "Either") => "Either",
+        ("DA.Set.Types", "Set") => "Set",
+        ("DA.NonEmpty.Types", "NonEmpty") => "NonEmpty",
+        ("DA.Map.Types", "Map") => "Map",
+        ("DA.Internal.Map", "Map") => "Map",
         _ => null,
     };
 
@@ -137,6 +174,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     private static bool IsParametricStdlibType(string module, string typeName) => (module, typeName) switch
     {
         ("DA.Types", "Tuple2") or ("DA.Types", "Tuple3") => true,
+        ("DA.Types", "Either") => true,
         ("DA.Set.Types", "Set") => true,
         ("DA.NonEmpty.Types", "NonEmpty") => true,
         ("DA.Map.Types", "Map") or ("DA.Internal.Map", "Map") => true,
@@ -144,18 +182,20 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     };
 
     /// <summary>
-    /// Returns true if a type reference resolves to a parametric stdlib type
+    /// Returns true if <paramref name="typeRef"/> resolves to a known stdlib type
     /// in a known stdlib package. Gating on package id matters because user
     /// packages can legally define a module named e.g. <c>DA.Types</c> with
     /// a type <c>Tuple2</c>; without the package check the codegen would
     /// route those through <c>Daml.Runtime.Stdlib.*</c> and emit broken code.
     /// </summary>
-    private bool IsParametricStdlibTypeRef(DamlTypeRef typeRef)
+    private bool IsStdlibTypeRef(DamlTypeRef typeRef, bool parametric) =>
+        IsInStdlibPackage(typeRef)
+        && (parametric
+            ? IsParametricStdlibType(typeRef.Module, typeRef.Name)
+            : MapStdlibType(typeRef.Module, typeRef.Name) is not null);
+
+    private bool IsInStdlibPackage(DamlTypeRef typeRef)
     {
-        if (!IsParametricStdlibType(typeRef.Module, typeRef.Name))
-        {
-            return false;
-        }
         if (string.IsNullOrEmpty(typeRef.PackageId) || _currentArchive is null)
         {
             return false;
@@ -171,8 +211,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     /// <summary>
     /// Resolves a DamlTypeRef to a C# identifier or fully qualified name.
-    /// Local refs return the bare sanitized name; cross-package refs return a
-    /// fully qualified name and record the package id so a PackageReference can be
+    /// Local refs return the bare sanitized name (qualified with the parent template
+    /// name when the type is a nested choice-argument type); cross-package refs return
+    /// a fully qualified name and record the package id so a PackageReference can be
     /// emitted for it.
     /// </summary>
     private string ResolveTypeRefName(DamlTypeRef typeRef)
@@ -181,6 +222,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (IsLocalTypeRef(typeRef))
         {
+            if (_localChoiceArgToTemplate.TryGetValue(typeRef.Name, out var parentTemplate))
+            {
+                return $"{SanitizeIdentifier(parentTemplate)}.{sanitized}";
+            }
             return sanitized;
         }
 
@@ -202,7 +247,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             var mapped = MapStdlibType(typeRef.Module, typeRef.Name);
             if (mapped is not null)
             {
-                return mapped;
+                return _qualifier.Qualify(mapped, _currentNamespace);
             }
             // Unknown stdlib type — leave unqualified so the build error points at the gap.
             // Tracked in https://github.com/peacefulstudio/daml-codegen-csharp/issues/57.
@@ -212,6 +257,15 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         _externalPackageIds.Add(typeRef.PackageId);
         var foreignNs = DeriveNamespace(foreignPkg.Name);
+        if (!_foreignChoiceArgCache.TryGetValue(typeRef.PackageId, out var foreignChoiceArgMap))
+        {
+            foreignChoiceArgMap = BuildForeignChoiceArgToTemplate(foreignPkg);
+            _foreignChoiceArgCache[typeRef.PackageId] = foreignChoiceArgMap;
+        }
+        if (foreignChoiceArgMap.TryGetValue(typeRef.Name, out var foreignParentTemplate))
+        {
+            return $"{foreignNs}.{SanitizeIdentifier(foreignParentTemplate)}.{sanitized}";
+        }
         return $"{foreignNs}.{sanitized}";
     }
 
@@ -223,6 +277,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // The root namespace comes from the package name (e.g., cats-markets -> Cats.Markets)
         // All types from all modules go into this single namespace
         var rootNamespace = options.RootNamespace ?? DeriveNamespace(package.Name);
+        _currentNamespace = rootNamespace;
+        _qualifier = new TypeReferenceQualifier([rootNamespace]);
 
         // Build a global lookup of all data types across all modules for cross-module references
         var globalDataTypes = new Dictionary<string, (DamlModule Module, DamlDataType DataType)>();
@@ -242,6 +298,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         var allDataTypesInGroup = new Dictionary<string, DamlDataType>();
         _localEnumQualifiedNames.Clear();
         _interfacePlaceholderQualifiedNames.Clear();
+        _localChoiceArgToTemplate.Clear();
+        _foreignChoiceArgCache.Clear();
         foreach (var module in package.Modules)
         {
             // Every Daml interface in the module declares a same-named record placeholder
@@ -270,9 +328,6 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             .Select(t => t.Name)
             .ToHashSet();
 
-        // Build a mapping of choice argument type names to their parent template
-        // This maps choiceArgTypeName -> (templateName, choiceName)
-        var choiceArgTypeToTemplate = new Dictionary<string, (string TemplateName, string ChoiceName)>();
         foreach (var module in package.Modules)
         {
             foreach (var template in module.Templates)
@@ -281,8 +336,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 {
                     if (choice.ArgumentType is DamlTypeRef typeRef && allDataTypesInGroup.ContainsKey(typeRef.Name))
                     {
-                        // This choice's argument type is a data type that should be nested
-                        choiceArgTypeToTemplate[typeRef.Name] = (template.Name, choice.Name);
+                        _localChoiceArgToTemplate[typeRef.Name] = template.Name;
                     }
                 }
             }
@@ -327,7 +381,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 }
 
                 // Skip data types that are choice argument types - they're generated as nested types in the template
-                if (choiceArgTypeToTemplate.ContainsKey(dataType.Name))
+                if (_localChoiceArgToTemplate.ContainsKey(dataType.Name))
                 {
                     continue;
                 }
@@ -421,16 +475,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
+        RequireCommonNamespaces(indent);
 
-        // Usings
-        WriteUsings(indent);
-
-        // Namespace
         if (options.UseFileScopedNamespaces)
         {
             indent.AppendLine($"namespace {moduleNamespace};");
@@ -457,11 +506,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         // Determine interfaces to implement
         var keyType = template.Key is not null ? MapDamlTypeToCSharp(template.Key) : null;
-        var interfacesList = new List<string> { "ITemplate" };
+        var interfacesList = new List<string> { _qualifier.Qualify("ITemplate", _currentNamespace) };
         if (keyType is not null)
-            interfacesList.Add($"IHasKey<{keyType}>");
+            interfacesList.Add($"{_qualifier.Qualify("IHasKey", _currentNamespace)}<{keyType}>");
         if (package.UpgradedPackageId is not null)
-            interfacesList.Add("IUpgradeable");
+            interfacesList.Add(_qualifier.Qualify("IUpgradeable", _currentNamespace));
         var interfaces = string.Join(", ", interfacesList);
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors && fields.Count > 0)
@@ -558,7 +607,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     /// <summary>
@@ -571,11 +620,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         string moduleNamespace,
         IReadOnlyDictionary<string, DamlDataType>? allDataTypes = null)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        WriteFileHeader(indent);
-        WriteUsings(indent);
+        RequireCommonNamespaces(indent);
 
         if (options.UseFileScopedNamespaces)
         {
@@ -608,7 +656,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     /// <summary>
@@ -621,14 +669,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
-
-        // Usings
-        WriteUsings(indent);
+        RequireCommonNamespaces(indent);
 
         // Namespace
         if (options.UseFileScopedNamespaces)
@@ -658,8 +702,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // Determine view interface
         var viewType = iface.ViewType is not null ? MapDamlTypeToCSharp(iface.ViewType) : null;
         var interfaces = viewType is not null
-            ? $"IDamlInterface, IHasView<{viewType}>"
-            : "IDamlInterface";
+            ? $"{_qualifier.Qualify("IDamlInterface", _currentNamespace)}, {_qualifier.Qualify("IHasView", _currentNamespace)}<{viewType}>"
+            : _qualifier.Qualify("IDamlInterface", _currentNamespace);
 
         indent.AppendLine($"public interface {interfaceName} : {interfaces}");
         indent.AppendLine("{");
@@ -669,7 +713,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         WriteInterfaceMetadata(indent, package, module, iface);
 
         // Generate method signatures for each choice
-        foreach (var method in iface.Methods)
+        foreach (var method in iface.Choices)
         {
             WriteInterfaceMethod(indent, method, dataTypes);
         }
@@ -683,7 +727,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // The `cid` here is a `ContractId<I>` (interface marker), so the wire-level
         // `template_id` slot carries the interface id per Canton's gRPC semantics —
         // see ExerciseCommand.ForInterface in Daml.Runtime.
-        if (iface.Methods.Count > 0)
+        if (iface.Choices.Count > 0)
         {
             indent.AppendLine();
             WriteInterfaceChoiceExtensions(indent, package, module, iface, interfaceName, dataTypes);
@@ -695,7 +739,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     private void WriteInterfaceChoiceExtensions(
@@ -711,10 +755,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>{iface.Name}</c> Daml interface.");
             indent.AppendLine("/// One method per choice; each submits an interface-typed");
-            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand\"/> built via");
-            indent.AppendLine($"/// <see cref=\"Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(Daml.Runtime.Contracts.ContractId{{TInterface}},string,Daml.Runtime.Data.DamlValue)\"/>");
-            indent.AppendLine("/// through <see cref=\"Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
-            indent.AppendLine($"/// and surfaces the raw <see cref=\"Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
+            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> built via");
+            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(global::Daml.Runtime.Contracts.ContractId{{TInterface}},string,global::Daml.Runtime.Data.DamlValue)\"/>");
+            indent.AppendLine("/// through <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine($"/// and surfaces the raw <see cref=\"global::Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
             indent.AppendLine("/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the");
             indent.AppendLine("/// implementing template (and therefore the produced contracts' shapes) is unknown");
             indent.AppendLine("/// at the call site.");
@@ -723,12 +767,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         var extensionsClassName = $"{interfaceName}Extensions";
 
-        var emittable = iface.Methods.ToList();
+        var emittable = iface.Choices.ToList();
 
         if (emittable.Count == 0)
         {
             return;
         }
+
+        RequireAsyncExerciserNamespaces(indent);
 
         indent.AppendLine($"public static class {extensionsClassName}");
         indent.AppendLine("{");
@@ -778,15 +824,15 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // but skips the typed <Choice>Result projection: interface choices do not know
         // the implementing template at the call site, so the most useful return shape
         // is the raw ExerciseOutcome<TransactionResult> the ledger client surfaces.
-        indent.AppendLine($"public static async Task<ExerciseOutcome<TransactionResult>> {methodName}(");
+        indent.AppendLine($"public static async Task<{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>> {methodName}(");
         indent.Indent();
-        indent.AppendLine($"this ContractId<{interfaceName}> contractId,");
-        indent.AppendLine("ILedgerClient client,");
+        indent.AppendLine($"this {_qualifier.Qualify("ContractId", _currentNamespace)}<{interfaceName}> contractId,");
+        indent.AppendLine($"{_qualifier.Qualify("ILedgerClient", _currentNamespace)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argTypeName} argument,");
         }
-        indent.AppendLine("Party actAs,");
+        indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} actAs,");
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -802,10 +848,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         var argExpr = hasArg
             ? GetToValueConversion(choice.ArgumentType, "argument")
-            : "DamlUnit.Instance";
-        indent.AppendLine($"var command = Daml.Runtime.Commands.ExerciseCommand.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
+            : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
+        indent.AppendLine($"var command = {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
         indent.AppendLine();
-        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithActAs(actAs)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
@@ -829,7 +875,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             return ("DamlUnit", false);
         }
-        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" })
+        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" } archiveRef
+            && !string.IsNullOrEmpty(archiveRef.PackageId)
+            && _currentArchive is not null
+            && _currentArchive.GetPackageById(archiveRef.PackageId) is { } archivePkg
+            && IsStdlibPackage(archivePkg.Name))
         {
             return ("DamlUnit", false);
         }
@@ -844,16 +894,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         IReadOnlyList<(DamlModule Module, DamlTemplate Template)> templates,
         string moduleNamespace)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
-
-        // Usings - include static import for TemplateExtensions.GetTemplateId
-        indent.AppendLine("using Daml.Runtime.Contracts;");
-        indent.AppendLine("using static Daml.Runtime.Contracts.TemplateExtensions;");
-        indent.AppendLine();
+        indent.Require("Daml.Runtime.Contracts");
+        indent.Require("static Daml.Runtime.Contracts.TemplateExtensions");
 
         // Namespace
         if (options.UseFileScopedNamespaces)
@@ -918,7 +963,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         var parentPath = Path.GetDirectoryName(namespacePath) ?? string.Empty;
         var path = Path.Combine(parentPath, "ContractIdentifiers.cs");
 
-        return new GeneratedFile(path, sb.ToString());
+        return new GeneratedFile(path, BuildFileContent(indent, bodySb));
     }
 
     /// <summary>
@@ -933,16 +978,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         string moduleNamespace,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
-        var sb = new StringBuilder();
-        var indent = new IndentWriter(sb);
+        var bodySb = new StringBuilder();
+        var indent = new IndentWriter(bodySb);
 
-        // File header
-        WriteFileHeader(indent);
+        RequireCommonNamespaces(indent);
 
-        // Usings
-        WriteUsings(indent);
-
-        // Namespace
         if (options.UseFileScopedNamespaces)
         {
             indent.AppendLine($"namespace {moduleNamespace};");
@@ -977,11 +1017,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             {
                 indent.Append($"public sealed record {choiceTypeName}(");
                 WriteRecordParameters(indent, record.Fields);
-                indent.AppendLine(") : IDamlValue");
+                indent.AppendLine($") : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
             }
             else
             {
-                indent.AppendLine($"public sealed record {choiceTypeName} : IDamlValue");
+                indent.AppendLine($"public sealed record {choiceTypeName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
             }
 
             indent.AppendLine("{");
@@ -1003,7 +1043,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("}");
         }
 
-        return sb.ToString();
+        return BuildFileContent(indent, bodySb);
     }
 
     private void WriteInterfaceMetadata(
@@ -1012,20 +1052,22 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlModule module,
         DamlInterface iface)
     {
+        indent.Require("System");
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Gets the interface identifier.</summary>");
-        indent.AppendLine($"static Identifier IDamlInterface.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
+        indent.AppendLine($"static {_qualifier.Qualify("Identifier", _currentNamespace)} {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package ID.</summary>");
-        indent.AppendLine($"static string IDamlInterface.PackageId => \"{package.PackageId}\";");
+        indent.AppendLine($"static string {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageId => \"{package.PackageId}\";");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package name.</summary>");
-        indent.AppendLine($"static string IDamlInterface.PackageName => \"{package.Name}\";");
+        indent.AppendLine($"static string {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageName => \"{package.Name}\";");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package version.</summary>");
-        indent.AppendLine($"static Version IDamlInterface.PackageVersion => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
+        indent.AppendLine($"static Version {_qualifier.Qualify("IDamlInterface", _currentNamespace)}.PackageVersion => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
         indent.AppendLine();
     }
 
@@ -1061,12 +1103,6 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine("// </auto-generated>");
         indent.AppendLine();
 
-        // Roslyn does not suppress CS8019 ("unnecessary using directive") for
-        // <auto-generated> sources, so consumers with TreatWarningsAsErrors
-        // would fail to build the over-emitted usings.
-        indent.AppendLine("#pragma warning disable CS8019");
-        indent.AppendLine();
-
         if (options.EnableNullableReferenceTypes)
         {
             indent.AppendLine("#nullable enable");
@@ -1074,34 +1110,92 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
     }
 
-    private void WriteUsings(IndentWriter indent)
+    private static void WriteTrackedUsings(IndentWriter headerIndent, IndentWriter bodyIndent)
     {
-        // BCL usings emitted explicitly so generated code compiles even when a
-        // consumer disables `<ImplicitUsings>` in their csproj. The codegen-emitted
-        // csproj turns ImplicitUsings on, but generated source dropped into a project
-        // without that flag (e.g. someone copying files into a hand-rolled lib) would
-        // otherwise miss `System`, `Collections.Generic`, `Tasks`, and `Threading`.
-        indent.AppendLine("using System;");
-        indent.AppendLine("using System.Collections.Generic;");
-        indent.AppendLine("using System.Linq;");
-        indent.AppendLine("using System.Threading;");
-        indent.AppendLine("using System.Threading.Tasks;");
-        indent.AppendLine("using Daml.Ledger.Abstractions;");
-        indent.AppendLine("using Daml.Runtime.Commands;");
-        indent.AppendLine("using Daml.Runtime.Contracts;");
-        indent.AppendLine("using Daml.Runtime.Data;");
-        // Outcomes namespace covers ExerciseOutcome<T> referenced by emitted
-        // <Choice>Result.FromCreatedContracts projectors and <Choice>Async
-        // exercisers. Always emitted — even for templates without create-bearing
-        // choices, the cost is one unused-using lint suppression at most.
-        indent.AppendLine("using Daml.Runtime.Outcomes;");
-
-        if (options.GenerateJsonSupport)
+        foreach (var ns in bodyIndent.RequiredUsings)
         {
-            indent.AppendLine("using Daml.Runtime.Serialization;");
+            headerIndent.AppendLine($"using {ns};");
         }
+        headerIndent.AppendLine();
+    }
 
-        indent.AppendLine();
+    private string BuildFileContent(IndentWriter bodyIndent, StringBuilder bodySb)
+    {
+        var headerSb = new StringBuilder();
+        var headerIndent = new IndentWriter(headerSb);
+        WriteFileHeader(headerIndent);
+        WriteTrackedUsings(headerIndent, bodyIndent);
+        headerSb.Append(bodySb);
+        return headerSb.ToString();
+    }
+
+    private void RequireCommonNamespaces(IndentWriter indent)
+    {
+        indent.Require("Daml.Runtime.Data");
+    }
+
+    private static void RequireAsyncExerciserNamespaces(IndentWriter indent)
+    {
+        indent.Require("System");
+        indent.Require("System.Threading");
+        indent.Require("System.Threading.Tasks");
+        indent.Require("Daml.Ledger.Abstractions");
+        indent.Require("Daml.Runtime.Commands");
+        indent.Require("Daml.Runtime.Contracts");
+        indent.Require("Daml.Runtime.Outcomes");
+    }
+
+    private void RequireForFieldType(IndentWriter indent, DamlType type)
+    {
+        switch (type)
+        {
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app:
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app:
+                indent.Require("System.Collections.Generic");
+                indent.Require("System.Linq");
+                RequireForFieldType(indent, app.Arguments[0]);
+                RequireForFieldType(indent, app.Arguments[1]);
+                break;
+            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } }:
+                indent.Require("Daml.Runtime.Contracts");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Date }:
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp }:
+                indent.Require("System");
+                break;
+            case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
+                indent.Require("Daml.Runtime.Stdlib");
+                break;
+            case DamlTypeApp { Base: DamlTypeRef typeRef } app
+                when IsStdlibTypeRef(typeRef, parametric: true):
+                indent.Require("Daml.Runtime.Stdlib");
+                foreach (var arg in app.Arguments)
+                {
+                    RequireForFieldType(indent, arg);
+                }
+                break;
+            case DamlTypeRef typeRef when IsStdlibTypeRef(typeRef, parametric: false):
+                indent.Require("Daml.Runtime.Stdlib");
+                break;
+            case DamlTypeApp app:
+                foreach (var arg in app.Arguments)
+                {
+                    RequireForFieldType(indent, arg);
+                }
+                break;
+        }
     }
 
     private void WriteTemplateMetadata(
@@ -1110,10 +1204,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         DamlModule module,
         DamlTemplate template)
     {
+        indent.Require("System");
         var templateId = $"{module.Name}:{template.Name}";
 
         indent.AppendLine($"/// <summary>Gets the template identifier.</summary>");
-        indent.AppendLine($"public static Identifier TemplateId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{template.Name}\");");
+        indent.AppendLine($"public static {_qualifier.Qualify("Identifier", _currentNamespace)} TemplateId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{template.Name}\");");
         indent.AppendLine();
 
         indent.AppendLine($"/// <summary>Gets the package ID.</summary>");
@@ -1137,13 +1232,18 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
     }
 
+    private static string ToCrefTypeArgument(string csharpType) =>
+        csharpType
+            .Replace("global::", string.Empty, StringComparison.Ordinal)
+            .Replace('<', '{')
+            .Replace('>', '}');
+
     private void WriteKeyProperty(IndentWriter indent, DamlType keyType)
     {
+        indent.Require("Daml.Runtime.Contracts");
+        RequireForFieldType(indent, keyType);
         var csharpKeyType = MapDamlTypeToCSharp(keyType);
-        // cref attribute syntax escapes generic angle brackets as { }. Apply the
-        // same transform to the rendered key type so generic key types don't
-        // produce an invalid cref (CS1574 under <GenerateDocumentationFile>true</>).
-        var crefKeyType = csharpKeyType.Replace('<', '{').Replace('>', '}');
+        var crefKeyType = ToCrefTypeArgument(csharpKeyType);
 
         // Full DALF key-expression analysis (mapping the template's `key` Daml
         // expression back to template fields, including tuple/record builders) is
@@ -1161,7 +1261,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
-            indent.AppendLine($"/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{{{crefKeyType}}}\"/>.");
+            indent.AppendLine($"/// Gets the contract key of type <c>{crefKeyType}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{{TKey}}\"/>.");
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <remarks>");
             indent.AppendLine("/// The body is supplied by a hand-rolled <c>partial</c> declaration in the");
@@ -1189,6 +1289,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
             var csharpType = MapDamlTypeToCSharp(field.Type);
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            RequireForFieldType(indent, field.Type);
             indent.Append($"{csharpType} {fieldName}");
         }
     }
@@ -1199,6 +1300,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             var csharpType = MapDamlTypeToCSharp(field.Type);
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            RequireForFieldType(indent, field.Type);
 
             if (options.GenerateXmlDocs)
             {
@@ -1219,13 +1321,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (fields.Count == 0)
         {
-            indent.AppendLine("public DamlRecord ToRecord() => DamlRecord.Create();");
+            indent.AppendLine($"public {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create();");
             indent.AppendLine();
             return;
         }
 
         // Use expression-bodied member with inline DamlRecord.Create
-        indent.AppendLine("public DamlRecord ToRecord() => DamlRecord.Create(");
+        indent.AppendLine($"public {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create(");
         indent.Indent();
 
         for (int i = 0; i < fields.Count; i++)
@@ -1234,8 +1336,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
             var conversion = GetToValueConversion(field.Type, fieldName);
             var comma = i < fields.Count - 1 ? "," : "";
+            RequireForFieldType(indent, field.Type);
 
-            indent.AppendLine($"DamlField.Create(\"{field.Name}\", {conversion}){comma}");
+            indent.AppendLine($"{_qualifier.Qualify("DamlField", _currentNamespace)}.Create(\"{field.Name}\", {conversion}){comma}");
         }
 
         indent.Dedent();
@@ -1249,14 +1352,19 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (fields.Count == 0)
         {
-            indent.AppendLine($"public static {className} FromRecord(DamlRecord record) => new {className}();");
+            indent.AppendLine($"public static {className} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) => new {className}();");
             indent.AppendLine();
             return;
         }
 
+        foreach (var field in fields)
+        {
+            RequireForFieldType(indent, field.Type);
+        }
+
         if (options.UseRecordTypes && options.UsePrimaryConstructors)
         {
-            indent.AppendLine($"public static {className} FromRecord(DamlRecord record) => new {className}(");
+            indent.AppendLine($"public static {className} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) => new {className}(");
             indent.Indent();
 
             for (int i = 0; i < fields.Count; i++)
@@ -1274,7 +1382,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
         else
         {
-            indent.AppendLine($"public static {className} FromRecord(DamlRecord record)");
+            indent.AppendLine($"public static {className} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record)");
             indent.AppendLine("{");
             indent.Indent();
 
@@ -1317,7 +1425,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (choice.ArgumentType is DamlTypeRef externalRef)
         {
-            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" })
+            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" }
+                && !string.IsNullOrEmpty(externalRef.PackageId)
+                && _currentArchive is not null
+                && _currentArchive.GetPackageById(externalRef.PackageId) is { } archivePkg
+                && IsStdlibPackage(archivePkg.Name))
             {
                 return ("DamlUnit", null, false, false);
             }
@@ -1358,6 +1470,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             return;
         }
 
+        indent.Require("Daml.Runtime.Commands");
+        RequireForFieldType(indent, choice.ReturnType);
+
         indent.AppendLine("/// <summary>");
         indent.AppendLine($"/// Exercise the {choice.Name} choice.");
         if (choice.Consuming)
@@ -1366,8 +1481,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
         indent.AppendLine("/// </summary>");
 
-        // Generate the Choice property with proper encoder/decoder
-        indent.AppendLine($"public static Choice<{indent.CurrentTypeName}, {argTypeName}, {returnType}> Choice{choiceName} {{ get; }} = new()");
+        var argTypeRef = argTypeName == "DamlUnit"
+            ? _qualifier.Qualify("DamlUnit", _currentNamespace)
+            : argTypeName;
+        indent.AppendLine($"public static {_qualifier.Qualify("Choice", _currentNamespace)}<{indent.CurrentTypeName}, {argTypeRef}, {returnType}> Choice{choiceName} {{ get; }} = new()");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine($"Name = \"{choice.Name}\",");
@@ -1375,7 +1492,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         if (argTypeName == "DamlUnit")
         {
-            indent.AppendLine("ArgumentEncoder = _ => DamlUnit.Instance,");
+            indent.AppendLine($"ArgumentEncoder = _ => {_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance,");
         }
         else
         {
@@ -1404,11 +1521,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         switch (returnType)
         {
             case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
-                indent.AppendLine("ResultDecoder = _ => DamlUnit.Instance");
+                indent.AppendLine($"ResultDecoder = _ => {_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance");
                 return;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
                 var contractType = MapDamlTypeToCSharp(arg);
-                indent.AppendLine($"ResultDecoder = val => new ContractId<{contractType}>(val.As<DamlContractId>().Value)");
+                indent.AppendLine($"ResultDecoder = val => new {_qualifier.Qualify("ContractId", _currentNamespace)}<{contractType}>(val.As<{_qualifier.Qualify("DamlContractId", _currentNamespace)}>().Value)");
                 return;
         }
 
@@ -1418,12 +1535,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteContractIdClass(IndentWriter indent, string className)
     {
+        indent.Require("Daml.Runtime.Commands");
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Contract ID for {className}.</summary>");
-        indent.AppendLine($"public sealed record ContractId(string Value) : ContractId<{className}>(Value), IExercises<{className}>");
+        indent.AppendLine($"public sealed record ContractId(string Value) : {_qualifier.Qualify("ContractId", _currentNamespace)}<{className}>(Value), {_qualifier.Qualify("IExercises", _currentNamespace)}<{className}>");
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine($"ContractId<{className}> IExercises<{className}>.ContractId => this;");
+        indent.AppendLine($"{_qualifier.Qualify("ContractId", _currentNamespace)}<{className}> {_qualifier.Qualify("IExercises", _currentNamespace)}<{className}>.ContractId => this;");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -1432,13 +1551,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteContractClass(IndentWriter indent, string className)
     {
+        indent.Require("Daml.Runtime.Contracts");
         indent.AppendLine($"/// <summary>Active contract for {className}.</summary>");
-        indent.AppendLine($"public sealed record Contract(ContractId Id, {className} Data) : IContract<ContractId, {className}>");
+        indent.AppendLine($"public sealed record Contract(ContractId Id, {className} Data) : {_qualifier.Qualify("IContract", _currentNamespace)}<ContractId, {className}>");
         indent.AppendLine("{");
         indent.Indent();
 
         indent.AppendLine("/// <summary>Creates a Contract from a CreatedEvent.</summary>");
-        indent.AppendLine("public static Contract FromCreatedEvent(CreatedEvent @event) =>");
+        indent.AppendLine($"public static Contract FromCreatedEvent({_qualifier.Qualify("CreatedEvent", _currentNamespace)} @event) =>");
         indent.Indent();
         indent.AppendLine($"new(new ContractId(@event.ContractId), {className}.FromRecord(@event.CreateArguments));");
         indent.Dedent();
@@ -1475,11 +1595,11 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             indent.Append($"public sealed record {fullClassName}(");
             WriteRecordParameters(indent, record.Fields);
-            indent.AppendLine(") : IDamlValue");
+            indent.AppendLine($") : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
         }
         else
         {
-            indent.AppendLine($"public sealed record {fullClassName} : IDamlValue");
+            indent.AppendLine($"public sealed record {fullClassName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
         }
 
         indent.AppendLine("{");
@@ -1505,6 +1625,8 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     /// </summary>
     private void WriteInterfacePlaceholderRecord(IndentWriter indent, DamlModule module, DamlDataType dataType)
     {
+        indent.Require("System");
+        indent.Require("Daml.Runtime.Contracts");
         var className = SanitizeIdentifier(dataType.Name);
         var qualifiedDamlName = $"{module.Name}:{dataType.Name}";
         var throwMessage =
@@ -1522,14 +1644,14 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
             indent.AppendLine("/// </summary>");
         }
 
-        indent.AppendLine($"public sealed record {className} : ITemplate");
+        indent.AppendLine($"public sealed record {className} : {_qualifier.Qualify("ITemplate", _currentNamespace)}");
         indent.AppendLine("{");
         indent.Indent();
 
         // Static metadata required by ITemplate. All four throw — they're never the
         // right thing to call on an interface placeholder, and a runtime exception
         // here is the cleanest signal that the caller should have coerced first.
-        indent.AppendLine($"public static Identifier TemplateId =>");
+        indent.AppendLine($"public static {_qualifier.Qualify("Identifier", _currentNamespace)} TemplateId =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");
         indent.Dedent();
@@ -1554,9 +1676,9 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // shape — interface placeholders have no fields). FromRecord round-trips
         // back to an empty instance; no information is lost because none was ever
         // carried.
-        indent.AppendLine("public DamlRecord ToRecord() => DamlRecord.Create();");
+        indent.AppendLine($"public {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create();");
         indent.AppendLine();
-        indent.AppendLine($"public static {className} FromRecord(DamlRecord record) => new {className}();");
+        indent.AppendLine($"public static {className} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) => new {className}();");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -1564,6 +1686,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteVariantType(IndentWriter indent, DamlDataType dataType, DamlVariantDefinition variant)
     {
+        indent.Require("System");
         var className = SanitizeIdentifier(dataType.Name);
         var typeParams = GetTypeParametersDeclaration(dataType.TypeParams);
         var fullClassName = $"{className}{typeParams}";
@@ -1581,7 +1704,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         }
 
         // Base abstract record
-        indent.AppendLine($"public abstract record {fullClassName} : IDamlValue");
+        indent.AppendLine($"public abstract record {fullClassName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -1590,7 +1713,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.AppendLine();
 
         indent.AppendLine("/// <summary>Converts to a DamlRecord.</summary>");
-        indent.AppendLine("public abstract DamlRecord ToRecord();");
+        indent.AppendLine($"public abstract {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord();");
         indent.AppendLine();
 
         // Variant FromRecord stub. Variants serialize to DamlVariant on the wire, not
@@ -1600,7 +1723,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // — runtime deserialization of the variant itself will throw until proper
         // variant codegen lands.
         indent.AppendLine($"/// <summary>Reconstructs a {className} from a DamlRecord. Stub: throws until variant deserialization is implemented (see issue #57).</summary>");
-        indent.AppendLine($"public static {fullClassName} FromRecord(DamlRecord record) =>");
+        indent.AppendLine($"public static {fullClassName} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) =>");
         indent.Indent();
         indent.AppendLine($"throw new NotImplementedException(\"Variant deserialization for {dataType.Name} is not implemented (variants serialize as DamlVariant, not DamlRecord). Tracking issue: https://github.com/peacefulstudio/daml-codegen-csharp/issues/57\");");
         indent.Dedent();
@@ -1610,10 +1733,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         foreach (var ctor in variant.Constructors)
         {
             var ctorName = SanitizeIdentifier(ctor.Name);
-            var argType = ctor.ArgumentType is not null ? MapDamlTypeToCSharp(ctor.ArgumentType) : null;
+            var hasArg = ctor.ArgumentType is not null
+                && ctor.ArgumentType is not DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
+            var argType = hasArg ? MapDamlTypeToCSharp(ctor.ArgumentType!) : null;
 
             if (argType is not null)
             {
+                RequireForFieldType(indent, ctor.ArgumentType!);
                 indent.AppendLine($"/// <summary>{ctor.Name} constructor.</summary>");
                 indent.AppendLine($"public sealed record {ctorName}({argType} Value) : {fullClassName}");
             }
@@ -1628,7 +1754,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
             indent.AppendLine($"public override string Tag => \"{ctor.Name}\";");
             indent.AppendLine();
-            indent.AppendLine("public override DamlRecord ToRecord() => DamlRecord.Create();");
+            indent.AppendLine($"public override {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create();");
 
             indent.Dedent();
             indent.AppendLine("}");
@@ -1641,6 +1767,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private void WriteEnumType(IndentWriter indent, DamlDataType dataType, DamlEnumDefinition enumDef)
     {
+        indent.Require("System");
         var enumName = SanitizeIdentifier(dataType.Name);
 
         if (options.GenerateXmlDocs)
@@ -1676,7 +1803,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         // ToRecord method (returns DamlEnum)
         indent.AppendLine($"/// <summary>Converts to a DamlEnum value.</summary>");
-        indent.AppendLine($"public static DamlEnum ToRecord(this {enumName} value)");
+        indent.AppendLine($"public static {_qualifier.Qualify("DamlEnum", _currentNamespace)} ToRecord(this {enumName} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value switch");
@@ -1684,7 +1811,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         indent.Indent();
         foreach (var ctor in enumDef.Constructors)
         {
-            indent.AppendLine($"{enumName}.{SanitizeIdentifier(ctor)} => DamlEnum.Create(\"{ctor}\"),");
+            indent.AppendLine($"{enumName}.{SanitizeIdentifier(ctor)} => {_qualifier.Qualify("DamlEnum", _currentNamespace)}.Create(\"{ctor}\"),");
         }
         indent.AppendLine($"_ => throw new ArgumentOutOfRangeException(nameof(value), value, null)");
         indent.Dedent();
@@ -1695,7 +1822,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
         // FromRecord static method
         indent.AppendLine($"/// <summary>Creates an instance from a DamlEnum value.</summary>");
-        indent.AppendLine($"public static {enumName} FromRecord(DamlEnum value)");
+        indent.AppendLine($"public static {enumName} FromRecord({_qualifier.Qualify("DamlEnum", _currentNamespace)} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value.Constructor switch");
@@ -1719,29 +1846,29 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
     // Type mapping helpers
     private string MapDamlTypeToCSharp(DamlType type) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "DamlUnit",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => _qualifier.Qualify("DamlUnit", _currentNamespace),
         DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => "bool",
         DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => "long",
         DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => "decimal",
         DamlPrimitiveType { Primitive: DamlPrimitive.Text } => "string",
         DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
         DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => "Party",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => _qualifier.Qualify("Party", _currentNamespace),
         // Numeric with scale argument (Numeric n) - maps to decimal
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
-            $"ContractId<{MapDamlTypeToCSharp(arg)}>",
+            $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{MapDamlTypeToCSharp(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
                       Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
             throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapDamlTypeToCSharp(arg)}?",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"IReadOnlyList<{MapDamlTypeToCSharp(arg)}>",
+            $"{_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{MapDamlTypeToCSharp(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"IReadOnlyDictionary<string, {MapDamlTypeToCSharp(arg)}>",
+            $"{_qualifier.Qualify("IReadOnlyDictionary", _currentNamespace)}<string, {MapDamlTypeToCSharp(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"IReadOnlyDictionary<{MapDamlTypeToCSharp(keyArg)}, {MapDamlTypeToCSharp(valueArg)}>",
+            $"{_qualifier.Qualify("IReadOnlyDictionary", _currentNamespace)}<{MapDamlTypeToCSharp(keyArg)}, {MapDamlTypeToCSharp(valueArg)}>",
         // Parameterized references — e.g. `Set X`, `Map k v` or any user-defined
         // generic record/variant. Emit `BaseName<arg1, arg2>` so the C# type stays
         // structurally faithful. If the base name resolves to a hand-coded stdlib
@@ -1757,17 +1884,17 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
 
     private string GetToValueConversion(DamlType type, string fieldName) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => "DamlUnit.Instance",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"new DamlBool({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"new DamlInt64({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"new DamlNumeric({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"new DamlText({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"new DamlDate({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"new DamlTimestamp({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"new {_qualifier.Qualify("DamlBool", _currentNamespace)}({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"new {_qualifier.Qualify("DamlInt64", _currentNamespace)}({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"new {_qualifier.Qualify("DamlNumeric", _currentNamespace)}({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"new {_qualifier.Qualify("DamlText", _currentNamespace)}({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"new {_qualifier.Qualify("DamlDate", _currentNamespace)}({fieldName})",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"new {_qualifier.Qualify("DamlTimestamp", _currentNamespace)}({fieldName})",
         DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{fieldName}.ToDamlValue()",
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
-            $"new DamlNumeric({fieldName})",
+            $"new {_qualifier.Qualify("DamlNumeric", _currentNamespace)}({fieldName})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } } =>
             $"{fieldName}.ToDamlValue()",
         // The TrimStart('@') here protects against an Optional field whose name is a
@@ -1779,25 +1906,25 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // (`{fieldName}`) keeps its `@` escape so the original record property is
         // still addressable.
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app =>
-            $"{fieldName} is {{ }} __{fieldName.TrimStart('@')} ? new DamlOptional({GetToValueConversion(app.Arguments[0], $"__{fieldName.TrimStart('@')}")}) : DamlOptional.None",
+            $"{fieldName} is {{ }} __{fieldName.TrimStart('@')} ? new {_qualifier.Qualify("DamlOptional", _currentNamespace)}({GetToValueConversion(app.Arguments[0], $"__{fieldName.TrimStart('@')}")}) : {_qualifier.Qualify("DamlOptional", _currentNamespace)}.None",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app =>
-            $"new DamlList({fieldName}.Select(x => (DamlValue){GetToValueConversion(app.Arguments[0], "x")}).ToList())",
+            $"new {_qualifier.Qualify("DamlList", _currentNamespace)}({fieldName}.Select(x => ({_qualifier.Qualify("DamlValue", _currentNamespace)}){GetToValueConversion(app.Arguments[0], "x")}).ToList())",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app =>
-            $"new DamlTextMap({fieldName}.ToDictionary(kv => kv.Key, kv => (DamlValue){GetToValueConversion(app.Arguments[0], "kv.Value")}))",
+            $"new {_qualifier.Qualify("DamlTextMap", _currentNamespace)}({fieldName}.ToDictionary(kv => kv.Key, kv => ({_qualifier.Qualify("DamlValue", _currentNamespace)}){GetToValueConversion(app.Arguments[0], "kv.Value")}))",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app =>
-            $"new DamlGenMap({fieldName}.Select(kv => ((DamlValue){GetToValueConversion(app.Arguments[0], "kv.Key")}, (DamlValue){GetToValueConversion(app.Arguments[1], "kv.Value")})).ToList())",
+            $"new {_qualifier.Qualify("DamlGenMap", _currentNamespace)}({fieldName}.Select(kv => (({_qualifier.Qualify("DamlValue", _currentNamespace)}){GetToValueConversion(app.Arguments[0], "kv.Key")}, ({_qualifier.Qualify("DamlValue", _currentNamespace)}){GetToValueConversion(app.Arguments[1], "kv.Value")})).ToList())",
         // Parametric stdlib types — Tuple2/3, Set, NonEmpty, Map. These all live in
         // Daml.Runtime.Stdlib and round-trip via delegate-based ToRecord/FromRecord
         // because their generic arguments may be CLR primitives (long, string, Party)
         // rather than IDamlValue. The codegen knows the concrete arg types here so
         // it inlines a conversion lambda per arg.
         DamlTypeApp { Base: DamlTypeRef typeRef } app
-            when IsParametricStdlibTypeRef(typeRef) =>
+            when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName),
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
-        DamlTypeVar => $"Daml.Runtime.Stdlib.GenericStub.NotImplemented<DamlValue>(\"{fieldName}\")",
+        DamlTypeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<{_qualifier.Qualify("DamlValue", _currentNamespace)}>(\"{fieldName}\")",
         _ => $"{fieldName}.ToRecord()"
     };
 
@@ -1807,8 +1934,10 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         string valueName,
         IReadOnlyDictionary<string, DamlDataType>? dataTypes)
     {
-        var stdlibName = MapStdlibType(typeRef.Module, typeRef.Name)
-            ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}");
+        var stdlibName = _qualifier.Qualify(
+            MapStdlibType(typeRef.Module, typeRef.Name)
+                ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}"),
+            _currentNamespace);
         var typeArgs = string.Join(", ", arguments.Select(MapDamlTypeToCSharp));
         var lambdas = arguments.Select((arg, i) =>
             $"__v{i} => {GetFromValueConversion(arg, $"__v{i}", dataTypes)}");
@@ -1816,11 +1945,13 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         {
             // Set/NonEmpty take a single converter (over the element type).
             ("DA.Set.Types", "Set") =>
-                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
+                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>(), {lambdas.First()})",
             ("DA.NonEmpty.Types", "NonEmpty") =>
-                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {lambdas.First()})",
+                $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>(), {lambdas.First()})",
+            ("DA.Types", "Either") =>
+                $"{stdlibName}<{typeArgs}>.FromValue({valueName}, {string.Join(", ", lambdas)})",
             // Tuple2/3 and Map take one converter per generic argument.
-            _ => $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<DamlRecord>(), {string.Join(", ", lambdas)})",
+            _ => $"{stdlibName}<{typeArgs}>.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>(), {string.Join(", ", lambdas)})",
         };
     }
 
@@ -1831,7 +1962,7 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
         // typed as a more specific subtype that the helper signature won't accept
         // implicitly.
         var converters = arguments.Select((arg, i) =>
-            $"(DamlValue)({GetToValueConversion(arg, $"__t{i}")})").ToList();
+            $"({_qualifier.Qualify("DamlValue", _currentNamespace)})({GetToValueConversion(arg, $"__t{i}")})").ToList();
         var lambdas = arguments.Select((_, i) =>
             $"__t{i} => {converters[i]}");
         return (typeRef.Module, typeRef.Name) switch
@@ -1840,59 +1971,61 @@ internal sealed partial class CSharpCodeGenerator(CodeGenOptions options, Consol
                 $"{fieldName}.ToRecord({lambdas.First()})",
             ("DA.NonEmpty.Types", "NonEmpty") =>
                 $"{fieldName}.ToRecord({lambdas.First()})",
+            ("DA.Types", "Either") =>
+                $"{fieldName}.ToValue({string.Join(", ", lambdas)})",
             _ => $"{fieldName}.ToRecord({string.Join(", ", lambdas)})",
         };
     }
 
     private string GetFromValueConversion(DamlType type, string valueName, IReadOnlyDictionary<string, DamlDataType>? dataTypes = null) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"{valueName}.As<DamlBool>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"{valueName}.As<DamlInt64>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"{valueName}.As<DamlNumeric>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"{valueName}.As<DamlText>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<DamlDate>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<DamlTimestamp>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"Party.FromDamlValue({valueName}.As<DamlParty>())",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"{valueName}.As<{_qualifier.Qualify("DamlBool", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"{valueName}.As<{_qualifier.Qualify("DamlInt64", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"{valueName}.As<{_qualifier.Qualify("DamlText", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<{_qualifier.Qualify("DamlDate", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<{_qualifier.Qualify("DamlTimestamp", _currentNamespace)}>().Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{_qualifier.Qualify("Party", _currentNamespace)}.FromDamlValue({valueName}.As<{_qualifier.Qualify("DamlParty", _currentNamespace)}>())",
         // Unit. The wire-level DamlUnit.Instance is the single inhabitant; we
         // surface it as the field type DamlUnit (matching MapDamlTypeToCSharp).
         // Without this arm, nested Unit shapes — Optional (), [()], tuples
         // containing () — fall through to `default!` and produce wrong typed
         // results at runtime. The bare-`()` return is special-cased upstream;
         // this arm covers the nested cases.
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{valueName}.As<DamlUnit>()",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{valueName}.As<{_qualifier.Qualify("DamlUnit", _currentNamespace)}>()",
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
-            $"{valueName}.As<DamlNumeric>().Value",
+            $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
         // Optional type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
-            $"{valueName}.As<DamlOptional>().HasValue ? {GetFromValueConversion(arg, $"{valueName}.As<DamlOptional>().Value!", dataTypes)} : null",
+            $"{valueName}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().HasValue ? {GetFromValueConversion(arg, $"{valueName}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().Value!", dataTypes)} : null",
         // List type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"{valueName}.As<DamlList>().Values.Select(x => {GetFromValueConversion(arg, "x", dataTypes)}).ToList()",
+            $"({_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{MapDamlTypeToCSharp(arg)}>){valueName}.As<{_qualifier.Qualify("DamlList", _currentNamespace)}>().Values.Select(x => {GetFromValueConversion(arg, "x", dataTypes)}).ToList()",
         // TextMap type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"{valueName}.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => {GetFromValueConversion(arg, "kv.Value", dataTypes)})",
+            $"{valueName}.As<{_qualifier.Qualify("DamlTextMap", _currentNamespace)}>().Values.ToDictionary(kv => kv.Key, kv => {GetFromValueConversion(arg, "kv.Value", dataTypes)})",
         // GenMap type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"{valueName}.As<DamlGenMap>().Entries.ToDictionary(kv => {GetFromValueConversion(keyArg, "kv.Key", dataTypes)}, kv => {GetFromValueConversion(valueArg, "kv.Value", dataTypes)})",
+            $"{valueName}.As<{_qualifier.Qualify("DamlGenMap", _currentNamespace)}>().Entries.ToDictionary(kv => {GetFromValueConversion(keyArg, "kv.Key", dataTypes)}, kv => {GetFromValueConversion(valueArg, "kv.Value", dataTypes)})",
         // ContractId type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
-            $"new ContractId<{MapDamlTypeToCSharp(arg)}>({valueName}.As<DamlContractId>().Value)",
+            $"new {_qualifier.Qualify("ContractId", _currentNamespace)}<{MapDamlTypeToCSharp(arg)}>({valueName}.As<{_qualifier.Qualify("DamlContractId", _currentNamespace)}>().Value)",
         // Parametric stdlib types — see GetToValueConversion for the matching
         // serialization arm. The conversion lambdas decode each generic arg from a
         // DamlValue back into its CLR shape.
         DamlTypeApp { Base: DamlTypeRef typeRef } app
-            when IsParametricStdlibTypeRef(typeRef) =>
+            when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
         // Type reference — enum dispatch keyed by module:name so a same-name record in a
         // different module doesn't accidentally route through *Extensions.FromRecord.
         DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>
-            $"{ResolveTypeRefName(typeRef)}Extensions.FromRecord({valueName}.As<DamlEnum>())",
+            $"{ResolveTypeRefName(typeRef)}Extensions.FromRecord({valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>())",
         // Type reference (record/variant types)
-        DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<DamlRecord>())",
+        DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>())",
         // Daml type variable — same treatment as ToValue: emit a runtime-throwing stub
         // typed as the generic placeholder so generics-bearing records still compile.
-        DamlTypeVar typeVar => $"Daml.Runtime.Stdlib.GenericStub.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
+        DamlTypeVar typeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
         _ => $"default! /* TODO: Implement deserialization for {type} */"
     };
 

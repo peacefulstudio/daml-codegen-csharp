@@ -438,4 +438,62 @@ public class StdlibTests
     }
 
     #endregion
+
+    #region Either
+
+    private static DamlValue Either_ToText(string value) => new DamlText(value);
+
+    private static DamlValue Either_ToInt(long value) => new DamlInt64(value);
+
+    private static string Either_FromText(DamlValue value) => ((DamlText)value).Value;
+
+    private static long Either_FromInt(DamlValue value) => ((DamlInt64)value).Value;
+
+    [Fact]
+    public void Either_Left_ToValue_should_emit_left_variant_with_bare_payload()
+    {
+        Either<string, long> either = new Either<string, long>.Left("hello");
+
+        var value = either.ToValue(Either_ToText, Either_ToInt);
+
+        var variant = value.Should().BeOfType<DamlVariant>().Subject;
+        variant.Constructor.Should().Be("Left");
+        variant.Value.Should().Be(new DamlText("hello"));
+    }
+
+    [Fact]
+    public void Either_Right_ToValue_should_emit_right_variant_with_bare_payload()
+    {
+        Either<string, long> either = new Either<string, long>.Right(7L);
+
+        var value = either.ToValue(Either_ToText, Either_ToInt);
+
+        var variant = value.Should().BeOfType<DamlVariant>().Subject;
+        variant.Constructor.Should().Be("Right");
+        variant.Value.Should().Be(new DamlInt64(7L));
+    }
+
+    [Fact]
+    public void Either_Left_should_round_trip_through_value()
+    {
+        Either<string, long> original = new Either<string, long>.Left("hello");
+
+        var restored = Either<string, long>.FromValue(
+            original.ToValue(Either_ToText, Either_ToInt), Either_FromText, Either_FromInt);
+
+        restored.Should().Be(original);
+    }
+
+    [Fact]
+    public void Either_Right_should_round_trip_through_value()
+    {
+        Either<string, long> original = new Either<string, long>.Right(7L);
+
+        var restored = Either<string, long>.FromValue(
+            original.ToValue(Either_ToText, Either_ToInt), Either_FromText, Either_FromInt);
+
+        restored.Should().Be(original);
+    }
+
+    #endregion
 }

@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -274,14 +275,13 @@ public class NewFeaturesCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        // Property signature uses real C# generic syntax.
-        code.Should().Contain("public partial IReadOnlyList<string> Key { get; }");
-        // cref must use cref-escape `{ }` instead of `< >` — both nested levels.
-        code.Should().Contain("/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{IReadOnlyList{string}}\"/>");
-        // Belt-and-braces: the malformed unescaped form must not appear in the
-        // doc. Using a regex anchored to the `cref="` prefix so the structural
-        // angle brackets in the property signature don't trip the assertion.
-        code.Should().NotMatchRegex(@"cref=""[^""]*<[^""]*""");
+        code.Should().Contain("public partial IReadOnlyList<string> Key { get; }",
+            "the property signature uses real C# generic syntax");
+        code.Should().Contain(
+            "of type <c>IReadOnlyList{string}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
+            "the concrete key type is cref-escaped prose while the cref targets the open generic by its declared type-parameter name TKey, because cref braces accept a type-parameter identifier not a constructed type (embedding a constructed type there is CS1584/CS1658)");
+        code.Should().NotMatchRegex(@"cref=""[^""]*<[^""]*""",
+            "no unescaped angle bracket may appear inside any cref attribute");
     }
 
     [Fact]
@@ -393,11 +393,11 @@ public class NewFeaturesCodeGenTests
         // breadcrumb were dropped. The cref uses cref-attribute syntax (`{string}`
         // instead of `<string>`) so it survives <GenerateDocumentationFile> on
         // consumer projects without a CS1574 warning.
-        code.Should().Contain("/// Gets the contract key, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{string}\"/>");
-        // Doc must point at the tracking issue so the deferred-work pointer
-        // doesn't silently rot — this is the only in-source signal explaining
-        // why the property has no body.
-        code.Should().Contain("daml-codegen-csharp#64");
+        code.Should().Contain(
+            "/// Gets the contract key of type <c>string</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
+            "the cref targets the open generic by its declared type-parameter name TKey while the concrete key type appears in prose, because a keyword/constructed type inside cref braces is CS1584/CS1658");
+        code.Should().Contain("daml-codegen-csharp#64",
+            "the deferred-work pointer is the only in-source signal explaining the body-less property");
     }
 
     #endregion
@@ -418,7 +418,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -452,7 +452,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Lockable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -486,7 +486,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Holdable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -537,7 +537,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Asset",
-                    Methods = [],
+                    Choices = [],
                     ViewType = new DamlTypeRef("", "Test.Module", "AssetView")
                 }
             ]
@@ -571,8 +571,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods =
-                    [
+                    Choices =                     [
                         new DamlChoice
                         {
                             Name = "Transfer",
@@ -614,7 +613,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Documented",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -661,13 +660,13 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "IncludeMe",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 },
                 new DamlInterface
                 {
                     Name = "ExcludeMe",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -1172,7 +1171,7 @@ public class NewFeaturesCodeGenTests
                 new DamlInterface
                 {
                     Name = "Transferable",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]

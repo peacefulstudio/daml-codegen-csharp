@@ -41,7 +41,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync<int>(SampleCommand, SingleParty);
+        await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.LastExerciseWithResultActAs.Should().Be("alice");
     }
@@ -52,7 +52,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync(SampleCommand, SingleParty);
+        await client.ExerciseAsync(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.LastExerciseVoidActAs.Should().Be("alice");
     }
@@ -63,7 +63,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.TryCreateAsync(new FakeTemplate(), SingleParty);
+        await client.TryCreateAsync(new FakeTemplate(), SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.LastCreateActAs.Should().Be("alice");
     }
@@ -74,7 +74,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, SingleParty);
+        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.LastExerciseForCreatedActAs.Should().Be("alice");
     }
@@ -85,7 +85,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(SingleParty))
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(SingleParty, cancellationToken: TestContext.Current.CancellationToken))
         {
             // Drain — the fake yields nothing.
         }
@@ -99,7 +99,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(SingleParty))
+        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(SingleParty, cancellationToken: TestContext.Current.CancellationToken))
         {
             // Drain — the fake yields nothing.
         }
@@ -210,7 +210,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new MultiPartyAwareLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync<int>(SampleCommand, MultiParty);
+        await client.ExerciseAsync<int>(SampleCommand, MultiParty, cancellationToken: TestContext.Current.CancellationToken);
 
         // The override recorded the call directly; the string-actAs base method must NOT have run.
         fake.OverrideHits.Should().Be(1);
@@ -225,7 +225,7 @@ public class LedgerClientSubmitterInfoTests
         var fake = new MultiPartyAwareLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync<int>(SampleCommand, SingleParty);
+        await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.OverrideHits.Should().Be(1);
         fake.LastExerciseWithResultActAs.Should().BeNull();

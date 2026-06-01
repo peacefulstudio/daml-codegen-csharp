@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -401,6 +402,80 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_record_with_genmap_of_list_field_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "InstrumentId",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text)),
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "BatchResult",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("senderChangeMap", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [
+                                new DamlTypeRef("", "Test.Module", "InstrumentId"),
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.List),
+                                    [new DamlTypeApp(
+                                        new DamlPrimitiveType(DamlPrimitive.ContractId),
+                                        [new DamlTypeRef("", "Test.Module", "Holding")])])
+                            ])),
+                    ])
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "GenMap-of-List FromRecord must compile without CS1503 against IReadOnlyDictionary<K,IReadOnlyList<V>>, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Generate_should_emit_langversion_marker_with_value_13_when_output_contains_partial_property()
     {
         var files = GenerateKeyBearingTemplate();
@@ -763,11 +838,1638 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
-    private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files)
+    [Fact]
+    public void Emitted_sibling_record_referencing_nested_choice_arg_type_compiles()
     {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "MergeDelegation",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "MergeDelegation_Merge",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MergeDelegation",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "MergeDelegation_Merge",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("quantity", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                },
+                new DamlDataType
+                {
+                    Name = "MergeDelegationCall",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("delegationCid", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.ContractId),
+                            [new DamlTypeRef("", "Test.Module", "MergeDelegation")])),
+                        new DamlField("choiceArg", new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a sibling record referencing a same-package nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_variant_constructor_referencing_nested_choice_arg_type_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "DsoRules",
+                    Fields = [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "DsoRules_AddSv",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "DsoRules_AddSv"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "DsoRules",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "DsoRules_AddSv",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("svParty", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "DsoRules_ActionRequiringConfirmation",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("SRARC_AddSv",
+                            new DamlTypeRef("", "Test.Module", "DsoRules_AddSv")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant constructor referencing a same-package nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_cross_package_variant_constructor_referencing_nested_choice_arg_type_compiles()
+    {
+        var foreignModule = new DamlModule
+        {
+            Name = "Splice.Amulet",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "AmuletRules",
+                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "AmuletRules_MiningRound_Archive",
+                            Consuming = false,
+                            ArgumentType = new DamlTypeRef("foreign-pkg-id", "Splice.Amulet", "AmuletRules_MiningRound_Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "AmuletRules",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "AmuletRules_MiningRound_Archive",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("roundId", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "foreign-pkg-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Governance",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "AmuletRules_ActionRequiringConfirmation",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("CRARC_MiningRound_Archive",
+                            new DamlTypeRef("foreign-pkg-id", "Splice.Amulet", "AmuletRules_MiningRound_Archive")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "main-pkg-id",
+            Name = "test-governance",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            GenerateJsonSupport = true,
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            IncludeDependencies = true,
+        };
+        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var files = generator.Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a cross-package variant constructor referencing a nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_variant_constructor_with_contract_id_argument_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "AnyValue",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("AnyContractId", ContractIdOf("Asset")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant constructor whose argument type is ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void RequireForFieldType_recurses_into_arguments_when_base_is_a_nested_type_app()
+    {
+        var sb = new System.Text.StringBuilder();
+        var indent = new IndentWriter(sb);
+
+        var nestedBase = new DamlTypeApp(
+            new DamlTypeRef("test-pkg", "Test.Module", "Wrapper"),
+            [new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var nestedAppCarryingContractId = new DamlTypeApp(
+            nestedBase,
+            [ContractIdOf("Asset")]);
+
+        var generator = CreateGenerator();
+        var method = typeof(CSharpCodeGenerator).GetMethod(
+            "RequireForFieldType",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("RequireForFieldType not found");
+        method.Invoke(generator, [indent, nestedAppCarryingContractId]);
+
+        indent.RequiredUsings.Should().Contain(
+            "Daml.Runtime.Contracts",
+            "any DamlTypeApp shape that transitively wraps a ContractId must add the runtime-contracts using, regardless of what the head's Base is (TypeRef, nested TypeApp, TypeVar) — otherwise a future MapDamlTypeToCSharp arm that learns to render the head type would emit `ContractId<...>` without the import.");
+    }
+
+    [Fact]
+    public void Emitted_record_with_tuple_field_wrapping_contract_id_compiles()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Tuple2",
+                            TypeParams = ["a", "b"],
+                            Definition = new DamlRecordDefinition([]),
+                        },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var contractIdTimesInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple2"),
+            [ContractIdOf("Asset"), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Holder",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("pair", contractIdTimesInt)]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field typed as a parametric stdlib type wrapping ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_party()
+    {
+        // Regression for B3: the runtime type Daml.Runtime.Data.Party was emitted
+        // as the bare identifier `Party`. When the package name derives a C# namespace
+        // whose tail segment is `Party` (real DAR: canton-party-replication-alpha),
+        // that namespace shadows the type and Roslyn reports CS0118. Every emitted
+        // Party TYPE site must be global::-qualified. This exercises the field type,
+        // the contract-key type + IHasKey<> argument, the choice actAs/controller
+        // params, the signatory-derived CreateAsync, and the Observers(payload) helper.
+        var module = new DamlModule
+        {
+            Name = "Replication",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields =
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                    ],
+                    Key = new DamlPrimitiveType(DamlPrimitive.Party),
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
+                    Observers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Holding"),
+                            Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "canton-party-id",
+            Name = "canton-party",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .Party");
+
+        // The key-bearing template emits a body-less `public partial ... Key { get; }`;
+        // the consumer must supply the implementing partial. Declaring it in the
+        // shadowing namespace also exercises the key type's global:: qualification.
+        var consumerPartial = new GeneratedFile(
+            RelativePath: "Holding.Consumer.cs",
+            Content: """
+                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                namespace Canton.Party;
+                public sealed partial record Holding
+                {
+                    public partial global::Daml.Runtime.Data.Party Key => Issuer;
+                }
+                """);
+
+        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .Party must global::-qualify the runtime Party type, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_contract_id_head_is_global_qualified_when_namespace_collides()
+    {
+        var module = new DamlModule
+        {
+            Name = "Holdings",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlField("custodian", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("custodian", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "VaultRef",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("vaultCid", ContractIdOf("Vault"))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-contractid-id",
+            Name = "acme-ContractId",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.ContractId", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .ContractId");
+
+        var vaultRef = files.First(f => f.RelativePath.EndsWith("VaultRef.cs", StringComparison.Ordinal));
+        vaultRef.Content.Should().Contain(
+            "global::Daml.Runtime.Contracts.ContractId<",
+            "the ContractId head must be global::-qualified when the surrounding namespace tail is `ContractId`, otherwise an unqualified `ContractId` is ambiguous with the enclosing namespace");
+        vaultRef.Content.Should().NotContain(
+            "(ContractId<",
+            "no bare ContractId head should survive in the shadowing namespace");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .ContractId must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_read_only_list_head_is_global_qualified_when_namespace_collides()
+    {
+        var module = new DamlModule
+        {
+            Name = "Generic",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Bag",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("items", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.List),
+                            [new DamlPrimitiveType(DamlPrimitive.Text)])),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-collections-generic-id",
+            Name = "acme-collections-generic-IReadOnlyList",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.Collections.Generic.IReadOnlyList", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .IReadOnlyList");
+
+        var bag = files.First(f => f.RelativePath.EndsWith("Bag.cs", StringComparison.Ordinal));
+        bag.Content.Should().Contain(
+            "global::System.Collections.Generic.IReadOnlyList<",
+            "the IReadOnlyList head must be global::-qualified when the surrounding namespace tail is `IReadOnlyList`");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .IReadOnlyList must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_itemplate()
+    {
+        var module = new DamlModule
+        {
+            Name = "Templates",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-itemplate-id",
+            Name = "acme-ITemplate",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.ITemplate", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .ITemplate");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().Contain(
+            "global::Daml.Runtime.Contracts.ITemplate",
+            "the ITemplate interface head must be global::-qualified when the surrounding namespace tail is `ITemplate`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .ITemplate must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvalue()
+    {
+        var module = new DamlModule
+        {
+            Name = "Values",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Payload",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-idamlvalue-id",
+            Name = "acme-IDamlValue",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.IDamlValue", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlValue");
+
+        var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
+        payload.Content.Should().Contain(
+            "global::Daml.Runtime.Data.IDamlValue",
+            "the IDamlValue interface head must be global::-qualified when the surrounding namespace tail is `IDamlValue`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .IDamlValue must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Theory]
+    [InlineData("acme-IHasView", "Acme.IHasView")]
+    [InlineData("acme-IDamlInterface", "Acme.IDamlInterface")]
+    [InlineData("acme-ExerciseCommand", "Acme.ExerciseCommand")]
+    [InlineData("daml", "Daml")]
+    public void Emitted_interface_code_compiles_when_package_namespace_shadows_a_runtime_type(
+        string packageName,
+        string expectedNamespace)
+    {
+        var module = new DamlModule
+        {
+            Name = "Holdings",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Reissue",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Party),
+                            ReturnType = ContractIdOf("Asset"),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "HoldingView",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Holding",
+                    ViewType = new DamlTypeRef("", "Holdings", "HoldingView"),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Party),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-iface-shadow-id",
+            Name = packageName,
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains($"namespace {expectedNamespace}", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in the runtime type name");
+
+        var iface = files.First(f => f.RelativePath.EndsWith("IHolding.cs", StringComparison.Ordinal));
+        iface.Content.Should().NotContain(
+            "  Daml.Runtime.Commands.ExerciseCommand.ForInterface<",
+            "the interface-choice ExerciseCommand head must route through the qualifier, never the hard-coded non-global fully-qualified form");
+        iface.Content.Should().Contain(
+            "ExerciseCommand.ForInterface<",
+            "the interface-choice site still calls ExerciseCommand.ForInterface, qualified by the central qualifier (bare or global::-prefixed depending on the surrounding namespace)");
+        iface.Content.Should().NotContain(
+            "cref=\"Daml.Runtime.",
+            "interface doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root (e.g. package 'daml' -> namespace Daml.*)");
+        iface.Content.Should().NotContain(
+            "cref=\"Daml.Ledger.",
+            "interface doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root (e.g. package 'daml' -> namespace Daml.*)");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().NotContain(
+            "cref=\"Daml.Ledger.",
+            "template extension doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted interface code whose namespace shadows a runtime type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_arity_protected_generic_heads_are_global_qualified_when_namespace_collides()
+    {
+        var module = new DamlModule
+        {
+            Name = "Choice",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Touch",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-choice-id",
+            Name = "acme-Choice",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.Choice", StringComparison.Ordinal),
+            "the test only guards the shadowing path if the derived namespace actually ends in .Choice");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().Contain(
+            "global::Daml.Runtime.Commands.Choice<",
+            "the Choice<> head must be global::-qualified when the surrounding namespace tail is `Choice`");
+        asset.Content.Should().NotContain(
+            " Choice<",
+            "no bare Choice<> head should survive in the shadowing namespace");
+        asset.Content.Should().Contain(
+            "IExercises<Asset>",
+            "IExercises<> is routed through the qualifier; with no .IExercises namespace collision it stays bare (collision-aware no-op)");
+        asset.Content.Should().Contain(
+            "IContract<ContractId, Asset>",
+            "IContract<> is routed through the qualifier; with no .IContract namespace collision it stays bare (collision-aware no-op)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .Choice must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_contract_interface_heads_are_global_qualified_when_namespace_ends_in_icontract()
+    {
+        var module = new DamlModule
+        {
+            Name = "IContract",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-icontract-id",
+            Name = "acme-IContract",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.IContract", StringComparison.Ordinal),
+            "the test only guards the shadowing path if the derived namespace actually ends in .IContract");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().Contain(
+            "global::Daml.Runtime.Contracts.IContract<",
+            "the IContract<> head must be global::-qualified when the surrounding namespace tail is `IContract`");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .IContract must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_record_with_either_field_compiles()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Either",
+                            TypeParams = ["a", "b"],
+                            Definition = new DamlVariantDefinition([]),
+                        },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var eitherTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Either"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Decision",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("outcome", eitherTextInt)]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field typed as DA.Types:Either must map to Daml.Runtime.Stdlib.Either and compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+
+        var emitted = string.Join("\n", files.Select(f => f.Content));
+        emitted.Should().Contain(
+            ".ToValue(",
+            "the emitted Decision.ToValue must wire DA.Types:Either through Either.ToValue (EmitParametricStdlibToValue)");
+        emitted.Should().Contain(
+            "Either<string, long>.FromValue(",
+            "the emitted decoder must wire DA.Types:Either through Either.FromValue (EmitParametricStdlibFromValue)");
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_submitterinfo()
+    {
+        var module = new DamlModule
+        {
+            Name = "Submissions",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields =
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ],
+                    Signatories = DamlPartyAnalysis.Static(
+                    [
+                        new DamlPartyPayloadField("issuer"),
+                        new DamlPartyPayloadField("owner"),
+                    ]),
+                    Observers = DamlPartyAnalysis.Static([]),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Asset"),
+                            Controllers = DamlPartyAnalysis.Dynamic,
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-submitterinfo-id",
+            Name = "acme-SubmitterInfo",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.SubmitterInfo", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .SubmitterInfo");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .SubmitterInfo must global::-qualify the runtime SubmitterInfo type in parameter and constructor positions, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_identifier()
+    {
+        var module = new DamlModule
+        {
+            Name = "Ids",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-identifier-id",
+            Name = "acme-Identifier",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.Identifier", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .Identifier");
+
+        var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
+        asset.Content.Should().Contain(
+            "global::Daml.Runtime.Data.Identifier TemplateId",
+            "the Identifier TemplateId type must be global::-qualified when the surrounding namespace tail is `Identifier`");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .Identifier must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_damlparty()
+    {
+        var module = new DamlModule
+        {
+            Name = "Values",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Payload",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-damlparty-id",
+            Name = "acme-DamlParty",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.DamlParty", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .DamlParty");
+
+        var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
+        payload.Content.Should().Contain(
+            ".As<global::Daml.Runtime.Data.DamlParty>()",
+            "the DamlParty cast must be global::-qualified when the surrounding namespace tail is `DamlParty`, otherwise the leading simple name resolves to the enclosing namespace (CS0118)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .DamlParty must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_exercise_outcome_head_is_global_qualified_when_namespace_collides()
+    {
+        var module = new DamlModule
+        {
+            Name = "Outcomes",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Touch",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Int64),
+                            Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
+                            Observers = DamlPartyAnalysis.Static([]),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-exerciseoutcome-id",
+            Name = "acme-ExerciseOutcome",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.ExerciseOutcome", StringComparison.Ordinal),
+            "the test only guards the shadowing path if the derived namespace actually ends in .ExerciseOutcome");
+
+        var emitted = string.Join("\n", files.Select(f => f.Content));
+        emitted.Should().Contain(
+            "global::Daml.Runtime.Outcomes.ExerciseOutcome<",
+            "the ExerciseOutcome<> head must be global::-qualified when the surrounding namespace tail is `ExerciseOutcome` (arity protects the type lookup, but the qualifier must still emit the global:: form for shape consistency)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .ExerciseOutcome must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_key_bearing_template_in_party_colliding_namespace_has_no_cref_diagnostics()
+    {
+        // Regression for CS1584/CS1658: WriteKeyProperty embedded the rendered key
+        // type inside the IHasKey cref braces. In a Party-shadowing namespace
+        // MapDamlTypeToCSharp returns `global::Daml.Runtime.Data.Party`, so the cref
+        // became IHasKey{global::Daml.Runtime.Data.Party} — a constructed type in
+        // cref braces, which Roslyn rejects under DocumentationMode.Diagnose.
+        var module = new DamlModule
+        {
+            Name = "Replication",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Key = new DamlPrimitiveType(DamlPrimitive.Party),
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "canton-party-id",
+            Name = "canton-party",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
+            "the test only guards the cref-shadowing path if the derived namespace actually ends in .Party");
+
+        var diagnostics = CompileEmittedFilesWithDocDiagnostics(files);
+        var crefDiagnostics = diagnostics
+            .Where(d => d.Id is "CS1574" or "CS1580" or "CS1584" or "CS1658")
+            .ToList();
+        crefDiagnostics.Should().BeEmpty(
+            "emitted XML-doc crefs must be single-global::, well-formed names so no malformed-cref diagnostic surfaces under DocumentationMode.Diagnose, but got: {0}",
+            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_key_bearing_template_with_nested_generic_party_key_has_no_cref_diagnostics()
+    {
+        // Regression for CS1584/CS1658 on a key whose mapped C# form is a NESTED
+        // generic wrapping an imported type: `List Party` renders as
+        // IReadOnlyList<global::Daml.Runtime.Data.Party> in a Party-shadowing
+        // namespace. ToCrefTypeArgument must strip the inner global:: AND escape
+        // the nested <>, yielding the prose form IReadOnlyList{Daml.Runtime.Data.Party}.
+        var module = new DamlModule
+        {
+            Name = "Replication",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Key = new DamlTypeApp(
+                        new DamlPrimitiveType(DamlPrimitive.List),
+                        [new DamlPrimitiveType(DamlPrimitive.Party)]),
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "canton-party-id",
+            Name = "canton-party",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var holding = files.First(f => f.RelativePath.EndsWith("Holding.cs", StringComparison.Ordinal));
+        holding.Content.Should().Contain(
+            "of type <c>IReadOnlyList{Daml.Runtime.Data.Party}</c>",
+            "the nested-generic key type appears in cref-escaped prose with every global:: stripped and the inner angle brackets rendered as braces");
+
+        var diagnostics = CompileEmittedFilesWithDocDiagnostics(files);
+        var crefDiagnostics = diagnostics
+            .Where(d => d.Id is "CS1574" or "CS1580" or "CS1584" or "CS1658")
+            .ToList();
+        crefDiagnostics.Should().BeEmpty(
+            "a nested-generic key over an imported type must produce a well-formed cref under DocumentationMode.Diagnose, but got: {0}",
+            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Theory]
+    [InlineData("acme-Daml")]
+    [InlineData("acme-Stdlib-V1")]
+    [InlineData("acme-Either-V1")]
+    [InlineData("acme-RelTime-V1")]
+    [InlineData("acme-Unit-V1")]
+    [InlineData("acme-Set-V1")]
+    [InlineData("acme-Map-V1")]
+    [InlineData("acme-Tuple2-V1")]
+    [InlineData("acme-Tuple3-V1")]
+    [InlineData("acme-NonEmpty-V1")]
+    public void Emitted_stdlib_types_compile_when_package_namespace_shadows_a_stdlib_type(string packageName)
+    {
+        // Phase 2 of routing Daml.Runtime.Stdlib.* through the central qualifier:
+        // a record field typed as RelTime plus parametric stdlib types
+        // (Either/Tuple2/Set/Map/NonEmpty) and a Unit-returning choice, all emitted
+        // into a namespace whose tail segment shadows a stdlib simple name. The
+        // qualifier must global::-qualify the shadowed names and the file must carry
+        // `using Daml.Runtime.Stdlib;`, so the emitted code compiles with no CS0118.
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Time.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "RelTime", Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Tuple2", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                        new DamlDataType { Name = "Tuple3", TypeParams = ["a", "b", "c"], Definition = new DamlRecordDefinition([]) },
+                        new DamlDataType { Name = "Either", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Set.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Set", TypeParams = ["a"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Map.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Map", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.Internal.Map",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "Map", TypeParams = ["a", "b"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+                new DamlModule
+                {
+                    Name = "DA.NonEmpty.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType { Name = "NonEmpty", TypeParams = ["a"], Definition = new DamlRecordDefinition([]) },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var relTime = new DamlTypeRef("daml-prim-id", "DA.Time.Types", "RelTime");
+        var eitherTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Either"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var tuple2TextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple2"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var setText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Set.Types", "Set"),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+        var mapTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Map.Types", "Map"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var nonEmptyText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.NonEmpty.Types", "NonEmpty"),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+        var tuple3TextIntText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Tuple3"),
+            [
+                new DamlPrimitiveType(DamlPrimitive.Text),
+                new DamlPrimitiveType(DamlPrimitive.Int64),
+                new DamlPrimitiveType(DamlPrimitive.Text),
+            ]);
+        var internalMapTextInt = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Internal.Map", "Map"),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)]);
+        var listOfEither = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.List),
+            [eitherTextInt]);
+        var setOfTuple2 = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Set.Types", "Set"),
+            [tuple2TextInt]);
+
+        var module = new DamlModule
+        {
+            Name = "Holdings",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Lock",
+                    Fields =
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("duration", relTime),
+                    ],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Release",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Lock",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("duration", relTime),
+                    ]),
+                },
+                new DamlDataType
+                {
+                    Name = "Bag",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("outcome", eitherTextInt),
+                        new DamlField("pair", tuple2TextInt),
+                        new DamlField("tags", setText),
+                        new DamlField("scores", mapTextInt),
+                        new DamlField("required", nonEmptyText),
+                        new DamlField("triple", tuple3TextIntText),
+                        new DamlField("internalScores", internalMapTextInt),
+                        new DamlField("outcomes", listOfEither),
+                        new DamlField("pairSet", setOfTuple2),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "main-pkg-id",
+            Name = packageName,
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted stdlib types must global::-qualify (no CS0118) and import Daml.Runtime.Stdlib when the namespace shadows a stdlib simple name, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    private static IReadOnlyList<Diagnostic> CompileEmittedFilesWithDocDiagnostics(IReadOnlyList<GeneratedFile> files) =>
+        CompileEmittedFiles(files, DocumentationMode.Diagnose);
+
+    private static IReadOnlyList<Diagnostic> CompileEmittedFiles(IReadOnlyList<GeneratedFile> files) =>
+        CompileEmittedFiles(files, DocumentationMode.Parse);
+
+    private static IReadOnlyList<Diagnostic> CompileEmittedFiles(
+        IReadOnlyList<GeneratedFile> files,
+        DocumentationMode documentationMode)
+    {
+        var parseOptions = new CSharpParseOptions(documentationMode: documentationMode);
         var trees = files
             .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal))
-            .Select(f => CSharpSyntaxTree.ParseText(f.Content, path: f.RelativePath))
+            .Select(f => CSharpSyntaxTree.ParseText(f.Content, parseOptions, path: f.RelativePath))
             .ToArray();
 
         // The TFM is net10.0 — pull system assemblies via reflection on a known type

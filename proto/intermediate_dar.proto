@@ -1,0 +1,190 @@
+// Copyright (c) 2026 Peaceful Studio OU
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package daml.codegen.intermediate;
+
+option java_package = "studio.peaceful.daml.codegen.intermediate";
+option java_multiple_files = true;
+option csharp_namespace = "Daml.Codegen.Intermediate";
+
+message IntermediateDar {
+  IntermediatePackage main = 1;
+  // Sorted lexicographically by `dependencies[i].package_id` — load-bearing
+  // for determinism (see ADR 0002 and AstToIntermediate.translate).
+  repeated IntermediatePackage dependencies = 2;
+}
+
+message IntermediatePackage {
+  string package_id = 1;
+  string package_name = 2;
+  string package_version = 3;
+  string language_version = 4;
+  // Sorted lexicographically by qualified module name (segments joined with
+  // `.`) — load-bearing for determinism (see ADR 0002 and
+  // AstToIntermediate.translatePackage).
+  repeated IntermediateModule modules = 5;
+  // Set when this package is an upgrade of another package; carries the
+  // package id of the predecessor. Empty means "no upgrade predecessor".
+  // Surfaced by the C# emitter as `package.UpgradedPackageId` and embedded
+  // in generated identifiers metadata.
+  string upgraded_package_id = 6;
+}
+
+message IntermediateModule {
+  repeated string name_segments = 1;
+  // Sorted lexicographically by `data_types[i].name` — load-bearing for
+  // determinism (see ADR 0002 and AstToIntermediate.translateModule).
+  repeated DataType data_types = 2;
+  // Sorted lexicographically by `templates[i].name`.
+  repeated Template templates = 3;
+  // Sorted lexicographically by `interfaces[i].name`.
+  repeated Interface interfaces = 4;
+  // Daml user-defined exceptions are intentionally absent for M1 — no
+  // C# emitter mapping for exceptions yet. Field number 5 is reserved
+  // so adding a `repeated Exception exceptions = 5;` later doesn't
+  // shift adjacent fields.
+  reserved 5;
+}
+
+message DataType {
+  string name = 1;
+  repeated string type_parameters = 2;
+  bool is_serializable = 3;
+  oneof shape {
+    Record record = 4;
+    Variant variant = 5;
+    Enum enum_type = 6;
+  }
+}
+
+message Record {
+  repeated Field fields = 1;
+}
+
+message Variant {
+  repeated Field constructors = 1;
+}
+
+message Enum {
+  repeated string constructors = 1;
+}
+
+message Field {
+  string name = 1;
+  Type type = 2;
+}
+
+message Template {
+  string name = 1;
+  repeated Choice choices = 2;
+  Type key_type = 3;
+  repeated TypeConName implements = 4;
+  // Static analysis of the `signatory ...` clause from the Daml source.
+  // Absent / unset means `Dynamic` — the JVM helper either ran in
+  // `--schema-only` mode (no analyzer at all) or could not statically
+  // resolve the expression. Present + `Static` means every signatory is
+  // a payload-field reference and codegen can derive `actAs` from the
+  // payload. See ADR 0003 amendment (2026-05-27).
+  PartyAnalysis signatories = 5;
+  // Same shape as `signatories` but for the `observer ...` clause.
+  PartyAnalysis observers = 6;
+}
+
+message Interface {
+  string name = 1;
+  Type view_type = 2;
+  repeated InterfaceMethod methods = 3;
+  repeated Choice choices = 4;
+}
+
+message InterfaceMethod {
+  string name = 1;
+  Type return_type = 2;
+}
+
+message Choice {
+  string name = 1;
+  bool consuming = 2;
+  Type argument_type = 3;
+  Type return_type = 4;
+  // Static analysis of the `controller ...` clause from the Daml source.
+  // Absent / unset means `Dynamic` — the JVM helper either ran in
+  // `--schema-only` mode or could not statically resolve the expression.
+  // Choice controllers can additionally project the choice argument record
+  // (the `arg` binder); that case is reported as `Dynamic` because the
+  // codegen would need to invent a name for the argument value. See
+  // ADR 0003 amendment (2026-05-27).
+  PartyAnalysis controllers = 5;
+  // Same shape as `controllers` but for the choice-level `observer ...`
+  // clause.
+  PartyAnalysis observers = 6;
+}
+
+message PartyAnalysis {
+  oneof shape {
+    StaticParties static = 1;
+    DynamicParties dynamic = 2;
+  }
+}
+
+message StaticParties {
+  // Payload field names in declaration order (lower-camel-case, matching
+  // the Daml source). An empty list is a valid Static verdict — it means
+  // the Daml source's expression is a literal `[]`.
+  repeated string payload_fields = 1;
+}
+
+message DynamicParties {
+}
+
+message Type {
+  oneof sort {
+    BuiltinType builtin = 1;
+    TypeConName type_con = 2;
+    TypeApp type_app = 3;
+    string type_var = 4;
+    int64 nat = 5;
+  }
+}
+
+message TypeApp {
+  // Invariant: `function.sort` is never another `TypeApp` — the JVM helper
+  // normalises curried `T A B C` into a single `TypeApp(function=T, arguments=[A,B,C])`
+  // (see `AstToIntermediate.collectApp`). Emitters can rely on this; producers must preserve it.
+  Type function = 1;
+  repeated Type arguments = 2;
+}
+
+message TypeConName {
+  string package_id = 1;
+  repeated string module_name_segments = 2;
+  repeated string name_segments = 3;
+}
+
+enum BuiltinType {
+  BUILTIN_TYPE_UNSPECIFIED = 0;
+  BUILTIN_TYPE_UNIT = 1;
+  BUILTIN_TYPE_BOOL = 2;
+  BUILTIN_TYPE_INT64 = 3;
+  BUILTIN_TYPE_TEXT = 4;
+  BUILTIN_TYPE_NUMERIC = 5;
+  BUILTIN_TYPE_PARTY = 6;
+  BUILTIN_TYPE_DATE = 7;
+  BUILTIN_TYPE_TIMESTAMP = 8;
+  BUILTIN_TYPE_LIST = 9;
+  BUILTIN_TYPE_OPTIONAL = 10;
+  BUILTIN_TYPE_TEXT_MAP = 11;
+  BUILTIN_TYPE_GEN_MAP = 12;
+  BUILTIN_TYPE_CONTRACT_ID = 13;
+  BUILTIN_TYPE_ANY = 14;
+  BUILTIN_TYPE_TYPE_REP = 15;
+  BUILTIN_TYPE_ROUNDING_MODE = 16;
+  BUILTIN_TYPE_BIGNUMERIC = 17;
+  BUILTIN_TYPE_ANY_EXCEPTION = 18;
+  BUILTIN_TYPE_UPDATE = 19;
+  BUILTIN_TYPE_SCENARIO = 20;
+  BUILTIN_TYPE_ARROW = 21;
+  BUILTIN_TYPE_FAILURE_CATEGORY = 22;
+}

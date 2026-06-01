@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -307,7 +308,7 @@ public class CodeGenEdgeCaseTests
         // The previous expectation `IReadOnlyList<string>.FromRecord(...)` was a known
         // codegen bug — IReadOnlyList<T> has no FromRecord, so it never compiled.
         code.Should().Contain("Choice<Contract, DamlUnit, IReadOnlyList<string>>");
-        code.Should().Contain("ResultDecoder = val => val.As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList()");
+        code.Should().Contain("ResultDecoder = val => (IReadOnlyList<string>)val.As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList()");
     }
 
     #endregion
@@ -768,7 +769,7 @@ public class CodeGenEdgeCaseTests
                 new DamlInterface
                 {
                     Name = "Holding",
-                    Methods = [],
+                    Choices = [],
                     ViewType = null
                 }
             ]
@@ -856,7 +857,7 @@ public class CodeGenEdgeCaseTests
             ],
             Interfaces =
             [
-                new DamlInterface { Name = "Token", Methods = [], ViewType = null }
+                new DamlInterface { Name = "Token", Choices = [], ViewType = null }
             ]
         };
         var modB = new DamlModule
@@ -952,8 +953,7 @@ public class CodeGenEdgeCaseTests
                 {
                     Name = "Holding",
                     ViewType = null,
-                    Methods =
-                    [
+                    Choices =                     [
                         new DamlChoice
                         {
                             Name = "Transfer",
@@ -1004,14 +1004,14 @@ public class CodeGenEdgeCaseTests
         // Internally builds the command via the runtime ForInterface helper — the
         // wire-level template_id slot carries IHolding.InterfaceId, and the choice
         // argument is serialised via argument.ToRecord().
-        code.Should().Contain("Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, \"Transfer\", argument.ToRecord())");
+        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, \"Transfer\", argument.ToRecord())");
         // Submission is funnelled through ILedgerClient.TrySubmitAndWaitForTransactionAsync
         // — same submission path as concrete-template <Choice>Async.
         code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
 
         // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
         code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> LockAsync(");
-        code.Should().Contain("Daml.Runtime.Commands.ExerciseCommand.ForInterface<IHolding>(contractId, \"Lock\", DamlUnit.Instance)");
+        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, \"Lock\", DamlUnit.Instance)");
     }
 
     [Fact]
@@ -1034,7 +1034,7 @@ public class CodeGenEdgeCaseTests
             ],
             Interfaces =
             [
-                new DamlInterface { Name = "Marker", Methods = [], ViewType = null }
+                new DamlInterface { Name = "Marker", Choices = [], ViewType = null }
             ]
         };
 
@@ -1251,8 +1251,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         timer.Should().NotBeNull();
-        timer!.Content.Should().Contain("Daml.Runtime.Stdlib.RelTime D");
-        timer.Content.Should().Contain("Daml.Runtime.Stdlib.RelTime.FromRecord");
+        timer!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        timer.Content.Should().Contain("RelTime D");
+        timer.Content.Should().Contain("RelTime.FromRecord");
         // No <PackageReference> for stdlib packages — they're served by the runtime stub.
         csproj.Should().NotBeNull();
         csproj!.Content.Should().NotContain("Daml.Stdlib");
@@ -1331,8 +1332,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert — type uses the stdlib name, FromRecord uses delegate-based decoder.
         pair.Should().NotBeNull();
-        pair!.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>");
-        pair.Content.Should().Contain("Daml.Runtime.Stdlib.Tuple2<long, string>.FromRecord(");
+        pair!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        pair.Content.Should().Contain("Tuple2<long, string>");
+        pair.Content.Should().Contain("Tuple2<long, string>.FromRecord(");
     }
 
     [Fact]
@@ -1404,8 +1406,9 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         roster.Should().NotBeNull();
-        roster!.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>");
-        roster.Content.Should().Contain("Daml.Runtime.Stdlib.Set<Party>.FromRecord(");
+        roster!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        roster.Content.Should().Contain("Set<Party>");
+        roster.Content.Should().Contain("Set<Party>.FromRecord(");
     }
 
     [Fact]
@@ -1476,6 +1479,7 @@ public class CodeGenEdgeCaseTests
 
         pair.Should().NotBeNull();
         pair!.Content.Should().NotContain("Daml.Runtime.Stdlib.Tuple2");
+        pair.Content.Should().NotContain("using Daml.Runtime.Stdlib;");
     }
 
     #endregion
@@ -1751,6 +1755,93 @@ public class CodeGenEdgeCaseTests
         bag!.Content.Should().Contain("IReadOnlyDictionary<string, long> Counts");
         bag.Content.Should().Contain("new DamlGenMap(Counts.Select(kv => ((DamlValue)new DamlText(kv.Key), (DamlValue)new DamlInt64(kv.Value))).ToList())");
         bag.Content.Should().Contain("record.GetRequiredField(\"counts\").As<DamlGenMap>().Entries.ToDictionary(kv => kv.Key.As<DamlText>().Value, kv => kv.Value.As<DamlInt64>().Value)");
+    }
+
+    #endregion
+
+    #region TextMap-of-List and GenMap-of-List ReadOnly Emission (#110)
+
+    [Fact]
+    public void Generate_should_emit_IReadOnlyList_cast_in_FromRecord_for_TextMap_of_List_field()
+    {
+        var module = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Buckets",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("items", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.TextMap),
+                            [
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.List),
+                                    [new DamlPrimitiveType(DamlPrimitive.Text)])
+                            ]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var bucketsFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Buckets.cs", StringComparison.Ordinal));
+
+        bucketsFile.Should().NotBeNull();
+        var code = bucketsFile!.Content;
+
+        code.Should().Contain("IReadOnlyDictionary<string, IReadOnlyList<string>> Items");
+        code.Should().Contain("(IReadOnlyList<string>)");
+        code.Should().NotContain("ToDictionary(kv => kv.Key, kv => kv.Value.As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList())");
+    }
+
+    [Fact]
+    public void Generate_should_emit_IReadOnlyList_cast_in_FromRecord_for_GenMap_of_List_field()
+    {
+        var module = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Ledger",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("entries", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Text),
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.List),
+                                    [new DamlPrimitiveType(DamlPrimitive.Int64)])
+                            ]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var ledgerFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Ledger.cs", StringComparison.Ordinal));
+
+        ledgerFile.Should().NotBeNull();
+        var code = ledgerFile!.Content;
+
+        code.Should().Contain("IReadOnlyDictionary<string, IReadOnlyList<long>> Entries");
+        code.Should().Contain("(IReadOnlyList<long>)");
+        code.Should().NotContain("Entries.ToDictionary(kv => kv.Key.As<DamlText>().Value, kv => kv.Value.As<DamlList>().Values.Select(x => x.As<DamlInt64>().Value).ToList())");
     }
 
     #endregion

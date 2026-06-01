@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -12,7 +12,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// projector that walks a transaction's created contracts and validates cardinality
 /// per declared template field. See issue #60.
 /// </summary>
-internal sealed partial class CSharpCodeGenerator
+public sealed partial class CSharpCodeGenerator
 {
     /// <summary>
     /// Cardinality of an expected created contract slot in a choice's return type.
@@ -248,6 +248,8 @@ internal sealed partial class CSharpCodeGenerator
             return;
         }
 
+        RequireAsyncExerciserNamespaces(indent);
+
         var partyFields = fields
             .Where(f => f.Type is DamlPrimitiveType { Primitive: DamlPrimitive.Party })
             .ToDictionary(f => f.Name, f => f, StringComparer.Ordinal);
@@ -262,7 +264,7 @@ internal sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for <see cref=\"{templateClassName}\"/>.");
             indent.AppendLine("/// One method per create-bearing choice; each delegates to");
-            indent.AppendLine("/// <see cref=\"Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine("/// <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
             indent.AppendLine($"/// and projects success via <c>&lt;Choice&gt;Result.FromCreatedContracts</c>.");
             indent.AppendLine("/// </summary>");
         }
@@ -407,10 +409,10 @@ internal sealed partial class CSharpCodeGenerator
         }
 
         // Method signature.
-        indent.AppendLine($"public static async Task<ExerciseOutcome<{resultName}>> {choiceName}Async(");
+        indent.AppendLine($"public static async Task<{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this ContractId<{templateClassName}> contractId,");
-        indent.AppendLine("ILedgerClient client,");
+        indent.AppendLine($"this {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{_qualifier.Qualify("ILedgerClient", _currentNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -423,16 +425,16 @@ internal sealed partial class CSharpCodeGenerator
         {
             foreach (var paramName in controllerParams)
             {
-                indent.AppendLine($"Party {paramName},");
+                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
             }
             foreach (var paramName in readAsParams)
             {
-                indent.AppendLine($"Party {paramName},");
+                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
             }
         }
         else
         {
-            indent.AppendLine("SubmitterInfo submitter,");
+            indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter,");
         }
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
@@ -457,28 +459,30 @@ internal sealed partial class CSharpCodeGenerator
             {
                 // Single controller, no extra readAs — rely on Party ->
                 // SubmitterInfo implicit conversion. Avoids a HashSet allocation.
-                indent.AppendLine($"SubmitterInfo submitter = {controllerParams[0]};");
+                indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter = {controllerParams[0]};");
             }
             else if (readAsParams.Count == 0)
             {
+                indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
-                indent.AppendLine($"var submitter = new SubmitterInfo(new HashSet<Party> {{ {string.Join(", ", controllerParams)} }});");
+                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
+                indent.Require("System.Collections.Generic");
                 indent.AppendLine("// actAs unions every named controller; readAs unions every observer that is");
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
-                indent.AppendLine("var submitter = new SubmitterInfo(");
+                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(");
                 indent.Indent();
-                indent.AppendLine($"actAs: new HashSet<Party> {{ {string.Join(", ", controllerParams)} }},");
-                indent.AppendLine($"readAs: new HashSet<Party> {{ {string.Join(", ", readAsParams)} }});");
+                indent.AppendLine($"actAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", readAsParams)} }});");
                 indent.Dedent();
             }
         }
 
         indent.AppendLine();
-        var argExpr = hasArg ? "argument.ToRecord()" : "DamlUnit.Instance";
-        indent.AppendLine("var command = new ExerciseCommand(");
+        var argExpr = hasArg ? "argument.ToRecord()" : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
+        indent.AppendLine($"var command = new {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId.Value,");
@@ -487,7 +491,7 @@ internal sealed partial class CSharpCodeGenerator
         indent.Dedent();
 
         indent.AppendLine();
-        indent.AppendLine("var submission = CommandsSubmission.Single(command)");
+        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithSubmitter(submitter)");
         indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
@@ -504,9 +508,9 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine("return outcome switch");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.One success => {resultName}.FromCreatedContracts(success.Result.CreatedContracts),");
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.DamlError damlError => new ExerciseOutcome<{resultName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
-        indent.AppendLine($"ExerciseOutcome<TransactionResult>.InfraError infraError => new ExerciseOutcome<{resultName}>.InfraError(infraError.StatusCode, infraError.Message),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.One success => {resultName}.FromCreatedContracts(success.Result.CreatedContracts),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.DamlError damlError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
+        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.InfraError infraError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.InfraError(infraError.StatusCode, infraError.Message),");
         indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
         indent.Dedent();
         indent.AppendLine("};");
@@ -566,6 +570,9 @@ internal sealed partial class CSharpCodeGenerator
         IReadOnlyList<ChoiceCreatedSlot> slots,
         string moduleNamespace)
     {
+        RequireAsyncExerciserNamespaces(indent);
+        indent.Require("System.Collections.Generic");
+
         var choiceName = SanitizeIdentifier(choice.Name);
         var resultName = $"{choiceName}Result";
 
@@ -591,12 +598,12 @@ internal sealed partial class CSharpCodeGenerator
         indent.AppendLine();
     }
 
-    private static string SlotPropertyType(ChoiceCreatedSlot slot) => slot.Cardinality switch
+    private string SlotPropertyType(ChoiceCreatedSlot slot) => slot.Cardinality switch
     {
-        CreatedCardinality.Single => $"ContractId<{slot.CSharpTemplateType}>",
-        CreatedCardinality.Optional => $"ContractId<{slot.CSharpTemplateType}>?",
-        CreatedCardinality.List => $"IReadOnlyList<ContractId<{slot.CSharpTemplateType}>>",
-        _ => $"ContractId<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Single => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Optional => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>?",
+        CreatedCardinality.List => $"{_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>>",
+        _ => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>",
     };
 
     private void WriteFromCreatedContractsProjector(
@@ -629,7 +636,7 @@ internal sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// </summary>");
         }
 
-        indent.AppendLine($"public static ExerciseOutcome<{resultName}> FromCreatedContracts(IEnumerable<CreatedContract> created)");
+        indent.AppendLine($"public static {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}> FromCreatedContracts(IEnumerable<{_qualifier.Qualify("CreatedContract", _currentNamespace)}> created)");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -776,13 +783,13 @@ internal sealed partial class CSharpCodeGenerator
                     indent.AppendLine($"if ({local}.Count == 0)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new ExerciseOutcome<{resultName}>.None();");
+                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.None();");
                     indent.Dedent();
                     indent.AppendLine("}");
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new ExerciseOutcome<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.Many({local}.Count, {local});");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -790,7 +797,7 @@ internal sealed partial class CSharpCodeGenerator
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new ExerciseOutcome<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.Many({local}.Count, {local});");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -802,7 +809,7 @@ internal sealed partial class CSharpCodeGenerator
 
         // Build the result.
         indent.AppendLine();
-        indent.AppendLine($"return new ExerciseOutcome<{resultName}>.One(new {resultName}(");
+        indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.One(new {resultName}(");
         indent.Indent();
         for (var i = 0; i < slots.Count; i++)
         {
@@ -816,13 +823,13 @@ internal sealed partial class CSharpCodeGenerator
             switch (slot.Cardinality)
             {
                 case CreatedCardinality.Single:
-                    indent.AppendLine($"{slot.FieldName}: new ContractId<{templateRef}>({local}[0]){separator}");
+                    indent.AppendLine($"{slot.FieldName}: new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>({local}[0]){separator}");
                     break;
                 case CreatedCardinality.Optional:
-                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new ContractId<{templateRef}>({local}[0]) : null{separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>({local}[0]) : null{separator}");
                     break;
                 case CreatedCardinality.List:
-                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new ContractId<{templateRef}>(c)){separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>(c)){separator}");
                     break;
             }
         }

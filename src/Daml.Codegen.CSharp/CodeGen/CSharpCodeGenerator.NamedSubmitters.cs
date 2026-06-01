@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
 
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -43,7 +43,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <c>Party</c>, so the legacy single-party call site stays a one-liner.
 /// </para>
 /// </summary>
-internal sealed partial class CSharpCodeGenerator
+public sealed partial class CSharpCodeGenerator
 {
     /// <summary>
     /// Emits the per-template <c>SubmissionExtensions</c> static class. Returns
@@ -79,6 +79,8 @@ internal sealed partial class CSharpCodeGenerator
         // helper but still treat the readAs contribution at choice exercise
         // as a known-empty set.
         var observers = ValidatePayloadParties(template.Observers, partyFields);
+
+        RequireAsyncExerciserNamespaces(indent);
 
         indent.AppendLine();
         if (options.GenerateXmlDocs)
@@ -132,6 +134,7 @@ internal sealed partial class CSharpCodeGenerator
             return;
         }
 
+        indent.Require("System.Collections.Generic");
         indent.AppendLine();
         if (options.GenerateXmlDocs)
         {
@@ -146,11 +149,11 @@ internal sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <param name=\"payload\">The contract payload.</param>");
         }
 
-        indent.AppendLine($"public static IReadOnlyList<Party> Observers({className} payload)");
+        indent.AppendLine($"public static {_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> Observers({className} payload)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("ArgumentNullException.ThrowIfNull(payload);");
-        indent.AppendLine("return new Party[]");
+        indent.AppendLine($"return new {_qualifier.Qualify("Party", _currentNamespace)}[]");
         indent.AppendLine("{");
         indent.Indent();
         for (var i = 0; i < observers.Parties.Count; i++)
@@ -211,6 +214,11 @@ internal sealed partial class CSharpCodeGenerator
                             && signatories.Parties.Count > 0;
         var multipleStatic = staticParties && signatories.Parties.Count > 1;
 
+        if (multipleStatic)
+        {
+            indent.Require("System.Collections.Generic");
+        }
+
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
@@ -239,13 +247,13 @@ internal sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
-        indent.AppendLine($"public static Task<ExerciseOutcome<ContractId<{className}>>> CreateAsync(");
+        indent.AppendLine($"public static Task<{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("ContractId", _currentNamespace)}<{className}>>> CreateAsync(");
         indent.Indent();
-        indent.AppendLine("this ILedgerClient client,");
+        indent.AppendLine($"this {_qualifier.Qualify("ILedgerClient", _currentNamespace)} client,");
         indent.AppendLine($"{className} payload,");
         if (!staticParties)
         {
-            indent.AppendLine("SubmitterInfo submitter,");
+            indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter,");
         }
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -263,7 +271,7 @@ internal sealed partial class CSharpCodeGenerator
             indent.AppendLine("// from those Party properties so the caller never restates a party.");
             if (multipleStatic)
             {
-                indent.AppendLine("var submitter = new SubmitterInfo(new HashSet<Party>");
+                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}>");
                 indent.AppendLine("{");
                 indent.Indent();
                 for (var i = 0; i < signatories.Parties.Count; i++)
@@ -284,7 +292,7 @@ internal sealed partial class CSharpCodeGenerator
                 // implicit conversion to SubmitterInfo. Avoids the HashSet allocation.
                 var pf = (DamlPartyPayloadField)signatories.Parties[0];
                 var prop = ToPascalCase(SanitizeIdentifier(pf.FieldName));
-                indent.AppendLine($"SubmitterInfo submitter = payload.{prop};");
+                indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter = payload.{prop};");
             }
             indent.AppendLine();
         }

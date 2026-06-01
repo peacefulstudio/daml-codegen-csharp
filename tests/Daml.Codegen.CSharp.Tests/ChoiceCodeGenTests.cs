@@ -1,5 +1,6 @@
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.DarReader;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using System.IO;
 using Xunit;
@@ -23,6 +24,16 @@ public class ChoiceCodeGenTests
         return new CSharpCodeGenerator(options, logger);
     }
 
+    private static readonly DamlPackage StdlibStub = new()
+    {
+        PackageId = "daml-prim-pkg-id",
+        Name = "daml-prim",
+        Version = new Version(1, 0, 0),
+        LfVersion = "2.1",
+        Modules = [],
+        DependencyReferences = [],
+    };
+
     private static DarArchive CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
@@ -38,7 +49,7 @@ public class ChoiceCodeGenTests
         return new DarArchive
         {
             MainPackage = package,
-            Dependencies = []
+            Dependencies = [StdlibStub]
         };
     }
 
@@ -194,7 +205,7 @@ public class ChoiceCodeGenTests
                         {
                             Name = "Archive",
                             Consuming = true,
-                            ArgumentType = new DamlTypeRef("daml-prim", "DA.Internal.Template", "Archive"),
+                            ArgumentType = new DamlTypeRef(StdlibStub.PackageId, "DA.Internal.Template", "Archive"),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
                         }
                     ]
@@ -398,7 +409,7 @@ public class ChoiceCodeGenTests
                         {
                             Name = "Archive",
                             Consuming = true,
-                            ArgumentType = new DamlTypeRef("daml-prim", "DA.Internal.Template", "Archive"),
+                            ArgumentType = new DamlTypeRef(StdlibStub.PackageId, "DA.Internal.Template", "Archive"),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
                         }
                     ]
