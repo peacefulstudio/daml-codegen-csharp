@@ -37,10 +37,9 @@ public static class DamlJsonSerializer
     /// </summary>
     /// <remarks>
     /// Untyped deserialization disambiguates <c>GenMap</c> from <c>List (List a)</c>
-    /// Untyped deserialization disambiguates <c>GenMap</c> from <c>List (List a)</c>
     /// heuristically: a top-level JSON array whose every element is a 2-element
     /// JSON array with non-null first and second elements is reconstructed as a
-    /// <see cref="DamlGenMap"/>.
+    /// <see cref="DamlGenMap"/>. This disambiguation is necessarily lossy for some
     /// untyped JSON, and callers needing exact round-trip behavior for these
     /// shapes must deserialize against a type schema rather than through this
     /// entry point:
