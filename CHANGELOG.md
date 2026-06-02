@@ -12,6 +12,7 @@ because they are versioned in lockstep:
 - `Daml.Runtime` — runtime types referenced by generated code
 - `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
 - `Daml.Codegen.CSharp.MSBuild` — MSBuild integration
+- `Daml.Codegen.Testing.Conformance` — compiled conformance corpus types + embedded DAR
 
 ## [Unreleased]
 
@@ -20,6 +21,8 @@ because they are versioned in lockstep:
 - **`Daml.Codegen.CSharp.MSBuild`: `DamlPinLangVersionForKeyBearing` target no longer ignores a consumer-set `LangVersion` when the NuGet `.props` is imported after the project body.** The previous implementation used a `_DamlLangVersionWasUserSet` sentinel set in `.props`, which meant a consumer whose `.csproj` imported the props file _after_ their own `<PropertyGroup>` would have the sentinel evaluated before their `LangVersion` was visible — causing the target to overwrite it. The target now reads the fully-resolved `$(LangVersion)` at `BeforeTargets=CoreCompile` execution time (i.e. just before compilation), so NuGet import order is irrelevant. Keyword values (`preview`, `latest`, `latestMajor`) and numeric values already meeting the requirement are preserved unchanged ([#233](https://github.com/peacefulstudio/daml-codegen-csharp/pull/233)).
 
 ### Added
+
+- **New published package `Daml.Codegen.Testing.Conformance`**: compiled C# generated from the `richtypes` conformance corpus (types under namespace `Richtypes`) plus the corpus DAR embedded as a resource. Consumers call `ConformanceCorpus.OpenDar()` to obtain the DAR stream for upload to a Canton participant before running live-ledger round-trip tests. Not for production use.
 
 - **`dpm-codegen-cs.cmd` (Windows bundle entrypoint) now supports `--publish-nuget --nuget-config <path> --nuget-source <name>`** ([#222](https://github.com/peacefulstudio/daml-codegen-csharp/pull/222)). When `--publish-nuget` is set, the script injects `--generate-project` into the emitter call, runs `dotnet pack`, and pushes the resulting `.nupkg` via `dotnet nuget push --skip-duplicate`. All three flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version).
 

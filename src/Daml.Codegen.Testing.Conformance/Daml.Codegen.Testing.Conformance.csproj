@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Daml.Codegen.Testing.Conformance</PackageId>
+    <RootNamespace>Daml.Codegen.Testing.Conformance</RootNamespace>
+    <Description>Conformance corpus for daml-codegen-csharp: compiled generated types plus the DAR they were generated from, for live-ledger round-trip testing by consumers. Not for production use.</Description>
+    <PackageTags>daml;canton;codegen;testing;conformance</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Daml.Runtime\Daml.Runtime.csproj" />
+    <ProjectReference Include="..\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\conformance\richtypes\richtypes.dar" LogicalName="richtypes.dar" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
