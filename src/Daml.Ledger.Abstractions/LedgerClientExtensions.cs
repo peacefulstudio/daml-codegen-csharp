@@ -70,6 +70,11 @@ public static class LedgerClientExtensions
     /// returning a result. Throws <see cref="InvalidOperationException"/> on error.
     /// <c>One</c>, <c>None</c>, and <c>Many</c> outcomes are all treated as success.
     /// </summary>
+    /// <remarks>
+    /// Calls <see cref="ILedgerClient.TryExerciseAsync{TResult}"/> with <c>TResult = object</c>.
+    /// Implementations must ignore <c>TResult</c> for void-choice responses and return
+    /// <see cref="ExerciseOutcome{T}"/> without attempting to deserialize the exercise result.
+    /// </remarks>
     public static async Task ExerciseAsync(
         this ILedgerClient client,
         ExerciseCommand command,
