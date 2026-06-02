@@ -59,7 +59,19 @@ public static class LedgerClientExtensions
     /// a void caller has discarded the result and no distinction between them is needed.
     /// Use <see cref="ILedgerClient.TryExerciseAsync{TResult}(ExerciseCommand,string,string?,CancellationToken)"/>
     /// if you need to distinguish them.
+    /// <summary>
+    /// Exercises a choice without returning a result. Throws
+    /// <see cref="InvalidOperationException"/> on Daml or infrastructure errors.
+    /// <c>One</c>, <c>None</c>, and <c>Many</c> outcomes are all treated as success —
+    /// a void caller has discarded the result and no distinction between them is needed.
+    /// Use <see cref="ILedgerClient.TryExerciseAsync{TResult}(ExerciseCommand,string,string?,CancellationToken)"/>
+    /// if you need to distinguish them.
     /// </summary>
+    /// <remarks>
+    /// Calls <see cref="ILedgerClient.TryExerciseAsync{TResult}"/> with <c>TResult = object</c>.
+    /// Implementations must ignore <c>TResult</c> for void-choice responses and return
+    /// <see cref="ExerciseOutcome{T}"/> without attempting to deserialize the exercise result.
+    /// </remarks>
     /// <remarks>
     /// Calls <see cref="ILedgerClient.TryExerciseAsync{TResult}"/> with <c>TResult = object</c>.
     /// Implementations must ignore <c>TResult</c> for void-choice responses and return
