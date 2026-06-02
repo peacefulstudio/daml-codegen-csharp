@@ -16,19 +16,25 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
-### Fixed
-
-- **`Daml.Codegen.CSharp.MSBuild`: `DamlPinLangVersionForKeyBearing` target no longer ignores a consumer-set `LangVersion` when the NuGet `.props` is imported after the project body.** The previous implementation used a `_DamlLangVersionWasUserSet` sentinel set in `.props`, which meant a consumer whose `.csproj` imported the props file _after_ their own `<PropertyGroup>` would have the sentinel evaluated before their `LangVersion` was visible — causing the target to overwrite it. The target now reads the fully-resolved `$(LangVersion)` at `BeforeTargets=CoreCompile` execution time (i.e. just before compilation), so NuGet import order is irrelevant. Keyword values (`preview`, `latest`, `latestMajor`) and numeric values already meeting the requirement are preserved unchanged ([#233](https://github.com/peacefulstudio/daml-codegen-csharp/pull/233)).
+## [0.1.7] — 2026-06-01
 
 ### Added
 
 - **New published package `Daml.Codegen.Testing.Conformance`**: compiled C# generated from the `richtypes` conformance corpus (types under namespace `Richtypes`) plus the corpus DAR embedded as a resource. Consumers call `ConformanceCorpus.OpenDar()` to obtain the DAR stream for upload to a Canton participant before running live-ledger round-trip tests. Not for production use.
 
-- **`dpm-codegen-cs.cmd` (Windows bundle entrypoint) now supports `--publish-nuget --nuget-config <path> --nuget-source <name>`** ([#222](https://github.com/peacefulstudio/daml-codegen-csharp/pull/222)). When `--publish-nuget` is set, the script injects `--generate-project` into the emitter call, runs `dotnet pack`, and pushes the resulting `.nupkg` via `dotnet nuget push --skip-duplicate`. All three flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version).
+- **All three `dpm-codegen-cs` entrypoints now support `--publish-nuget --nuget-config <path> --nuget-source <name>`** ([#222](https://github.com/peacefulstudio/daml-codegen-csharp/pull/222), [#223](https://github.com/peacefulstudio/daml-codegen-csharp/pull/223)). When `--publish-nuget` is set, the entrypoint injects `--generate-project` into the emitter call, runs `dotnet pack`, discovers the produced `.nupkg`, and pushes it via `dotnet nuget push --skip-duplicate`. All flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version). Covered across `dpm-codegen-cs` (POSIX bundle entrypoint), `dpm-codegen-cs.cmd` (Windows bundle entrypoint), and `scripts/codegen-pipeline.sh`.
 
 ### Changed — BREAKING
 
 - **`ILedgerClient`: `ExerciseAsync<TResult>` and void `ExerciseAsync` overloads are removed from the interface** and replaced by `TryExerciseAsync<TResult>` returning `ExerciseOutcome<TResult>` for structured error handling (callers `switch` on the outcome instead of catching exceptions). Throwing `ExerciseAsync` convenience overloads remain available at every call site via the new `LedgerClientExtensions` static class — existing callers compile unchanged. Implementations must now override `TryExerciseAsync<TResult>` instead of `ExerciseAsync<TResult>` (#225).
+
+### Changed
+
+- **JVM helper now uses `daml-lf-archive-reader` 3.4.11 stable** ([#218](https://github.com/peacefulstudio/daml-codegen-csharp/pull/218)), replacing the previous `3.3.0-snapshot` pre-release. DARs compiled against Daml SDK 3.4.x are now parsed against a stable release of the LF archive library.
+
+### Fixed
+
+- **`Daml.Codegen.CSharp.MSBuild`: `DamlPinLangVersionForKeyBearing` target no longer ignores a consumer-set `LangVersion` when the NuGet `.props` is imported after the project body.** The previous implementation used a `_DamlLangVersionWasUserSet` sentinel set in `.props`, which meant a consumer whose `.csproj` imported the props file _after_ their own `<PropertyGroup>` would have the sentinel evaluated before their `LangVersion` was visible — causing the target to overwrite it. The target now reads the fully-resolved `$(LangVersion)` at `BeforeTargets=CoreCompile` execution time (i.e. just before compilation), so NuGet import order is irrelevant. Keyword values (`preview`, `latest`, `latestMajor`) and numeric values already meeting the requirement are preserved unchanged ([#234](https://github.com/peacefulstudio/daml-codegen-csharp/pull/234)).
 
 ## [0.1.6] — 2026-06-01
 
@@ -609,7 +615,8 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...v0.1.4
