@@ -5,15 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-This changelog tracks the four packages published from this repo together,
+This changelog tracks the packages published from this repo together,
 because they are versioned in lockstep:
 
-- `Daml.Codegen.CSharp` — dotnet tool CLI
+- `Daml.Codegen.CSharp` — C# emitter library (NuGet package)
 - `Daml.Runtime` — runtime types referenced by generated code
 - `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
 - `Daml.Codegen.CSharp.MSBuild` — MSBuild integration
 
 ## [Unreleased]
+
+### Fixed
+
+- **`Daml.Codegen.CSharp.MSBuild`: `DamlPinLangVersionForKeyBearing` target no longer ignores a consumer-set `LangVersion` when the NuGet `.props` is imported after the project body.** The previous implementation used a `_DamlLangVersionWasUserSet` sentinel set in `.props`, which meant a consumer whose `.csproj` imported the props file _after_ their own `<PropertyGroup>` would have the sentinel evaluated before their `LangVersion` was visible — causing the target to overwrite it. The target now reads the fully-resolved `$(LangVersion)` at `BeforeTargets=CoreCompile` execution time (i.e. just before compilation), so NuGet import order is irrelevant. Keyword values (`preview`, `latest`, `latestMajor`) and numeric values already meeting the requirement are preserved unchanged ([#233](https://github.com/peacefulstudio/daml-codegen-csharp/pull/233)).
 
 ### Added
 
