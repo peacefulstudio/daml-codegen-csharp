@@ -38,3 +38,10 @@ local `daml build` without a clear reason. If the upstream Splice package
 genuinely needs to advance, replace the file in place, refresh the
 `expected/` snapshot per the procedure above, and call out the version bump
 in the PR description.
+
+`SpliceDarCharacterizationTests` (in `Daml.Codegen.DarParser.Tests`) pins two
+SHA-256 package-id constants tied to this exact DAR — the main package id
+asserted in `main_package_id_is_the_archive_content_hash` and the
+`MetadataPackageId` constant for the imported `splice-api-token-metadata-v1`
+dependency. Both are derived from the checked-in bytes and must be refreshed
+together with the `.dar` whenever the fixture is regenerated.
