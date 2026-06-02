@@ -43,7 +43,7 @@ public class LedgerClientSubmitterInfoTests
 
         await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastExerciseWithResultActAs.Should().Be("alice");
+        fake.LastTryExerciseActAs.Should().Be("alice");
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class LedgerClientSubmitterInfoTests
 
         await client.ExerciseAsync(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastExerciseVoidActAs.Should().Be("alice");
+        fake.LastTryExerciseActAs.Should().Be("alice");
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class LedgerClientSubmitterInfoTests
         Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, MultiParty);
 
         await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*ExerciseAsync*single ActAs party with no ReadAs parties*");
+            .WithMessage("*TryExerciseAsync*single ActAs party with no ReadAs parties*");
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public class LedgerClientSubmitterInfoTests
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, MultiParty);
 
         await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*ExerciseAsync*single ActAs party with no ReadAs parties*");
+            .WithMessage("*TryExerciseAsync*single ActAs party with no ReadAs parties*");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class LedgerClientSubmitterInfoTests
 
         // The override recorded the call directly; the string-actAs base method must NOT have run.
         fake.OverrideHits.Should().Be(1);
-        fake.LastExerciseWithResultActAs.Should().BeNull();
+        fake.LastTryExerciseActAs.Should().BeNull();
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class LedgerClientSubmitterInfoTests
         await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
 
         fake.OverrideHits.Should().Be(1);
-        fake.LastExerciseWithResultActAs.Should().BeNull();
+        fake.LastTryExerciseActAs.Should().BeNull();
     }
 
     /// <summary>
@@ -238,31 +238,20 @@ public class LedgerClientSubmitterInfoTests
     /// </summary>
     private class RecordingLedgerClient : ILedgerClient
     {
-        public string? LastExerciseWithResultActAs { get; private set; }
-        public string? LastExerciseVoidActAs { get; private set; }
+        public string? LastTryExerciseActAs { get; private set; }
         public string? LastCreateActAs { get; private set; }
         public string? LastExerciseForCreatedActAs { get; private set; }
         public string? LastSubscribeActAs { get; private set; }
         public string? LastSubscribeActiveActAs { get; private set; }
 
-        public Task<TResult> ExerciseAsync<TResult>(
+        public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
             string actAs,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
         {
-            LastExerciseWithResultActAs = actAs;
-            return Task.FromResult(default(TResult)!);
-        }
-
-        public Task ExerciseAsync(
-            ExerciseCommand command,
-            string actAs,
-            string? workflowId = null,
-            CancellationToken cancellationToken = default)
-        {
-            LastExerciseVoidActAs = actAs;
-            return Task.CompletedTask;
+            LastTryExerciseActAs = actAs;
+            return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
 
         public Task<string> SubmitAsync(
@@ -345,14 +334,14 @@ public class LedgerClientSubmitterInfoTests
     {
         public int OverrideHits { get; private set; }
 
-        Task<TResult> ILedgerClient.ExerciseAsync<TResult>(
+        Task<ExerciseOutcome<TResult>> ILedgerClient.TryExerciseAsync<TResult>(
             ExerciseCommand command,
             SubmitterInfo submitter,
             string? workflowId,
             CancellationToken cancellationToken)
         {
             OverrideHits++;
-            return Task.FromResult(default(TResult)!);
+            return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
     }
 

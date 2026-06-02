@@ -16,38 +16,37 @@ namespace Daml.Ledger.Abstractions;
 public interface ILedgerClient : IDisposable
 {
     /// <summary>
-    /// Exercises a choice on an existing contract.
+    /// Exercises a choice and returns a structured outcome distinguishing success,
+    /// Daml errors, and infrastructure errors. The caller switches on the result
+    /// instead of catching exceptions.
+    /// Use <see cref="LedgerClientExtensions.ExerciseAsync{TResult}(ILedgerClient,ExerciseCommand,string,string?,CancellationToken)"/>
+    /// for the throwing convenience overload.
     /// </summary>
     /// <typeparam name="TResult">The result type of the choice.</typeparam>
     /// <param name="command">The exercise command.</param>
     /// <param name="actAs">The party acting as the submitter.</param>
     /// <param name="workflowId">Optional workflow identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The result of exercising the choice.</returns>
-    Task<TResult> ExerciseAsync<TResult>(
+    /// <returns>A structured outcome; callers switch on the concrete subtype.</returns>
+    Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
         ExerciseCommand command,
         string actAs,
         string? workflowId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Exercises a choice on an existing contract using a multi-party
-    /// <see cref="SubmitterInfo"/> (combined <c>actAs</c> ∪ <c>readAs</c>).
+    /// Exercises a choice using a multi-party <see cref="SubmitterInfo"/> and returns
+    /// a structured outcome. The default implementation forwards single-party
+    /// submissions to the <c>string actAs</c> overload; multi-party submissions
+    /// throw <see cref="NotSupportedException"/> — implementations override to support them.
     /// </summary>
     /// <typeparam name="TResult">The result type of the choice.</typeparam>
     /// <param name="command">The exercise command.</param>
     /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
     /// <param name="workflowId">Optional workflow identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The result of exercising the choice.</returns>
-    /// <remarks>
-    /// The default implementation forwards single-party submissions
-    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
-    /// <see cref="ExerciseAsync{TResult}(ExerciseCommand, string, string, CancellationToken)"/>
-    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
-    /// implementations must override this method to support true multi-party authorization.
-    /// </remarks>
-    Task<TResult> ExerciseAsync<TResult>(
+    /// <returns>A structured outcome; callers switch on the concrete subtype.</returns>
+    Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
         ExerciseCommand command,
         SubmitterInfo submitter,
         string? workflowId = null,
@@ -55,52 +54,10 @@ public interface ILedgerClient : IDisposable
     {
         if (TryGetSinglePartyActAs(submitter, out var actAs))
         {
-            return ExerciseAsync<TResult>(command, actAs, workflowId, cancellationToken);
+            return TryExerciseAsync<TResult>(command, actAs, workflowId, cancellationToken);
         }
 
-        throw NewMultiPartyNotSupported(nameof(ExerciseAsync));
-    }
-
-    /// <summary>
-    /// Exercises a choice on an existing contract without returning a result.
-    /// </summary>
-    /// <param name="command">The exercise command.</param>
-    /// <param name="actAs">The party acting as the submitter.</param>
-    /// <param name="workflowId">Optional workflow identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task ExerciseAsync(
-        ExerciseCommand command,
-        string actAs,
-        string? workflowId = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Exercises a choice on an existing contract without returning a result,
-    /// using a multi-party <see cref="SubmitterInfo"/>.
-    /// </summary>
-    /// <param name="command">The exercise command.</param>
-    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
-    /// <param name="workflowId">Optional workflow identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <remarks>
-    /// The default implementation forwards single-party submissions
-    /// (<c>ActAs.Count == 1</c> and <c>ReadAs.Count == 0</c>) to the
-    /// <see cref="ExerciseAsync(ExerciseCommand, string, string, CancellationToken)"/>
-    /// overload. Multi-party submissions throw <see cref="NotSupportedException"/> —
-    /// implementations must override this method to support true multi-party authorization.
-    /// </remarks>
-    Task ExerciseAsync(
-        ExerciseCommand command,
-        SubmitterInfo submitter,
-        string? workflowId = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (TryGetSinglePartyActAs(submitter, out var actAs))
-        {
-            return ExerciseAsync(command, actAs, workflowId, cancellationToken);
-        }
-
-        throw NewMultiPartyNotSupported(nameof(ExerciseAsync));
+        throw NewMultiPartyNotSupported(nameof(TryExerciseAsync));
     }
 
     /// <summary>

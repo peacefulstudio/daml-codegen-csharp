@@ -1,0 +1,213 @@
+// Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+
+using System.Runtime.CompilerServices;
+using Daml.Runtime.Commands;
+using Daml.Runtime.Contracts;
+using Daml.Runtime.Data;
+using Daml.Runtime.Outcomes;
+using Daml.Runtime.Streams;
+using FluentAssertions;
+using Xunit;
+
+namespace Daml.Ledger.Abstractions.Tests;
+
+/// <summary>
+/// Verifies <see cref="LedgerClientExtensions"/>: the throwing convenience
+/// wrappers around <see cref="ILedgerClient.TryExerciseAsync{TResult}"/>.
+/// </summary>
+public class LedgerClientExtensionsTests
+{
+    private static readonly ExerciseCommand SampleCommand = new(
+        new Identifier("pkg", "Module", "Template"),
+        ContractId: "cid-1",
+        Choice: "DoIt",
+        ChoiceArgument: new DamlRecord(null, []));
+
+    [Fact]
+    public async Task ExerciseAsync_returns_value_when_TryExerciseAsync_returns_One()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.One(42));
+
+        var result = await client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_InvalidOperationException_when_TryExerciseAsync_returns_DamlError()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*CONTRACT_NOT_FOUND*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_InvalidOperationException_when_TryExerciseAsync_returns_InfraError()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Connection reset*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_InvalidOperationException_when_TryExerciseAsync_returns_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.None());
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*None*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_InvalidOperationException_when_TryExerciseAsync_returns_Many()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(3, ["cid-1", "cid-2", "cid-3"]));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Many*3*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_does_not_throw_when_TryExerciseAsync_returns_One()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.One(new object()));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_does_not_throw_when_TryExerciseAsync_returns_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.None());
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_does_not_throw_when_TryExerciseAsync_returns_Many()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.Many(2, ["cid-1", "cid-2"]));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_throws_InvalidOperationException_when_TryExerciseAsync_returns_DamlError()
+    {
+        var outcome = new ExerciseOutcome<object>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*CONTRACT_NOT_FOUND*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_throws_InvalidOperationException_when_TryExerciseAsync_returns_InfraError()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.InfraError(14, "Connection reset"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Connection reset*");
+    }
+
+    /// <summary>
+    /// Minimal <see cref="ILedgerClient"/> stub that returns a pre-configured
+    /// <see cref="ExerciseOutcome{T}"/> from <see cref="ILedgerClient.TryExerciseAsync{TResult}"/>.
+    /// The outcome is stored as <c>object</c> and cast on retrieval so a single non-generic
+    /// stub can satisfy the generic <c>TryExerciseAsync&lt;TResult&gt;</c> contract for any <c>TResult</c>.
+    /// </summary>
+    private sealed class StubLedgerClient : ILedgerClient
+    {
+        private readonly object _outcome;
+
+        public StubLedgerClient(object outcome) => _outcome = outcome;
+
+        public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
+            ExerciseCommand command,
+            string actAs,
+            string? workflowId = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult((ExerciseOutcome<TResult>)_outcome);
+
+        public Task<string> SubmitAsync(
+            CommandsSubmission submission,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult("update-id");
+
+        public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
+            CommandsSubmission submission,
+            CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
+            TTemplate payload,
+            string actAs,
+            string? workflowId = null,
+            CancellationToken cancellationToken = default)
+            where TTemplate : ITemplate
+            => Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(new ExerciseOutcome<ContractId<TTemplate>>.None());
+
+        public Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
+            ExerciseCommand command,
+            string actAs,
+            string? workflowId = null,
+            CancellationToken cancellationToken = default)
+            where TTemplate : ITemplate
+            => Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(new ExerciseOutcome<ContractId<TTemplate>>.None());
+
+        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+            string actAs,
+            long? fromOffset = null,
+            CancellationToken cancellationToken = default)
+            where T : ITemplate
+            => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
+
+        public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+            string actAs,
+            CancellationToken cancellationToken = default)
+            where T : ITemplate
+            => EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
+
+        public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(0L);
+
+        public void Dispose() { }
+
+        private static async IAsyncEnumerable<TItem> EmptyAsync<TItem>(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            yield break;
+        }
+    }
+}

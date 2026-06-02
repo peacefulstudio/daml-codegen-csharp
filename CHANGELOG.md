@@ -19,9 +19,9 @@ because they are versioned in lockstep:
 
 - **`dpm-codegen-cs.cmd` (Windows bundle entrypoint) now supports `--publish-nuget --nuget-config <path> --nuget-source <name>`** ([#222](https://github.com/peacefulstudio/daml-codegen-csharp/pull/222)). When `--publish-nuget` is set, the script injects `--generate-project` into the emitter call, runs `dotnet pack`, and pushes the resulting `.nupkg` via `dotnet nuget push --skip-duplicate`. All three flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version).
 
-### Changed
+### Changed — BREAKING
 
-### Fixed
+- **`ILedgerClient`: `ExerciseAsync<TResult>` and void `ExerciseAsync` overloads are removed from the interface** and replaced by `TryExerciseAsync<TResult>` returning `ExerciseOutcome<TResult>` for structured error handling (callers `switch` on the outcome instead of catching exceptions). Throwing `ExerciseAsync` convenience overloads remain available at every call site via the new `LedgerClientExtensions` static class — existing callers compile unchanged. Implementations must now override `TryExerciseAsync<TResult>` instead of `ExerciseAsync<TResult>` (#225).
 
 ## [0.1.6] — 2026-06-01
 
