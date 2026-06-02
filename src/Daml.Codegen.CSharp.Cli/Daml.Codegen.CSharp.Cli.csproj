@@ -6,7 +6,7 @@
     <Description>Thin CLI wiring the IntermediateDar proto reader (or the legacy DAR-direct path) into the C# emitter. Bundled inside the dpm codegen-cs OCI artifact (#136). Internal-only.</Description>
     <IsPackable>false</IsPackable>
     <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
-    <AssemblyName>daml-codegen-csharp</AssemblyName>
+    <AssemblyName>Daml.Codegen.CSharp.Cli</AssemblyName>
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
