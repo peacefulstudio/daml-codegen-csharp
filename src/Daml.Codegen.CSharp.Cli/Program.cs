@@ -14,25 +14,17 @@ namespace Daml.Codegen.CSharp.Cli;
 /// Entry point for the Daml C# code generator CLI, bundled as a
 /// self-contained single-file binary inside the <c>dpm codegen-cs</c> OCI
 /// artifact. Reads an <c>IntermediateDar</c> proto file (produced by the JVM
-/// helper) via <c>--intermediate</c>. When built with DAR-direct support
-/// (<c>DamlIncludeDarDirect=true</c>), it also accepts one or more
-/// <c>.dar</c> archives via the positional <c>dar-files</c> argument.
+/// helper) via <c>--intermediate</c> and emits C# sources.
 /// </summary>
-public static partial class Program
+public static class Program
 {
-#pragma warning disable CA1805
-    private static Argument<FileInfo[]>? _darFilesArg = null;
-
-    private static Func<FileInfo[], CodeGenOptions, CodegenArgs, ConsoleLogger, Task<int>>? _generateFromDarFiles = null;
-#pragma warning restore CA1805
-
     public static async Task<int> Main(string[] args)
     {
         var rootCommand = new RootCommand("Generate C# code from an IntermediateDar proto");
 
         var intermediateOption = new Option<FileInfo?>("--intermediate")
         {
-            Description = "Path to an IntermediateDar proto file produced by the JVM helper. When set, the positional dar-files argument is ignored."
+            Description = "Path to an IntermediateDar proto file produced by the JVM helper."
         };
         intermediateOption.Validators.Add(result =>
         {
@@ -142,8 +134,6 @@ public static partial class Program
             }
         });
 
-        ConfigureDarDirect(rootCommand);
-
         rootCommand.Options.Add(intermediateOption);
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(namespaceOption);
@@ -163,7 +153,6 @@ public static partial class Program
         Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, _) =>
             RunCodegen(new CodegenArgs(
                 parseResult.GetValue(intermediateOption),
-                _darFilesArg is not null ? parseResult.GetValue(_darFilesArg) ?? [] : [],
                 parseResult.GetValue(outputOption)!,
                 parseResult.GetValue(namespaceOption),
                 parseResult.GetValue(verbosityOption),
@@ -177,15 +166,12 @@ public static partial class Program
                 parseResult.GetValue(contractIdentifiersOption),
                 parseResult.GetValue(emitterCounterOption),
                 parseResult.GetValue(releaseCountersOption),
-                parseResult.GetValue(packageLicenseOption)!,
-                _generateFromDarFiles is not null));
+                parseResult.GetValue(packageLicenseOption)!));
         rootCommand.SetAction(action);
 
         var parseResult = rootCommand.Parse(args);
         return await parseResult.InvokeAsync();
     }
-
-    static partial void ConfigureDarDirect(RootCommand root);
 
     private static async Task<int> RunCodegen(CodegenArgs args)
     {
@@ -204,7 +190,7 @@ public static partial class Program
 
             if (args.ReleaseCountersFile is not null && args.IntermediateFile is null)
             {
-                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash; the DAR-direct path does not expose the deterministic proto bytes.");
+                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash.");
                 return 1;
             }
 
@@ -213,14 +199,8 @@ public static partial class Program
                 await GenerateFromIntermediate(args.IntermediateFile, args, logger);
                 return 0;
             }
-            if (args.DarFiles.Length > 0 && _generateFromDarFiles is not null)
-            {
-                return await _generateFromDarFiles(args.DarFiles, BuildOptions(args, args.EmitterCounter), args, logger);
-            }
 
-            logger.Error(args.DarDirectAvailable
-                ? "Either --intermediate <path> or one or more <dar-files> must be provided."
-                : "--intermediate is required; this build does not include the DAR-direct path.");
+            logger.Error("--intermediate <path> is required.");
             return 1;
         }
         catch (Exception ex)
@@ -314,7 +294,6 @@ public static partial class Program
 
 internal sealed record CodegenArgs(
     FileInfo? IntermediateFile,
-    FileInfo[] DarFiles,
     DirectoryInfo OutputDirectory,
     string? RootNamespace,
     int Verbosity,
@@ -328,5 +307,4 @@ internal sealed record CodegenArgs(
     bool GenerateContractIdentifiers,
     int EmitterCounter,
     FileInfo? ReleaseCountersFile,
-    string PackageLicenseExpression,
-    bool DarDirectAvailable);
+    string PackageLicenseExpression);
