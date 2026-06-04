@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
+
 using System.Text.Json;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;

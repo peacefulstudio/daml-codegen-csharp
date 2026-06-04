@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
+
 // Example demonstrating how generated Daml C# code would be used.
 // This shows what the codegen produces and how to interact with contracts.
 

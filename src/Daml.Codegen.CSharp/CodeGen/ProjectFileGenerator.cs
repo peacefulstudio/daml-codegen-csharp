@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
+
 using System.Text;
 using System.Text.RegularExpressions;
 using Daml.Codegen.CSharp.Model;

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+// Copyright (c) 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
 using PbBuiltin = Daml.Codegen.Intermediate.BuiltinType;

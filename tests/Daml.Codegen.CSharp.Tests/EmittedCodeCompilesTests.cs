@@ -1,4 +1,5 @@
-// Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+// Copyright (c) 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
@@ -217,7 +218,8 @@ public class EmittedCodeCompilesTests
         var consumerPartial = new GeneratedFile(
             RelativePath: "AssetWithKey.Consumer.cs",
             Content: """
-                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                // Copyright (c) 2026 Peaceful Studio OÜ
+                // SPDX-License-Identifier: Apache-2.0
                 using Daml.Runtime.Data;
                 namespace Test.Package;
                 public sealed partial record AssetWithKey
@@ -546,7 +548,8 @@ public class EmittedCodeCompilesTests
         var consumerPartial = new GeneratedFile(
             RelativePath: "AssetWithKey.Consumer.cs",
             Content: """
-                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                // Copyright (c) 2026 Peaceful Studio OÜ
+                // SPDX-License-Identifier: Apache-2.0
                 using Daml.Runtime.Data;
                 namespace Test.Package;
                 public sealed partial class AssetWithKey
@@ -1329,7 +1332,8 @@ public class EmittedCodeCompilesTests
         var consumerPartial = new GeneratedFile(
             RelativePath: "Holding.Consumer.cs",
             Content: """
-                // Copyright (c) 2026 Peaceful Studio OÜ. All rights reserved.
+                // Copyright (c) 2026 Peaceful Studio OÜ
+                // SPDX-License-Identifier: Apache-2.0
                 namespace Canton.Party;
                 public sealed partial record Holding
                 {

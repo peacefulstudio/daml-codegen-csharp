@@ -16,6 +16,14 @@ because they are versioned in lockstep:
 
 ## [Unreleased]
 
+### Added
+
+- `NOTICE` file added at repo root (Apache-2.0 open-source prep).
+
+### Changed
+
+- Licensing: every source file now carries the two-line SPDX Apache-2.0 header (`Copyright (c) 2026 Peaceful Studio OÜ` + `SPDX-License-Identifier: Apache-2.0`); the central `<Copyright>` tag in `Directory.Build.props` is retained for assembly metadata. (open-source prep)
+
 ## [0.1.7] — 2026-06-01
 
 ### Added
