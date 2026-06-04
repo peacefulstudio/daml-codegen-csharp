@@ -7,8 +7,7 @@ namespace Daml.Codegen.CSharp.Model;
 
 /// <summary>
 /// Parses a Daml package version string into a <see cref="Version"/>. The
-/// DAR-intrinsic version is a 3-part <c>Major.Minor.Patch</c> shape per
-/// <a href="../../docs/adr/0002-splice-nuget-versioning.md">ADR 0002</a>;
+/// DAR-intrinsic version is a 3-part <c>Major.Minor.Patch</c> shape;
 /// the optional 4th segment used by Canton.Splice NuGet packaging is added
 /// downstream at pack time. Used by both the proto-direct
 /// <c>IntermediateDarReader</c> and the parser-direct <c>DalfReader</c>

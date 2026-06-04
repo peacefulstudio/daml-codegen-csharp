@@ -6,8 +6,7 @@ using System.Globalization;
 namespace Daml.Codegen.CSharp.Model;
 
 /// <summary>
-/// 4-part NuGet version <c>Major.Minor.Patch.Revision</c> per
-/// <a href="../../docs/adr/0002-splice-nuget-versioning.md">ADR 0002</a>.
+/// 4-part NuGet version <c>Major.Minor.Patch.Revision</c>.
 /// Segments 1–3 are the DAR-intrinsic version; segment 4 (<see cref="Revision"/>) is
 /// the monotonic emitter counter that disambiguates content-identical re-emissions
 /// of the same DAR-intrinsic version under different emitter versions.

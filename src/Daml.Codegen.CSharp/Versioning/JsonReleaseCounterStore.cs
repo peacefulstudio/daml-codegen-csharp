@@ -10,7 +10,6 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// <summary>
 /// File-backed store of emitter-counter values keyed by
 /// <c>{packageName}@{Major.Minor.Patch}</c>. The 4th NuGet version segment
-/// per <a href="../../docs/adr/0002-splice-nuget-versioning.md">ADR 0002</a>
 /// is derived from this store: <c>0</c> for any first emission of a
 /// (package, intrinsic) pair, incremented only when the same pair is
 /// re-emitted with a different content hash.

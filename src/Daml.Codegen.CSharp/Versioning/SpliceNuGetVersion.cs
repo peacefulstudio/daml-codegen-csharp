@@ -6,12 +6,11 @@ using Daml.Codegen.CSharp.Model;
 namespace Daml.Codegen.CSharp.Versioning;
 
 /// <summary>
-/// Entry point for the 4-part <c>M.m.p.r</c> NuGet versioning scheme from
-/// <a href="../../docs/adr/0002-splice-nuget-versioning.md">ADR 0002</a>. Composes
+/// Entry point for the 4-part <c>M.m.p.r</c> NuGet versioning scheme. Composes
 /// a DAR-intrinsic <see cref="Version"/> (segments 1–3, from the package metadata)
 /// with the emitter counter (segment 4) derived from the supplied
 /// <see cref="JsonReleaseCounterStore"/>. Intended to be called by the NuGet packing
-/// step (issue #148) once per package being packed.
+/// step once per package being packed.
 /// </summary>
 public static class SpliceNuGetVersion
 {
