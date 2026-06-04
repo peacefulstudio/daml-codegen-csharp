@@ -87,21 +87,21 @@ public sealed class CodeGenOptions
 
     /// <summary>
     /// Gets or sets the 4th-segment emitter counter for the generated NuGet
-    /// version per <c>ADR 0002</c> (Splice NuGet versioning). The Daml package
-    /// supplies segments 1–3 (<c>Major.Minor.Patch</c>); segment 4 is a
+    /// version. The Daml package supplies segments 1–3
+    /// (<c>Major.Minor.Patch</c>); segment 4 is a
     /// monotonic counter keyed to the emitter version that produced this
     /// build. Defaults to <c>0</c> for the first emission of a given content.
-    /// The emitter-version → counter mapping lives next to
-    /// <c>publish-splice.yaml</c> and is consumed by the publish pipeline;
-    /// local-dev codegen invocations leave the default in place.
+    /// A release pipeline supplies a monotonic counter to distinguish
+    /// republished builds of the same source; local-dev codegen invocations
+    /// leave the default in place.
     /// </summary>
     public int EmitterCounter { get; init; }
 
     /// <summary>
     /// Gets or sets the SPDX license expression emitted in the generated
     /// <c>.csproj</c>'s <c>&lt;PackageLicenseExpression&gt;</c>. Defaults to
-    /// <c>Apache-2.0</c> — correct for the M1 Splice publish path and for
-    /// any DAR whose own licensing is Apache-2.0. Consumers running the
+    /// <c>Apache-2.0</c>, correct for any DAR whose own licensing is
+    /// Apache-2.0. Consumers running the
     /// emitter against a proprietary or differently-licensed DAR should
     /// pass the right SPDX identifier here (or via <c>--package-license</c>
     /// on the CLI) so the published <c>.nuspec</c> doesn't misrepresent

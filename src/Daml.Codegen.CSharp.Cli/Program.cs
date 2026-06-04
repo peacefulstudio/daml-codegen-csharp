@@ -6,26 +6,29 @@ using Daml.Codegen.CSharp;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
 using Daml.Codegen.CSharp.Versioning;
-using Daml.Codegen.DarParser;
 using Daml.Codegen.Intermediate;
-using Spectre.Console;
 
 namespace Daml.Codegen.CSharp.Cli;
 
 /// <summary>
-/// Entry point for the Daml C# code generator CLI. Bundled as a
-/// self-contained single-file binary inside the <c>dpm codegen-cs</c>
-/// OCI artifact (#136). Accepts either an <c>IntermediateDar</c> proto
-/// file (the post-#147 primary path, produced by the JVM helper) via
-/// <c>--intermediate</c>, or one or more <c>.dar</c> archives via the
-/// positional <c>dar-files</c> argument (legacy direct path retained for
-/// local development).
+/// Entry point for the Daml C# code generator CLI, bundled as a
+/// self-contained single-file binary inside the <c>dpm codegen-cs</c> OCI
+/// artifact. Reads an <c>IntermediateDar</c> proto file (produced by the JVM
+/// helper) via <c>--intermediate</c>. When built with DAR-direct support
+/// (<c>DamlIncludeDarDirect=true</c>), it also accepts one or more
+/// <c>.dar</c> archives via the positional <c>dar-files</c> argument.
 /// </summary>
-public static class Program
+public static partial class Program
 {
+#pragma warning disable CA1805
+    private static Argument<FileInfo[]>? _darFilesArg = null;
+
+    private static Func<FileInfo[], CodeGenOptions, CodegenArgs, ConsoleLogger, Task<int>>? _generateFromDarFiles = null;
+#pragma warning restore CA1805
+
     public static async Task<int> Main(string[] args)
     {
-        var rootCommand = new RootCommand("Generate C# code from Daml Archive (.dar) files or an IntermediateDar proto");
+        var rootCommand = new RootCommand("Generate C# code from an IntermediateDar proto");
 
         var intermediateOption = new Option<FileInfo?>("--intermediate")
         {
@@ -37,28 +40,6 @@ public static class Program
             if (value is not null && !value.Exists)
             {
                 result.AddError($"IntermediateDar proto not found: {value.FullName}");
-            }
-        });
-
-        var darFilesArg = new Argument<FileInfo[]>("dar-files")
-        {
-            Description = "DAR files to generate C# bindings for (legacy direct path; ignored when --intermediate is given)",
-            Arity = ArgumentArity.ZeroOrMore
-        };
-        darFilesArg.Validators.Add(result =>
-        {
-            foreach (var file in result.GetValueOrDefault<FileInfo[]>() ?? [])
-            {
-                if (!file.Exists)
-                {
-                    result.AddError($"DAR file not found: {file.FullName}");
-                    return;
-                }
-                if (!file.Extension.Equals(".dar", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.AddError($"File must have .dar extension: {file.FullName}");
-                    return;
-                }
             }
         });
 
@@ -131,25 +112,25 @@ public static class Program
 
         var emitterCounterOption = new Option<int>("--emitter-counter")
         {
-            Description = "4th segment of the generated NuGet version (M.m.p.r per ADR 0002). Defaults to 0; the Splice publish CI passes a monotonic counter from the emitter-version mapping table.",
+            Description = "4th segment of the generated NuGet version (Major.Minor.Patch.Revision). Defaults to 0; set a monotonic counter to distinguish republished builds of the same source.",
             DefaultValueFactory = _ => 0
         };
         emitterCounterOption.Validators.Add(result =>
         {
             if (result.GetValue(emitterCounterOption) < 0)
             {
-                result.AddError("--emitter-counter must be a non-negative integer (ADR 0002 segment 4 is a monotonic counter).");
+                result.AddError("--emitter-counter must be a non-negative integer (the 4th version segment is a monotonic counter).");
             }
         });
 
         var releaseCountersOption = new Option<FileInfo?>("--release-counters")
         {
-            Description = "Path to a JSON release-counter store (JsonReleaseCounterStore). REQUIRES --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store via SpliceNuGetVersion.Compute — overriding --emitter-counter. The store is created on first use and atomically updated on each run; per ADR 0004 the Splice publish CI loads / saves it as a GitHub Actions repo variable across runs."
+            Description = "Path to a JSON release-counter store. Requires --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store, overriding --emitter-counter. The store is created on first use and atomically updated on each run."
         };
 
         var packageLicenseOption = new Option<string>("--package-license")
         {
-            Description = "SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0 (correct for the Splice publish path).",
+            Description = "SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0.",
             DefaultValueFactory = _ => "Apache-2.0"
         };
         packageLicenseOption.Validators.Add(result =>
@@ -161,7 +142,8 @@ public static class Program
             }
         });
 
-        rootCommand.Arguments.Add(darFilesArg);
+        ConfigureDarDirect(rootCommand);
+
         rootCommand.Options.Add(intermediateOption);
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(namespaceOption);
@@ -181,7 +163,7 @@ public static class Program
         Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, _) =>
             RunCodegen(new CodegenArgs(
                 parseResult.GetValue(intermediateOption),
-                parseResult.GetValue(darFilesArg) ?? [],
+                _darFilesArg is not null ? parseResult.GetValue(_darFilesArg) ?? [] : [],
                 parseResult.GetValue(outputOption)!,
                 parseResult.GetValue(namespaceOption),
                 parseResult.GetValue(verbosityOption),
@@ -195,12 +177,15 @@ public static class Program
                 parseResult.GetValue(contractIdentifiersOption),
                 parseResult.GetValue(emitterCounterOption),
                 parseResult.GetValue(releaseCountersOption),
-                parseResult.GetValue(packageLicenseOption)!));
+                parseResult.GetValue(packageLicenseOption)!,
+                _generateFromDarFiles is not null));
         rootCommand.SetAction(action);
 
         var parseResult = rootCommand.Parse(args);
         return await parseResult.InvokeAsync();
     }
+
+    static partial void ConfigureDarDirect(RootCommand root);
 
     private static async Task<int> RunCodegen(CodegenArgs args)
     {
@@ -219,7 +204,7 @@ public static class Program
 
             if (args.ReleaseCountersFile is not null && args.IntermediateFile is null)
             {
-                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash (see ADR 0002 / ADR 0004); the DAR-direct path does not expose the deterministic proto bytes.");
+                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash; the DAR-direct path does not expose the deterministic proto bytes.");
                 return 1;
             }
 
@@ -228,13 +213,14 @@ public static class Program
                 await GenerateFromIntermediate(args.IntermediateFile, args, logger);
                 return 0;
             }
-            if (args.DarFiles.Length > 0)
+            if (args.DarFiles.Length > 0 && _generateFromDarFiles is not null)
             {
-                await GenerateFromDarFiles(args.DarFiles, BuildOptions(args, args.EmitterCounter), args, logger);
-                return 0;
+                return await _generateFromDarFiles(args.DarFiles, BuildOptions(args, args.EmitterCounter), args, logger);
             }
 
-            logger.Error("Either --intermediate <path> or one or more <dar-files> must be provided.");
+            logger.Error(args.DarDirectAvailable
+                ? "Either --intermediate <path> or one or more <dar-files> must be provided."
+                : "--intermediate is required; this build does not include the DAR-direct path.");
             return 1;
         }
         catch (Exception ex)
@@ -306,50 +292,6 @@ public static class Program
             PackageLicenseExpression = args.PackageLicenseExpression,
         };
 
-    private static async Task GenerateFromDarFiles(FileInfo[] darFiles, CodeGenOptions options, CodegenArgs args, ConsoleLogger logger)
-    {
-        var totalFiles = 0;
-        foreach (var darFile in darFiles)
-        {
-            logger.Info($"Processing: {darFile.Name}");
-            await AnsiConsole.Status().StartAsync($"Reading {darFile.Name}...", async ctx =>
-            {
-                ctx.Status($"Parsing {darFile.Name}...");
-                var dar = await DarArchive.ReadAsync(darFile.FullName);
-
-                logger.Info($"  Package: {dar.MainPackage.Name} v{dar.MainPackage.Version}");
-                logger.Info($"  Modules: {dar.MainPackage.Modules.Count}");
-                logger.Debug($"  Dependencies: {dar.Dependencies.Count}");
-
-                if (options.IncludeDependencies)
-                {
-                    logger.Info($"  Including {dar.Dependencies.Count} dependencies in code generation");
-                }
-
-                if (dar.MainPackage.DependencyReferences.Count > 0)
-                {
-                    logger.Debug($"  Package references {dar.MainPackage.DependencyReferences.Count} dependencies:");
-                    foreach (var depRef in dar.MainPackage.DependencyReferences)
-                    {
-                        var depInfo = depRef.Name != null
-                            ? $"{depRef.Name} v{depRef.Version}"
-                            : depRef.PackageId[..Math.Min(16, depRef.PackageId.Length)] + "...";
-                        logger.Debug($"    - {depInfo}");
-                    }
-                }
-
-                ctx.Status("Generating C# code...");
-                var generator = new CSharpCodeGenerator(options, logger);
-                var generatedFiles = generator.Generate(dar);
-
-                ctx.Status("Writing files...");
-                totalFiles += await WriteGeneratedFiles(generatedFiles, args, logger);
-            });
-        }
-
-        AnsiConsole.MarkupLine($"[green]✓[/] Generated {totalFiles} files");
-    }
-
     private static async Task<int> WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ConsoleLogger logger)
     {
         var written = 0;
@@ -386,4 +328,5 @@ internal sealed record CodegenArgs(
     bool GenerateContractIdentifiers,
     int EmitterCounter,
     FileInfo? ReleaseCountersFile,
-    string PackageLicenseExpression);
+    string PackageLicenseExpression,
+    bool DarDirectAvailable);

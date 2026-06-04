@@ -8,17 +8,22 @@
     <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
     <AssemblyName>Daml.Codegen.CSharp.Cli</AssemblyName>
     <RollForward>Major</RollForward>
+    <DamlIncludeDarDirect Condition="'$(DamlIncludeDarDirect)'==''">true</DamlIncludeDarDirect>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
-    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console" Condition="'$(DamlIncludeDarDirect)'=='true'" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Daml.Codegen.CSharp\Daml.Codegen.CSharp.csproj" />
-    <ProjectReference Include="..\Daml.Codegen.DarParser\Daml.Codegen.DarParser.csproj" />
+    <ProjectReference Include="..\Daml.Codegen.DarParser\Daml.Codegen.DarParser.csproj" Condition="'$(DamlIncludeDarDirect)'=='true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DamlIncludeDarDirect)'!='true'">
+    <Compile Remove="Program.DarDirect.cs" />
   </ItemGroup>
 
 </Project>

@@ -5,11 +5,9 @@ namespace Daml.Codegen.CSharp.Model;
 
 /// <summary>
 /// Emitter input contract — a main package plus dependency packages, with
-/// per-package-id lookup. Implemented by both the parser-direct
-/// <c>DarArchive</c> (in <c>Daml.Codegen.DarParser</c>) and the
-/// proto-direct <see cref="DarModel"/> produced by
-/// <c>IntermediateDarReader</c>. Keeps the emitter library decoupled from
-/// the DAR-parsing project per ADR 0003.
+/// per-package-id lookup. Implemented by the proto-direct
+/// <see cref="DarModel"/> produced by <c>IntermediateDarReader</c>. Keeps the
+/// emitter library decoupled from how the DAR is decoded.
 /// </summary>
 public interface IDarSource
 {
