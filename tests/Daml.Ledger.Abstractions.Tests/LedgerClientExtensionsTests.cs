@@ -140,6 +140,132 @@ public class LedgerClientExtensionsTests
             .WithMessage("*Connection reset*");
     }
 
+    [Fact]
+    public async Task ExerciseAsync_with_SubmitterInfo_returns_value_when_TryExerciseAsync_returns_One()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.One(99));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        var result = await client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().Be(99);
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_DamlError()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*CONTRACT_NOT_FOUND*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_InfraError()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset"));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Connection reset*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.None());
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*None*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_Many()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(3, ["cid-1", "cid-2", "cid-3"]));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Many*3*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_with_SubmitterInfo_does_not_throw_when_TryExerciseAsync_returns_One()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.One(new object()));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_with_SubmitterInfo_does_not_throw_when_TryExerciseAsync_returns_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.None());
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_with_SubmitterInfo_does_not_throw_when_TryExerciseAsync_returns_Many()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.Many(2, ["cid-1", "cid-2"]));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_DamlError()
+    {
+        var outcome = new ExerciseOutcome<object>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*CONTRACT_NOT_FOUND*");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_InfraError()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.InfraError(14, "Connection reset"));
+        var submitter = new SubmitterInfo(new Party("alice"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Connection reset*");
+    }
+
     /// <summary>
     /// Minimal <see cref="ILedgerClient"/> stub that returns a pre-configured
     /// <see cref="ExerciseOutcome{T}"/> from <see cref="ILedgerClient.TryExerciseAsync{TResult}"/>.
