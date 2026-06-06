@@ -90,11 +90,27 @@ public static class Program
             Description = "Target framework for the generated project (e.g., net10.0)",
             DefaultValueFactory = _ => "net10.0"
         };
+        targetFrameworkOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(targetFrameworkOption);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("--target-framework must be a non-empty target framework moniker (e.g. net10.0, net9.0).");
+            }
+        });
 
         var runtimeVersionOption = new Option<string?>("--runtime-version")
         {
             Description = "Version of Daml.Runtime package to reference"
         };
+        runtimeVersionOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(runtimeVersionOption);
+            if (value is not null && string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("--runtime-version must be a non-empty version string when specified (e.g. 1.2.3).");
+            }
+        });
 
         var contractIdentifiersOption = new Option<bool>("--contract-identifiers")
         {

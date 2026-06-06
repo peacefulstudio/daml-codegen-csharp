@@ -83,7 +83,7 @@ public sealed class ProjectFileGenerator
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
-        sb.AppendLine($"    <TargetFramework>{_options.TargetFramework}</TargetFramework>");
+        sb.AppendLine($"    <TargetFramework>{EscapeXmlText(_options.TargetFramework)}</TargetFramework>");
         // Pin C# 13 only when the project's actual emitted code contains the
         // partial-property syntax from WriteKeyProperty (see daml-codegen-csharp#65).
         // Anchored to the emission set (not to package.Modules) so that:
@@ -117,7 +117,7 @@ public sealed class ProjectFileGenerator
         sb.AppendLine("  <ItemGroup>");
 
         // Runtime package reference
-        var runtimeVersion = _options.RuntimePackageVersion ?? "*";
+        var runtimeVersion = EscapeXmlText(_options.RuntimePackageVersion ?? "*");
         sb.AppendLine($"    <PackageReference Include=\"Daml.Runtime\" Version=\"{runtimeVersion}\" />");
         // Ledger-abstractions package reference. Required by the codegen-emitted
         // `<Choice>Async` extension methods (which take `ILedgerClient`). Emitted

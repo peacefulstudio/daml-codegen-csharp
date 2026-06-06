@@ -706,4 +706,59 @@ public class ProjectFileGeneratorTests
 
         file.Content.Should().NotContain("<LangVersion>");
     }
+
+    [Fact]
+    public void GenerateProjectFile_should_xml_escape_target_framework_in_element_text()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0 & <evil>",
+            GenerateProjectFile = true,
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<TargetFramework>net10.0 &amp; &lt;evil&gt;</TargetFramework>",
+            "user-supplied target framework flows into csproj element text and must be XML-escaped");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_xml_escape_runtime_version_in_attribute_value()
+    {
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            TargetFramework = "net10.0",
+            RuntimePackageVersion = "1.0.0\"injected",
+            GenerateProjectFile = true,
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "Version=\"1.0.0&quot;injected\"",
+            "user-supplied runtime version flows into a csproj attribute and embedded quotes must be escaped");
+    }
 }
