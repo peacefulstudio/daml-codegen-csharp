@@ -11,15 +11,6 @@ namespace Daml.Runtime.Tests;
 public class SubmitterInfoTests
 {
     [Fact]
-    public void Implicit_string_conversion_should_yield_single_party_actAs()
-    {
-        SubmitterInfo info = "alice";
-
-        info.ActAs.Should().ContainSingle().Which.Should().Be(new Party("alice"));
-        info.ReadAs.Should().BeEmpty();
-    }
-
-    [Fact]
     public void Implicit_Party_conversion_should_yield_single_party_actAs()
     {
         SubmitterInfo info = new Party("alice");
@@ -198,15 +189,14 @@ public class SubmitterInfoTests
     }
 
     [Fact]
-    public void CommandsSubmission_WithSubmitter_via_implicit_string_should_yield_single_party_submission()
+    public void CommandsSubmission_WithSubmitter_via_implicit_Party_should_yield_single_party_submission()
     {
         var submission = CommandsSubmission.Single(
             new CreateCommand(
                 new Identifier("pkg", "Module", "Template"),
                 new DamlRecord(null, [])));
 
-        // Single-party ergonomic — no explicit SubmitterInfo construction needed.
-        var result = submission.WithSubmitter("alice");
+        var result = submission.WithSubmitter(new Party("alice"));
 
         result.ActAs.Should().ContainSingle().Which.Should().Be(new Party("alice"));
         result.ReadAs.Should().BeNull();

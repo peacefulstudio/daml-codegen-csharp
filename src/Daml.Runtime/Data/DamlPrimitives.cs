@@ -97,7 +97,9 @@ public sealed record DamlTimestamp(DateTimeOffset Value) : DamlValue
 
 /// <summary>
 /// Represents a first-class Daml Party identifier.
-/// Implicit conversion to string (for logging/interpolation), explicit from string.
+/// Conversions to and from <see cref="string"/> are both explicit, so a party can
+/// never be silently mistaken for an arbitrary string (or vice versa); use
+/// <see cref="Id"/> or <see cref="ToString"/> for logging and interpolation.
 /// </summary>
 [JsonConverter(typeof(PartyJsonConverter))]
 public readonly record struct Party
@@ -113,7 +115,7 @@ public readonly record struct Party
         _id = id;
     }
 
-    public static implicit operator string(Party party) =>
+    public static explicit operator string(Party party) =>
         party._id ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) Party to string.");
 
     public static explicit operator Party(string id) => new(id);

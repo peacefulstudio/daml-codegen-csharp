@@ -20,6 +20,13 @@ because they are versioned in lockstep:
 
 - `NOTICE` file added at repo root (Apache-2.0 open-source prep).
 
+### Changed — BREAKING
+
+- **`ILedgerClient` submitter API is now strongly typed: the single-party convenience overloads of `TryExerciseAsync<TResult>`, `TryCreateAsync<TTemplate>`, `TryExerciseForCreatedAsync<TTemplate>`, `SubscribeAsync<T>`, and `SubscribeActiveAsync<T>` (and `LedgerClientExtensions.ExerciseAsync`) take `Party actAs` instead of `string actAs`.** The `SubmitterInfo` overloads remain the abstract primitives implementations override; the `Party actAs` overloads are convenience default-interface-methods that forward to them with that single `ActAs` party and empty `ReadAs`. Replace `client.ExerciseAsync(cmd, "alice")` with `client.ExerciseAsync(cmd, new Party("alice"))` ([#257](https://github.com/peacefulstudio/daml-codegen-csharp/pull/257)).
+- **Removed the implicit `string` → `SubmitterInfo` conversion.** A bare `string` no longer binds to a submitter parameter — construct the party explicitly (`new Party("alice")`), or build a `SubmitterInfo`. The implicit `Party` → `SubmitterInfo` conversion is retained, so single-party submission stays a one-liner once you hold a `Party`. This closes a transposition footgun where `actAs` and the adjacent `string? workflowId` could be swapped silently ([#257](https://github.com/peacefulstudio/daml-codegen-csharp/pull/257)).
+- **`Party` → `string` is now an explicit conversion** (was implicit). Use `party.Id` or `(string)party` where a raw string is genuinely wanted; this prevents a `Party` from silently flowing into an arbitrary `string` parameter such as `workflowId`. There is still no implicit `string` → `Party` conversion — construct with `new Party(...)` ([#257](https://github.com/peacefulstudio/daml-codegen-csharp/pull/257)).
+- The default submission path carries `ReadAs` parties and multiple `ActAs` parties straight through to the implementation instead of throwing `NotSupportedException` — a single-`actAs`-plus-`readAs` submission no longer fails at runtime ([#236](https://github.com/peacefulstudio/daml-codegen-csharp/issues/236)).
+
 ### Changed
 
 - Licensing: every source file now carries the two-line SPDX Apache-2.0 header (`Copyright (c) 2026 Peaceful Studio OÜ` + `SPDX-License-Identifier: Apache-2.0`); the central `<Copyright>` tag in `Directory.Build.props` is retained for assembly metadata. (open-source prep)

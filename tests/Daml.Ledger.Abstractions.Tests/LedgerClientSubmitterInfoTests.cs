@@ -13,11 +13,11 @@ using Xunit;
 namespace Daml.Ledger.Abstractions.Tests;
 
 /// <summary>
-/// Verifies the default-interface-method (DIM) overloads of <see cref="ILedgerClient"/>
-/// that accept <see cref="SubmitterInfo"/>: single-party submissions delegate to the
-/// existing string <c>actAs</c> methods, multi-party submissions throw a clear
-/// <see cref="NotSupportedException"/>, and an explicit override of the SubmitterInfo
-/// overload bypasses the default delegation entirely.
+/// Verifies the authorization routing of <see cref="ILedgerClient"/>: the
+/// <see cref="SubmitterInfo"/> overloads are the primitives implementations override,
+/// the <c>Party</c> <c>actAs</c> default-interface-methods forward to them with a single
+/// act-as party and no read-as parties, and multi-party / read-as submissions carry
+/// every party through to the primitive instead of throwing.
 /// </summary>
 public class LedgerClientSubmitterInfoTests
 {
@@ -27,8 +27,6 @@ public class LedgerClientSubmitterInfoTests
         Choice: "DoIt",
         ChoiceArgument: new DamlRecord(null, []));
 
-    private static readonly SubmitterInfo SingleParty = new(new Party("alice"));
-
     private static readonly SubmitterInfo MultiParty = new(
         actAs: new HashSet<Party> { new("alice"), new("bob") });
 
@@ -37,221 +35,228 @@ public class LedgerClientSubmitterInfoTests
         readAs: new HashSet<Party> { new("observer") });
 
     [Fact]
-    public async Task ExerciseAsync_with_result_single_party_should_delegate_to_string_actAs()
+    public async Task ExerciseAsync_with_result_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
+        await client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastTryExerciseActAs.Should().Be("alice");
+        fake.LastExerciseSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ExerciseAsync_void_single_party_should_delegate_to_string_actAs()
+    public async Task ExerciseAsync_void_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
+        await client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastTryExerciseActAs.Should().Be("alice");
+        fake.LastExerciseSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task TryCreateAsync_single_party_should_delegate_to_string_actAs()
+    public async Task TryCreateAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.TryCreateAsync(new FakeTemplate(), SingleParty, cancellationToken: TestContext.Current.CancellationToken);
+        await client.TryCreateAsync(new FakeTemplate(), new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastCreateActAs.Should().Be("alice");
+        fake.LastCreateSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastCreateSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task TryExerciseForCreatedAsync_single_party_should_delegate_to_string_actAs()
+    public async Task TryExerciseForCreatedAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
+        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastExerciseForCreatedActAs.Should().Be("alice");
+        fake.LastExerciseForCreatedSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseForCreatedSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SubscribeAsync_single_party_should_delegate_to_string_actAs()
+    public async Task SubscribeAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(SingleParty, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
         {
-            // Drain — the fake yields nothing.
         }
 
-        fake.LastSubscribeActAs.Should().Be("alice");
+        fake.LastSubscribeSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SubscribeActiveAsync_single_party_should_delegate_to_string_actAs()
+    public async Task SubscribeActiveAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(SingleParty, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
         {
-            // Drain — the fake yields nothing.
         }
 
-        fake.LastSubscribeActiveActAs.Should().Be("alice");
+        fake.LastSubscribeActiveSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeActiveSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ExerciseAsync_with_result_multi_party_should_throw_NotSupportedException()
+    public async Task ExerciseAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, MultiParty);
+        await client.ExerciseAsync<int>(SampleCommand, SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*TryExerciseAsync*single ActAs party with no ReadAs parties*");
+        fake.LastExerciseSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
     }
 
     [Fact]
-    public async Task ExerciseAsync_void_multi_party_should_throw_NotSupportedException()
+    public async Task TryCreateAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, MultiParty);
+        await client.TryCreateAsync(new FakeTemplate(), SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*TryExerciseAsync*single ActAs party with no ReadAs parties*");
+        fake.LastCreateSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastCreateSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
     }
 
     [Fact]
-    public async Task TryCreateAsync_multi_party_should_throw_NotSupportedException()
+    public async Task SubscribeAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        Func<Task> act = () => client.TryCreateAsync(new FakeTemplate(), MultiParty);
-
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*TryCreateAsync*single ActAs party with no ReadAs parties*");
-    }
-
-    [Fact]
-    public async Task TryExerciseForCreatedAsync_multi_party_should_throw_NotSupportedException()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        Func<Task> act = () => client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, MultiParty);
-
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*TryExerciseForCreatedAsync*single ActAs party with no ReadAs parties*");
-    }
-
-    [Fact]
-    public async Task SubscribeAsync_multi_party_should_throw_NotSupportedException()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        Func<Task> act = async () =>
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken))
         {
-            await foreach (var _ in client.SubscribeAsync<FakeTemplate>(MultiParty))
-            {
-                // Drain.
-            }
-        };
+        }
 
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*SubscribeAsync*single ActAs party with no ReadAs parties*");
+        fake.LastSubscribeSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
     }
 
     [Fact]
-    public async Task SubscribeActiveAsync_multi_party_should_throw_NotSupportedException()
+    public async Task ExerciseAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
     {
         var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        Func<Task> act = async () =>
-        {
-            await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(MultiParty))
-            {
-                // Drain.
-            }
-        };
-
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*SubscribeActiveAsync*single ActAs party with no ReadAs parties*");
-    }
-
-    [Fact]
-    public async Task SubmitterInfo_with_readAs_should_be_treated_as_multi_party()
-    {
-        // Single ActAs party but with a ReadAs party — must NOT be flattened to the
-        // single-party path because the readAs visibility would be lost.
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, SinglePartyWithReadAs);
-
-        await act.Should().ThrowAsync<NotSupportedException>();
-    }
-
-    [Fact]
-    public async Task Custom_override_of_SubmitterInfo_overload_should_be_invoked_for_multi_party()
-    {
-        var fake = new MultiPartyAwareLedgerClient();
         ILedgerClient client = fake;
 
         await client.ExerciseAsync<int>(SampleCommand, MultiParty, cancellationToken: TestContext.Current.CancellationToken);
 
-        // The override recorded the call directly; the string-actAs base method must NOT have run.
-        fake.OverrideHits.Should().Be(1);
-        fake.LastTryExerciseActAs.Should().BeNull();
+        fake.LastExerciseSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+        fake.LastExerciseSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Custom_override_of_SubmitterInfo_overload_should_win_over_default_for_single_party()
+    public async Task TryExerciseForCreatedAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
     {
-        // Even single-party submissions go through the override when the implementation
-        // chooses to override — the default delegation is opt-out, not opt-in.
-        var fake = new MultiPartyAwareLedgerClient();
+        var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.ExerciseAsync<int>(SampleCommand, SingleParty, cancellationToken: TestContext.Current.CancellationToken);
+        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, MultiParty, cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.OverrideHits.Should().Be(1);
-        fake.LastTryExerciseActAs.Should().BeNull();
+        fake.LastExerciseForCreatedSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+    }
+
+    [Fact]
+    public async Task SubscribeActiveAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(MultiParty, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeActiveSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+    }
+
+    [Fact]
+    public async Task TryExerciseForCreatedAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await client.TryExerciseForCreatedAsync<FakeTemplate>(SampleCommand, SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken);
+
+        fake.LastExerciseForCreatedSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseForCreatedSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
+    }
+
+    [Fact]
+    public async Task SubscribeActiveAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeActiveSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeActiveSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
+    }
+
+    [Fact]
+    public async Task TryCreateAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await client.TryCreateAsync(new FakeTemplate(), MultiParty, cancellationToken: TestContext.Current.CancellationToken);
+
+        fake.LastCreateSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+        fake.LastCreateSubmitter!.Value.ReadAs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(MultiParty, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+        fake.LastSubscribeSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     /// <summary>
-    /// Records the string-<c>actAs</c> argument each method receives so tests can
-    /// assert that the default-interface-method delegation hit the legacy overload
-    /// with the right party.
+    /// Records the <see cref="SubmitterInfo"/> each primitive receives so tests can
+    /// assert that the <c>Party</c>-<c>actAs</c> default-interface-method forwards with
+    /// the right single party and that read-as / multi-party submissions carry every
+    /// party through to the primitive.
     /// </summary>
     private class RecordingLedgerClient : ILedgerClient
     {
-        public string? LastTryExerciseActAs { get; private set; }
-        public string? LastCreateActAs { get; private set; }
-        public string? LastExerciseForCreatedActAs { get; private set; }
-        public string? LastSubscribeActAs { get; private set; }
-        public string? LastSubscribeActiveActAs { get; private set; }
+        public SubmitterInfo? LastExerciseSubmitter { get; private set; }
+        public SubmitterInfo? LastCreateSubmitter { get; private set; }
+        public SubmitterInfo? LastExerciseForCreatedSubmitter { get; private set; }
+        public SubmitterInfo? LastSubscribeSubmitter { get; private set; }
+        public SubmitterInfo? LastSubscribeActiveSubmitter { get; private set; }
 
         public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
         {
-            LastTryExerciseActAs = actAs;
+            LastExerciseSubmitter = submitter;
             return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
 
@@ -267,44 +272,44 @@ public class LedgerClientSubmitterInfoTests
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
         {
-            LastCreateActAs = actAs;
+            LastCreateSubmitter = submitter;
             return Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(
                 new ExerciseOutcome<ContractId<TTemplate>>.None());
         }
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
             ExerciseCommand command,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
         {
-            LastExerciseForCreatedActAs = actAs;
+            LastExerciseForCreatedSubmitter = submitter;
             return Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(
                 new ExerciseOutcome<ContractId<TTemplate>>.None());
         }
 
         public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
-            string actAs,
+            SubmitterInfo submitter,
             long? fromOffset = null,
             CancellationToken cancellationToken = default)
             where T : ITemplate
         {
-            LastSubscribeActAs = actAs;
+            LastSubscribeSubmitter = submitter;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
         public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
-            string actAs,
+            SubmitterInfo submitter,
             CancellationToken cancellationToken = default)
             where T : ITemplate
         {
-            LastSubscribeActiveActAs = actAs;
+            LastSubscribeActiveSubmitter = submitter;
             return EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
         }
 
@@ -313,7 +318,6 @@ public class LedgerClientSubmitterInfoTests
 
         public void Dispose()
         {
-            // No resources to release in the test fake.
         }
 
         private static async IAsyncEnumerable<TItem> EmptyAsync<TItem>(
@@ -326,30 +330,9 @@ public class LedgerClientSubmitterInfoTests
     }
 
     /// <summary>
-    /// Overrides the SubmitterInfo overload of <c>ExerciseAsync&lt;TResult&gt;</c> via
-    /// explicit interface implementation so it bypasses the default-interface-method
-    /// delegation entirely. Tests that the override wins over the default DIM
-    /// implementation, including for multi-party calls that the default would otherwise refuse.
-    /// </summary>
-    private sealed class MultiPartyAwareLedgerClient : RecordingLedgerClient, ILedgerClient
-    {
-        public int OverrideHits { get; private set; }
-
-        Task<ExerciseOutcome<TResult>> ILedgerClient.TryExerciseAsync<TResult>(
-            ExerciseCommand command,
-            SubmitterInfo submitter,
-            string? workflowId,
-            CancellationToken cancellationToken)
-        {
-            OverrideHits++;
-            return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
-        }
-    }
-
-    /// <summary>
     /// Minimal <see cref="ITemplate"/> for routing tests. Carries no payload —
-    /// the assertions here are about whether the SubmitterInfo overload reaches
-    /// the right legacy method, not about template encoding.
+    /// the assertions here are about which submitter reaches the primitive,
+    /// not about template encoding.
     /// </summary>
     private sealed record FakeTemplate : ITemplate
     {

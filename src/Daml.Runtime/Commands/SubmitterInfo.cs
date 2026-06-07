@@ -23,8 +23,11 @@ namespace Daml.Runtime.Commands;
 /// still cannot mutate the snapshot.
 /// </para>
 /// <para>
-/// Implicit conversions from <see cref="string"/> and <see cref="Party"/> preserve
-/// the single-party ergonomic at every existing call site.
+/// An implicit conversion from <see cref="Party"/> preserves the single-party
+/// ergonomic at every existing call site. There is deliberately no
+/// <see cref="string"/> conversion: callers construct parties explicitly with
+/// <c>new Party(...)</c> so a bare string can never be mistaken for an authorized
+/// submitter.
 /// </para>
 /// <para>
 /// This is the canonical home of <c>SubmitterInfo</c>: <c>Party</c> already lives in
@@ -50,7 +53,7 @@ public readonly record struct SubmitterInfo
     /// </summary>
     public IReadOnlySet<Party> ActAs => _actAs ?? throw new InvalidOperationException(
         "Cannot access ActAs of a default (uninitialized) SubmitterInfo. " +
-        "Construct via the SubmitterInfo constructor or implicit conversion from string/Party.");
+        "Construct via the SubmitterInfo constructor or implicit conversion from Party.");
 
     /// <summary>
     /// The set of additional parties whose contracts are read-visible during command
@@ -120,14 +123,6 @@ public readonly record struct SubmitterInfo
         }
         return source.ToFrozenSet();
     }
-
-    /// <summary>
-    /// Implicitly converts a single-party identifier (string) into a
-    /// <see cref="SubmitterInfo"/> with that single <c>actAs</c> party and no
-    /// <c>readAs</c> parties. Preserves the single-party ergonomic at every call site.
-    /// </summary>
-    public static implicit operator SubmitterInfo(string singleActAs) =>
-        new(new Party(singleActAs));
 
     /// <summary>
     /// Implicitly converts a single <see cref="Party"/> into a

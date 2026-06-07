@@ -40,7 +40,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <c>controller</c> expression (anything other than a payload-field
 /// projection on the template parameter), codegen falls back to a single
 /// <c>SubmitterInfo submitter</c> parameter — callers retain full control via
-/// <c>SubmitterInfo</c>'s implicit conversion from <c>string</c> /
+/// <c>SubmitterInfo</c>'s implicit conversion from a single
 /// <c>Party</c>, so the legacy single-party call site stays a one-liner.
 /// </para>
 /// </summary>
@@ -207,7 +207,7 @@ public sealed partial class CSharpCodeGenerator
     /// <c>SubmitterInfo</c> from the payload's PascalCased <c>Party</c>
     /// properties. On the dynamic path, the caller passes a
     /// <c>SubmitterInfo</c> directly (with implicit conversion from
-    /// <c>string</c> / <c>Party</c> for the single-party ergonomic).
+    /// a single <c>Party</c> for the single-party ergonomic).
     /// </summary>
     private void WriteCreateAsync(IndentWriter indent, string className, DamlPartyAnalysis signatories)
     {
@@ -236,7 +236,7 @@ public sealed partial class CSharpCodeGenerator
                 indent.AppendLine("/// analyzer could not resolve the Daml <c>signatory</c> clause to payload-field");
                 indent.AppendLine("/// references — typically because the expression involves the template key, a");
                 indent.AppendLine("/// constant, or a function call. <see cref=\"SubmitterInfo\"/> implicitly converts");
-                indent.AppendLine("/// from <c>string</c> / <c>Party</c>, so single-party callers still pass one literal.");
+                indent.AppendLine("/// from a single <c>Party</c>, so single-party callers still pass one literal.");
             }
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");

@@ -3,6 +3,7 @@
 
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
+using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using FluentAssertions;
 using Richtypes;
@@ -28,7 +29,7 @@ public class RelabelAsyncTests
         using var client = new FakeLedgerClient(
             _ => new ExerciseOutcome<TransactionResult>.One(TransactionCreating("new-rich-cid")));
 
-        var outcome = await Target.RelabelAsync(client, Argument, "alice",
+        var outcome = await Target.RelabelAsync(client, Argument, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.Should().BeOfType<ExerciseOutcome<RelabelResult>.One>();
@@ -41,7 +42,7 @@ public class RelabelAsyncTests
         using var client = new FakeLedgerClient(
             _ => new ExerciseOutcome<TransactionResult>.One(TransactionCreating("new-rich-cid")));
 
-        await Target.RelabelAsync(client, Argument, "alice", workflowId: "wf-7",
+        await Target.RelabelAsync(client, Argument, new Party("alice"), workflowId: "wf-7",
             cancellationToken: TestContext.Current.CancellationToken);
 
         client.LastSubmission.Should().NotBeNull();
@@ -62,7 +63,7 @@ public class RelabelAsyncTests
                 "gone",
                 new Dictionary<string, string>()));
 
-        var outcome = await Target.RelabelAsync(client, Argument, "alice",
+        var outcome = await Target.RelabelAsync(client, Argument, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
         var error = outcome.Should().BeOfType<ExerciseOutcome<RelabelResult>.DamlError>().Subject;
@@ -76,7 +77,7 @@ public class RelabelAsyncTests
         using var client = new FakeLedgerClient(
             _ => new ExerciseOutcome<TransactionResult>.InfraError(14, "unavailable"));
 
-        var outcome = await Target.RelabelAsync(client, Argument, "alice",
+        var outcome = await Target.RelabelAsync(client, Argument, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
         var error = outcome.Should().BeOfType<ExerciseOutcome<RelabelResult>.InfraError>().Subject;
@@ -89,7 +90,7 @@ public class RelabelAsyncTests
     {
         using var client = new FakeLedgerClient();
 
-        var act = async () => await ((ContractId<RichRecord>)null!).RelabelAsync(client, Argument, "alice",
+        var act = async () => await ((ContractId<RichRecord>)null!).RelabelAsync(client, Argument, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
@@ -100,7 +101,7 @@ public class RelabelAsyncTests
     {
         using var client = new FakeLedgerClient();
 
-        var act = async () => await Target.RelabelAsync(client, null!, "alice",
+        var act = async () => await Target.RelabelAsync(client, null!, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentNullException>();

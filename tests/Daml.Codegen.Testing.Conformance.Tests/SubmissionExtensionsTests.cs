@@ -19,7 +19,7 @@ public class SubmissionExtensionsTests
             create: _ => new ExerciseOutcome<object>.One("marker-cid"));
         var payload = new Marker(new Party("alice"));
 
-        var outcome = await client.CreateAsync(payload, "alice", TestContext.Current.CancellationToken);
+        var outcome = await client.CreateAsync(payload, new Party("alice"), TestContext.Current.CancellationToken);
 
         outcome.Should().BeOfType<ExerciseOutcome<ContractId<Marker>>.One>();
         ((ExerciseOutcome<ContractId<Marker>>.One)outcome).Result.Value.Should().Be("marker-cid");
@@ -30,7 +30,7 @@ public class SubmissionExtensionsTests
     {
         using var client = new FakeLedgerClient();
 
-        var act = async () => await client.CreateAsync((Marker)null!, "alice");
+        var act = async () => await client.CreateAsync((Marker)null!, new Party("alice"));
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -54,7 +54,7 @@ public class SubmissionExtensionsTests
             Marker: new ContractId<Marker>("m"),
             Profile: new Profile("n", 0));
 
-        var outcome = await client.CreateAsync(payload, "alice", TestContext.Current.CancellationToken);
+        var outcome = await client.CreateAsync(payload, new Party("alice"), TestContext.Current.CancellationToken);
 
         outcome.Should().BeOfType<ExerciseOutcome<ContractId<RichRecord>>.One>();
         ((ExerciseOutcome<ContractId<RichRecord>>.One)outcome).Result.Value.Should().Be("rich-cid");

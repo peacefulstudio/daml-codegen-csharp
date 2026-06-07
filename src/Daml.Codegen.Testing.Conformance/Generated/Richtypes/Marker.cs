@@ -90,7 +90,7 @@ public static class MarkerSubmissionExtensions
     /// analyzer could not resolve the Daml <c>signatory</c> clause to payload-field
     /// references — typically because the expression involves the template key, a
     /// constant, or a function call. <see cref="SubmitterInfo"/> implicitly converts
-    /// from <c>string</c> / <c>Party</c>, so single-party callers still pass one literal.
+    /// from a single <c>Party</c>, so single-party callers still pass one literal.
     /// </summary>
     /// <param name="client">The ledger client.</param>
     /// <param name="payload">The contract payload.</param>

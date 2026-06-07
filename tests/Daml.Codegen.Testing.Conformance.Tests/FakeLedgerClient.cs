@@ -34,7 +34,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
         TTemplate payload,
-        string actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
         where TTemplate : ITemplate
@@ -60,7 +60,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
         ExerciseCommand command,
-        string actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
@@ -72,7 +72,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
         ExerciseCommand command,
-        string actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
         where TTemplate : ITemplate =>
@@ -82,14 +82,14 @@ internal sealed class FakeLedgerClient : ILedgerClient
         throw new NotSupportedException();
 
     public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
-        string actAs,
+        SubmitterInfo submitter,
         long? fromOffset = null,
         CancellationToken cancellationToken = default)
         where T : ITemplate =>
         throw new NotSupportedException();
 
     public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
-        string actAs,
+        SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
         where T : ITemplate =>
         throw new NotSupportedException();

@@ -391,8 +391,8 @@ public sealed partial class CSharpCodeGenerator
             {
                 indent.AppendLine("/// The submitter is passed explicitly via <paramref name=\"submitter\"/> — the static");
                 indent.AppendLine("/// analyzer could not resolve the Daml <c>controller</c> clause to payload-field");
-                indent.AppendLine("/// references. <see cref=\"SubmitterInfo\"/> implicitly converts from <c>string</c> /");
-                indent.AppendLine("/// <c>Party</c>, so the single-party call site stays a one-liner.");
+                indent.AppendLine("/// references. <see cref=\"SubmitterInfo\"/> implicitly converts from a");
+                indent.AppendLine("/// single <c>Party</c>, so the single-party call site stays a one-liner.");
             }
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");

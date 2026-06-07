@@ -121,15 +121,12 @@ public class DamlTypesTests
     }
 
     [Fact]
-    public void Party_should_convert_to_string_implicitly()
+    public void Party_should_convert_to_string_explicitly()
     {
-        // Arrange
         var party = new Party("alice");
 
-        // Act
-        string s = party;
+        var s = (string)party;
 
-        // Assert
         s.Should().Be("alice");
     }
 
@@ -223,15 +220,12 @@ public class DamlTypesTests
     }
 
     [Fact]
-    public void Party_default_implicit_string_should_throw()
+    public void Party_default_explicit_string_conversion_should_throw()
     {
-        // Arrange
         var party = default(Party);
 
-        // Act
-        var act = () => { string _ = party; };
+        var act = () => { var _ = (string)party; };
 
-        // Assert
         act.Should().Throw<InvalidOperationException>();
     }
 

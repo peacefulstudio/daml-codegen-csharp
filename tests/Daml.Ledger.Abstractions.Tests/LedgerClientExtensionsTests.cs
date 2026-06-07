@@ -29,7 +29,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.One(42));
 
-        var result = await client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         result.Should().Be(42);
     }
@@ -44,7 +44,7 @@ public class LedgerClientExtensionsTests
             new Dictionary<string, string>());
         ILedgerClient client = new StubLedgerClient(outcome);
 
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*CONTRACT_NOT_FOUND*");
@@ -55,7 +55,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset"));
 
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Connection reset*");
@@ -66,7 +66,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.None());
 
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*None*");
@@ -77,7 +77,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(3, ["cid-1", "cid-2", "cid-3"]));
 
-        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Many*3*");
@@ -88,7 +88,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.One(new object()));
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }
@@ -98,7 +98,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.None());
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }
@@ -108,7 +108,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.Many(2, ["cid-1", "cid-2"]));
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }
@@ -123,7 +123,7 @@ public class LedgerClientExtensionsTests
             new Dictionary<string, string>());
         ILedgerClient client = new StubLedgerClient(outcome);
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*CONTRACT_NOT_FOUND*");
@@ -134,7 +134,7 @@ public class LedgerClientExtensionsTests
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.InfraError(14, "Connection reset"));
 
-        Func<Task> act = () => client.ExerciseAsync(SampleCommand, "alice", cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Connection reset*");
@@ -268,9 +268,11 @@ public class LedgerClientExtensionsTests
 
     /// <summary>
     /// Minimal <see cref="ILedgerClient"/> stub that returns a pre-configured
-    /// <see cref="ExerciseOutcome{T}"/> from <see cref="ILedgerClient.TryExerciseAsync{TResult}"/>.
-    /// The outcome is stored as <c>object</c> and cast on retrieval so a single non-generic
-    /// stub can satisfy the generic <c>TryExerciseAsync&lt;TResult&gt;</c> contract for any <c>TResult</c>.
+    /// <see cref="ExerciseOutcome{T}"/> from the <see cref="SubmitterInfo"/>
+    /// <c>TryExerciseAsync&lt;TResult&gt;</c> primitive. The outcome is stored as
+    /// <c>object</c> and cast on retrieval so a single non-generic stub can satisfy
+    /// the generic contract for any <c>TResult</c>. The throwing extension wrappers
+    /// and the <c>Party</c>-<c>actAs</c> default-interface-method both route here.
     /// </summary>
     private sealed class StubLedgerClient : ILedgerClient
     {
@@ -280,7 +282,7 @@ public class LedgerClientExtensionsTests
 
         public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult((ExerciseOutcome<TResult>)_outcome);
@@ -297,7 +299,7 @@ public class LedgerClientExtensionsTests
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
@@ -305,21 +307,21 @@ public class LedgerClientExtensionsTests
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
             ExerciseCommand command,
-            string actAs,
+            SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
             => Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(new ExerciseOutcome<ContractId<TTemplate>>.None());
 
         public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
-            string actAs,
+            SubmitterInfo submitter,
             long? fromOffset = null,
             CancellationToken cancellationToken = default)
             where T : ITemplate
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
         public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
-            string actAs,
+            SubmitterInfo submitter,
             CancellationToken cancellationToken = default)
             where T : ITemplate
             => EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
