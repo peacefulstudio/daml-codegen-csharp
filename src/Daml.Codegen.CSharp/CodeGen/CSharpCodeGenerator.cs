@@ -1849,14 +1849,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     // Type mapping helpers
     private string MapDamlTypeToCSharp(DamlType type) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => _qualifier.Qualify("DamlUnit", _currentNamespace),
-        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => "bool",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => "long",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => "decimal",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => "string",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => "DateOnly",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => "DateTimeOffset",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => _qualifier.Qualify("Party", _currentNamespace),
+        DamlPrimitiveType primitive => MapBarePrimitiveToCSharp(primitive.Primitive),
         // Numeric with scale argument (Numeric n) - maps to decimal
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
@@ -1885,16 +1878,34 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         _ => "object"
     };
 
+    // CS8524 disabled (not CS8509): the no-default switch covers every named
+    // DamlPrimitive so an out-of-range cast is the only uncovered input. CS8509
+    // (a newly-added named member left unhandled) stays an error — that is the
+    // compiler-enforced checklist for adding a Daml primitive.
+#pragma warning disable CS8524
+    private string MapBarePrimitiveToCSharp(DamlPrimitive primitive) => primitive switch
+    {
+        DamlPrimitive.Unit => _qualifier.Qualify("DamlUnit", _currentNamespace),
+        DamlPrimitive.Bool => "bool",
+        DamlPrimitive.Int64 => "long",
+        DamlPrimitive.Numeric => "decimal",
+        DamlPrimitive.Text => "string",
+        DamlPrimitive.Date => "DateOnly",
+        DamlPrimitive.Timestamp => "DateTimeOffset",
+        DamlPrimitive.Party => _qualifier.Qualify("Party", _currentNamespace),
+        DamlPrimitive.ContractId
+            or DamlPrimitive.List
+            or DamlPrimitive.Optional
+            or DamlPrimitive.TextMap
+            or DamlPrimitive.GenMap =>
+            throw new NotSupportedException(
+                $"Daml primitive '{primitive}' is a type constructor and cannot appear bare — it must be applied to argument types (handled by the DamlTypeApp arms of MapDamlTypeToCSharp)."),
+    };
+#pragma warning restore CS8524
+
     private string GetToValueConversion(DamlType type, string fieldName) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"new {_qualifier.Qualify("DamlBool", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"new {_qualifier.Qualify("DamlInt64", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"new {_qualifier.Qualify("DamlNumeric", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"new {_qualifier.Qualify("DamlText", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"new {_qualifier.Qualify("DamlDate", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"new {_qualifier.Qualify("DamlTimestamp", _currentNamespace)}({fieldName})",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{fieldName}.ToDamlValue()",
+        DamlPrimitiveType primitive => GetBarePrimitiveToValueConversion(primitive.Primitive, fieldName),
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"new {_qualifier.Qualify("DamlNumeric", _currentNamespace)}({fieldName})",
@@ -1930,6 +1941,28 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<{_qualifier.Qualify("DamlValue", _currentNamespace)}>(\"{fieldName}\")",
         _ => $"{fieldName}.ToRecord()"
     };
+
+    // See MapBarePrimitiveToCSharp for the CS8524-vs-CS8509 rationale.
+#pragma warning disable CS8524
+    private string GetBarePrimitiveToValueConversion(DamlPrimitive primitive, string fieldName) => primitive switch
+    {
+        DamlPrimitive.Unit => $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance",
+        DamlPrimitive.Bool => $"new {_qualifier.Qualify("DamlBool", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Int64 => $"new {_qualifier.Qualify("DamlInt64", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Numeric => $"new {_qualifier.Qualify("DamlNumeric", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Text => $"new {_qualifier.Qualify("DamlText", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Date => $"new {_qualifier.Qualify("DamlDate", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Timestamp => $"new {_qualifier.Qualify("DamlTimestamp", _currentNamespace)}({fieldName})",
+        DamlPrimitive.Party => $"{fieldName}.ToDamlValue()",
+        DamlPrimitive.ContractId
+            or DamlPrimitive.List
+            or DamlPrimitive.Optional
+            or DamlPrimitive.TextMap
+            or DamlPrimitive.GenMap =>
+            throw new NotSupportedException(
+                $"Daml primitive '{primitive}' is a type constructor and cannot appear bare — it must be applied to argument types (handled by the DamlTypeApp arms of GetToValueConversion)."),
+    };
+#pragma warning restore CS8524
 
     private string EmitParametricStdlibFromValue(
         DamlTypeRef typeRef,
@@ -1982,20 +2015,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
     private string GetFromValueConversion(DamlType type, string valueName, IReadOnlyDictionary<string, DamlDataType>? dataTypes = null) => type switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Bool } => $"{valueName}.As<{_qualifier.Qualify("DamlBool", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Int64 } => $"{valueName}.As<{_qualifier.Qualify("DamlInt64", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } => $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => $"{valueName}.As<{_qualifier.Qualify("DamlText", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Date } => $"{valueName}.As<{_qualifier.Qualify("DamlDate", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Timestamp } => $"{valueName}.As<{_qualifier.Qualify("DamlTimestamp", _currentNamespace)}>().Value",
-        DamlPrimitiveType { Primitive: DamlPrimitive.Party } => $"{_qualifier.Qualify("Party", _currentNamespace)}.FromDamlValue({valueName}.As<{_qualifier.Qualify("DamlParty", _currentNamespace)}>())",
-        // Unit. The wire-level DamlUnit.Instance is the single inhabitant; we
-        // surface it as the field type DamlUnit (matching MapDamlTypeToCSharp).
-        // Without this arm, nested Unit shapes — Optional (), [()], tuples
-        // containing () — fall through to `default!` and produce wrong typed
-        // results at runtime. The bare-`()` return is special-cased upstream;
-        // this arm covers the nested cases.
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => $"{valueName}.As<{_qualifier.Qualify("DamlUnit", _currentNamespace)}>()",
+        DamlPrimitiveType primitive => GetBarePrimitiveFromValueConversion(primitive.Primitive, valueName),
         // Numeric with scale argument
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
@@ -2031,6 +2051,32 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeVar typeVar => $"{_qualifier.Qualify("GenericStub", _currentNamespace)}.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
         _ => $"default! /* TODO: Implement deserialization for {type} */"
     };
+
+    // See MapBarePrimitiveToCSharp for the CS8524-vs-CS8509 rationale.
+#pragma warning disable CS8524
+    private string GetBarePrimitiveFromValueConversion(DamlPrimitive primitive, string valueName) => primitive switch
+    {
+        DamlPrimitive.Bool => $"{valueName}.As<{_qualifier.Qualify("DamlBool", _currentNamespace)}>().Value",
+        DamlPrimitive.Int64 => $"{valueName}.As<{_qualifier.Qualify("DamlInt64", _currentNamespace)}>().Value",
+        DamlPrimitive.Numeric => $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
+        DamlPrimitive.Text => $"{valueName}.As<{_qualifier.Qualify("DamlText", _currentNamespace)}>().Value",
+        DamlPrimitive.Date => $"{valueName}.As<{_qualifier.Qualify("DamlDate", _currentNamespace)}>().Value",
+        DamlPrimitive.Timestamp => $"{valueName}.As<{_qualifier.Qualify("DamlTimestamp", _currentNamespace)}>().Value",
+        DamlPrimitive.Party => $"{_qualifier.Qualify("Party", _currentNamespace)}.FromDamlValue({valueName}.As<{_qualifier.Qualify("DamlParty", _currentNamespace)}>())",
+        // The wire-level DamlUnit.Instance is the single inhabitant; we surface it as
+        // the field type DamlUnit. Without this arm, nested Unit shapes — Optional (),
+        // [()], tuples containing () — fall through and produce wrong typed results at
+        // runtime. The bare-`()` return is special-cased upstream; this covers nesting.
+        DamlPrimitive.Unit => $"{valueName}.As<{_qualifier.Qualify("DamlUnit", _currentNamespace)}>()",
+        DamlPrimitive.ContractId
+            or DamlPrimitive.List
+            or DamlPrimitive.Optional
+            or DamlPrimitive.TextMap
+            or DamlPrimitive.GenMap =>
+            throw new NotSupportedException(
+                $"Daml primitive '{primitive}' is a type constructor and cannot appear bare — it must be applied to argument types (handled by the DamlTypeApp arms of GetFromValueConversion)."),
+    };
+#pragma warning restore CS8524
 
     // Type parameter helpers
     private static string GetTypeParametersDeclaration(IReadOnlyList<string> typeParams)
