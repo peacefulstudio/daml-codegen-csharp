@@ -249,6 +249,70 @@ public class DamlJsonSerializerTests
     }
 
     [Fact]
+    public void Serialize_DamlNumeric_should_strip_trailing_zeros()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("amount", new DamlNumeric(1.50m))
+        );
+
+        var json = DamlJsonSerializer.Serialize(record);
+
+        json.Should().Contain("\"amount\":\"1.5\"");
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_integer_value_should_get_single_trailing_zero()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("amount", new DamlNumeric(42m))
+        );
+
+        var json = DamlJsonSerializer.Serialize(record);
+
+        json.Should().Contain("\"amount\":\"42.0\"");
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_high_precision_should_not_use_scientific_notation()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("amount", new DamlNumeric(0.0000000001m))
+        );
+
+        var json = DamlJsonSerializer.Serialize(record);
+
+        json.Should().Contain("\"amount\":\"0.0000000001\"");
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_should_be_independent_of_construction_scale()
+    {
+        var fromShort = DamlJsonSerializer.Serialize(new DamlNumeric(1.5m));
+        var fromPadded = DamlJsonSerializer.Serialize(new DamlNumeric(1.500000m));
+
+        fromShort.Should().Be("\"1.5\"");
+        fromPadded.Should().Be(fromShort);
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_negative_value_should_keep_sign_and_strip_trailing_zeros()
+    {
+        var fractional = DamlJsonSerializer.Serialize(new DamlNumeric(-1.50m));
+        var integral = DamlJsonSerializer.Serialize(new DamlNumeric(-42m));
+
+        fractional.Should().Be("\"-1.5\"");
+        integral.Should().Be("\"-42.0\"");
+    }
+
+    [Fact]
+    public void Serialize_DamlNumeric_zero_should_be_canonical_zero_with_trailing_zero()
+    {
+        var json = DamlJsonSerializer.Serialize(new DamlNumeric(0m));
+
+        json.Should().Be("\"0.0\"");
+    }
+
+    [Fact]
     public void DeserializeRecord_should_handle_DamlList()
     {
         // Arrange

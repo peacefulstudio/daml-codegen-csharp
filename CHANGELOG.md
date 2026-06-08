@@ -39,6 +39,7 @@ because they are versioned in lockstep:
 
 ### Changed
 
+- **`DamlNumeric` now serializes to JSON in canonical unpadded decimal form.** Trailing zeros are stripped and at least one fractional digit is always emitted, so the wire shape no longer depends on how the `decimal` was constructed: `1.5m` and `1.50m` both serialize to `"1.5"`, and an integer value such as `42m` serializes to `"42.0"`. Scientific notation is never emitted (e.g. `0.0000000001m` → `"0.0000000001"`). Previously the output preserved the `decimal`'s internal scale (`1.50m` → `"1.50"`, `42m` → `"42"`). This is the M1 commitment-grade wire shape per ADR-0011; PQS-style scale-padded reading remains out of scope (deferred to M2) ([#276](https://github.com/peacefulstudio/daml-codegen-csharp/pull/276)).
 - Licensing: every source file now carries the two-line SPDX Apache-2.0 header (`Copyright (c) 2026 Peaceful Studio OÜ` + `SPDX-License-Identifier: Apache-2.0`); the central `<Copyright>` tag in `Directory.Build.props` is retained for assembly metadata. (open-source prep)
 
 ## [0.1.7] — 2026-06-01

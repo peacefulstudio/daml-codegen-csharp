@@ -86,7 +86,7 @@ public static class DamlJsonSerializer
     internal static JsonNode? ValueToJsonNode(DamlValue value) => value switch
     {
         DamlInt64 i => JsonValue.Create(i.Value),
-        DamlNumeric n => JsonValue.Create(n.Value.ToString("G", CultureInfo.InvariantCulture)),
+        DamlNumeric n => JsonValue.Create(FormatCanonicalNumeric(n.Value)),
         DamlText t => JsonValue.Create(t.Value),
         DamlBool b => JsonValue.Create(b.Value),
         DamlUnit => new JsonObject(),
@@ -103,6 +103,9 @@ public static class DamlJsonSerializer
         DamlRecord rec => RecordToJsonObject(rec),
         _ => throw new NotSupportedException($"Cannot serialize {value.GetType().Name} to JSON")
     };
+
+    private static string FormatCanonicalNumeric(decimal value) =>
+        value.ToString("0.0###########################", CultureInfo.InvariantCulture);
 
     private static JsonObject MapToJsonObject(DamlTextMap map)
     {
