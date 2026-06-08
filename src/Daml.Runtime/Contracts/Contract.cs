@@ -28,7 +28,7 @@ public interface IContract<TId, TData>
 /// Base record for generated contracts.
 /// </summary>
 /// <typeparam name="T">The template type.</typeparam>
-public record Contract<T>(ContractId<T> Id, T Data) : IContract<ContractId<T>, T>
+public sealed record Contract<T>(ContractId<T> Id, T Data) : IContract<ContractId<T>, T>
     where T : ITemplate
 {
     /// <summary>

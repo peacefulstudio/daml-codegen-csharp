@@ -13,7 +13,7 @@ namespace Daml.Runtime.Contracts;
 /// <param name="CreatedContracts">Contracts created by the transaction. Project to
 /// typed <see cref="ContractId{T}"/> values via <see cref="TransactionResultExtensions"/>.</param>
 /// <param name="ArchivedContractIds">Raw contract IDs archived by the transaction.</param>
-public record TransactionResult(
+public sealed record TransactionResult(
     string UpdateId,
     long CompletionOffset,
     IReadOnlyList<CreatedContract> CreatedContracts,
@@ -37,7 +37,7 @@ public record TransactionResult(
 /// <param name="ContractId">The on-ledger contract ID.</param>
 /// <param name="TemplateId">The template identifier (package + module + entity).</param>
 /// <param name="Payload">The serialized payload of the contract.</param>
-public record CreatedContract(
+public sealed record CreatedContract(
     string ContractId,
     Identifier TemplateId,
     string Payload);

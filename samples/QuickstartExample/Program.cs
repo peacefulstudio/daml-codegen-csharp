@@ -92,14 +92,12 @@ public sealed record Iou(
             ExerciseTransfer(new TransferArgument(newOwner));
     }
 
-    /// <summary>Active contract for Iou.</summary>
-    public sealed record IouContract : Contract<Iou>
+    /// <summary>Active contract helpers for Iou.</summary>
+    public static class IouContract
     {
-        public IouContract(IouContractId id, Iou data) : base(id, data) { }
-
         /// <summary>Creates a Contract from a CreatedEvent.</summary>
-        public static IouContract FromCreatedEvent(CreatedEvent @event) =>
-            new(new IouContractId(@event.ContractId), Iou.FromRecord(@event.CreateArguments));
+        public static Contract<Iou> FromCreatedEvent(CreatedEvent @event) =>
+            Contract<Iou>.FromCreatedEvent(@event, Iou.FromRecord);
     }
 }
 
