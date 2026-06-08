@@ -50,23 +50,6 @@ public interface IHasKey<TKey>
 }
 
 /// <summary>
-/// Companion object pattern for templates - provides static factory methods.
-/// </summary>
-/// <typeparam name="T">The template type.</typeparam>
-public interface ITemplateCompanion<T> where T : ITemplate
-{
-    /// <summary>
-    /// Decodes a template instance from a Daml record.
-    /// </summary>
-    static abstract T FromRecord(DamlRecord record);
-
-    /// <summary>
-    /// Decodes a template instance from JSON.
-    /// </summary>
-    static abstract T FromJson(string json);
-}
-
-/// <summary>
 /// Marker interface for all Daml interfaces.
 /// </summary>
 /// <remarks>

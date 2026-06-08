@@ -25,24 +25,6 @@ public interface IExercises<T> where T : ITemplate
 }
 
 /// <summary>
-/// Provides a fluent interface for building create-and-exercise commands.
-/// </summary>
-/// <typeparam name="T">The template type.</typeparam>
-public interface ICreateAnd<T> where T : ITemplate
-{
-    /// <summary>
-    /// Gets the template instance to create.
-    /// </summary>
-    T Template { get; }
-
-    /// <summary>
-    /// Creates the contract and exercises the Archive choice.
-    /// </summary>
-    CreateAndExerciseCommand CreateAndExerciseArchive() =>
-        CreateAndExerciseCommand.For(Template, new ChoiceName("Archive"), DamlUnit.Instance);
-}
-
-/// <summary>
 /// Choice metadata for generated choice types.
 /// </summary>
 /// <typeparam name="TTemplate">The template type.</typeparam>
