@@ -49,7 +49,7 @@ public class RelabelAsyncTests
         client.LastSubmission!.WorkflowId.Should().Be(new WorkflowId("wf-7"));
         var command = client.LastSubmission.Commands.Should().ContainSingle().Which
             .Should().BeOfType<ExerciseCommand>().Subject;
-        command.ContractId.Should().Be("rich-cid");
+        command.ContractId.Value.Should().Be("rich-cid");
         command.Choice.Should().Be(new ChoiceName("Relabel"));
     }
 

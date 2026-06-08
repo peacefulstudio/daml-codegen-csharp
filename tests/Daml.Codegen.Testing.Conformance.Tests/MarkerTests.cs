@@ -42,7 +42,7 @@ public class MarkerTests
     [Fact]
     public void archive_choice_is_consuming_and_named_archive()
     {
-        Marker.ChoiceArchive.Name.Should().Be("Archive");
+        Marker.ChoiceArchive.Name.Value.Should().Be("Archive");
         Marker.ChoiceArchive.Consuming.Should().BeTrue();
     }
 

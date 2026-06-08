@@ -25,14 +25,14 @@ public class RichRecordChoiceTests
     [Fact]
     public void relabel_choice_is_non_consuming_and_named_relabel()
     {
-        RichRecord.ChoiceRelabel.Name.Should().Be("Relabel");
+        RichRecord.ChoiceRelabel.Name.Value.Should().Be("Relabel");
         RichRecord.ChoiceRelabel.Consuming.Should().BeFalse();
     }
 
     [Fact]
     public void archive_choice_is_consuming_and_named_archive()
     {
-        RichRecord.ChoiceArchive.Name.Should().Be("Archive");
+        RichRecord.ChoiceArchive.Name.Value.Should().Be("Archive");
         RichRecord.ChoiceArchive.Consuming.Should().BeTrue();
     }
 

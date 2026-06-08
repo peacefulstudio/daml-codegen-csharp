@@ -486,7 +486,7 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine($"var command = new {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
-        indent.AppendLine("contractId.Value,");
+        indent.AppendLine("contractId,");
         indent.AppendLine($"new {_qualifier.Qualify("ChoiceName", _currentNamespace)}(\"{choice.Name}\"),");
         indent.AppendLine($"{argExpr});");
         indent.Dedent();

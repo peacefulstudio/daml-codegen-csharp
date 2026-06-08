@@ -23,7 +23,7 @@ public class LedgerClientSubmitterInfoTests
 {
     private static readonly ExerciseCommand SampleCommand = new(
         new Identifier("pkg", "Module", "Template"),
-        ContractId: "cid-1",
+        ContractId: new ContractId<SampleTemplate>("cid-1"),
         Choice: new ChoiceName("DoIt"),
         ChoiceArgument: new DamlRecord(null, []));
 

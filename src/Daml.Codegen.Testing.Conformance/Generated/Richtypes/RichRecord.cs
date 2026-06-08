@@ -74,7 +74,7 @@ public sealed partial record RichRecord(Party Owner, long Count, decimal Amount,
     /// </summary>
     public static Choice<RichRecord, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()
     {
-        Name = "Archive",
+        Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlUnit.Instance,
         ResultDecoder = _ => DamlUnit.Instance
@@ -85,7 +85,7 @@ public sealed partial record RichRecord(Party Owner, long Count, decimal Amount,
     /// </summary>
     public static Choice<RichRecord, Relabel, ContractId<RichRecord>> ChoiceRelabel { get; } = new()
     {
-        Name = "Relabel",
+        Name = new ChoiceName("Relabel"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
         ResultDecoder = val => new ContractId<RichRecord>(val.As<DamlContractId>().Value)
@@ -203,7 +203,7 @@ public static class RichRecordExtensions
 
         var command = new ExerciseCommand(
             RichRecord.TemplateId,
-            contractId.Value,
+            contractId,
             new ChoiceName("Relabel"),
             argument.ToRecord());
 

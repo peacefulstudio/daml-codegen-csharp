@@ -6,6 +6,34 @@ using Daml.Runtime.Data;
 namespace Daml.Runtime.Contracts;
 
 /// <summary>
+/// Non-generic, erased contract id: a validated ledger contract-id string with no
+/// static template witness. The only concrete subtype is <see cref="ContractId{T}"/>;
+/// the base is abstract on purpose, so a typeless contract id can never be fabricated.
+/// </summary>
+/// <remarks>
+/// Construction is guarded — <see cref="ArgumentException.ThrowIfNullOrWhiteSpace"/>
+/// runs in the protected constructor, so every <see cref="ContractId{T}"/> carries a
+/// non-empty value. The value still projects onto the Ledger API <c>contract_id</c>
+/// string via <see cref="Value"/>.
+/// </remarks>
+public abstract record ContractId
+{
+    /// <summary>The verbatim ledger contract-id string (non-null, non-whitespace).</summary>
+    public string Value { get; }
+
+    /// <summary>Constructs a contract id from a non-empty string.</summary>
+    /// <param name="value">The ledger contract-id string; stored verbatim.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is null, empty, or whitespace.</exception>
+    protected ContractId(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(value));
+        Value = value;
+    }
+
+    public sealed override string ToString() => Value;
+}
+
+/// <summary>
 /// Represents a contract ID that references a contract of type T on the ledger.
 /// </summary>
 /// <typeparam name="T">
@@ -16,12 +44,17 @@ namespace Daml.Runtime.Contracts;
 /// <c>ContractId Holding</c> across the Splice token standard — and that flows here as
 /// <c>ContractId&lt;IHolding&gt;</c>.
 /// </typeparam>
-public record ContractId<T>(string Value) where T : IDamlType
+public record ContractId<T> : ContractId where T : IDamlType
 {
+    /// <summary>Constructs a typed contract id from a non-empty string.</summary>
+    /// <param name="value">The ledger contract-id string; stored verbatim.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is null, empty, or whitespace.</exception>
+    public ContractId(string value) : base(value)
+    {
+    }
+
     public static explicit operator string(ContractId<T> id) => id.Value;
     public static explicit operator ContractId<T>(string value) => new(value);
-
-    public override string ToString() => Value;
 
     /// <summary>
     /// Converts to a <see cref="DamlContractId"/> for serialization, including the
@@ -43,6 +76,17 @@ public record ContractId<T>(string Value) where T : IDamlType
 /// </summary>
 public sealed record DamlContractId(string Value, Identifier? TemplateId = null) : DamlValue
 {
+    /// <summary>
+    /// Produces a validated <see cref="ContractId{T}"/> from this raw wire carrier.
+    /// <see cref="DamlContractId"/> itself carries the contract-id string unvalidated
+    /// (per ADR 0009, the erased/wire contract id stays an unvalidated string); this
+    /// method — together with the typed <see cref="ContractId{T}"/> constructors and
+    /// casts — is the validation boundary for raw wire values.
+    /// </summary>
+    /// <typeparam name="T">The Daml template or interface witness for the typed id.</typeparam>
+    /// <exception cref="System.ArgumentException">
+    /// Thrown when the carried <see cref="Value"/> is null, empty, or whitespace.
+    /// </exception>
     public ContractId<T> ToTyped<T>() where T : IDamlType => new(Value);
 
     public override string ToString() => Value;

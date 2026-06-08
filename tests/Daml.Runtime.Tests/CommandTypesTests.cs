@@ -28,6 +28,14 @@ public class CommandTypesTests
                 record.GetRequiredField("amount").As<DamlInt64>().Value);
     }
 
+    private interface TestInterfaceMarker : IDamlInterface
+    {
+        static Identifier IDamlInterface.InterfaceId => new("test-package", "Test.Module", "TestInterfaceMarker");
+        static string IDamlInterface.PackageId => "test-package";
+        static string IDamlInterface.PackageName => "test-package-name";
+        static Version IDamlInterface.PackageVersion => new(1, 0, 0);
+    }
+
     [Fact]
     public void CreateCommand_should_have_correct_command_type()
     {
@@ -65,7 +73,7 @@ public class CommandTypesTests
     {
         // Arrange
         var templateId = new Identifier("pkg", "Module", "Template");
-        var contractId = "contract-id-123";
+        var contractId = new ContractId<TestTemplate>("contract-id-123");
         var choice = new ChoiceName("Transfer");
         var arg = new DamlText("argument");
 
@@ -75,7 +83,7 @@ public class CommandTypesTests
         // Assert
         command.CommandType.Should().Be("Exercise");
         command.TemplateId.Should().Be(templateId);
-        command.ContractId.Should().Be(contractId);
+        command.ContractId.Value.Should().Be("contract-id-123");
         command.Choice.Should().Be(choice);
         command.ChoiceArgument.Should().Be(arg);
     }
@@ -86,7 +94,11 @@ public class CommandTypesTests
         var templateId = new Identifier("pkg", "Module", "Template");
         var arg = new DamlText("argument");
 
-        var command = new ExerciseCommand(templateId, "contract-id-123", new ChoiceName("Transfer"), arg);
+        var command = new ExerciseCommand(
+            templateId,
+            new ContractId<TestTemplate>("contract-id-123"),
+            new ChoiceName("Transfer"),
+            arg);
 
         command.Choice.Value.Should().Be("Transfer");
     }
@@ -105,9 +117,25 @@ public class CommandTypesTests
         // Assert
         command.CommandType.Should().Be("Exercise");
         command.TemplateId.Should().Be(TestTemplate.TemplateId);
-        command.ContractId.Should().Be("contract-123");
+        command.ContractId.Value.Should().Be("contract-123");
         command.Choice.Should().Be(choice);
         command.ChoiceArgument.Should().Be(DamlUnit.Instance);
+    }
+
+    [Fact]
+    public void ExerciseCommand_For_rejects_a_null_contract_id()
+    {
+        var act = () => ExerciseCommand.For<TestTemplate>(null!, new ChoiceName("Archive"), DamlUnit.Instance);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ExerciseCommand_ForInterface_rejects_a_null_contract_id()
+    {
+        var act = () => ExerciseCommand.ForInterface<TestInterfaceMarker>(null!, new ChoiceName("Transfer"), DamlUnit.Instance);
+
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -344,14 +372,15 @@ public class CommandTypesTests
         // Arrange & Act
         var choice = new Choice<TestTemplate, DamlUnit, DamlUnit>
         {
-            Name = "Archive",
+            Name = new ChoiceName("Archive"),
             Consuming = true,
             ArgumentEncoder = _ => DamlUnit.Instance,
             ResultDecoder = _ => DamlUnit.Instance
         };
 
         // Assert
-        choice.Name.Should().Be("Archive");
+        choice.Name.Should().Be(new ChoiceName("Archive"));
+        choice.Name.Value.Should().Be("Archive");
         choice.Consuming.Should().BeTrue();
     }
 
@@ -361,7 +390,7 @@ public class CommandTypesTests
         // Arrange
         var choice = new Choice<TestTemplate, DamlInt64, string>
         {
-            Name = "GetValue",
+            Name = new ChoiceName("GetValue"),
             Consuming = false,
             ArgumentEncoder = arg => arg,
             ResultDecoder = val => val.As<DamlText>().Value
@@ -380,7 +409,7 @@ public class CommandTypesTests
         // Arrange
         var choice = new Choice<TestTemplate, DamlUnit, long>
         {
-            Name = "GetCount",
+            Name = new ChoiceName("GetCount"),
             Consuming = false,
             ArgumentEncoder = _ => DamlUnit.Instance,
             ResultDecoder = val => val.As<DamlInt64>().Value

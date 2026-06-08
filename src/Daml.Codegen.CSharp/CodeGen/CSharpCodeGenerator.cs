@@ -1490,7 +1490,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine($"public static {_qualifier.Qualify("Choice", _currentNamespace)}<{indent.CurrentTypeName}, {argTypeRef}, {returnType}> Choice{choiceName} {{ get; }} = new()");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"Name = \"{choice.Name}\",");
+        indent.AppendLine($"Name = new {_qualifier.Qualify("ChoiceName", _currentNamespace)}(\"{choice.Name}\"),");
         indent.AppendLine($"Consuming = {(choice.Consuming ? "true" : "false")},");
 
         if (argTypeName == "DamlUnit")

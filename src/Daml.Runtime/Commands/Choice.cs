@@ -54,7 +54,7 @@ public sealed record Choice<TTemplate, TArg, TResult>
     /// <summary>
     /// Gets the choice name.
     /// </summary>
-    public required string Name { get; init; }
+    public required ChoiceName Name { get; init; }
 
     /// <summary>
     /// Gets whether this choice is consuming.

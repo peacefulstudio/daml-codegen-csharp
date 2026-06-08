@@ -20,7 +20,7 @@ public class LedgerClientExtensionsTests
 {
     private static readonly ExerciseCommand SampleCommand = new(
         new Identifier("pkg", "Module", "Template"),
-        ContractId: "cid-1",
+        ContractId: new ContractId<SampleTemplate>("cid-1"),
         Choice: new ChoiceName("DoIt"),
         ChoiceArgument: new DamlRecord(null, []));
 
@@ -339,4 +339,15 @@ public class LedgerClientExtensionsTests
             yield break;
         }
     }
+}
+
+internal sealed record SampleTemplate : ITemplate
+{
+    public static Identifier TemplateId => new("pkg", "Module", "Template");
+    public static string PackageId => "pkg";
+    public static string PackageName => "pkg-name";
+    public static Version PackageVersion => new(1, 0, 0);
+
+    public DamlRecord ToRecord() => DamlRecord.Create();
+    public static SampleTemplate FromRecord(DamlRecord record) => new();
 }

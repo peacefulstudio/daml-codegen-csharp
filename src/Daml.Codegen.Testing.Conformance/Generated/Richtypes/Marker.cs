@@ -50,7 +50,7 @@ public sealed partial record Marker(Party Owner) : ITemplate
     /// </summary>
     public static Choice<Marker, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()
     {
-        Name = "Archive",
+        Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlUnit.Instance,
         ResultDecoder = _ => DamlUnit.Instance

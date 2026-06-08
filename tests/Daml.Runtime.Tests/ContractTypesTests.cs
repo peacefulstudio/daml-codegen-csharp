@@ -72,6 +72,17 @@ public class ContractTypesTests
         contractId.Value.Should().Be("contract-123");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void ContractId_construction_rejects_null_empty_or_whitespace(string? value)
+    {
+        var act = () => new ContractId<TestTemplate>(value!);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void ContractId_should_convert_to_string_explicitly()
     {
@@ -133,6 +144,18 @@ public class ContractTypesTests
         // Assert
         id1.Should().Be(id2);
         id1.Should().NotBe(id3);
+    }
+
+    [Fact]
+    public void ContractId_of_different_template_types_are_not_equal()
+    {
+        var sameTemplate1 = new ContractId<TestTemplate>("contract-x");
+        var sameTemplate2 = new ContractId<TestTemplate>("contract-x");
+        var differentTemplate = new ContractId<MyHolding>("contract-x");
+
+        sameTemplate1.Should().Be(sameTemplate2);
+        ((ContractId)sameTemplate1).Should().NotBe((ContractId)differentTemplate);
+        sameTemplate1.Value.Should().Be(differentTemplate.Value);
     }
 
     #endregion
@@ -368,7 +391,7 @@ public class ContractTypesTests
             cid, new Daml.Runtime.Commands.ChoiceName("Transfer"), arg.ToRecord());
 
         cmd.TemplateId.Should().Be(new Identifier(TestPackageId, TestModuleName, "ITestInterfaceMarker"));
-        cmd.ContractId.Should().Be("interface-cid-exec");
+        cmd.ContractId.Value.Should().Be("interface-cid-exec");
         cmd.Choice.Should().Be(new Daml.Runtime.Commands.ChoiceName("Transfer"));
     }
 

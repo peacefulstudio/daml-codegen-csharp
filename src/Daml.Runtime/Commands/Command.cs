@@ -50,7 +50,7 @@ public sealed record CreateCommand(
 /// <param name="ChoiceArgument">The choice arguments.</param>
 public sealed record ExerciseCommand(
     Identifier TemplateId,
-    string ContractId,
+    ContractId ContractId,
     ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
@@ -62,8 +62,11 @@ public sealed record ExerciseCommand(
     public static ExerciseCommand For<T>(
         ContractId<T> contractId,
         ChoiceName choice,
-        DamlValue argument) where T : ITemplate =>
-        new(T.TemplateId, contractId.Value, choice, argument);
+        DamlValue argument) where T : ITemplate
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        return new(T.TemplateId, contractId, choice, argument);
+    }
 
     /// <summary>
     /// Creates an ExerciseCommand for an interface choice. The interface id is
@@ -74,8 +77,11 @@ public sealed record ExerciseCommand(
     public static ExerciseCommand ForInterface<TInterface>(
         ContractId<TInterface> contractId,
         ChoiceName choice,
-        DamlValue argument) where TInterface : IDamlInterface =>
-        new(TInterface.InterfaceId, contractId.Value, choice, argument);
+        DamlValue argument) where TInterface : IDamlInterface
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        return new(TInterface.InterfaceId, contractId, choice, argument);
+    }
 }
 
 /// <summary>
