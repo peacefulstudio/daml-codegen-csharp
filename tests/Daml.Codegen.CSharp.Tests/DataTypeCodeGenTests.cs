@@ -573,6 +573,40 @@ public class DataTypeCodeGenTests
     }
 
     [Fact]
+    public void Generate_should_name_enum_extension_methods_after_their_DamlEnum_type()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Status",
+                    Definition = new DamlEnumDefinition(["Pending", "Active"])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var statusFile = files.First(f => f.RelativePath.EndsWith("Status.cs", StringComparison.Ordinal));
+        var code = statusFile.Content;
+
+        // Assert — the extension method names must match the DamlEnum return/param type.
+        code.Should().Contain("public static DamlEnum ToDamlEnum(this Status value)");
+        code.Should().Contain("public static Status FromDamlEnum(DamlEnum value)");
+        code.Should().NotContain("ToRecord");
+        code.Should().NotContain("FromRecord");
+    }
+
+    [Fact]
     public void Generate_should_create_enum_with_xml_docs_when_enabled()
     {
         // Arrange

@@ -1559,10 +1559,10 @@ public class CodeGenEdgeCaseTests
         var holder = files.FirstOrDefault(f => f.RelativePath.EndsWith("Holder.cs", StringComparison.Ordinal));
 
         // Assert — must dispatch through `Token.FromRecord(...As<DamlRecord>())`,
-        // NOT through `TokenExtensions.FromRecord(...As<DamlEnum>())`.
+        // NOT through `TokenExtensions.FromDamlEnum(...As<DamlEnum>())`.
         holder.Should().NotBeNull();
         holder!.Content.Should().Contain("Token.FromRecord(record.GetRequiredField(\"t\").As<DamlRecord>())");
-        holder.Content.Should().NotContain("TokenExtensions.FromRecord");
+        holder.Content.Should().NotContain("TokenExtensions.FromDamlEnum");
     }
 
     [Fact]
@@ -1624,7 +1624,56 @@ public class CodeGenEdgeCaseTests
 
         // Assert — enum module qualifier matches, so dispatch through the *Extensions helper.
         holder.Should().NotBeNull();
-        holder!.Content.Should().Contain("TokenExtensions.FromRecord(record.GetRequiredField(\"t\").As<DamlEnum>())");
+        holder!.Content.Should().Contain("TokenExtensions.FromDamlEnum(record.GetRequiredField(\"t\").As<DamlEnum>())");
+    }
+
+    [Fact]
+    public void Generate_should_encode_enum_field_through_the_ToDamlEnum_extension()
+    {
+        var enumModule = new DamlModule
+        {
+            Name = "App.Config",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Token",
+                    Definition = new DamlEnumDefinition(["Active", "Frozen"])
+                }
+            ],
+            Interfaces = []
+        };
+        var holderModule = new DamlModule
+        {
+            Name = "App.Holder",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holder",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("t", new DamlTypeRef("test-package-id", "App.Config", "Token"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var pkg = CreateTestPackage("test-package-id", "test-package", enumModule, holderModule);
+        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar).ToList();
+        var holder = files.FirstOrDefault(f => f.RelativePath.EndsWith("Holder.cs", StringComparison.Ordinal));
+
+        // Assert — the to-value side must route the enum field through the renamed
+        // extension method, not the misnamed `.ToRecord()`.
+        holder.Should().NotBeNull();
+        holder!.Content.Should().Contain(".ToDamlEnum()");
+        holder.Content.Should().NotContain(".ToRecord()");
     }
 
     #endregion

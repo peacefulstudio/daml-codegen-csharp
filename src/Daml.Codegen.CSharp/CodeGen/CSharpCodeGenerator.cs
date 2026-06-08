@@ -24,7 +24,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     // Required because Daml allows the same simple name in multiple modules — e.g.
     // splice-amulet defines both `Splice.Amulet:Amulet` (record/template) and
     // `Splice.AmuletConfig:Amulet` (enum). A name-only lookup would dispatch every
-    // `Amulet` reference through *Extensions.FromRecord, breaking the record case.
+    // `Amulet` reference through *Extensions.FromDamlEnum, breaking the record case.
     private readonly HashSet<string> _localEnumQualifiedNames = [];
 
     // Module-qualified names of records that exist purely as the C# placeholder for a
@@ -1804,9 +1804,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine("{");
         indent.Indent();
 
-        // ToRecord method (returns DamlEnum)
+        // ToDamlEnum method (returns DamlEnum)
         indent.AppendLine($"/// <summary>Converts to a DamlEnum value.</summary>");
-        indent.AppendLine($"public static {_qualifier.Qualify("DamlEnum", _currentNamespace)} ToRecord(this {enumName} value)");
+        indent.AppendLine($"public static {_qualifier.Qualify("DamlEnum", _currentNamespace)} ToDamlEnum(this {enumName} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value switch");
@@ -1823,9 +1823,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine("}");
         indent.AppendLine();
 
-        // FromRecord static method
+        // FromDamlEnum static method
         indent.AppendLine($"/// <summary>Creates an instance from a DamlEnum value.</summary>");
-        indent.AppendLine($"public static {enumName} FromRecord({_qualifier.Qualify("DamlEnum", _currentNamespace)} value)");
+        indent.AppendLine($"public static {enumName} FromDamlEnum({_qualifier.Qualify("DamlEnum", _currentNamespace)} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value.Constructor switch");
@@ -1935,6 +1935,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName),
+        // Enum dispatch keyed by module:name (mirrors GetFromValueConversion) so a
+        // same-name record in a different module doesn't route through the enum's
+        // ToDamlEnum extension. Enums serialize via the generated *Extensions helper.
+        DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>
+            $"{fieldName}.ToDamlEnum()",
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
@@ -2041,9 +2046,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
         // Type reference — enum dispatch keyed by module:name so a same-name record in a
-        // different module doesn't accidentally route through *Extensions.FromRecord.
+        // different module doesn't accidentally route through *Extensions.FromDamlEnum.
         DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>
-            $"{ResolveTypeRefName(typeRef)}Extensions.FromRecord({valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>())",
+            $"{ResolveTypeRefName(typeRef)}Extensions.FromDamlEnum({valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>())",
         // Type reference (record/variant types)
         DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>())",
         // Daml type variable — same treatment as ToValue: emit a runtime-throwing stub
