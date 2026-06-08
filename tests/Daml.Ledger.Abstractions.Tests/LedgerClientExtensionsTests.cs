@@ -21,7 +21,7 @@ public class LedgerClientExtensionsTests
     private static readonly ExerciseCommand SampleCommand = new(
         new Identifier("pkg", "Module", "Template"),
         ContractId: "cid-1",
-        Choice: "DoIt",
+        Choice: new ChoiceName("DoIt"),
         ChoiceArgument: new DamlRecord(null, []));
 
     [Fact]

@@ -15,8 +15,8 @@ namespace Daml.Runtime.Commands;
 /// <param name="ReadAs">Parties whose contracts are visible.</param>
 public sealed record CommandsSubmission(
     IReadOnlyList<ICommand> Commands,
-    string? WorkflowId = null,
-    string? CommandId = null,
+    WorkflowId? WorkflowId = null,
+    CommandId? CommandId = null,
     IReadOnlyList<Party>? ActAs = null,
     IReadOnlyList<Party>? ReadAs = null)
 {
@@ -35,13 +35,13 @@ public sealed record CommandsSubmission(
     /// <summary>
     /// Adds a workflow ID to this submission.
     /// </summary>
-    public CommandsSubmission WithWorkflowId(string workflowId) =>
+    public CommandsSubmission WithWorkflowId(WorkflowId workflowId) =>
         this with { WorkflowId = workflowId };
 
     /// <summary>
     /// Adds a command ID to this submission.
     /// </summary>
-    public CommandsSubmission WithCommandId(string commandId) =>
+    public CommandsSubmission WithCommandId(CommandId commandId) =>
         this with { CommandId = commandId };
 
     /// <summary>

@@ -18,7 +18,7 @@ namespace Daml.Runtime.Contracts;
 /// </typeparam>
 public record ContractId<T>(string Value) where T : IDamlType
 {
-    public static implicit operator string(ContractId<T> id) => id.Value;
+    public static explicit operator string(ContractId<T> id) => id.Value;
     public static explicit operator ContractId<T>(string value) => new(value);
 
     public override string ToString() => Value;

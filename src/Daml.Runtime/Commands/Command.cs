@@ -51,7 +51,7 @@ public sealed record CreateCommand(
 public sealed record ExerciseCommand(
     Identifier TemplateId,
     string ContractId,
-    string Choice,
+    ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
     public string CommandType => "Exercise";
@@ -61,7 +61,7 @@ public sealed record ExerciseCommand(
     /// </summary>
     public static ExerciseCommand For<T>(
         ContractId<T> contractId,
-        string choice,
+        ChoiceName choice,
         DamlValue argument) where T : ITemplate =>
         new(T.TemplateId, contractId.Value, choice, argument);
 
@@ -73,7 +73,7 @@ public sealed record ExerciseCommand(
     /// <typeparam name="TInterface">The Daml interface marker type.</typeparam>
     public static ExerciseCommand ForInterface<TInterface>(
         ContractId<TInterface> contractId,
-        string choice,
+        ChoiceName choice,
         DamlValue argument) where TInterface : IDamlInterface =>
         new(TInterface.InterfaceId, contractId.Value, choice, argument);
 }
@@ -88,7 +88,7 @@ public sealed record ExerciseCommand(
 public sealed record ExerciseByKeyCommand(
     Identifier TemplateId,
     DamlValue ContractKey,
-    string Choice,
+    ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
     public string CommandType => "ExerciseByKey";
@@ -104,7 +104,7 @@ public sealed record ExerciseByKeyCommand(
 public sealed record CreateAndExerciseCommand(
     Identifier TemplateId,
     DamlRecord CreateArguments,
-    string Choice,
+    ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
     public string CommandType => "CreateAndExercise";
@@ -114,7 +114,7 @@ public sealed record CreateAndExerciseCommand(
     /// </summary>
     public static CreateAndExerciseCommand For<T>(
         T template,
-        string choice,
+        ChoiceName choice,
         DamlValue argument) where T : ITemplate =>
         new(T.TemplateId, template.ToRecord(), choice, argument);
 }

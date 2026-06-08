@@ -1007,14 +1007,14 @@ public class CodeGenEdgeCaseTests
         // Internally builds the command via the runtime ForInterface helper — the
         // wire-level template_id slot carries IHolding.InterfaceId, and the choice
         // argument is serialised via argument.ToRecord().
-        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, \"Transfer\", argument.ToRecord())");
+        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord())");
         // Submission is funnelled through ILedgerClient.TrySubmitAndWaitForTransactionAsync
         // — same submission path as concrete-template <Choice>Async.
         code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
 
         // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
         code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> LockAsync(");
-        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, \"Lock\", DamlUnit.Instance)");
+        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Lock\"), DamlUnit.Instance)");
     }
 
     [Fact]

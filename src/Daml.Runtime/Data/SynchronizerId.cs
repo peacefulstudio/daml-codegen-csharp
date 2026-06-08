@@ -49,7 +49,7 @@ public readonly record struct SynchronizerId
         _id = id;
     }
 
-    public static implicit operator string(SynchronizerId id) =>
+    public static explicit operator string(SynchronizerId id) =>
         id._id ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) SynchronizerId to string.");
 
     public static explicit operator SynchronizerId(string id) => new(id);

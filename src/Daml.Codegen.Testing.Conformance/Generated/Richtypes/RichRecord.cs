@@ -204,15 +204,15 @@ public static class RichRecordExtensions
         var command = new ExerciseCommand(
             RichRecord.TemplateId,
             contractId.Value,
-            "Relabel",
+            new ChoiceName("Relabel"),
             argument.ToRecord());
 
         var submission = CommandsSubmission.Single(command)
             .WithSubmitter(submitter)
-            .WithCommandId(Guid.NewGuid().ToString());
-        if (workflowId is not null)
+            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
+        if (!string.IsNullOrEmpty(workflowId))
         {
-            submission = submission.WithWorkflowId(workflowId);
+            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
         var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);

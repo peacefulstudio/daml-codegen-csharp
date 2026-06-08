@@ -487,7 +487,7 @@ public sealed partial class CSharpCodeGenerator
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId.Value,");
-        indent.AppendLine($"\"{choice.Name}\",");
+        indent.AppendLine($"new {_qualifier.Qualify("ChoiceName", _currentNamespace)}(\"{choice.Name}\"),");
         indent.AppendLine($"{argExpr});");
         indent.Dedent();
 
@@ -495,12 +495,12 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithSubmitter(submitter)");
-        indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
+        indent.AppendLine($".WithCommandId(new {_qualifier.Qualify("CommandId", _currentNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
-        indent.AppendLine("if (workflowId is not null)");
+        indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine("submission = submission.WithWorkflowId(workflowId);");
+        indent.AppendLine($"submission = submission.WithWorkflowId(new {_qualifier.Qualify("WorkflowId", _currentNamespace)}(workflowId));");
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();

@@ -66,7 +66,7 @@ public class CommandTypesTests
         // Arrange
         var templateId = new Identifier("pkg", "Module", "Template");
         var contractId = "contract-id-123";
-        var choice = "Transfer";
+        var choice = new ChoiceName("Transfer");
         var arg = new DamlText("argument");
 
         // Act
@@ -81,11 +81,22 @@ public class CommandTypesTests
     }
 
     [Fact]
+    public void ExerciseCommand_should_carry_a_typed_choice_name_that_unwraps_to_its_wire_string()
+    {
+        var templateId = new Identifier("pkg", "Module", "Template");
+        var arg = new DamlText("argument");
+
+        var command = new ExerciseCommand(templateId, "contract-id-123", new ChoiceName("Transfer"), arg);
+
+        command.Choice.Value.Should().Be("Transfer");
+    }
+
+    [Fact]
     public void ExerciseCommand_For_should_create_command_from_contract_id()
     {
         // Arrange
         var contractId = new ContractId<TestTemplate>("contract-123");
-        var choice = "Archive";
+        var choice = new ChoiceName("Archive");
         var arg = DamlUnit.Instance;
 
         // Act
@@ -105,7 +116,7 @@ public class CommandTypesTests
         // Arrange
         var templateId = new Identifier("pkg", "Module", "Template");
         var key = new DamlText("contract-key");
-        var choice = "Transfer";
+        var choice = new ChoiceName("Transfer");
         var arg = new DamlInt64(100);
 
         // Act
@@ -125,7 +136,7 @@ public class CommandTypesTests
         // Arrange
         var templateId = new Identifier("pkg", "Module", "Template");
         var createArgs = DamlRecord.Create(DamlField.Create("field", new DamlText("value")));
-        var choice = "Archive";
+        var choice = new ChoiceName("Archive");
         var choiceArg = DamlUnit.Instance;
 
         // Act
@@ -144,7 +155,7 @@ public class CommandTypesTests
     {
         // Arrange
         var template = new TestTemplate(new Party("Bob"), 200);
-        var choice = "Split";
+        var choice = new ChoiceName("Split");
         var arg = new DamlInt64(50);
 
         // Act
@@ -212,6 +223,35 @@ public class CommandTypesTests
     }
 
     [Fact]
+    public void CommandsSubmission_should_carry_typed_ids_that_unwrap_to_their_wire_strings()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+
+        var submission = new CommandsSubmission(
+            [command],
+            new WorkflowId("wf-1"),
+            new CommandId("cmd-1"));
+
+        submission.WorkflowId!.Value.Value.Should().Be("wf-1");
+        submission.CommandId!.Value.Value.Should().Be("cmd-1");
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_leave_optional_ids_null_when_omitted()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+
+        var submission = new CommandsSubmission([command]);
+
+        submission.WorkflowId.Should().BeNull();
+        submission.CommandId.Should().BeNull();
+    }
+
+    [Fact]
     public void CommandsSubmission_WithWorkflowId_should_set_workflow_id()
     {
         // Arrange
@@ -221,10 +261,10 @@ public class CommandTypesTests
         var submission = CommandsSubmission.Single(command);
 
         // Act
-        var result = submission.WithWorkflowId("workflow-123");
+        var result = submission.WithWorkflowId(new WorkflowId("workflow-123"));
 
         // Assert
-        result.WorkflowId.Should().Be("workflow-123");
+        result.WorkflowId.Should().Be(new WorkflowId("workflow-123"));
         result.Commands.Should().BeEquivalentTo(submission.Commands);
     }
 
@@ -238,10 +278,10 @@ public class CommandTypesTests
         var submission = CommandsSubmission.Single(command);
 
         // Act
-        var result = submission.WithCommandId("cmd-456");
+        var result = submission.WithCommandId(new CommandId("cmd-456"));
 
         // Assert
-        result.CommandId.Should().Be("cmd-456");
+        result.CommandId.Should().Be(new CommandId("cmd-456"));
     }
 
     [Fact]
@@ -286,14 +326,14 @@ public class CommandTypesTests
 
         // Act
         var submission = CommandsSubmission.Single(command)
-            .WithWorkflowId("workflow-1")
-            .WithCommandId("cmd-1")
+            .WithWorkflowId(new WorkflowId("workflow-1"))
+            .WithCommandId(new CommandId("cmd-1"))
             .WithActAs(new Party("Alice"))
             .WithReadAs(new Party("Bob"));
 
         // Assert
-        submission.WorkflowId.Should().Be("workflow-1");
-        submission.CommandId.Should().Be("cmd-1");
+        submission.WorkflowId.Should().Be(new WorkflowId("workflow-1"));
+        submission.CommandId.Should().Be(new CommandId("cmd-1"));
         submission.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
         submission.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
     }

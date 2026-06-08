@@ -24,7 +24,7 @@ public class LedgerClientSubmitterInfoTests
     private static readonly ExerciseCommand SampleCommand = new(
         new Identifier("pkg", "Module", "Template"),
         ContractId: "cid-1",
-        Choice: "DoIt",
+        Choice: new ChoiceName("DoIt"),
         ChoiceArgument: new DamlRecord(null, []));
 
     private static readonly SubmitterInfo MultiParty = new(

@@ -64,10 +64,10 @@ public class SynchronizerIdTests
     }
 
     [Fact]
-    public void Implicit_conversion_to_string_should_return_id()
+    public void Explicit_conversion_to_string_should_return_id()
     {
         var sid = new SynchronizerId(Canton34Id);
-        string s = sid;
+        var s = (string)sid;
         s.Should().Be(Canton34Id);
     }
 

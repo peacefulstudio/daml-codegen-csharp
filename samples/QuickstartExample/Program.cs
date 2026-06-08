@@ -85,7 +85,7 @@ public sealed record Iou(
 
         /// <summary>Exercise the Transfer choice.</summary>
         public ExerciseCommand ExerciseTransfer(TransferArgument arg) =>
-            ExerciseCommand.For(this, "Transfer", arg.ToValue());
+            ExerciseCommand.For(this, new ChoiceName("Transfer"), arg.ToValue());
 
         /// <summary>Exercise the Transfer choice.</summary>
         public ExerciseCommand ExerciseTransfer(Party newOwner) =>
@@ -156,8 +156,8 @@ class Program
         Console.WriteLine("6. Building a command submission:");
         var submission = CommandsSubmission.Single(createCmd)
             .WithActAs(new Party("Alice"))
-            .WithWorkflowId("iou-issuance")
-            .WithCommandId(Guid.NewGuid().ToString());
+            .WithWorkflowId(new WorkflowId("iou-issuance"))
+            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
         Console.WriteLine($"   Commands: {submission.Commands.Count}");
         Console.WriteLine($"   ActAs: {string.Join(", ", submission.ActAs ?? [])}");
         Console.WriteLine($"   WorkflowId: {submission.WorkflowId}");

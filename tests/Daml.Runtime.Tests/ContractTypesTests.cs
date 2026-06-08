@@ -73,13 +73,13 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void ContractId_should_convert_to_string_implicitly()
+    public void ContractId_should_convert_to_string_explicitly()
     {
         // Arrange
         var contractId = new ContractId<TestTemplate>("contract-123");
 
         // Act
-        string stringValue = contractId;
+        var stringValue = (string)contractId;
 
         // Assert
         stringValue.Should().Be("contract-123");
@@ -365,11 +365,11 @@ public class ContractTypesTests
         var arg = new TestTemplate(new Party("alice"), 42L);
 
         var cmd = Daml.Runtime.Commands.ExerciseCommand.ForInterface<ITestInterfaceMarker>(
-            cid, "Transfer", arg.ToRecord());
+            cid, new Daml.Runtime.Commands.ChoiceName("Transfer"), arg.ToRecord());
 
         cmd.TemplateId.Should().Be(new Identifier(TestPackageId, TestModuleName, "ITestInterfaceMarker"));
         cmd.ContractId.Should().Be("interface-cid-exec");
-        cmd.Choice.Should().Be("Transfer");
+        cmd.Choice.Should().Be(new Daml.Runtime.Commands.ChoiceName("Transfer"));
     }
 
     #endregion

@@ -43,7 +43,7 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>Holding</c> Daml interface.
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
-/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},string,global::Daml.Runtime.Data.DamlValue)"/>
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
 /// through <see cref="global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync"/>
 /// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
 /// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
@@ -71,14 +71,14 @@ public static class IHoldingExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
-        var command = ExerciseCommand.ForInterface<IHolding>(contractId, "Archive", DamlUnit.Instance);
+        var command = ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName("Archive"), DamlUnit.Instance);
 
         var submission = CommandsSubmission.Single(command)
             .WithActAs(actAs)
-            .WithCommandId(Guid.NewGuid().ToString());
-        if (workflowId is not null)
+            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
+        if (!string.IsNullOrEmpty(workflowId))
         {
-            submission = submission.WithWorkflowId(workflowId);
+            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
         return await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);

@@ -759,7 +759,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>{iface.Name}</c> Daml interface.");
             indent.AppendLine("/// One method per choice; each submits an interface-typed");
             indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> built via");
-            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(global::Daml.Runtime.Contracts.ContractId{{TInterface}},string,global::Daml.Runtime.Data.DamlValue)\"/>");
+            indent.AppendLine($"/// <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{{TInterface}}(global::Daml.Runtime.Contracts.ContractId{{TInterface}},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)\"/>");
             indent.AppendLine("/// through <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
             indent.AppendLine($"/// and surfaces the raw <see cref=\"global::Daml.Runtime.Outcomes.ExerciseOutcome{{TransactionResult}}\"/> —");
             indent.AppendLine("/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the");
@@ -852,17 +852,17 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         var argExpr = hasArg
             ? GetToValueConversion(choice.ArgumentType, "argument")
             : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
-        indent.AppendLine($"var command = {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}.ForInterface<{interfaceName}>(contractId, \"{choice.Name}\", {argExpr});");
+        indent.AppendLine($"var command = {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}.ForInterface<{interfaceName}>(contractId, new {_qualifier.Qualify("ChoiceName", _currentNamespace)}(\"{choice.Name}\"), {argExpr});");
         indent.AppendLine();
         indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithActAs(actAs)");
-        indent.AppendLine(".WithCommandId(Guid.NewGuid().ToString());");
+        indent.AppendLine($".WithCommandId(new {_qualifier.Qualify("CommandId", _currentNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
-        indent.AppendLine("if (workflowId is not null)");
+        indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine("submission = submission.WithWorkflowId(workflowId);");
+        indent.AppendLine($"submission = submission.WithWorkflowId(new {_qualifier.Qualify("WorkflowId", _currentNamespace)}(workflowId));");
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();

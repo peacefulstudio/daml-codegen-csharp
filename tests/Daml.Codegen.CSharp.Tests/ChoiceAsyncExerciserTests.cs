@@ -201,9 +201,8 @@ public class ChoiceAsyncExerciserTests
 
         code.Should().NotContain("\"exercise-renew\"");
         code.Should().NotContain("workflowId ??");
-        // Conditional emission shape — only call .WithWorkflowId when explicitly supplied.
-        code.Should().Contain("if (workflowId is not null)");
-        code.Should().Contain("submission = submission.WithWorkflowId(workflowId);");
+        code.Should().Contain("if (!string.IsNullOrEmpty(workflowId))");
+        code.Should().Contain("submission = submission.WithWorkflowId(new WorkflowId(workflowId));");
     }
 
     [Fact]

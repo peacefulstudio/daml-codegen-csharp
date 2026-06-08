@@ -46,11 +46,48 @@ public class RelabelAsyncTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         client.LastSubmission.Should().NotBeNull();
-        client.LastSubmission!.WorkflowId.Should().Be("wf-7");
+        client.LastSubmission!.WorkflowId.Should().Be(new WorkflowId("wf-7"));
         var command = client.LastSubmission.Commands.Should().ContainSingle().Which
             .Should().BeOfType<ExerciseCommand>().Subject;
         command.ContractId.Should().Be("rich-cid");
-        command.Choice.Should().Be("Relabel");
+        command.Choice.Should().Be(new ChoiceName("Relabel"));
+    }
+
+    [Fact]
+    public async Task omits_workflow_id_when_null()
+    {
+        using var client = new FakeLedgerClient(
+            _ => new ExerciseOutcome<TransactionResult>.One(TransactionCreating("new-rich-cid")));
+
+        await Target.RelabelAsync(client, Argument, new Party("alice"), workflowId: null,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        client.LastSubmission!.WorkflowId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task omits_workflow_id_when_empty()
+    {
+        using var client = new FakeLedgerClient(
+            _ => new ExerciseOutcome<TransactionResult>.One(TransactionCreating("new-rich-cid")));
+
+        await Target.RelabelAsync(client, Argument, new Party("alice"), workflowId: "",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        client.LastSubmission!.WorkflowId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task forwards_whitespace_workflow_id_verbatim()
+    {
+        using var client = new FakeLedgerClient(
+            _ => new ExerciseOutcome<TransactionResult>.One(TransactionCreating("new-rich-cid")));
+
+        await Target.RelabelAsync(client, Argument, new Party("alice"), workflowId: "   ",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        client.LastSubmission!.WorkflowId.Should().NotBeNull();
+        client.LastSubmission!.WorkflowId!.Value.Value.Should().Be("   ");
     }
 
     [Fact]
