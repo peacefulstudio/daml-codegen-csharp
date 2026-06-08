@@ -212,6 +212,24 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         || _currentPackage is null
         || typeRef.PackageId == _currentPackage.PackageId;
 
+    private bool IsLocalEnumTypeRef(DamlTypeRef typeRef) =>
+        IsLocalTypeRef(typeRef)
+        && _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}");
+
+    private bool IsCrossPackageEnumTypeRef(DamlTypeRef typeRef) =>
+        !IsLocalTypeRef(typeRef)
+        && (_currentArchive?.GetPackageById(typeRef.PackageId)?.Modules
+            .Where(m => m.Name == typeRef.Module)
+            .SelectMany(m => m.DataTypes)
+            .Any(dt => dt.Name == typeRef.Name && dt.Definition is DamlEnumDefinition)
+            ?? false);
+
+    private bool IsEnumTypeRef(DamlTypeRef typeRef) =>
+        IsLocalEnumTypeRef(typeRef) || IsCrossPackageEnumTypeRef(typeRef);
+
+    private string QualifiedEnumExtensionsCall(DamlTypeRef typeRef, string method, string argument) =>
+        $"{ResolveTypeRefName(typeRef)}Extensions.{method}({argument})";
+
     /// <summary>
     /// Resolves a DamlTypeRef to a C# identifier or fully qualified name.
     /// Local refs return the bare sanitized name (qualified with the parent template
@@ -1935,11 +1953,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName),
-        // Enum dispatch keyed by module:name (mirrors GetFromValueConversion) so a
-        // same-name record in a different module doesn't route through the enum's
-        // ToDamlEnum extension. Enums serialize via the generated *Extensions helper.
-        DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>
+        DamlTypeRef typeRef when IsLocalEnumTypeRef(typeRef) =>
             $"{fieldName}.ToDamlEnum()",
+        DamlTypeRef typeRef when IsCrossPackageEnumTypeRef(typeRef) =>
+            QualifiedEnumExtensionsCall(typeRef, "ToDamlEnum", fieldName),
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
@@ -2045,10 +2062,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when IsStdlibTypeRef(typeRef, parametric: true) =>
             EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
-        // Type reference — enum dispatch keyed by module:name so a same-name record in a
-        // different module doesn't accidentally route through *Extensions.FromDamlEnum.
-        DamlTypeRef typeRef when _localEnumQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}") =>
-            $"{ResolveTypeRefName(typeRef)}Extensions.FromDamlEnum({valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>())",
+        DamlTypeRef typeRef when IsEnumTypeRef(typeRef) =>
+            QualifiedEnumExtensionsCall(typeRef, "FromDamlEnum", $"{valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>()"),
         // Type reference (record/variant types)
         DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>())",
         // Daml type variable — same treatment as ToValue: emit a runtime-throwing stub

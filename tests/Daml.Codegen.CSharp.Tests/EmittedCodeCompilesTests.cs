@@ -329,6 +329,95 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_record_with_cross_package_enum_field_compiles_against_both_packages()
+    {
+        var foreignModule = new DamlModule
+        {
+            Name = "Other.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Severity",
+                    Definition = new DamlEnumDefinition(["Low", "High"]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = "other-pkg-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Alert",
+                    Fields =
+                    [
+                        new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
+                    ],
+                    Choices = [],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Alert",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlField("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            GenerateJsonSupport = true,
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            IncludeDependencies = true,
+        };
+        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var files = generator.Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field whose type is an enum from a dependency package must round-trip via the foreign enum's *Extensions.ToDamlEnum/FromDamlEnum, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_non_contract_wrapper_with_nested_unit_return_compiles()
     {
         var module = new DamlModule
