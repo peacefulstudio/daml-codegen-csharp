@@ -59,28 +59,10 @@ helper on the input DAR, hands the Intermediate DAR to the bundled C# emitter, w
 right RID lazily on first invocation (requires `DPM_AUTO_INSTALL=true`) and dispatches
 to its launcher at `dpm codegen-cs` invocation time. Users opt in by listing every
 component they need — SDK ones and `codegen-cs` — under `components:` in `daml.yaml`,
-with no `sdk-version` key (the two are mutually exclusive by upstream design; see
-ADR-0001). At M1 the supply chain is the OCI registry plus stock dpm — the codegen
-toolchain will not be distributed as a `dotnet tool`, a Docker image, or a NuGet
-package. (Today's shape, pre-M1, ships `Daml.Codegen.CSharp` as a `dotnet tool` /
-NuGet package; that distribution is retired at the F6 dpm cutover. See the project guide's
-"Packages" target-vs-current note.)
+with no `sdk-version` key (the two are mutually exclusive by upstream design). The
+supply chain is the OCI registry plus stock dpm — the codegen toolchain is not
+distributed as a `dotnet tool`, a Docker image, or a NuGet package.
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
-
-**Dpm mode**:
-The `Daml.Codegen.CSharp.MSBuild` adapter that runs codegen via `dpm codegen-cs` (the OCI
-bundle: JVM helper + emitter). Needs `dpm` + a JDK at build time. The default `DamlCodegenMode`.
-_Avoid_: "dpm plugin", "online mode"
-
-**Standalone mode**:
-The JVM-free MSBuild adapter that bundles the DAR-direct CLI (and thus `Daml.Codegen.DarParser`) —
-no `dpm`, no JDK. Internal-only until `Daml.Codegen.DarParser` is public.
-_Avoid_: "offline mode", "DarDirect package", "embedded mode"
-
-**`DamlCodegenMode`**:
-The MSBuild seam (a property) that selects which `$(DamlCodegenTool)` adapter runs — `Dpm` or
-`Standalone`.
-_Avoid_: "codegen backend", "toolchain flag"
 
 ## Example dialogue
 

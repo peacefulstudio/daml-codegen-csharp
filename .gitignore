@@ -140,7 +140,7 @@ Desktop.ini
 # Code generation test output
 output/
 
-# OCI bundle workspaces (issue #136 — local builds of the dpm codegen-cs
+# OCI bundle workspaces (local builds of the dpm codegen-cs
 # bundle drop publish/ and bundle/ in the repo root; CI uses these same
 # names but in a runner workspace).
 publish/
