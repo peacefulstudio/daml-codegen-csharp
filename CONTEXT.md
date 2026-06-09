@@ -67,6 +67,21 @@ NuGet package; that distribution is retired at the F6 dpm cutover. See the proje
 "Packages" target-vs-current note.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
+**Dpm mode**:
+The `Daml.Codegen.CSharp.MSBuild` adapter that runs codegen via `dpm codegen-cs` (the OCI
+bundle: JVM helper + emitter). Needs `dpm` + a JDK at build time. The default `DamlCodegenMode`.
+_Avoid_: "dpm plugin", "online mode"
+
+**Standalone mode**:
+The JVM-free MSBuild adapter that bundles the DAR-direct CLI (and thus `Daml.Codegen.DarParser`) —
+no `dpm`, no JDK. Internal-only until `Daml.Codegen.DarParser` is public.
+_Avoid_: "offline mode", "DarDirect package", "embedded mode"
+
+**`DamlCodegenMode`**:
+The MSBuild seam (a property) that selects which `$(DamlCodegenTool)` adapter runs — `Dpm` or
+`Standalone`.
+_Avoid_: "codegen backend", "toolchain flag"
+
 ## Example dialogue
 
 > **Dev**: Where does the JVM dependency go? I thought consumers shouldn't need a JDK.

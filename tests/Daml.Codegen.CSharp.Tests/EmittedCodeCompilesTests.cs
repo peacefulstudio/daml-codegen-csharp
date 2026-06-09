@@ -1344,11 +1344,7 @@ public class EmittedCodeCompilesTests
             [ContractIdOf("Asset")]);
 
         var generator = CreateGenerator();
-        var method = typeof(CSharpCodeGenerator).GetMethod(
-            "RequireForFieldType",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?? throw new InvalidOperationException("RequireForFieldType not found");
-        method.Invoke(generator, [indent, nestedAppCarryingContractId]);
+        generator.RequireForFieldType(indent, nestedAppCarryingContractId);
 
         indent.RequiredUsings.Should().Contain(
             "Daml.Runtime.Contracts",

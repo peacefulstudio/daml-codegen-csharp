@@ -147,59 +147,46 @@ internal static class ContractIdMetadata
             + "ITemplate.TemplateId nor IDamlInterface.InterfaceId statically.");
     }
 
-    // Walks T and its interfaces looking for a static `Identifier`-returning property
-    // named `propertyName`. Codegen emits the metadata in three shapes:
-    //
-    //  1. Concrete template:           `public static Identifier TemplateId => ...`
-    //  2. Interface placeholder:       `public static Identifier TemplateId => throw ...`
-    //  3. Interface marker (`I<Name>`): explicit `static Identifier IDamlInterface.InterfaceId => ...`
-    //
-    // (1) and (2) are reachable by short-name GetProperty on the closed type. (3) is
-    // an explicit static-virtual interface implementation; reflection surfaces it on
-    // the implementing type only under the full-namespace name (e.g.
-    // `Daml.Runtime.Contracts.IDamlInterface.InterfaceId`). Scan that path too.
-    private static Identifier ResolveStaticIdentifier(Type type, string propertyName)
+    private const System.Reflection.BindingFlags StaticIdentifierBindingFlags =
+        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+        | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy;
+
+    private static Identifier ResolveStaticIdentifier(Type type, string propertyName) =>
+        ResolveDirectlyDeclaredIdentifier(type, propertyName)
+            ?? ResolveExplicitInterfaceIdentifier(type, propertyName)
+            ?? throw new InvalidOperationException(
+                $"Type '{type.FullName}' exposes no static Identifier {propertyName} property.");
+
+    private static Identifier? ResolveDirectlyDeclaredIdentifier(Type type, string propertyName)
     {
-        const System.Reflection.BindingFlags flags =
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-            | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy;
+        var prop = type.GetProperty(propertyName, StaticIdentifierBindingFlags);
+        return prop is not null && IsConcreteIdentifierGetter(prop)
+            ? (Identifier)InvokeStaticGetter(prop)!
+            : null;
+    }
 
-        // (1) and (2): direct short-name lookup on the type. Skips abstract-only
-        // declarations on the marker base, which would dispatch to a no-impl getter.
-        var prop = type.GetProperty(propertyName, flags);
-        if (prop is not null && prop.PropertyType == typeof(Identifier) && prop.GetMethod is { IsAbstract: false })
-        {
-            return (Identifier)InvokeStaticGetter(prop)!;
-        }
-
-        // (3): explicit static-virtual implementation, exposed under the full
-        // qualified name on either `type` itself (codegen-emitted I<Name>) or any
-        // interface it derives from.
+    private static Identifier? ResolveExplicitInterfaceIdentifier(Type type, string propertyName)
+    {
         foreach (var candidateType in EnumerateTypeAndInterfaces(type))
         {
-            foreach (var p in candidateType.GetProperties(flags))
+            foreach (var prop in candidateType.GetProperties(StaticIdentifierBindingFlags))
             {
-                if (p.PropertyType != typeof(Identifier))
+                if (IsConcreteIdentifierGetter(prop) && TrailingSegment(prop.Name) == propertyName)
                 {
-                    continue;
-                }
-                if (p.GetMethod is null || p.GetMethod.IsAbstract)
-                {
-                    continue;
-                }
-                // Match by trailing segment so both "InterfaceId" and
-                // "Daml.Runtime.Contracts.IDamlInterface.InterfaceId" resolve.
-                var lastDot = p.Name.LastIndexOf('.');
-                var shortName = lastDot >= 0 ? p.Name[(lastDot + 1)..] : p.Name;
-                if (string.Equals(shortName, propertyName, StringComparison.Ordinal))
-                {
-                    return (Identifier)InvokeStaticGetter(p)!;
+                    return (Identifier)InvokeStaticGetter(prop)!;
                 }
             }
         }
+        return null;
+    }
 
-        throw new InvalidOperationException(
-            $"Type '{type.FullName}' exposes no static Identifier {propertyName} property.");
+    private static bool IsConcreteIdentifierGetter(System.Reflection.PropertyInfo prop) =>
+        prop.PropertyType == typeof(Identifier) && prop.GetMethod is { IsAbstract: false };
+
+    private static string TrailingSegment(string memberName)
+    {
+        var lastDot = memberName.LastIndexOf('.');
+        return lastDot >= 0 ? memberName[(lastDot + 1)..] : memberName;
     }
 
     private static IEnumerable<Type> EnumerateTypeAndInterfaces(Type type)
@@ -211,9 +198,6 @@ internal static class ContractIdMetadata
         }
     }
 
-    // Unwraps TargetInvocationException so a throwing static getter (e.g. a Daml
-    // interface placeholder) surfaces its inner InvalidOperationException directly,
-    // preserving the explanatory message that points the caller at the right path.
     private static object? InvokeStaticGetter(System.Reflection.PropertyInfo prop)
     {
         try
@@ -223,7 +207,7 @@ internal static class ContractIdMetadata
         catch (System.Reflection.TargetInvocationException tie) when (tie.InnerException is not null)
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(tie.InnerException).Throw();
-            throw; // unreachable
+            throw;
         }
     }
 }

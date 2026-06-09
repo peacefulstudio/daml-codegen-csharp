@@ -15,6 +15,9 @@ namespace Daml.Runtime.Serialization;
 /// </summary>
 public static class DamlJsonSerializer
 {
+    private const string VariantTagKey = "tag";
+    private const string VariantValueKey = "value";
+
     private static readonly JsonSerializerOptions DefaultOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -131,8 +134,8 @@ public static class DamlJsonSerializer
     {
         var obj = new JsonObject
         {
-            ["tag"] = variant.Constructor,
-            ["value"] = ValueToJsonNode(variant.Value)
+            [VariantTagKey] = variant.Constructor,
+            [VariantValueKey] = ValueToJsonNode(variant.Value)
         };
         return obj;
     }
@@ -157,9 +160,9 @@ public static class DamlJsonSerializer
         JsonArray arr => new DamlList(arr.Select(n => n is null
             ? throw new JsonException("Null array elements not supported")
             : JsonNodeToValue(n)).ToList()),
-        JsonObject obj when obj.ContainsKey("tag") && obj.ContainsKey("value") =>
-            new DamlVariant(null, obj["tag"]!.GetValue<string>(),
-                obj["value"] is null ? DamlUnit.Instance : JsonNodeToValue(obj["value"]!)),
+        JsonObject obj when obj.ContainsKey(VariantTagKey) && obj.ContainsKey(VariantValueKey) =>
+            new DamlVariant(null, obj[VariantTagKey]!.GetValue<string>(),
+                obj[VariantValueKey] is null ? DamlUnit.Instance : JsonNodeToValue(obj[VariantValueKey]!)),
         JsonObject obj => new DamlRecord(null,
             obj.Where(p => p.Value is not null)
                .Select(p => new DamlField(p.Key, JsonNodeToValue(p.Value!)))

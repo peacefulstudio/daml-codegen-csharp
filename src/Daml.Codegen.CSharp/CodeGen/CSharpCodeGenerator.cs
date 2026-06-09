@@ -1191,7 +1191,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Require("Daml.Runtime.Outcomes");
     }
 
-    private void RequireForFieldType(IndentWriter indent, DamlType type)
+    internal void RequireForFieldType(IndentWriter indent, DamlType type)
     {
         switch (type)
         {
