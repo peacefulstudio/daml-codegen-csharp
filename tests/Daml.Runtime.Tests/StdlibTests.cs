@@ -397,8 +397,8 @@ public class StdlibTests
 
         act.Should().Throw<NotImplementedException>()
             .WithMessage("*amulet*")
-            .And.Message.Should().Contain("issues/57",
-                because: "the message must point at the tracking issue so consumers can find the workaround status");
+            .And.Message.Should().Contain("Workaround:",
+                because: "the message must describe the workaround so consumers can resolve the gap");
     }
 
     [Fact]

@@ -24,7 +24,7 @@ public class ExerciseOutcomeProjectionTests
     {
         public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "Agreement");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "peaceful-sample-agreements";
+        public static string PackageName => "sample-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Agreement FromRecord(DamlRecord record) => new();
@@ -35,7 +35,7 @@ public class ExerciseOutcomeProjectionTests
     {
         public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "SwapRecord");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "peaceful-sample-agreements";
+        public static string PackageName => "sample-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static SwapRecord FromRecord(DamlRecord record) => new();
@@ -46,7 +46,7 @@ public class ExerciseOutcomeProjectionTests
     {
         public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "AgreementRecord");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "peaceful-sample-agreements";
+        public static string PackageName => "sample-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static AgreementRecord FromRecord(DamlRecord record) => new();
@@ -245,7 +245,7 @@ public class ExerciseOutcomeProjectionTests
     {
         public static Identifier TemplateId => new("pkg-1", "Sample.Splitters", "Half");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "peaceful-sample-splitters";
+        public static string PackageName => "sample-splitters";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Half FromRecord(DamlRecord record) => new();
