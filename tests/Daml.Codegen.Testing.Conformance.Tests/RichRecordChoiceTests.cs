@@ -51,7 +51,9 @@ public class RichRecordChoiceTests
             Tags: new List<string>(),
             Attributes: new Dictionary<string, string>(),
             Marker: new ContractId<Marker>("m"),
-            Profile: new Profile("n", 0));
+            Profile: new Profile("n", 0),
+            Outcome: new Outcome.Pending(),
+            Fee: 0m);
         var @event = new CreatedEvent(
             EventId: "ev-1",
             ContractId: "rich-cid",

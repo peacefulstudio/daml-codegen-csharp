@@ -22,13 +22,13 @@ namespace Richtypes;
 /// <summary>
 /// Generated from Daml template RichTypes:RichRecord
 /// </summary>
-public sealed partial record RichRecord(Party Owner, long Count, decimal Amount, string Label, bool Active, DateOnly AsOf, DateTimeOffset ObservedAt, string? Note, IReadOnlyList<string> Tags, IReadOnlyDictionary<string, string> Attributes, ContractId<Marker> Marker, Profile Profile) : ITemplate
+public sealed partial record RichRecord(Party Owner, long Count, decimal Amount, string Label, bool Active, DateOnly AsOf, DateTimeOffset ObservedAt, string? Note, IReadOnlyList<string> Tags, IReadOnlyDictionary<string, string> Attributes, ContractId<Marker> Marker, Profile Profile, Outcome Outcome, decimal Fee) : ITemplate
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("9b632e831723777332a1ba27c9f4715ec8174b61da29b985d7db250dbfdb9bb1", "RichTypes", "RichRecord");
+    public static Identifier TemplateId { get; } = new("9fbb9c81a2f951e871e72723d952fa879c49a90514647b9b496c52251b63cf8f", "RichTypes", "RichRecord");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "9b632e831723777332a1ba27c9f4715ec8174b61da29b985d7db250dbfdb9bb1";
+    public static string PackageId => "9fbb9c81a2f951e871e72723d952fa879c49a90514647b9b496c52251b63cf8f";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";
@@ -49,7 +49,9 @@ public sealed partial record RichRecord(Party Owner, long Count, decimal Amount,
         DamlField.Create("tags", new DamlList(Tags.Select(x => (DamlValue)new DamlText(x)).ToList())),
         DamlField.Create("attributes", new DamlTextMap(Attributes.ToDictionary(kv => kv.Key, kv => (DamlValue)new DamlText(kv.Value)))),
         DamlField.Create("marker", Marker.ToDamlValue()),
-        DamlField.Create("profile", Profile.ToRecord())
+        DamlField.Create("profile", Profile.ToRecord()),
+        DamlField.Create("outcome", Outcome.ToVariant()),
+        DamlField.Create("fee", new DamlNumeric(Fee))
     );
 
     /// <summary>Creates an instance from a DamlRecord.</summary>
@@ -65,7 +67,9 @@ public sealed partial record RichRecord(Party Owner, long Count, decimal Amount,
         Tags: (IReadOnlyList<string>)record.GetRequiredField("tags").As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList(),
         Attributes: record.GetRequiredField("attributes").As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => kv.Value.As<DamlText>().Value),
         Marker: new ContractId<Marker>(record.GetRequiredField("marker").As<DamlContractId>().Value),
-        Profile: Profile.FromRecord(record.GetRequiredField("profile").As<DamlRecord>())
+        Profile: Profile.FromRecord(record.GetRequiredField("profile").As<DamlRecord>()),
+        Outcome: Outcome.FromVariant(record.GetRequiredField("outcome").As<DamlVariant>()),
+        Fee: record.GetRequiredField("fee").As<DamlNumeric>().Value
     );
 
     /// <summary>

@@ -52,7 +52,9 @@ public class SubmissionExtensionsTests
             Tags: new List<string>(),
             Attributes: new Dictionary<string, string>(),
             Marker: new ContractId<Marker>("m"),
-            Profile: new Profile("n", 0));
+            Profile: new Profile("n", 0),
+            Outcome: new Outcome.Pending(),
+            Fee: 0m);
 
         var outcome = await client.CreateAsync(payload, new Party("alice"), TestContext.Current.CancellationToken);
 

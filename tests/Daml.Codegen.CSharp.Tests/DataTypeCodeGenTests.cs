@@ -669,6 +669,78 @@ public class DataTypeCodeGenTests
         code.Should().Contain("Pick: Choice.FromVariant(record.GetRequiredField(\"pick\").As<DamlVariant>())");
     }
 
+    [Fact]
+    public void Generate_should_use_indefinite_article_an_for_vowel_initial_variant_in_FromVariant_summary()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Outcome",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Win", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlVariantConstructor("Pending", null)
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var outcomeFile = files.First(f => f.RelativePath.EndsWith("Outcome.cs", StringComparison.Ordinal));
+        var code = outcomeFile.Content;
+
+        // Assert
+        code.Should().Contain("/// <summary>Reconstructs an Outcome by dispatching on the DamlVariant constructor tag.</summary>");
+        code.Should().NotContain("Reconstructs a Outcome");
+    }
+
+    [Fact]
+    public void Generate_should_use_indefinite_article_a_for_consonant_initial_variant_in_FromVariant_summary()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "PaymentMethod",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Cash", null),
+                        new DamlVariantConstructor("Card", new DamlPrimitiveType(DamlPrimitive.Text))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var paymentFile = files.First(f => f.RelativePath.EndsWith("PaymentMethod.cs", StringComparison.Ordinal));
+        var code = paymentFile.Content;
+
+        // Assert
+        code.Should().Contain("/// <summary>Reconstructs a PaymentMethod by dispatching on the DamlVariant constructor tag.</summary>");
+        code.Should().NotContain("Reconstructs an PaymentMethod");
+    }
+
     #endregion
 
     #region Enum Data Type Tests

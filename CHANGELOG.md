@@ -47,6 +47,7 @@ because they are versioned in lockstep:
 
 ### Fixed
 
+- Generated `<summary>` doc comments now use the correct indefinite article for type names beginning with a vowel — e.g. a variant's `FromVariant` summary reads `Reconstructs an Outcome`, not `Reconstructs a Outcome` ([#286](https://github.com/peacefulstudio/daml-codegen-csharp/pull/286)).
 - **A record (or template/choice-argument) field whose type is an `enum` defined in a *dependency* package now round-trips correctly.** Previously the codegen only recognized enums declared in the package being generated, so a field referencing an enum from another package fell through to the record serialization path and the emitted code failed to compile — the TO side called `.ToRecord()` and the FROM side called `FromRecord(...)` on a bare C# `enum`, neither of which exists. Such fields now serialize and deserialize through the foreign enum's generated `…Extensions.ToDamlEnum` / `…Extensions.FromDamlEnum` helpers, exactly like a same-package enum field ([#281](https://github.com/peacefulstudio/daml-codegen-csharp/issues/281)).
 
 ## [0.1.7] — 2026-06-01

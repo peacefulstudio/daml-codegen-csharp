@@ -1762,7 +1762,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine($"public abstract {_qualifier.Qualify("DamlVariant", _currentNamespace)} ToVariant();");
         indent.AppendLine();
 
-        indent.AppendLine($"/// <summary>Reconstructs a {className} by dispatching on the DamlVariant constructor tag.</summary>");
+        indent.AppendLine($"/// <summary>Reconstructs {IndefiniteArticleFor(className)} {className} by dispatching on the DamlVariant constructor tag.</summary>");
         indent.AppendLine($"public static {fullClassName} FromVariant({_qualifier.Qualify("DamlVariant", _currentNamespace)} variant) =>");
         indent.Indent();
         indent.AppendLine("variant.Constructor switch");
@@ -2191,6 +2191,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
         return sanitized;
     }
+
+    private static string IndefiniteArticleFor(string name) =>
+        name.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(name[0])) ? "an" : "a";
 
     private static string ToPascalCase(string name)
     {
