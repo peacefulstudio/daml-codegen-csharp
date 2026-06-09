@@ -92,7 +92,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                     logger.Warning($"External package id {id[..Math.Min(16, id.Length)]}… is not present in the DAR — no <PackageReference> will be emitted for it. Generated code that references it will fail to compile.");
                     continue;
                 }
-                if (IsStdlibPackage(pkg.Name))
+                if (IsStdlibPackage(pkg.Name) || IsPlaceholderPackageName(pkg.Name))
                 {
                     continue;
                 }
@@ -125,6 +125,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         packageName.StartsWith("daml-prim", StringComparison.Ordinal)
         || packageName.StartsWith("daml-stdlib", StringComparison.Ordinal)
         || packageName.StartsWith("ghc-stdlib", StringComparison.Ordinal);
+
+    private static bool IsPlaceholderPackageName(string packageName) =>
+        string.IsNullOrEmpty(packageName)
+        || packageName == "-no-package-metadata"
+        || packageName == "UnknownPackage";
 
     /// <summary>
     /// Builds a mapping of choice-argument type name to parent template name for the
@@ -209,7 +214,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             return false;
         }
         var foreignPkg = _currentArchive.GetPackageById(typeRef.PackageId);
-        return foreignPkg is not null && IsStdlibPackage(foreignPkg.Name);
+        return foreignPkg is not null
+            && (IsStdlibPackage(foreignPkg.Name) || IsPlaceholderPackageName(foreignPkg.Name));
     }
 
     private bool IsLocalTypeRef(DamlTypeRef typeRef) =>
@@ -283,7 +289,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 $"Cross-package type ref {typeRef.Module}:{typeRef.Name} points at package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}… which is not present in the DAR. Rebuild the DAR with the missing package included, or pass a multi-DAR input that resolves it.");
         }
 
-        if (IsStdlibPackage(foreignPkg.Name))
+        if (IsStdlibPackage(foreignPkg.Name) || IsPlaceholderPackageName(foreignPkg.Name))
         {
             var mapped = MapStdlibType(typeRef.Module, typeRef.Name);
             if (mapped is not null)
@@ -925,7 +931,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             && !string.IsNullOrEmpty(archiveRef.PackageId)
             && _currentArchive is not null
             && _currentArchive.GetPackageById(archiveRef.PackageId) is { } archivePkg
-            && IsStdlibPackage(archivePkg.Name))
+            && (IsStdlibPackage(archivePkg.Name) || IsPlaceholderPackageName(archivePkg.Name)))
         {
             return ("DamlUnit", false);
         }
@@ -1235,10 +1241,17 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             case DamlTypeRef typeRef when IsStdlibTypeRef(typeRef, parametric: false):
                 indent.Require("Daml.Runtime.Stdlib");
                 break;
+            case DamlTypeVar:
+                indent.Require("Daml.Runtime.Stdlib");
+                break;
             case DamlTypeApp app:
-                foreach (var arg in app.Arguments)
+                foreach (var argument in app.Arguments)
                 {
-                    RequireForFieldType(indent, arg);
+                    if (argument is DamlTypeVar)
+                    {
+                        continue;
+                    }
+                    RequireForFieldType(indent, argument);
                 }
                 break;
         }
@@ -1475,7 +1488,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 && !string.IsNullOrEmpty(externalRef.PackageId)
                 && _currentArchive is not null
                 && _currentArchive.GetPackageById(externalRef.PackageId) is { } archivePkg
-                && IsStdlibPackage(archivePkg.Name))
+                && (IsStdlibPackage(archivePkg.Name) || IsPlaceholderPackageName(archivePkg.Name)))
             {
                 return ("DamlUnit", null, false, false);
             }
@@ -2164,26 +2177,32 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     }
 
     // Naming helpers
+    private const string FallbackNamespace = "DamlGenerated";
+
     private static string DeriveNamespace(string packageName)
     {
         var parts = packageName.Split('-', '_')
             .Select(ToPascalCase)
-            .Select(SanitizeIdentifier);
-        return string.Join(".", parts);
+            .Select(SanitizeIdentifier)
+            .Where(segment => segment.Length > 0)
+            .ToList();
+        return parts.Count == 0 ? FallbackNamespace : string.Join(".", parts);
     }
 
     private static string SanitizeIdentifier(string name)
     {
-        // Replace invalid characters
         var sanitized = IdentifierRegex().Replace(name, "_");
 
-        // Ensure it doesn't start with a digit
+        if (sanitized.Length == 0)
+        {
+            return sanitized;
+        }
+
         if (char.IsDigit(sanitized[0]))
         {
             sanitized = "_" + sanitized;
         }
 
-        // Handle C# keywords
         if (CSharpKeywords.Contains(sanitized))
         {
             sanitized = "@" + sanitized;

@@ -191,10 +191,10 @@ public sealed class ProjectFileGenerator
     /// </summary>
     private static string SanitizePackageName(string name)
     {
-        // Split on hyphens and underscores, convert each part to PascalCase
         var parts = name.Split('-', '_')
             .Select(ToPascalCase)
-            .Select(SanitizeIdentifier);
+            .Select(SanitizeIdentifier)
+            .Where(segment => segment.Length > 0);
         return string.Join(".", parts);
     }
 

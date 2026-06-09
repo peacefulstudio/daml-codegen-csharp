@@ -295,6 +295,39 @@ public class ProjectFileGeneratorTests
         file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0\" />");
     }
 
+    [Fact]
+    public void GenerateProjectFile_should_not_emit_leading_dot_package_id_for_leading_hyphen_dependency_name()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "lf1x-prim-id",
+                Name = "-no-package-metadata",
+                Version = new Version(0, 0, 0),
+                LfVersion = "1.6",
+                Modules = [],
+                DependencyReferences = []
+            }
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences);
+
+        file.Content.Should().Contain("<PackageReference Include=\"No.Package.Metadata\" Version=\"0.0.0\" />");
+        file.Content.Should().NotContain("Include=\".No.Package.Metadata");
+    }
+
     // Removed test "should_handle_dependency_without_name": no longer applicable.
     // ProjectFileGenerator now receives a list of resolved DamlPackage instances; the
     // codegen filters out unknown/unresolved package ids before calling it. The case

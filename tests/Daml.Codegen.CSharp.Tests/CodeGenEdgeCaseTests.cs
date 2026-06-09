@@ -109,6 +109,42 @@ public class CodeGenEdgeCaseTests
         code.Should().Contain("new DamlNumeric(Value)");
     }
 
+    [Fact]
+    public void Generate_should_not_import_stdlib_namespace_for_numeric_scale_type_variable()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Amount",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("value", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.Numeric),
+                            [new DamlTypeVar("10")]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var amountFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Amount.cs", StringComparison.Ordinal));
+
+        amountFile.Should().NotBeNull();
+        var code = amountFile!.Content;
+
+        code.Should().Contain("decimal Value");
+        code.Should().NotContain("using Daml.Runtime.Stdlib;");
+    }
+
     #endregion
 
     #region Type Variable Tests
@@ -148,6 +184,110 @@ public class CodeGenEdgeCaseTests
 
         // Type variables are mapped to generic type parameters (a -> TA)
         code.Should().Contain("TA Item");
+    }
+
+    [Fact]
+    public void Generate_should_import_stdlib_namespace_for_generic_stub_in_record()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Container",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("item", new DamlTypeVar("a"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var containerFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Container.cs", StringComparison.Ordinal));
+
+        containerFile.Should().NotBeNull();
+        var code = containerFile!.Content;
+
+        code.Should().Contain("GenericStub.NotImplemented");
+        code.Should().Contain("using Daml.Runtime.Stdlib;");
+    }
+
+    [Fact]
+    public void Generate_should_import_stdlib_namespace_for_generic_stub_in_variant()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Box",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Holds", new DamlTypeVar("a"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var boxFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Box.cs", StringComparison.Ordinal));
+
+        boxFile.Should().NotBeNull();
+        var code = boxFile!.Content;
+
+        code.Should().Contain("GenericStub.NotImplemented");
+        code.Should().Contain("using Daml.Runtime.Stdlib;");
+    }
+
+    [Fact]
+    public void Generate_should_import_stdlib_namespace_for_generic_stub_in_list_element_type_variable()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Container",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("items", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.List),
+                            [new DamlTypeVar("a")]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var containerFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Container.cs", StringComparison.Ordinal));
+
+        containerFile.Should().NotBeNull();
+        var code = containerFile!.Content;
+
+        code.Should().Contain("GenericStub.NotImplemented");
+        code.Should().Contain("using Daml.Runtime.Stdlib;");
     }
 
     #endregion
@@ -1483,6 +1623,303 @@ public class CodeGenEdgeCaseTests
         pair.Should().NotBeNull();
         pair!.Content.Should().NotContain("Daml.Runtime.Stdlib.Tuple2");
         pair.Content.Should().NotContain("using Daml.Runtime.Stdlib;");
+    }
+
+    [Fact]
+    public void Generate_should_not_emit_foreign_namespace_or_PackageReference_for_unmapped_type_in_placeholder_package()
+    {
+        const string ForeignPackageId = "foreign-no-metadata-id";
+
+        var foreignModule = new DamlModule
+        {
+            Name = "Foreign.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Meta",
+                    Definition = new DamlRecordDefinition([new DamlField("note", new DamlPrimitiveType(DamlPrimitive.Text))])
+                }
+            ],
+            Interfaces = []
+        };
+        var foreignPkg = CreateTestPackage(ForeignPackageId, "-no-package-metadata", foreignModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "Main.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Wrapper",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("meta", new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Meta"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, foreignPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = true
+        };
+        var generator = CreateGenerator(options);
+
+        var files = generator.Generate(dar).ToList();
+        var wrapper = files.FirstOrDefault(f => f.RelativePath.EndsWith("Wrapper.cs", StringComparison.Ordinal));
+        var csproj = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
+
+        wrapper.Should().NotBeNull();
+        wrapper!.Content.Should().Contain("Meta Meta");
+        wrapper.Content.Should().NotContain("No.Package.Metadata");
+
+        csproj.Should().NotBeNull();
+        csproj!.Content.Should().NotContain("No.Package.Metadata");
+        csproj.Content.Should().NotContain("PackageReference Include=\".");
+    }
+
+    [Fact]
+    public void Generate_should_map_Archive_choice_to_DamlUnit_when_template_package_is_placeholder_named()
+    {
+        const string PlaceholderPackageId = "lf1x-prim-id";
+
+        var primModule = new DamlModule
+        {
+            Name = "DA.Internal.Template",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType { Name = "Archive", Definition = new DamlRecordDefinition([]) }
+            ],
+            Interfaces = []
+        };
+        var primPkg = CreateTestPackage(PlaceholderPackageId, "-no-package-metadata", primModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "Main.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Archive",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef(PlaceholderPackageId, "DA.Internal.Template", "Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, primPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = true
+        };
+        var generator = CreateGenerator(options);
+
+        var files = generator.Generate(dar).ToList();
+        var holding = files.FirstOrDefault(f => f.RelativePath.EndsWith("Holding.cs", StringComparison.Ordinal));
+        var csproj = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
+
+        holding.Should().NotBeNull();
+        holding!.Content.Should().Contain("Choice<Holding, DamlUnit,");
+        holding.Content.Should().NotContain("No.Package.Metadata");
+
+        csproj.Should().NotBeNull();
+        csproj!.Content.Should().NotContain("No.Package.Metadata");
+        csproj.Content.Should().NotContain("PackageReference Include=\".");
+    }
+
+    [Fact]
+    public void Generate_should_map_Archive_interface_choice_to_DamlUnit_when_argument_package_is_placeholder_named()
+    {
+        const string PlaceholderPackageId = "lf1x-prim-id";
+
+        var primModule = new DamlModule
+        {
+            Name = "DA.Internal.Template",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType { Name = "Archive", Definition = new DamlRecordDefinition([]) }
+            ],
+            Interfaces = []
+        };
+        var primPkg = CreateTestPackage(PlaceholderPackageId, "-no-package-metadata", primModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "Main.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition([])
+                }
+            ],
+            Interfaces =
+            [
+                new DamlInterface
+                {
+                    Name = "Asset",
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Archive",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef(PlaceholderPackageId, "DA.Internal.Template", "Archive"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+                        }
+                    ],
+                    ViewType = null
+                }
+            ]
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, primPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = true
+        };
+        var generator = CreateGenerator(options);
+
+        var files = generator.Generate(dar).ToList();
+        var iface = files.FirstOrDefault(f => f.RelativePath.EndsWith("IAsset.cs", StringComparison.Ordinal));
+        var csproj = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
+
+        iface.Should().NotBeNull();
+        iface!.Content.Should().Contain("ArchiveAsync(");
+        iface.Content.Should().Contain("DamlUnit.Instance");
+        iface.Content.Should().NotContain("No.Package.Metadata");
+
+        csproj.Should().NotBeNull();
+        csproj!.Content.Should().NotContain("No.Package.Metadata");
+        csproj.Content.Should().NotContain("PackageReference Include=\".");
+    }
+
+    [Fact]
+    public void Generate_should_route_stdlib_Tuple2_to_runtime_when_package_is_placeholder_named()
+    {
+        const string PlaceholderPackageId = "lf1x-prim-types-id";
+
+        var stdlibModule = new DamlModule
+        {
+            Name = "DA.Types",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Tuple2",
+                    TypeParams = ["a", "b"],
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("_1", new DamlTypeVar("a")),
+                        new DamlField("_2", new DamlTypeVar("b"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var stdlibPkg = CreateTestPackage(PlaceholderPackageId, "-no-package-metadata", stdlibModule);
+
+        var mainModule = new DamlModule
+        {
+            Name = "App.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Pair",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("p", new DamlTypeApp(
+                            new DamlTypeRef(PlaceholderPackageId, "DA.Types", "Tuple2"),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Int64),
+                                new DamlPrimitiveType(DamlPrimitive.Text)
+                            ]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+        var mainPkg = CreateTestPackage("main-pkg-id", "main-pkg", mainModule);
+        var dar = CreateMultiPackageDar(mainPkg, stdlibPkg);
+
+        var options = new CodeGenOptions
+        {
+            OutputDirectory = "/tmp/test",
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            GenerateXmlDocs = true,
+            GenerateProjectFile = true
+        };
+        var generator = CreateGenerator(options);
+
+        var files = generator.Generate(dar).ToList();
+        var pair = files.FirstOrDefault(f => f.RelativePath.EndsWith("Pair.cs", StringComparison.Ordinal));
+        var csproj = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
+
+        pair.Should().NotBeNull();
+        pair!.Content.Should().Contain("using Daml.Runtime.Stdlib;");
+        pair.Content.Should().Contain("Tuple2<long, string>");
+        pair.Content.Should().Contain("Tuple2<long, string>.FromRecord(");
+        pair.Content.Should().NotContain("No.Package.Metadata");
+
+        csproj.Should().NotBeNull();
+        csproj!.Content.Should().NotContain("No.Package.Metadata");
+        csproj.Content.Should().NotContain("PackageReference Include=\".");
     }
 
     #endregion
