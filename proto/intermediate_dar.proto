@@ -86,7 +86,7 @@ message Template {
   // `--schema-only` mode (no analyzer at all) or could not statically
   // resolve the expression. Present + `Static` means every signatory is
   // a payload-field reference and codegen can derive `actAs` from the
-  // payload. See ADR 0003 amendment (2026-05-27).
+  // payload.
   PartyAnalysis signatories = 5;
   // Same shape as `signatories` but for the `observer ...` clause.
   PartyAnalysis observers = 6;
@@ -114,8 +114,7 @@ message Choice {
   // `--schema-only` mode or could not statically resolve the expression.
   // Choice controllers can additionally project the choice argument record
   // (the `arg` binder); that case is reported as `Dynamic` because the
-  // codegen would need to invent a name for the argument value. See
-  // ADR 0003 amendment (2026-05-27).
+  // codegen would need to invent a name for the argument value.
   PartyAnalysis controllers = 5;
   // Same shape as `controllers` but for the choice-level `observer ...`
   // clause.
