@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -615,8 +614,7 @@ public class ProjectFileGeneratorTests
         //
         // The decision is anchored to the EMITTED file set rather than the
         // package's templates, so a key-bearing template added via
-        // `IncludeDependencies` still pins LangVersion correctly — see
-        // daml-codegen-csharp#65 round-5 review.
+        // `IncludeDependencies` still pins LangVersion correctly.
         var options = CreateOptions();
         var generator = new ProjectFileGenerator(options);
         var package = new DamlPackage

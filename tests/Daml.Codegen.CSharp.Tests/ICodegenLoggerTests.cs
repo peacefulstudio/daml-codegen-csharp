@@ -17,7 +17,7 @@ public class ICodegenLoggerTests
         var options = new CodeGenOptions { OutputDirectory = "/tmp/test-168-logger" };
 
         var generator = new CSharpCodeGenerator(options, captured);
-        generator.Should().NotBeNull("CSharpCodeGenerator's constructor must accept any ICodegenLogger, not only ConsoleLogger (review #13)");
+        generator.Should().NotBeNull("CSharpCodeGenerator's constructor must accept any ICodegenLogger, not only ConsoleLogger");
     }
 
     [Fact]
@@ -25,7 +25,7 @@ public class ICodegenLoggerTests
     {
         var logger = new ConsoleLogger(0);
         logger.Should().BeAssignableTo<ICodegenLogger>(
-            "ConsoleLogger keeps its existing role as the CLI logger but is now plug-compatible via ICodegenLogger (review #13)");
+            "ConsoleLogger keeps its existing role as the CLI logger but is now plug-compatible via ICodegenLogger");
     }
 
     private sealed class CapturingLogger : ICodegenLogger

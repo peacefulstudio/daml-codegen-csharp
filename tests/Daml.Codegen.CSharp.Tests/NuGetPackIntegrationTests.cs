@@ -3,16 +3,17 @@
 
 using System.Diagnostics;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.DarParser;
+using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate;
 using FluentAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// End-to-end integration test for issue #148 (F2 — NuGet packing). Generates
-/// C# code + a <c>.csproj</c> from the <c>splice-api-token-holding-v1.dar</c>
-/// fixture, runs <c>dotnet pack</c> against the generated project, and asserts
+/// End-to-end integration test for NuGet packing. Generates
+/// C# code + a <c>.csproj</c> from the <c>splice-api-token-holding-v1</c>
+/// proto snapshot, runs <c>dotnet pack</c> against the generated project, and asserts
 /// that a <c>.nupkg</c> file is produced. The pack uses a temp NuGet config
 /// pointing at the repo's <c>output/nuget/</c> directory so the generated
 /// <c>PackageReference</c> entries for <c>Daml.Runtime</c> and
@@ -29,9 +30,9 @@ public class NuGetPackIntegrationTests
     public async Task generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture()
     {
         var snapshotDir = Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName);
-        var darPath = Path.Combine(snapshotDir, $"{FixtureSnapshotName}.dar");
-        File.Exists(darPath).Should().BeTrue(
-            $"the integration test requires the DAR fixture at {darPath}");
+        var protoPath = Path.Combine(snapshotDir, "intermediate.binpb");
+        File.Exists(protoPath).Should().BeTrue(
+            $"the integration test requires the intermediate.binpb proto snapshot at {protoPath}");
 
         var localNuGetSource = LocateLocalNuGetSource();
         Assert.SkipUnless(
@@ -51,7 +52,12 @@ public class NuGetPackIntegrationTests
             };
 
             var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
-            var dar = await DarArchive.ReadAsync(darPath);
+            IntermediateDar proto;
+            await using (var stream = File.OpenRead(protoPath))
+            {
+                proto = IntermediateDar.Parser.ParseFrom(stream);
+            }
+            var dar = IntermediateDarReader.Read(proto);
             var generated = generator.Generate(dar);
 
             foreach (var file in generated)

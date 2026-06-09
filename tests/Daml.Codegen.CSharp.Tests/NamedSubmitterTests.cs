@@ -3,15 +3,14 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Codegen-shape tests for issue #68 (typed CreateAsync / &lt;Choice&gt;Async with one
-/// parameter per signatory / controller). The static analyzer in the
+/// Codegen-shape tests for typed CreateAsync / &lt;Choice&gt;Async with one
+/// parameter per signatory / controller. The static analyzer in the
 /// <c>DarReader</c> namespace walks the Daml-LF expression tree; in unit
 /// tests we pre-build the analysis directly on the model classes (bypassing
 /// the proto layer) and assert on the emitted source.
@@ -50,7 +49,7 @@ public class NamedSubmitterTests
         DependencyReferences = [],
     };
 
-    private static DarArchive CreateDar(DamlModule module) =>
+    private static DarModel CreateDar(DamlModule module) =>
         new()
         {
             MainPackage = new DamlPackage
@@ -67,7 +66,7 @@ public class NamedSubmitterTests
 
     /// <summary>
     /// Helper for the common shape: a template with three Party signatories,
-    /// all referenced as payload fields. Mirrors the canonical Sample
+    /// all referenced as payload fields. Mirrors a canonical
     /// <c>Agreement</c> template (<c>signatory platform, initiator, counterparty</c>).
     /// </summary>
     private static DamlModule MakeAgreementModule(DamlPartyAnalysis signatories, DamlPartyAnalysis? archiveControllers = null)
@@ -496,7 +495,7 @@ public class NamedSubmitterTests
     public void Generate_brings_in_Daml_Ledger_Abstractions_using_for_named_submitter_extensions()
     {
         // Generated templates reference ILedgerClient — that interface lifted to
-        // Daml.Ledger.Abstractions in #74, so the using is brought in
+        // Daml.Ledger.Abstractions, so the using is brought in
         // unconditionally so consumers don't need to add it. The transport-
         // specific Canton.Ledger.Grpc.Client using is no longer emitted.
         var module = MakeAgreementModule(DamlPartyAnalysis.Static(

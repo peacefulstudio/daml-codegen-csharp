@@ -14,7 +14,7 @@ public class CliExitCodeTests
     {
         var exit = await Program.Main([]);
         exit.Should().NotBe(0,
-            "the CLI must fail loudly when given neither --intermediate nor any positional dar-files (review #6)");
+            "the CLI must fail loudly when given no --intermediate input");
     }
 
     [Fact]
@@ -22,7 +22,7 @@ public class CliExitCodeTests
     {
         var exit = await Program.Main(["--unknown-flag"]);
         exit.Should().NotBe(0,
-            "System.CommandLine should surface a parse error and the action must not paper over it (review #6)");
+            "System.CommandLine should surface a parse error and the action must not paper over it");
     }
 
     [Fact]

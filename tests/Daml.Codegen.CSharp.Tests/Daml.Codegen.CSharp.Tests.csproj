@@ -6,14 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Daml.Codegen.CSharp\Daml.Codegen.CSharp.csproj" />
     <ProjectReference Include="..\..\src\Daml.Codegen.CSharp.Cli\Daml.Codegen.CSharp.Cli.csproj" />
-    <ProjectReference Include="..\..\src\Daml.Codegen.DarParser\Daml.Codegen.DarParser.csproj" />
     <ProjectReference Include="..\..\src\Daml.Runtime\Daml.Runtime.csproj" />
     <ProjectReference Include="..\..\src\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Daml.Codegen.Testing.Conformance\Daml.Codegen.Testing.Conformance.csproj" />

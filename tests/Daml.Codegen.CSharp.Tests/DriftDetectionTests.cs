@@ -3,7 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
+using Daml.Codegen.Intermediate;
 using FluentAssertions;
 using Xunit;
 
@@ -11,22 +11,22 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Drift-detection snapshot tests. Each sub-directory of <c>Snapshots/</c>
-/// that contains a matching <c>&lt;name&gt;.dar</c> file becomes one theory
-/// invocation; the <c>expected/</c> sub-tree is asserted per test case so
-/// that a partially-committed snapshot fails explicitly rather than being
+/// that contains an <c>intermediate.binpb</c> proto snapshot becomes one
+/// theory invocation; the <c>expected/</c> sub-tree is asserted per test case
+/// so that a partially-committed snapshot fails explicitly rather than being
 /// silently skipped at discovery time.
 ///
 /// Catches accidental codegen output changes — even semantically-equivalent
 /// reformatting — before they ship as a behavior change in the published
-/// per-family Splice NuGet packages (issue #57 — drift-detection epic). When
+/// per-family Splice NuGet packages (the drift-detection suite). When
 /// codegen output legitimately changes, refresh the snapshot by running
 /// the refresh procedure described in <c>Snapshots/&lt;name&gt;/README.md</c>.
 /// </summary>
 public class DriftDetectionTests
 {
     /// <summary>
-    /// Enumerates every sub-directory under <c>Snapshots/</c> that has a
-    /// matching <c>&lt;name&gt;.dar</c> file, yielding the directory name
+    /// Enumerates every sub-directory under <c>Snapshots/</c> that has an
+    /// <c>intermediate.binpb</c> proto snapshot, yielding the directory name
     /// (snapshot name) as the sole theory parameter. The presence of the
     /// <c>expected/</c> sub-tree is validated inside each theory case, not
     /// here, so that a half-committed snapshot produces an explicit failure
@@ -46,7 +46,7 @@ public class DriftDetectionTests
                 "check that snapshot fixture content is copied to the output directory in the .csproj.");
 
         foreach (var dir in Directory.EnumerateDirectories(snapshotsRoot)
-                     .Where(d => File.Exists(Path.Combine(d, $"{Path.GetFileName(d)}.dar")))
+                     .Where(d => File.Exists(Path.Combine(d, "intermediate.binpb")))
                      .OrderBy(d => Path.GetFileName(d), StringComparer.Ordinal))
         {
             data.Add(Path.GetFileName(dir)!);
@@ -54,7 +54,7 @@ public class DriftDetectionTests
 
         if (data.Count == 0)
             throw new InvalidOperationException(
-                $"No snapshot directories with a matching <name>.dar file were found under '{snapshotsRoot}'. " +
+                $"No snapshot directories with an intermediate.binpb proto snapshot were found under '{snapshotsRoot}'. " +
                 "The expected/ sub-directory is validated later for each discovered snapshot. " +
                 "A zero-case theory would silently skip drift detection.");
 
@@ -66,12 +66,12 @@ public class DriftDetectionTests
     public async Task Codegen_output_matches_snapshot(string snapshotName)
     {
         var snapshotDir = Path.Combine(AppContext.BaseDirectory, "Snapshots", snapshotName);
-        var darPath = Path.Combine(snapshotDir, $"{snapshotName}.dar");
+        var protoPath = Path.Combine(snapshotDir, "intermediate.binpb");
         var expectedDir = Path.Combine(snapshotDir, "expected");
 
-        File.Exists(darPath).Should().BeTrue(
-            "the DAR fixture must ship alongside the test assembly at {0}",
-            darPath);
+        File.Exists(protoPath).Should().BeTrue(
+            "the intermediate.binpb proto snapshot must ship alongside the test assembly at {0}",
+            protoPath);
         Directory.Exists(expectedDir).Should().BeTrue(
             "the snapshot fixtures directory must ship alongside the test assembly at {0}",
             expectedDir);
@@ -82,7 +82,12 @@ public class DriftDetectionTests
         };
         var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
 
-        var dar = await DarArchive.ReadAsync(darPath);
+        IntermediateDar proto;
+        await using (var stream = File.OpenRead(protoPath))
+        {
+            proto = IntermediateDar.Parser.ParseFrom(stream);
+        }
+        var dar = IntermediateDarReader.Read(proto);
         var allGenerated = generator.Generate(dar);
 
         allGenerated.Should().ContainSingle(
@@ -118,7 +123,7 @@ public class DriftDetectionTests
             "the snapshot must contain at least one .cs file; an empty fixture would let the test pass vacuously. " + refreshHint);
         actualFiles.Should().Contain(
             f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
-            "codegen must emit at least one .cs file from the DAR; zero .cs output indicates a regression in DarArchive.ReadAsync or Generate.");
+            "codegen must emit at least one .cs file from the proto snapshot; zero .cs output indicates a regression in IntermediateDarReader.Read or Generate.");
 
         actualFiles.Select(f => f.RelativePath).Should().Equal(
             expectedFiles.Select(f => f.RelativePath),

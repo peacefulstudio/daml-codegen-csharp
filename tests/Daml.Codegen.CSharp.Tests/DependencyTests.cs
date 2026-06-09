@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -79,10 +78,10 @@ public class DependencyTests
 
     #endregion
 
-    #region DarArchive GetPackageById Tests
+    #region DarModel GetPackageById Tests
 
     [Fact]
-    public void DarArchive_GetPackageById_should_find_main_package()
+    public void DarModel_GetPackageById_should_find_main_package()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -95,7 +94,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarArchive
+        var dar = new DarModel
         {
             MainPackage = mainPackage,
             Dependencies = []
@@ -109,7 +108,7 @@ public class DependencyTests
     }
 
     [Fact]
-    public void DarArchive_GetPackageById_should_find_dependency_package()
+    public void DarModel_GetPackageById_should_find_dependency_package()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -132,7 +131,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarArchive
+        var dar = new DarModel
         {
             MainPackage = mainPackage,
             Dependencies = [depPackage]
@@ -146,7 +145,7 @@ public class DependencyTests
     }
 
     [Fact]
-    public void DarArchive_GetPackageById_should_return_null_for_unknown_id()
+    public void DarModel_GetPackageById_should_return_null_for_unknown_id()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -159,7 +158,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarArchive
+        var dar = new DarModel
         {
             MainPackage = mainPackage,
             Dependencies = []
@@ -170,76 +169,6 @@ public class DependencyTests
 
         // Assert
         found.Should().BeNull();
-    }
-
-    #endregion
-
-    #region DarArchive ResolveDependencyReferences Tests
-
-    [Fact]
-    public void DarArchive_ResolveDependencyReferences_should_populate_name_and_version()
-    {
-        // Arrange
-        var depPackage = new DamlPackage
-        {
-            PackageId = "dep-pkg-id",
-            Name = "my-dependency",
-            Version = new Version(2, 5, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences = []
-        };
-
-        var mainPackage = new DamlPackage
-        {
-            PackageId = "main-pkg-id",
-            Name = "main",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences = [new DamlPackageReference { PackageId = "dep-pkg-id" }]
-        };
-
-        var dar = new DarArchive
-        {
-            MainPackage = mainPackage,
-            Dependencies = [depPackage]
-        };
-
-        // Act
-        dar.ResolveDependencyReferences(mainPackage);
-
-        // Assert
-        mainPackage.DependencyReferences[0].Name.Should().Be("my-dependency");
-        mainPackage.DependencyReferences[0].Version.Should().Be(new Version(2, 5, 0));
-    }
-
-    [Fact]
-    public void DarArchive_ResolveDependencyReferences_should_handle_missing_dependency()
-    {
-        // Arrange
-        var mainPackage = new DamlPackage
-        {
-            PackageId = "main-pkg-id",
-            Name = "main",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences = [new DamlPackageReference { PackageId = "unknown-dep-id" }]
-        };
-
-        var dar = new DarArchive
-        {
-            MainPackage = mainPackage,
-            Dependencies = []
-        };
-
-        // Act
-        dar.ResolveDependencyReferences(mainPackage);
-
-        // Assert - should remain null for unresolved dependencies
-        mainPackage.DependencyReferences[0].Name.Should().BeNull();
-        mainPackage.DependencyReferences[0].Version.Should().BeNull();
     }
 
     #endregion

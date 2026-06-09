@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -53,14 +52,14 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_template_with_fallback_argument_choice_compiles()
     {
-        // Regression for #78: WriteChoiceMethod previously emitted
+        // Regression: WriteChoiceMethod previously emitted
         //   `ArgumentEncoder = arg => arg.ToRecord()`
         // for any non-Unit, non-external choice argument type. When the type
         // hits the codegen fallback path (here: a non-Unit DamlPrimitiveType),
         // WriteChoiceArgumentType emits a stub `<Choice>Arg` record with no
         // ToRecord() method — so the static `Choice<T,A,R>` field site no
         // longer compiles in consumer output. The B3 gate already extended to
-        // <Choice>Async emission in #77; this test pins the same gate on
+        // <Choice>Async emission; this test pins the same gate on
         // WriteChoiceMethod.
         var module = new DamlModule
         {
@@ -107,7 +106,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -169,7 +168,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -182,7 +181,7 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_template_with_key_fails_to_compile_without_implementing_partial()
     {
-        // PR #65 contract: a template with a key emits `public partial T Key { get; }`
+        // Contract: a template with a key emits `public partial T Key { get; }`
         // — a body-less defining partial property. By design, the consumer MUST supply
         // an implementing partial declaration. If they don't, Roslyn reports CS9248
         // "Partial property '...Key' must have an implementation part." This test pins
@@ -202,7 +201,7 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_template_with_key_compiles_when_consumer_supplies_implementing_partial()
     {
-        // The other half of the PR #65 contract: when the consumer DOES supply an
+        // The other half of the contract: when the consumer DOES supply an
         // implementing partial declaration in the same compilation, the emitted code
         // compiles cleanly. Locks in the "extension point" half of the partial-property
         // shape — a regression that rejected valid implementing partials would block
@@ -306,7 +305,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
 
         var options = new CodeGenOptions
         {
@@ -395,7 +394,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
 
         var options = new CodeGenOptions
         {
@@ -482,7 +481,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -556,7 +555,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -612,7 +611,7 @@ public class EmittedCodeCompilesTests
             Modules = [module],
             DependencyReferences = [],
         };
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion").Subject;
@@ -708,7 +707,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -798,7 +797,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -844,7 +843,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         return CreateGenerator(useRecordTypes).Generate(dar);
     }
 
@@ -920,7 +919,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -993,7 +992,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1064,7 +1063,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1155,7 +1154,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
 
         var options = new CodeGenOptions
         {
@@ -1222,7 +1221,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1272,7 +1271,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1320,7 +1319,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1425,7 +1424,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [stdlibPackage] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -1502,7 +1501,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1574,7 +1573,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1629,7 +1628,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1686,7 +1685,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1734,7 +1733,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1785,7 +1784,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1873,7 +1872,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -1955,7 +1954,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2021,7 +2020,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2100,7 +2099,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [stdlibPackage] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
@@ -2179,7 +2178,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2231,7 +2230,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2282,7 +2281,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2350,7 +2349,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2413,7 +2412,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
@@ -2475,7 +2474,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var files = CreateGenerator().Generate(dar);
 
         var holding = files.First(f => f.RelativePath.EndsWith("Holding.cs", StringComparison.Ordinal));
@@ -2684,7 +2683,7 @@ public class EmittedCodeCompilesTests
             DependencyReferences = [],
         };
 
-        var dar = new DarArchive { MainPackage = package, Dependencies = [stdlibPackage] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [stdlibPackage] };
         var files = CreateGenerator().Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);

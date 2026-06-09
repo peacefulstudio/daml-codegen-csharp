@@ -3,14 +3,13 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Tests for typed choice-result struct emission (issue #60).
+/// Tests for typed choice-result struct emission.
 ///
 /// For each choice whose return type carries one or more <c>ContractId T</c>
 /// references, the generator should emit a nested <c>&lt;Choice&gt;Result</c> record
@@ -36,7 +35,7 @@ public class ChoiceResultStructTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarArchive CreateTestDar(DamlModule module)
+    private static DarModel CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
         {
@@ -58,7 +57,7 @@ public class ChoiceResultStructTests
             DependencyReferences = []
         };
 
-        return new DarArchive
+        return new DarModel
         {
             MainPackage = package,
             Dependencies = [damlPrim]
@@ -221,8 +220,8 @@ public class ChoiceResultStructTests
     public void Generate_should_skip_result_struct_when_return_type_carries_no_contract_ids()
     {
         // Choice GetCount : Int — non-creating, codegen should not emit a public
-        // <Choice>Result record (the slot-based projector type from #60). Non-CID
-        // returns flow through the ExercisedEvents projector added in #63, which
+        // <Choice>Result record (the slot-based projector type). Non-CID
+        // returns flow through the ExercisedEvents projector, which
         // emits a private `Project<Choice>Result` helper instead.
         var module = ModuleWith(
             Template("Counter", new DamlPrimitiveType(DamlPrimitive.Int64), choiceName: "GetCount"));

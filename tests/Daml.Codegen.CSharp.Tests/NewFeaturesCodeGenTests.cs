@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -30,7 +29,7 @@ public class NewFeaturesCodeGenTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarArchive CreateTestDar(
+    private static DarModel CreateTestDar(
         DamlModule module,
         string packageName = "test-package",
         string? upgradedPackageId = null)
@@ -46,7 +45,7 @@ public class NewFeaturesCodeGenTests
             UpgradedPackageId = upgradedPackageId
         };
 
-        return new DarArchive
+        return new DarModel
         {
             MainPackage = package,
             Dependencies = []
@@ -105,7 +104,7 @@ public class NewFeaturesCodeGenTests
         code.Should().Contain("IHasKey<string>");
         // Codegen emits the Key property as a body-less `partial` declaration so
         // consuming projects fill in the body until DALF key-expression analysis
-        // lands (daml-codegen-csharp#64). The literal `{ get; }` shape (no setter,
+        // lands. The literal `{ get; }` shape (no setter,
         // no body) is load-bearing — consumers' hand-rolled implementing partial
         // mates against this exact signature. See WriteKeyProperty in
         // CSharpCodeGenerator.
@@ -399,8 +398,8 @@ public class NewFeaturesCodeGenTests
         code.Should().Contain(
             "/// Gets the contract key of type <c>string</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
             "the cref targets the open generic by its declared type-parameter name TKey while the concrete key type appears in prose, because a keyword/constructed type inside cref braces is CS1584/CS1658");
-        code.Should().Contain("daml-codegen-csharp#64",
-            "the deferred-work pointer is the only in-source signal explaining the body-less property");
+        code.Should().Contain("until the full DALF key-expression analysis lands",
+            "the remarks breadcrumb is the in-source signal explaining the body-less partial property");
     }
 
     #endregion

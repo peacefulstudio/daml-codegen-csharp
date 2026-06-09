@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -11,7 +10,7 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Tests for the codegen-emitted <c>&lt;Choice&gt;Async(...)</c> extension methods —
-/// the second deliverable of issue #60. Each choice with a typed
+/// a typed-result deliverable. Each choice with a typed
 /// <c>&lt;Choice&gt;Result</c> gets a static extension on
 /// <c>ContractId&lt;TemplateName&gt;</c> that calls
 /// <c>ILedgerClient.TrySubmitAndWaitForTransactionAsync</c> and projects the
@@ -35,7 +34,7 @@ public class ChoiceAsyncExerciserTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarArchive CreateTestDar(DamlModule module)
+    private static DarModel CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
         {
@@ -55,7 +54,7 @@ public class ChoiceAsyncExerciserTests
             Modules = [],
             DependencyReferences = []
         };
-        return new DarArchive { MainPackage = package, Dependencies = [damlPrim] };
+        return new DarModel { MainPackage = package, Dependencies = [damlPrim] };
     }
 
     private static DamlType TupleType(params DamlType[] componentTypes) =>
@@ -150,7 +149,7 @@ public class ChoiceAsyncExerciserTests
     {
         // Choices that return Unit / primitives don't go through the create-bearing
         // <Choice>Async path (which projects via FromCreatedContracts). Non-CID
-        // returns are routed to a separate NonContractExtensions class (#63), which
+        // returns are routed to a separate NonContractExtensions class, which
         // is verified by NonContractChoiceWrapperTests.
         var module = ModuleWith(
             Template("Counter", new DamlPrimitiveType(DamlPrimitive.Int64), choiceName: "GetCount"));
@@ -160,7 +159,7 @@ public class ChoiceAsyncExerciserTests
         // The plain <TemplateName>Extensions class is only emitted for create-bearing
         // choices; primitive returns get the <TemplateName>NonContractExtensions class.
         code.Should().NotContain("public static class CounterExtensions");
-        // GetCount's emission lives in CounterNonContractExtensions (issue #63).
+        // GetCount's emission lives in CounterNonContractExtensions.
         code.Should().Contain("public static class CounterNonContractExtensions");
     }
 
@@ -315,7 +314,7 @@ public class ChoiceAsyncExerciserTests
         code.Should().Contain("public static async Task<ExerciseOutcome<ExecuteSwapResult>> ExecuteSwapAsync(");
         code.Should().Contain("public static async Task<ExerciseOutcome<CancelResult>> CancelAsync(");
         // Non-creating choice (returns Int64, not a ContractId) is routed to the
-        // NonContractExtensions class added in #63 — not skipped — so it does emit
+        // NonContractExtensions class — not skipped — so it does emit
         // an async wrapper, just via the ExercisedEvents projector path. The
         // create-bearing AgreementExtensions class still excludes it.
         code.Should().Contain("public static class AgreementNonContractExtensions");

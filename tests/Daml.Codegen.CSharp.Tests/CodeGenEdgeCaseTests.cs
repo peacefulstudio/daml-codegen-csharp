@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -30,7 +29,7 @@ public class CodeGenEdgeCaseTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarArchive CreateTestDar(DamlModule module)
+    private static DarModel CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
         {
@@ -42,7 +41,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-        return new DarArchive
+        return new DarModel
         {
             MainPackage = package,
             Dependencies = []
@@ -60,7 +59,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-    private static DarArchive CreateMultiPackageDar(DamlPackage main, params DamlPackage[] dependencies) =>
+    private static DarModel CreateMultiPackageDar(DamlPackage main, params DamlPackage[] dependencies) =>
         new()
         {
             MainPackage = main,
@@ -810,7 +809,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-        var dar = new DarArchive
+        var dar = new DarModel
         {
             MainPackage = package,
             Dependencies = []
@@ -1030,7 +1029,7 @@ public class CodeGenEdgeCaseTests
             Modules = [modA, modB],
             DependencyReferences = []
         };
-        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -1135,7 +1134,7 @@ public class CodeGenEdgeCaseTests
         code.Should().Contain("public static class IHoldingExtensions");
 
         // Record-argument choice: async signature returning ExerciseOutcome<TransactionResult>
-        // (mirrors the concrete-template <Choice>Async shape from #77). Interface choices
+        // (mirrors the concrete-template <Choice>Async shape). Interface choices
         // surface the raw ExerciseOutcome<TransactionResult> because the implementing
         // template — and therefore any typed <Choice>Result projection — is unknown at
         // the call site.
@@ -1988,7 +1987,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", recordModule, enumModule, holderModule);
-        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2052,7 +2051,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", recordModule, enumModule, holderModule);
-        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2099,7 +2098,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", enumModule, holderModule);
-        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2205,7 +2204,6 @@ public class CodeGenEdgeCaseTests
         // Assert — no throwing path survives.
         shape.Should().NotBeNull();
         shape!.Content.Should().NotContain("NotImplementedException");
-        shape.Content.Should().NotContain("issues/57");
 
         // The record-payload case carries the record under the variant tag.
         shape.Content.Should().Contain("public sealed record Rect(Rectangle Value) : Shape");
@@ -2264,7 +2262,7 @@ public class CodeGenEdgeCaseTests
 
     #endregion
 
-    #region TextMap-of-List and GenMap-of-List ReadOnly Emission (#110)
+    #region TextMap-of-List and GenMap-of-List ReadOnly Emission
 
     [Fact]
     public void Generate_should_emit_IReadOnlyList_cast_in_FromRecord_for_TextMap_of_List_field()

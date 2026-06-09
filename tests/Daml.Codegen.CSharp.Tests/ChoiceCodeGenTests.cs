@@ -3,7 +3,6 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using Daml.Codegen.DarParser;
 using FluentAssertions;
 using System.IO;
 using Xunit;
@@ -37,7 +36,7 @@ public class ChoiceCodeGenTests
         DependencyReferences = [],
     };
 
-    private static DarArchive CreateTestDar(DamlModule module)
+    private static DarModel CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
         {
@@ -49,7 +48,7 @@ public class ChoiceCodeGenTests
             DependencyReferences = []
         };
 
-        return new DarArchive
+        return new DarModel
         {
             MainPackage = package,
             Dependencies = [StdlibStub]
