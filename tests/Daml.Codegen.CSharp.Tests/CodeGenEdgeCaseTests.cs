@@ -1721,15 +1721,15 @@ public class CodeGenEdgeCaseTests
 
     #endregion
 
-    #region Variant FromRecord Stub
+    #region Variant Record-Payload Round-Trip
 
     [Fact]
-    public void Generate_should_emit_throwing_FromRecord_stub_on_variants()
+    public void Generate_should_round_trip_variant_case_with_record_payload_through_ToRecord_and_FromRecord()
     {
-        // Variants serialize to DamlVariant on the wire, but parent records that hold a
-        // variant field call a static FromRecord method on it. The codegen emits a stub
-        // that throws NotImplementedException so the package still compiles; full variant
-        // codec is tracked separately.
+        // A Daml-LF variant constructor carries exactly one type argument; when that
+        // argument is a (synthesized) record, the case payload round-trips through the
+        // record's ToRecord/FromRecord — no per-field flattening. This is the path the
+        // primitive-payload spec does not exercise.
         var module = new DamlModule
         {
             Name = "App.Module",
@@ -1738,11 +1738,20 @@ public class CodeGenEdgeCaseTests
             [
                 new DamlDataType
                 {
-                    Name = "Maybe",
+                    Name = "Shape",
                     Definition = new DamlVariantDefinition(
                     [
-                        new DamlVariantConstructor("Nothing", null),
-                        new DamlVariantConstructor("Just", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlVariantConstructor("Point", null),
+                        new DamlVariantConstructor("Rect", new DamlTypeRef(string.Empty, "App.Module", "Rectangle"))
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "Rectangle",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("width", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlField("height", new DamlPrimitiveType(DamlPrimitive.Int64))
                     ])
                 }
             ],
@@ -1754,13 +1763,20 @@ public class CodeGenEdgeCaseTests
 
         // Act
         var files = generator.Generate(dar);
-        var maybe = files.FirstOrDefault(f => f.RelativePath.EndsWith("Maybe.cs", StringComparison.Ordinal));
+        var shape = files.FirstOrDefault(f => f.RelativePath.EndsWith("Shape.cs", StringComparison.Ordinal));
 
-        // Assert — stub throws and points at the tracking issue.
-        maybe.Should().NotBeNull();
-        maybe!.Content.Should().Contain("public static Maybe FromRecord(DamlRecord record) =>");
-        maybe.Content.Should().Contain("throw new NotImplementedException(\"Variant deserialization for Maybe is not implemented");
-        maybe.Content.Should().Contain("issues/57");
+        // Assert — no throwing path survives.
+        shape.Should().NotBeNull();
+        shape!.Content.Should().NotContain("NotImplementedException");
+        shape.Content.Should().NotContain("issues/57");
+
+        // The record-payload case carries the record under the variant tag.
+        shape.Content.Should().Contain("public sealed record Rect(Rectangle Value) : Shape");
+        shape.Content.Should().Contain("public override DamlVariant ToVariant() => DamlVariant.Create(\"Rect\", Value.ToRecord());");
+
+        // FromVariant decodes the payload back through the record's FromRecord.
+        shape.Content.Should().Contain("\"Rect\" => new Rect(Rectangle.FromRecord(variant.Value.As<DamlRecord>())),");
+        shape.Content.Should().Contain("\"Point\" => new Point(),");
     }
 
     #endregion

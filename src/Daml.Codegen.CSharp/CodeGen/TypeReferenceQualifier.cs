@@ -23,6 +23,7 @@ public sealed class TypeReferenceQualifier
             ["DamlValue"] = "Daml.Runtime.Data",
             ["IDamlValue"] = "Daml.Runtime.Data",
             ["IDamlRecord"] = "Daml.Runtime.Data",
+            ["IDamlVariant"] = "Daml.Runtime.Data",
             ["DamlVariant"] = "Daml.Runtime.Data",
             ["DamlEnum"] = "Daml.Runtime.Data",
             ["DamlOptional"] = "Daml.Runtime.Data",

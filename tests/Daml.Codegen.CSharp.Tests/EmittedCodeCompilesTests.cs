@@ -1233,6 +1233,104 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_variant_constructor_whose_payload_is_another_variant_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Inner",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Lit", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlVariantConstructor("None", null),
+                    ]),
+                },
+                new DamlDataType
+                {
+                    Name = "Outer",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Wrap", new DamlTypeRef("", "Test.Module", "Inner")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant constructor whose payload is another variant must round-trip through that variant's ToVariant/FromVariant, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_record_with_a_variant_typed_field_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Choice",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Yes", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlVariantConstructor("No", null),
+                    ]),
+                },
+                new DamlDataType
+                {
+                    Name = "Holder",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlField("pick", new DamlTypeRef("", "Test.Module", "Choice"))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field whose type is a variant must serialize via the variant's ToVariant/FromVariant, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void RequireForFieldType_recurses_into_arguments_when_base_is_a_nested_type_app()
     {
         var sb = new System.Text.StringBuilder();
@@ -1660,7 +1758,7 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvalue()
+    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvariant()
     {
         var module = new DamlModule
         {
@@ -1683,8 +1781,8 @@ public class EmittedCodeCompilesTests
 
         var package = new DamlPackage
         {
-            PackageId = "acme-idamlvalue-id",
-            Name = "acme-IDamlValue",
+            PackageId = "acme-idamlvariant-id",
+            Name = "acme-IDamlVariant",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
             Modules = [module],
@@ -1695,13 +1793,13 @@ public class EmittedCodeCompilesTests
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
-            f => f.Content.Contains("namespace Acme.IDamlValue", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlValue");
+            f => f.Content.Contains("namespace Acme.IDamlVariant", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlVariant");
 
         var choice = files.First(f => f.RelativePath.EndsWith("Choice.cs", StringComparison.Ordinal));
         choice.Content.Should().Contain(
-            "global::Daml.Runtime.Data.IDamlValue",
-            "the variant abstract base record head must be global::-qualified when the surrounding namespace tail is `IDamlValue`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
+            "global::Daml.Runtime.Data.IDamlVariant",
+            "the variant abstract base record head must be global::-qualified when the surrounding namespace tail is `IDamlVariant`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();

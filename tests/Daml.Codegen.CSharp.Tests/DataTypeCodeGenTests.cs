@@ -479,7 +479,7 @@ public class DataTypeCodeGenTests
         var code = paymentFile!.Content;
 
         // Base abstract record
-        code.Should().Contain("public abstract record PaymentMethod : IDamlValue");
+        code.Should().Contain("public abstract record PaymentMethod : IDamlVariant");
         code.Should().Contain("public abstract string Tag { get; }");
 
         // Derived types
@@ -529,6 +529,144 @@ public class DataTypeCodeGenTests
 
         code.Should().Contain("public sealed record Fixed(decimal Value) : Amount");
         code.Should().Contain("public sealed record Percentage(decimal Value) : Amount");
+    }
+
+    [Fact]
+    public void Generate_should_emit_ToVariant_and_FromVariant_for_primitive_payload_case()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Maybe",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Nothing", null),
+                        new DamlVariantConstructor("Just", new DamlPrimitiveType(DamlPrimitive.Text))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var maybe = files.First(f => f.RelativePath.EndsWith("Maybe.cs", StringComparison.Ordinal));
+        var code = maybe.Content;
+
+        // Assert — base is a variant, not a record.
+        code.Should().Contain("public abstract record Maybe : IDamlVariant");
+        code.Should().Contain("public abstract DamlVariant ToVariant();");
+        code.Should().NotContain("ToRecord");
+        code.Should().NotContain("NotImplementedException");
+
+        // Each case produces a DamlVariant carrying its tag and payload conversion.
+        code.Should().Contain("public override DamlVariant ToVariant() => DamlVariant.Create(\"Nothing\", DamlUnit.Instance);");
+        code.Should().Contain("public override DamlVariant ToVariant() => DamlVariant.Create(\"Just\", new DamlText(Value));");
+
+        // FromVariant dispatches on the constructor tag back to the typed case.
+        code.Should().Contain("public static Maybe FromVariant(DamlVariant variant) =>");
+        code.Should().Contain("\"Nothing\" => new Nothing(),");
+        code.Should().Contain("\"Just\" => new Just(variant.Value.As<DamlText>().Value),");
+    }
+
+    [Fact]
+    public void Generate_should_route_variant_payload_through_ToVariant_and_FromVariant_when_payload_is_another_variant()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Inner",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Lit", new DamlPrimitiveType(DamlPrimitive.Int64))
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "Outer",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Wrap", new DamlTypeRef(string.Empty, "Test.Module", "Inner"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var outer = files.First(f => f.RelativePath.EndsWith("Outer.cs", StringComparison.Ordinal));
+        var code = outer.Content;
+
+        // Assert — a variant payload that is itself a variant must round-trip through
+        // the inner variant's ToVariant/FromVariant, never the (now non-existent)
+        // ToRecord/FromRecord.
+        code.Should().NotContain(".ToRecord()");
+        code.Should().NotContain(".FromRecord(");
+        code.Should().Contain("public override DamlVariant ToVariant() => DamlVariant.Create(\"Wrap\", Value.ToVariant());");
+        code.Should().Contain("\"Wrap\" => new Wrap(Inner.FromVariant(variant.Value.As<DamlVariant>())),");
+    }
+
+    [Fact]
+    public void Generate_should_route_record_field_through_ToVariant_and_FromVariant_when_field_type_is_a_variant()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Choice",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Yes", new DamlPrimitiveType(DamlPrimitive.Int64))
+                    ])
+                },
+                new DamlDataType
+                {
+                    Name = "Holder",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("pick", new DamlTypeRef(string.Empty, "Test.Module", "Choice"))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var holder = files.First(f => f.RelativePath.EndsWith("Holder.cs", StringComparison.Ordinal));
+        var code = holder.Content;
+
+        // Assert — a record field whose type is a variant serializes through the
+        // variant's ToVariant/FromVariant.
+        code.Should().Contain("DamlField.Create(\"pick\", Pick.ToVariant())");
+        code.Should().Contain("Pick: Choice.FromVariant(record.GetRequiredField(\"pick\").As<DamlVariant>())");
     }
 
     #endregion

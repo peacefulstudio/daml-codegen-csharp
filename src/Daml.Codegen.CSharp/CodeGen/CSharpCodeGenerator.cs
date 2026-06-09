@@ -27,6 +27,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     // `Amulet` reference through *Extensions.FromDamlEnum, breaking the record case.
     private readonly HashSet<string> _localEnumQualifiedNames = [];
 
+    // Module-qualified names of variants declared in the package being generated. A
+    // variant ref must route through the variant's ToVariant/FromVariant (it serializes
+    // as DamlVariant), never the record-shaped ToRecord/FromRecord catch-all.
+    private readonly HashSet<string> _localVariantQualifiedNames = [];
+
     // Module-qualified names of records that exist purely as the C# placeholder for a
     // Daml interface declaration. Daml-LF emits one record per interface (with the
     // same name and an empty fields list) so that `ContractId I` has a phantom type
@@ -227,6 +232,21 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     private bool IsEnumTypeRef(DamlTypeRef typeRef) =>
         IsLocalEnumTypeRef(typeRef) || IsCrossPackageEnumTypeRef(typeRef);
 
+    private bool IsLocalVariantTypeRef(DamlTypeRef typeRef) =>
+        IsLocalTypeRef(typeRef)
+        && _localVariantQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}");
+
+    private bool IsCrossPackageVariantTypeRef(DamlTypeRef typeRef) =>
+        !IsLocalTypeRef(typeRef)
+        && (_currentArchive?.GetPackageById(typeRef.PackageId)?.Modules
+            .Where(m => m.Name == typeRef.Module)
+            .SelectMany(m => m.DataTypes)
+            .Any(dt => dt.Name == typeRef.Name && dt.Definition is DamlVariantDefinition)
+            ?? false);
+
+    private bool IsVariantTypeRef(DamlTypeRef typeRef) =>
+        IsLocalVariantTypeRef(typeRef) || IsCrossPackageVariantTypeRef(typeRef);
+
     private string QualifiedEnumExtensionsCall(DamlTypeRef typeRef, string method, string argument) =>
         $"{ResolveTypeRefName(typeRef)}Extensions.{method}({argument})";
 
@@ -318,6 +338,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // on the first collision.
         var allDataTypesInGroup = new Dictionary<string, DamlDataType>();
         _localEnumQualifiedNames.Clear();
+        _localVariantQualifiedNames.Clear();
         _interfacePlaceholderQualifiedNames.Clear();
         _localChoiceArgToTemplate.Clear();
         _foreignChoiceArgCache.Clear();
@@ -336,6 +357,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 if (dataType.Definition is DamlEnumDefinition)
                 {
                     _localEnumQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                }
+                if (dataType.Definition is DamlVariantDefinition)
+                {
+                    _localVariantQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
                 if (interfaceNames.Contains(dataType.Name))
                 {
@@ -664,7 +689,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 WriteRecordType(indent, module, dataType, record, allDataTypes);
                 break;
             case DamlVariantDefinition variant:
-                WriteVariantType(indent, dataType, variant);
+                WriteVariantType(indent, dataType, variant, allDataTypes);
                 break;
             case DamlEnumDefinition enumDef:
                 WriteEnumType(indent, dataType, enumDef);
@@ -1701,7 +1726,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine("}");
     }
 
-    private void WriteVariantType(IndentWriter indent, DamlDataType dataType, DamlVariantDefinition variant)
+    private void WriteVariantType(
+        IndentWriter indent,
+        DamlDataType dataType,
+        DamlVariantDefinition variant,
+        IReadOnlyDictionary<string, DamlDataType>? dataTypes)
     {
         indent.Require("System");
         var className = SanitizeIdentifier(dataType.Name);
@@ -1721,7 +1750,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         }
 
         // Base abstract record
-        indent.AppendLine($"public abstract record {fullClassName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
+        indent.AppendLine($"public abstract record {fullClassName} : {_qualifier.Qualify("IDamlVariant", _currentNamespace)}");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -1729,20 +1758,31 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine("public abstract string Tag { get; }");
         indent.AppendLine();
 
-        indent.AppendLine("/// <summary>Converts to a DamlRecord.</summary>");
-        indent.AppendLine($"public abstract {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord();");
+        indent.AppendLine("/// <summary>Converts to a DamlVariant.</summary>");
+        indent.AppendLine($"public abstract {_qualifier.Qualify("DamlVariant", _currentNamespace)} ToVariant();");
         indent.AppendLine();
 
-        // Variant FromRecord stub. Variants serialize to DamlVariant on the wire, not
-        // DamlRecord; full round-trip support is tracked in
-        // https://github.com/peacefulstudio/daml-codegen-csharp/issues/57. This stub
-        // exists so generated parent records that hold a variant field still compile
-        // — runtime deserialization of the variant itself will throw until proper
-        // variant codegen lands.
-        indent.AppendLine($"/// <summary>Reconstructs a {className} from a DamlRecord. Stub: throws until variant deserialization is implemented (see issue #57).</summary>");
-        indent.AppendLine($"public static {fullClassName} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) =>");
+        indent.AppendLine($"/// <summary>Reconstructs a {className} by dispatching on the DamlVariant constructor tag.</summary>");
+        indent.AppendLine($"public static {fullClassName} FromVariant({_qualifier.Qualify("DamlVariant", _currentNamespace)} variant) =>");
         indent.Indent();
-        indent.AppendLine($"throw new NotImplementedException(\"Variant deserialization for {dataType.Name} is not implemented (variants serialize as DamlVariant, not DamlRecord). Tracking issue: https://github.com/peacefulstudio/daml-codegen-csharp/issues/57\");");
+        indent.AppendLine("variant.Constructor switch");
+        indent.AppendLine("{");
+        indent.Indent();
+        foreach (var ctor in variant.Constructors)
+        {
+            var ctorName = SanitizeIdentifier(ctor.Name);
+            if (HasVariantPayload(ctor))
+            {
+                indent.AppendLine($"\"{ctor.Name}\" => new {ctorName}({GetFromValueConversion(ctor.ArgumentType!, "variant.Value", dataTypes)}),");
+            }
+            else
+            {
+                indent.AppendLine($"\"{ctor.Name}\" => new {ctorName}(),");
+            }
+        }
+        indent.AppendLine($"_ => throw new ArgumentOutOfRangeException(nameof(variant), variant.Constructor, \"Unknown {className} constructor\")");
+        indent.Dedent();
+        indent.AppendLine("};");
         indent.Dedent();
         indent.AppendLine();
 
@@ -1750,8 +1790,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         foreach (var ctor in variant.Constructors)
         {
             var ctorName = SanitizeIdentifier(ctor.Name);
-            var hasArg = ctor.ArgumentType is not null
-                && ctor.ArgumentType is not DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
+            var hasArg = HasVariantPayload(ctor);
             var argType = hasArg ? MapDamlTypeToCSharp(ctor.ArgumentType!) : null;
 
             if (argType is not null)
@@ -1771,7 +1810,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
             indent.AppendLine($"public override string Tag => \"{ctor.Name}\";");
             indent.AppendLine();
-            indent.AppendLine($"public override {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create();");
+            var payload = hasArg
+                ? GetToValueConversion(ctor.ArgumentType!, "Value")
+                : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
+            indent.AppendLine($"public override {_qualifier.Qualify("DamlVariant", _currentNamespace)} ToVariant() => {_qualifier.Qualify("DamlVariant", _currentNamespace)}.Create(\"{ctor.Name}\", {payload});");
 
             indent.Dedent();
             indent.AppendLine("}");
@@ -1781,6 +1823,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Dedent();
         indent.AppendLine("}");
     }
+
+    private static bool HasVariantPayload(DamlVariantConstructor ctor) =>
+        ctor.ArgumentType is not null
+        && ctor.ArgumentType is not DamlPrimitiveType { Primitive: DamlPrimitive.Unit };
 
     private void WriteEnumType(IndentWriter indent, DamlDataType dataType, DamlEnumDefinition enumDef)
     {
@@ -1953,6 +1999,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             $"{fieldName}.ToDamlEnum()",
         DamlTypeRef typeRef when IsCrossPackageEnumTypeRef(typeRef) =>
             QualifiedEnumExtensionsCall(typeRef, "ToDamlEnum", fieldName),
+        DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
+            $"{fieldName}.ToVariant()",
         // Daml type variables (parametric polymorphism). The codegen has no way to
         // dispatch ToRecord through a bare T at compile time, so we emit a runtime
         // stub: the type compiles, but serializing an actual generic instance throws.
@@ -2060,7 +2108,9 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, dataTypes),
         DamlTypeRef typeRef when IsEnumTypeRef(typeRef) =>
             QualifiedEnumExtensionsCall(typeRef, "FromDamlEnum", $"{valueName}.As<{_qualifier.Qualify("DamlEnum", _currentNamespace)}>()"),
-        // Type reference (record/variant types)
+        DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
+            $"{ResolveTypeRefName(typeRef)}.FromVariant({valueName}.As<{_qualifier.Qualify("DamlVariant", _currentNamespace)}>())",
+        // Type reference (record types)
         DamlTypeRef typeRef => $"{ResolveTypeRefName(typeRef)}.FromRecord({valueName}.As<{_qualifier.Qualify("DamlRecord", _currentNamespace)}>())",
         // Daml type variable — same treatment as ToValue: emit a runtime-throwing stub
         // typed as the generic placeholder so generics-bearing records still compile.
