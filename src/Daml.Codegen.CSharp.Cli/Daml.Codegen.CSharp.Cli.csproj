@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <PackageId>Daml.Codegen.CSharp.Cli</PackageId>
-    <Description>Thin CLI wiring the IntermediateDar proto reader into the C# emitter. Bundled inside the dpm codegen-cs OCI artifact. Internal-only.</Description>
+    <Description>Thin CLI wiring the IntermediateDar proto reader into the C# emitter. Bundled inside the dpm codegen-cs OCI artifact. Not published to NuGet.</Description>
     <IsPackable>false</IsPackable>
     <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
     <AssemblyName>Daml.Codegen.CSharp.Cli</AssemblyName>
