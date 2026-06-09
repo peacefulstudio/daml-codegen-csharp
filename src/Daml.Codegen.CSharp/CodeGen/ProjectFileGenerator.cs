@@ -29,7 +29,7 @@ public sealed class ProjectFileGenerator
     /// <summary>
     /// Returns true if the given emitted file's content contains the
     /// codegen-emitted partial-property <c>Key</c> declaration that requires
-    /// C# 13 (see <c>WriteKeyProperty</c> / daml-codegen-csharp#65). Used by
+    /// C# 13 (see <c>WriteKeyProperty</c>). Used by
     /// the MSBuild integration target to decide whether to bump the consumer
     /// project's <c>&lt;LangVersion&gt;</c>.
     /// </summary>
@@ -85,7 +85,7 @@ public sealed class ProjectFileGenerator
         sb.AppendLine("  <PropertyGroup>");
         sb.AppendLine($"    <TargetFramework>{EscapeXmlText(_options.TargetFramework)}</TargetFramework>");
         // Pin C# 13 only when the project's actual emitted code contains the
-        // partial-property syntax from WriteKeyProperty (see daml-codegen-csharp#65).
+        // partial-property syntax from WriteKeyProperty.
         // Anchored to the emission set (not to package.Modules) so that:
         //   - a key-bearing dependency added via `IncludeDependencies` still pins
         //     LangVersion (otherwise its emitted partial-property would fail to parse);

@@ -134,7 +134,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     /// <summary>
     /// Builds a mapping of choice-argument type name to parent template name for the
     /// given package. Used by <see cref="ResolveTypeRefName"/> to qualify cross-package
-    /// refs that point at a type nested inside a foreign template. See issue #111.
+    /// refs that point at a type nested inside a foreign template.
     /// </summary>
     private static IReadOnlyDictionary<string, string> BuildForeignChoiceArgToTemplate(DamlPackage pkg)
     {
@@ -297,8 +297,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 return _qualifier.Qualify(mapped, _currentNamespace);
             }
             // Unknown stdlib type — leave unqualified so the build error points at the gap.
-            // Tracked in https://github.com/peacefulstudio/daml-codegen-csharp/issues/57.
-            logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile (see issue #57)");
+            logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile.");
             return sanitized;
         }
 
@@ -872,7 +871,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
-        // Method signature mirrors the concrete-template <Choice>Async shape from #77,
+        // Method signature mirrors the concrete-template <Choice>Async shape,
         // but skips the typed <Choice>Result projection: interface choices do not know
         // the implementing template at the call site, so the most useful return shape
         // is the raw ExerciseOutcome<TransactionResult> the ledger client surfaces.
@@ -1306,7 +1305,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
         // Full DALF key-expression analysis (mapping the template's `key` Daml
         // expression back to template fields, including tuple/record builders) is
-        // tracked in peacefulstudio/daml-codegen-csharp#64. Until that lands, two
+        // not yet implemented. Until that lands, two
         // options exist for the codegen-emitted Key accessor:
         //   (1) emit a body that throws NotImplementedException — silent at compile,
         //       loud at runtime;
@@ -1324,8 +1323,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <remarks>");
             indent.AppendLine("/// The body is supplied by a hand-rolled <c>partial</c> declaration in the");
-            indent.AppendLine("/// consuming project until the full DALF key-expression analysis lands");
-            indent.AppendLine("/// (see <see href=\"https://github.com/peacefulstudio/daml-codegen-csharp/issues/64\">daml-codegen-csharp#64</see>).");
+            indent.AppendLine("/// consuming project until the full DALF key-expression analysis lands.");
             indent.AppendLine("/// Failure to supply the implementing partial is a compile-time error");
             indent.AppendLine("/// (Roslyn <c>CS9248</c>) — that is intentional and indicates the consuming");
             indent.AppendLine("/// project must opt in. Requires C# 13 or later on the consumer side.");

@@ -21,7 +21,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// Returns whose top-level shape exposes a <c>ContractId T</c> directly to
 /// <c>ExtractCreatedSlots</c> — bare <c>ContractId T</c>, <c>Optional (ContractId T)</c>,
 /// <c>[ContractId T]</c>, and tuples-with-<c>ContractId</c> components — are
-/// intentionally not handled here. They flow through issue #60's slot-based
+/// intentionally not handled here. They flow through the slot-based
 /// projector (<c>&lt;Choice&gt;Result.FromCreatedContracts</c> emitted into
 /// <c>&lt;Tpl&gt;Extensions</c>). Splitting on <c>ExtractCreatedSlots</c>
 /// keeps the two emission paths from producing duplicate
@@ -38,10 +38,10 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </para>
 ///
 /// <para>
-/// This emitter is the implementation of issue #63 (typed choice wrappers for
-/// non-contract-id returns). It depends on
+/// This emitter implements typed choice wrappers for
+/// non-contract-id returns. It depends on
 /// <see cref="Daml.Runtime.Contracts.TransactionResult.ExercisedEvents"/>
-/// (added in PR #80) so the runtime can locate the matching exercise and pull
+/// so the runtime can locate the matching exercise and pull
 /// its typed result.
 /// </para>
 /// </summary>
@@ -138,7 +138,7 @@ public sealed partial class CSharpCodeGenerator
         var className = SanitizeIdentifier(template.Name);
 
         // Mirror the gate applied to <Choice>Async emission for CID-returning
-        // choices (#77/#78): skip choices whose argument type went through the
+        // choices: skip choices whose argument type went through the
         // codegen fallback path. The fallback emits a field-less <Choice>Arg
         // stub with no ToRecord(), so `argument.ToRecord()` would not compile
         // in consumer output.

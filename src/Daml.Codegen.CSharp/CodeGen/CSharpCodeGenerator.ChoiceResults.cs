@@ -11,7 +11,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// contracts, plus a static
 /// <c>FromCreatedContracts(IEnumerable&lt;CreatedContract&gt;) -&gt; ExerciseOutcome&lt;&lt;Choice&gt;Result&gt;</c>
 /// projector that walks a transaction's created contracts and validates cardinality
-/// per declared template field. See issue #60.
+/// per declared template field.
 /// </summary>
 public sealed partial class CSharpCodeGenerator
 {

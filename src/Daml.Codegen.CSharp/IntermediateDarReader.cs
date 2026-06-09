@@ -19,15 +19,14 @@ namespace Daml.Codegen.CSharp;
 
 /// <summary>
 /// Maps a <see cref="PbDar"/> protobuf message (produced by the JVM helper,
-/// per ADR 0003 and the schema in <c>proto/intermediate_dar.proto</c>) into
+/// per the schema in <c>proto/intermediate_dar.proto</c>) into
 /// the emitter's in-memory <see cref="DarModel"/>. Static party analysis
 /// (<c>signatories</c>, <c>observers</c>, <c>controllers</c>,
 /// <c>choiceObservers</c>) is preserved through the proto when the JVM
-/// helper runs in its default full-decode mode (per the ADR 0003 amendment
-/// of 2026-05-27 — issue #171). When the helper runs with
+/// helper runs in its default full-decode mode. When the helper runs with
 /// <c>--schema-only</c>, the proto carries <see cref="DamlPartyAnalysis.Dynamic"/>
 /// on every template and choice and the typed-<c>actAs</c> codegen path
-/// in [#68] falls back to an explicit <c>SubmitterInfo</c> parameter.
+/// falls back to an explicit <c>SubmitterInfo</c> parameter.
 /// </summary>
 public static class IntermediateDarReader
 {

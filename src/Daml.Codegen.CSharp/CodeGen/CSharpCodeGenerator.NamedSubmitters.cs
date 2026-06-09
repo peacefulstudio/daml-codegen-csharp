@@ -6,7 +6,7 @@ using Daml.Codegen.CSharp.Model;
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
-/// Codegen for the typed-submitter surface — issue #68. Each template gets a
+/// Codegen for the typed-submitter surface. Each template gets a
 /// <c>&lt;TemplateName&gt;SubmissionExtensions</c> static class with:
 ///
 /// <list type="bullet">
@@ -94,7 +94,7 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// the static analyzer could not resolve). When the template's");
             indent.AppendLine("/// <c>observer</c> clause is statically resolvable, an");
             indent.AppendLine("/// <c>Observers(payload)</c> documentation helper is also emitted.");
-            indent.AppendLine("/// Closes peacefulstudio/daml-codegen-csharp#68.");
+            indent.AppendLine("/// Named-submitter support.");
             indent.AppendLine("/// </summary>");
         }
         indent.AppendLine($"public static class {className}SubmissionExtensions");
