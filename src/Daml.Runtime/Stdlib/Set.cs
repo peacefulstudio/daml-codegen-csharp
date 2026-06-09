@@ -17,7 +17,7 @@ namespace Daml.Runtime.Stdlib;
 /// </para>
 /// <para>
 /// The C# codegen emits the type with a concrete CLR generic argument
-/// (e.g. <c>Set&lt;Party&gt;</c>) which is not in general <see cref="IDamlValue"/>.
+/// (e.g. <c>Set&lt;Party&gt;</c>) which is not in general <see cref="IDamlRecord"/>.
 /// Round-tripping therefore goes through caller-supplied converters that bridge
 /// the generic CLR type to <see cref="DamlValue"/>; the codegen knows the
 /// concrete element type at the call site and inlines the appropriate conversion

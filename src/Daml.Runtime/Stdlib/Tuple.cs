@@ -13,7 +13,7 @@ namespace Daml.Runtime.Stdlib;
 /// <para>
 /// The C# codegen emits the type with concrete CLR generic arguments
 /// (e.g. <c>Tuple2&lt;Party, long&gt;</c>) which are not in general
-/// <see cref="IDamlValue"/> — primitive types like <c>long</c> have no <c>ToRecord</c>
+/// <see cref="IDamlRecord"/> — primitive types like <c>long</c> have no <c>ToRecord</c>
 /// method. Round-tripping therefore goes through caller-supplied converters that
 /// bridge the generic CLR type to <see cref="DamlValue"/>; the codegen knows the
 /// concrete types at the call site and inlines the appropriate conversion lambdas.

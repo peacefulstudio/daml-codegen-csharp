@@ -229,12 +229,8 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void InterfacePlaceholder_round_trips_empty_record()
+    public void InterfacePlaceholder_round_trips_empty_record_without_throwing()
     {
-        // ToRecord/FromRecord exist (IDamlValue requires it) but carry no data.
-        // Round-tripping must not throw — those paths are reachable when a
-        // placeholder type appears as a field of a *real* template's record (e.g.
-        // Reference.Cid in splice-api-token-allocation-v1).
         var placeholder = new TestInterfacePlaceholder();
         var record = placeholder.ToRecord();
 

@@ -86,7 +86,7 @@ public class DataTypeCodeGenTests
         code.Should().Contain("string Name");
         code.Should().Contain("long Age");
         code.Should().Contain("bool Active");
-        code.Should().Contain(": IDamlValue");
+        code.Should().Contain(": IDamlRecord");
     }
 
     [Fact]

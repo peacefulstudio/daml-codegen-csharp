@@ -1612,7 +1612,7 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvalue()
+    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlrecord()
     {
         var module = new DamlModule
         {
@@ -1625,6 +1625,57 @@ public class EmittedCodeCompilesTests
                     Name = "Payload",
                     Definition = new DamlRecordDefinition(
                         [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "acme-idamlrecord-id",
+            Name = "acme-IDamlRecord",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        files.Should().Contain(
+            f => f.Content.Contains("namespace Acme.IDamlRecord", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlRecord");
+
+        var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
+        payload.Content.Should().Contain(
+            "global::Daml.Runtime.Data.IDamlRecord",
+            "the IDamlRecord interface head must be global::-qualified when the surrounding namespace tail is `IDamlRecord`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "emitted code whose namespace ends in .IDamlRecord must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvalue()
+    {
+        var module = new DamlModule
+        {
+            Name = "Values",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Choice",
+                    Definition = new DamlVariantDefinition(
+                        [
+                            new DamlVariantConstructor("Yes", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                            new DamlVariantConstructor("No", null),
+                        ]),
                 },
             ],
             Interfaces = [],
@@ -1647,10 +1698,10 @@ public class EmittedCodeCompilesTests
             f => f.Content.Contains("namespace Acme.IDamlValue", StringComparison.Ordinal),
             "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlValue");
 
-        var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
-        payload.Content.Should().Contain(
+        var choice = files.First(f => f.RelativePath.EndsWith("Choice.cs", StringComparison.Ordinal));
+        choice.Content.Should().Contain(
             "global::Daml.Runtime.Data.IDamlValue",
-            "the IDamlValue interface head must be global::-qualified when the surrounding namespace tail is `IDamlValue`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
+            "the variant abstract base record head must be global::-qualified when the surrounding namespace tail is `IDamlValue`, otherwise it is ambiguous with the enclosing namespace (CS0118)");
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();

@@ -417,7 +417,7 @@ public class CodeGenEdgeCaseTests
         // OtherType should exist as a data type
         var otherTypeFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("OtherType.cs", StringComparison.Ordinal));
         otherTypeFile.Should().NotBeNull();
-        otherTypeFile!.Content.Should().Contain(": IDamlValue");
+        otherTypeFile!.Content.Should().Contain(": IDamlRecord");
     }
 
     #endregion
@@ -618,7 +618,7 @@ public class CodeGenEdgeCaseTests
         var code = emptyFile!.Content;
 
         // Record with no primary constructor parameters
-        code.Should().Contain("public sealed record EmptyRecord : IDamlValue");
+        code.Should().Contain("public sealed record EmptyRecord : IDamlRecord");
         code.Should().Contain("DamlRecord.Create(");
     }
 
@@ -791,7 +791,7 @@ public class CodeGenEdgeCaseTests
         holdingRecord.Should().NotBeNull("the LF placeholder record should be emitted alongside the interface");
         var code = holdingRecord!.Content;
 
-        // Sealed record implementing ITemplate (NOT just IDamlValue)
+        // Sealed record implementing ITemplate (NOT just IDamlRecord)
         code.Should().Contain("public sealed record Holding : ITemplate");
         // Throwing static metadata — InvalidOperationException with the qualified Daml name in the message
         code.Should().Contain("public static Identifier TemplateId =>");
@@ -839,7 +839,7 @@ public class CodeGenEdgeCaseTests
         // Assert
         holdingFile.Should().NotBeNull();
         var code = holdingFile!.Content;
-        code.Should().Contain("public sealed record Holding(decimal Amount) : IDamlValue");
+        code.Should().Contain("public sealed record Holding(decimal Amount) : IDamlRecord");
         code.Should().NotContain(": ITemplate");
         code.Should().NotContain("InvalidOperationException");
     }
@@ -903,13 +903,13 @@ public class CodeGenEdgeCaseTests
         var tokenFiles = files.Where(f => f.RelativePath.EndsWith("Token.cs", StringComparison.Ordinal)).ToList();
 
         // Assert — both Token records exist (last-wins file path is acceptable here:
-        // the regular record keeps its IDamlValue shape, and the placeholder keeps
+        // the regular record keeps its IDamlRecord shape, and the placeholder keeps
         // its ITemplate shape, with their qualifying logic running independently).
         tokenFiles.Should().NotBeEmpty();
         var hasPlaceholder = tokenFiles.Any(f => f.Content.Contains("public sealed record Token : ITemplate", StringComparison.Ordinal));
-        var hasRegular = tokenFiles.Any(f => f.Content.Contains("public sealed record Token(string Symbol) : IDamlValue", StringComparison.Ordinal));
+        var hasRegular = tokenFiles.Any(f => f.Content.Contains("public sealed record Token(string Symbol) : IDamlRecord", StringComparison.Ordinal));
         hasPlaceholder.Should().BeTrue("module A's Token must be emitted as the interface placeholder");
-        hasRegular.Should().BeTrue("module B's Token must keep its IDamlValue regular-record shape");
+        hasRegular.Should().BeTrue("module B's Token must keep its IDamlRecord regular-record shape");
     }
 
     // -------------------------------------------------------------------
@@ -1726,10 +1726,10 @@ public class CodeGenEdgeCaseTests
     [Fact]
     public void Generate_should_emit_throwing_FromRecord_stub_on_variants()
     {
-        // Variants serialize to DamlVariant on the wire, but the IDamlValue contract
-        // (and parent records that hold a variant field) require a static FromRecord
-        // method. The codegen emits a stub that throws NotImplementedException so the
-        // package still compiles; full variant codec is tracked separately.
+        // Variants serialize to DamlVariant on the wire, but parent records that hold a
+        // variant field call a static FromRecord method on it. The codegen emits a stub
+        // that throws NotImplementedException so the package still compiles; full variant
+        // codec is tracked separately.
         var module = new DamlModule
         {
             Name = "App.Module",

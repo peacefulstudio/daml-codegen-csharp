@@ -1038,11 +1038,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             {
                 indent.Append($"public sealed record {choiceTypeName}(");
                 WriteRecordParameters(indent, record.Fields);
-                indent.AppendLine($") : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
+                indent.AppendLine($") : {_qualifier.Qualify("IDamlRecord", _currentNamespace)}");
             }
             else
             {
-                indent.AppendLine($"public sealed record {choiceTypeName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
+                indent.AppendLine($"public sealed record {choiceTypeName} : {_qualifier.Qualify("IDamlRecord", _currentNamespace)}");
             }
 
             indent.AppendLine("{");
@@ -1616,11 +1616,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         {
             indent.Append($"public sealed record {fullClassName}(");
             WriteRecordParameters(indent, record.Fields);
-            indent.AppendLine($") : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
+            indent.AppendLine($") : {_qualifier.Qualify("IDamlRecord", _currentNamespace)}");
         }
         else
         {
-            indent.AppendLine($"public sealed record {fullClassName} : {_qualifier.Qualify("IDamlValue", _currentNamespace)}");
+            indent.AppendLine($"public sealed record {fullClassName} : {_qualifier.Qualify("IDamlRecord", _currentNamespace)}");
         }
 
         indent.AppendLine("{");
@@ -1693,10 +1693,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Dedent();
         indent.AppendLine();
 
-        // IDamlValue requirements. ToRecord returns an empty record (matches the LF
-        // shape — interface placeholders have no fields). FromRecord round-trips
-        // back to an empty instance; no information is lost because none was ever
-        // carried.
         indent.AppendLine($"public {_qualifier.Qualify("DamlRecord", _currentNamespace)} ToRecord() => {_qualifier.Qualify("DamlRecord", _currentNamespace)}.Create();");
         indent.AppendLine();
         indent.AppendLine($"public static {className} FromRecord({_qualifier.Qualify("DamlRecord", _currentNamespace)} record) => new {className}();");
@@ -1948,7 +1944,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // Parametric stdlib types — Tuple2/3, Set, NonEmpty, Map. These all live in
         // Daml.Runtime.Stdlib and round-trip via delegate-based ToRecord/FromRecord
         // because their generic arguments may be CLR primitives (long, string, Party)
-        // rather than IDamlValue. The codegen knows the concrete arg types here so
+        // rather than IDamlRecord. The codegen knows the concrete arg types here so
         // it inlines a conversion lambda per arg.
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when IsStdlibTypeRef(typeRef, parametric: true) =>

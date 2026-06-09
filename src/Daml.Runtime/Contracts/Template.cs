@@ -14,7 +14,7 @@ namespace Daml.Runtime.Contracts;
 /// accept either a concrete template or a Daml interface marker (the sibling
 /// <see cref="IDamlInterface"/> defined just below).
 /// </remarks>
-public interface ITemplate : IDamlValue, IDamlType
+public interface ITemplate : IDamlRecord, IDamlType
 {
     /// <summary>
     /// Gets the template identifier for this template type.
@@ -58,7 +58,7 @@ public interface IHasKey<TKey>
 /// templates and Daml interface markers without dispatching on template-specific
 /// static metadata.
 /// </remarks>
-public interface IDamlInterface : IDamlValue, IDamlType
+public interface IDamlInterface : IDamlRecord, IDamlType
 {
     /// <summary>
     /// Gets the interface identifier for this interface type.
