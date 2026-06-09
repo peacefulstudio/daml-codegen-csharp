@@ -1,0 +1,23 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/samples/">
+    <Project Path="samples/QuickstartExample/QuickstartExample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Daml.Codegen.CSharp.Cli/Daml.Codegen.CSharp.Cli.csproj" />
+    <Project Path="src/Daml.Codegen.CSharp/Daml.Codegen.CSharp.csproj" />
+    <Project Path="src/Daml.Codegen.Testing.Conformance/Daml.Codegen.Testing.Conformance.csproj" />
+    <Project Path="src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj" />
+    <Project Path="src/Daml.Runtime/Daml.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj" />
+    <Project Path="tests/Daml.Codegen.Testing.Conformance.Tests/Daml.Codegen.Testing.Conformance.Tests.csproj" />
+    <Project Path="tests/Daml.Ledger.Abstractions.Tests/Daml.Ledger.Abstractions.Tests.csproj" />
+    <Project Path="tests/Daml.Runtime.Tests/Daml.Runtime.Tests.csproj" />
+  </Folder>
+</Solution>
