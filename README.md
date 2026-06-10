@@ -1,5 +1,6 @@
 # Daml C# Code Generator
 
+[![CI](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml/badge.svg)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![.NET](https://img.shields.io/badge/.NET-10.0-white.svg)](https://dotnet.microsoft.com/)
 
@@ -11,6 +12,11 @@ talk to a Canton/Daml ledger with full type safety.
 Active. Curated public releases land here; ongoing development happens
 on a separate working tree. Issues, discussions, and pull requests are
 welcome on this repo.
+
+This project is pre-1.0: under SemVer 0.x, any release may change the
+public API without a major-version bump (see the versioning note at the
+top of the [CHANGELOG](CHANGELOG.md)). The first release published to
+NuGet.org is `0.1.8-preview.1`.
 
 ## Features
 
@@ -39,6 +45,10 @@ Add the runtime package to your C# project:
 dotnet add package Daml.Runtime
 ```
 
+Until the first NuGet.org release is live, build the packages from
+source instead — see [Building from Source](#building-from-source) and
+`dotnet pack` below.
+
 ### Generate Code
 
 ```bash
@@ -48,6 +58,12 @@ dpm codegen-cs --dar ./my-project.dar --out ./generated -n MyCompany.Contracts
 # With verbose output
 dpm codegen-cs --dar ./my-project.dar --out ./generated -V 2
 ```
+
+> **Architecture note.** `dpm codegen-cs` accepts a `.dar` because the OCI
+> bundle pairs a DAR → IntermediateDar decoder (a JVM helper) with the C#
+> emitter from this repo. The emitter CLI in this repo consumes only the
+> decoded IntermediateDar proto (`--intermediate`); it cannot read a `.dar`
+> directly. See [CLI Reference](#cli-reference).
 
 ### Use Generated Code
 
@@ -79,7 +95,9 @@ var submission = CommandsSubmission.Single(createCmd)
 
 ## NuGet Packages
 
-The following packages are published to NuGet:
+The following packages are published to NuGet.org, starting with
+`0.1.8-preview.1` (earlier versions in the CHANGELOG were internal
+milestones and never reached a public feed):
 
 | Package | Role |
 |---|---|
@@ -123,24 +141,53 @@ daml-codegen-csharp/
 
 ## CLI Reference
 
+Two layers share one flag surface:
+
+- **`dpm codegen-cs`** — the OCI bundle. Takes a `.dar`, decodes it to an
+  IntermediateDar proto with its bundled JVM helper, then runs the emitter
+  CLI below on the proto. This is the only place the DAR → IntermediateDar
+  decode ships.
+- **`Daml.Codegen.CSharp.Cli`** — the emitter CLI in this repo. Takes the
+  IntermediateDar proto via `--intermediate`; it does not read `.dar` files.
+
+### Bundle usage
+
 ```
-dpm codegen-cs --dar <dar-file> --out <output-dir> [emitter-options]
+dpm codegen-cs --dar <path-to-dar> --out <output-dir> [emitter-options...]
+```
 
-Bundle flags (parsed by dpm-codegen-cs entrypoint):
-  --dar <path>           DAR file to generate C# bindings for (required)
-  --out <dir>            Output directory for generated sources (required)
+Options other than `--dar`/`--out` are forwarded to the emitter CLI.
 
-Emitter options (forwarded to the emitter):
-  -n, --namespace        Root namespace for generated code
-  -V, --verbosity        0=errors, 1=warnings, 2=info, 3=debug [default: 1]
-  -r, --root             Regex filter for template names [default: .*]
-  --json                 Generate JSON serialization support [default: true]
-  --nullable             Enable nullable reference types [default: true]
-  --generate-project     Generate a .csproj file for NuGet packaging [default: false]
-  --include-dependencies Generate code for dependency packages as well [default: false]
-  --target-framework     Target framework for the generated project [default: net10.0]
-  --runtime-version      Version of the runtime package to reference
-  --help                 Show help
+### Emitter CLI
+
+Output of `dotnet run --project src/Daml.Codegen.CSharp.Cli -- --help`
+(the `--output-directory` default is the invoking directory):
+
+```
+Description:
+  Generate C# code from an IntermediateDar proto
+
+Usage:
+  Daml.Codegen.CSharp.Cli [options]
+
+Options:
+  --intermediate <intermediate>          Path to an IntermediateDar proto file produced by the JVM helper.
+  -o, --output-directory <o>             Output directory for generated sources [default: the invoking directory]
+  -n, --namespace <n>                    Root namespace for generated code (default: derived from package name)
+  -V, --verbosity <V>                    Verbosity level: 0=errors only, 1=warnings, 2=info, 3=debug [default: 1]
+  -r, --root <r>                         Regular expression to filter which templates to generate (default: .*)
+  --json                                 Generate JSON serialization support
+  --nullable                             Enable nullable reference types in generated code
+  --generate-project                     Generate a .csproj file for the generated code
+  --include-dependencies                 Generate code for dependency packages as well
+  --target-framework <target-framework>  Target framework for the generated project (e.g., net10.0) [default: net10.0]
+  --runtime-version <runtime-version>    Version of Daml.Runtime package to reference
+  --contract-identifiers                 Generate a ContractIdentifiers helper class for PQS queries
+  --emitter-counter <emitter-counter>    4th segment of the generated NuGet version (Major.Minor.Patch.Revision). Defaults to 0; set a monotonic counter to distinguish republished builds of the same source. [default: 0]
+  --release-counters <release-counters>  Path to a JSON release-counter store. Requires --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store, overriding --emitter-counter. The store is created on first use and atomically updated on each run.
+  --package-license <package-license>    SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0. [default: Apache-2.0]
+  -?, -h, --help                         Show help and usage information
+  --version                              Show version information
 ```
 
 ## DAR to NuGet Pipeline
@@ -316,53 +363,93 @@ arbitrary string.
 
 ## Generated Code Example
 
-Given this Daml template:
+Given this Daml template (the model vendored at
+[`samples/QuickstartExample/daml/Iou.daml`](samples/QuickstartExample/daml/Iou.daml)):
 
 ```daml
 template Iou
   with
-    issuer: Party
-    owner: Party
-    currency: Text
-    amount: Decimal
+    issuer : Party
+    owner : Party
+    currency : Text
+    amount : Decimal
   where
     signatory issuer
+    observer owner
 
-    choice Transfer: ContractId Iou
+    choice Transfer : ContractId Iou
       with
-        newOwner: Party
+        newOwner : Party
       controller owner
       do create this with owner = newOwner
 ```
 
-The codegen produces:
+the codegen produces (excerpted verbatim from the checked-in emitter output at
+[`samples/QuickstartExample/Generated/Quickstart/Iou.cs`](samples/QuickstartExample/Generated/Quickstart/Iou.cs);
+elisions marked `…`):
 
 ```csharp
-public sealed record Iou(
-    Party Issuer,
-    Party Owner,
-    string Currency,
-    decimal Amount) : ITemplate
+namespace Quickstart;
+
+/// <summary>
+/// Generated from Daml template Iou:Iou
+/// </summary>
+public sealed partial record Iou(Party Issuer, Party Owner, string Currency, decimal Amount) : ITemplate
 {
-    public static Identifier TemplateId { get; } = new("pkg-id", "Main", "Iou");
+    /// <summary>Gets the template identifier.</summary>
+    public static Identifier TemplateId { get; } = new("c6ae1a03c6a0e5c146dba48c5c577583e4e2bc12ef1dad7fa72429f733367aba", "Iou", "Iou");
 
-    public DamlRecord ToRecord() { ... }
-    public static Iou FromRecord(DamlRecord record) { ... }
+    // … package id/name/version properties and Archive choice metadata elided …
 
-    public sealed record TransferArgument(Party NewOwner);
+    /// <summary>Converts this value to a DamlRecord.</summary>
+    public DamlRecord ToRecord() => DamlRecord.Create(
+        DamlField.Create("issuer", Issuer.ToDamlValue()),
+        DamlField.Create("owner", Owner.ToDamlValue()),
+        DamlField.Create("currency", new DamlText(Currency)),
+        DamlField.Create("amount", new DamlNumeric(Amount))
+    );
 
-    public sealed record IouContractId(string Value) : ContractId<Iou>(Value), IExercises<Iou>
+    /// <summary>Creates an instance from a DamlRecord.</summary>
+    public static Iou FromRecord(DamlRecord record) => new Iou(
+        Issuer: Party.FromDamlValue(record.GetRequiredField("issuer").As<DamlParty>()),
+        Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
+        Currency: record.GetRequiredField("currency").As<DamlText>().Value,
+        Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value
+    );
+
+    /// <summary>
+    /// Exercise the Transfer choice.
+    /// This choice is consuming and will archive the contract.
+    /// </summary>
+    public static Choice<Iou, Transfer, ContractId<Iou>> ChoiceTransfer { get; } = new()
     {
-        public ExerciseCommand ExerciseTransfer(Party newOwner) => ...;
+        Name = new ChoiceName("Transfer"),
+        Consuming = true,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ResultDecoder = val => new ContractId<Iou>(val.As<DamlContractId>().Value)
+    };
+
+    /// <summary>Contract ID for Iou.</summary>
+    public sealed record ContractId(string Value) : ContractId<Iou>(Value), IExercises<Iou>
+    {
+        ContractId<Iou> IExercises<Iou>.ContractId => this;
     }
 
-    public static class IouContract
+    /// <summary>Active contract for Iou.</summary>
+    public sealed record Contract(ContractId Id, Iou Data) : IContract<ContractId, Iou>
     {
-        public static Contract<Iou> FromCreatedEvent(CreatedEvent @event) => ...;
+        /// <summary>Creates a Contract from a CreatedEvent.</summary>
+        public static Contract FromCreatedEvent(CreatedEvent @event) =>
+            new(new ContractId(@event.ContractId), Iou.FromRecord(@event.CreateArguments));
     }
 }
 ```
 
+The same file also emits the typed `TransferResult` projection plus
+`IouExtensions.TransferAsync` and `IouSubmissionExtensions.CreateAsync`
+extension methods that submit through an `ILedgerClient`; the choice-argument
+record `Iou.Transfer` is emitted alongside in
+[`Iou.Transfer.cs`](samples/QuickstartExample/Generated/Quickstart/Iou.Transfer.cs).
 See [`samples/QuickstartExample`](samples/QuickstartExample/Program.cs) for a
 complete, runnable rendition of this shape.
 
@@ -398,30 +485,62 @@ dotnet pack -c Release
 
 ## Integration with Canton
 
-The generated code is designed to work with the Canton Ledger API:
+The generated code is designed to work with the Canton Ledger API. The
+highest-level path is the generated extension methods
+(`IouSubmissionExtensions.CreateAsync`, `IouExtensions.TransferAsync`, …)
+submitting through a `Daml.Ledger.Abstractions.ILedgerClient`
+implementation. Below that, the runtime types map directly onto the wire
+formats:
 
-### JSON Ledger API
+### JSON Ledger API (v2)
+
+The generated `TemplateId` and `DamlJsonSerializer` output plug straight
+into the JSON Ledger API v2 command endpoints — here
+`POST /v2/commands/submit-and-wait` (the port is the participant's JSON
+Ledger API port; `7575` is the conventional default):
 
 ```csharp
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
+using Quickstart;
 
-var httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:7575") };
+var http = new HttpClient { BaseAddress = new Uri("http://localhost:7575") };
 
-// Create a contract via JSON API
-var iou = new Iou(new Party("Alice"), new Party("Bob"), "USD", 100m);
-var payload = new {
-    templateId = Iou.TemplateId.ToString(),
-    payload = DamlJsonSerializer.Serialize(iou.ToRecord())
+var alice = new Party("Alice::1220deadbeef");
+var iou = new Iou(Issuer: alice, Owner: new Party("Bob::1220deadbeef"), Currency: "USD", Amount: 100m);
+
+var request = new
+{
+    commands = new object[]
+    {
+        new
+        {
+            CreateCommand = new
+            {
+                templateId = Iou.TemplateId.ToString(),
+                createArguments = JsonNode.Parse(DamlJsonSerializer.Serialize(iou.ToRecord())),
+            },
+        },
+    },
+    commandId = Guid.NewGuid().ToString(),
+    userId = "ledger-api-user",
+    actAs = new[] { alice.Id },
 };
 
-await httpClient.PostAsJsonAsync("/v1/create", payload);
+var response = await http.PostAsJsonAsync("/v2/commands/submit-and-wait", request);
+response.EnsureSuccessStatusCode();
 ```
+
+`Iou.TemplateId.ToString()` renders the package-id reference format
+(`<package-id>:<module>:<entity>`); the API also accepts the
+package-name format (`#<package-name>:<module>:<entity>`), which can be
+built from the generated `PackageName` property.
 
 ### gRPC Ledger API
 
-The runtime types can be converted to/from the gRPC protobuf types. See the [Canton documentation](https://docs.daml.com/) for gRPC integration details.
+The runtime types can be converted to/from the gRPC protobuf types. See the [Canton documentation](https://docs.canton.network/) for gRPC integration details.
 
 ## Contributing
 
