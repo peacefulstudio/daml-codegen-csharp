@@ -31,15 +31,6 @@ dotnet test
 
 You'll need the [.NET SDK](https://dotnet.microsoft.com/download) — install the version pinned in this repo's `global.json`.
 
-### Pre-commit hook
-
-If the repo ships a pre-commit hook (lint + build + test) under `.githooks/`,
-activate it once after cloning:
-
-```bash
-git config core.hooksPath .githooks
-```
-
 ## Branching model
 
 | Branch | Purpose                        |

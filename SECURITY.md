@@ -2,18 +2,16 @@
 
 ## Supported versions
 
-`daml-codegen-csharp` follows [Semantic Versioning][semver]. Once releases ship,
-security fixes are issued for the latest minor release tagged from the `main`
+`daml-codegen-csharp` follows [Semantic Versioning][semver]. Security
+fixes are issued for the latest minor release tagged from the `main`
 branch; older minor releases do not receive backports unless coordinated
-case-by-case with the maintainers. For an unreleased project, the table
-below shows `unreleased` instead — security reports are still welcome and
-will be addressed against `main`.
+case-by-case with the maintainers.
 
 [semver]: https://semver.org/spec/v2.0.0.html
 
-| Version    | Supported          |
-|------------|--------------------|
-| unreleased | :white_check_mark: |
+| Version | Supported          |
+|---------|--------------------|
+| 0.1.x   | :white_check_mark: |
 
 ## Reporting a vulnerability
 
