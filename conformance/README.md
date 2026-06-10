@@ -8,4 +8,4 @@ corpus (new type shapes), edit `RichTypes.daml`, then rebuild and commit the DAR
 
     cd conformance/richtypes && dpm build && cp .daml/dist/richtypes-*.dar ./richtypes.dar
 
-See `docs/public/adr/0006-conformance-package-and-live-ledger-gate.md`.
+The conformance-package and live-ledger-gate rationale is recorded in ADR 0006, kept in the project's internal ADR collection.

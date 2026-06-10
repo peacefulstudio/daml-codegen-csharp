@@ -133,8 +133,6 @@ daml-codegen-csharp/
 │   ├── Daml.Ledger.Abstractions.Tests/
 │   └── Daml.Runtime.Tests/
 ├── proto/                                # intermediate DAR proto schema
-├── docs/
-│   └── public/                           # public architecture decision records
 └── samples/
     └── QuickstartExample/                # Working example
 ```
