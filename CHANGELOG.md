@@ -13,6 +13,12 @@ because they are versioned in lockstep:
 - `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
 - `Daml.Codegen.Testing.Conformance` — compiled conformance corpus types + embedded DAR
 
+> **Versioning and stability.** This project is pre-1.0: under SemVer 0.x, any
+> release may change the public API without a major-version bump. The first
+> release published to NuGet.org is `0.1.8-preview.1`; the `0.1.0`–`0.1.7`
+> sections below record internal development milestones whose packages were
+> never published to a public feed.
+
 ## [Unreleased]
 
 ### Added
@@ -60,7 +66,7 @@ because they are versioned in lockstep:
 
 ### Added
 
-- **New published package `Daml.Codegen.Testing.Conformance`**: compiled C# generated from the `richtypes` conformance corpus (types under namespace `Richtypes`) plus the corpus DAR embedded as a resource. Consumers call `ConformanceCorpus.OpenDar()` to obtain the DAR stream for upload to a Canton participant before running live-ledger round-trip tests. Not for production use.
+- **New package `Daml.Codegen.Testing.Conformance`** (first available on NuGet.org with `0.1.8-preview.1`): compiled C# generated from the `richtypes` conformance corpus (types under namespace `Richtypes`) plus the corpus DAR embedded as a resource. Consumers call `ConformanceCorpus.OpenDar()` to obtain the DAR stream for upload to a Canton participant before running live-ledger round-trip tests. Not for production use.
 
 - **All three `dpm-codegen-cs` entrypoints now support `--publish-nuget --nuget-config <path> --nuget-source <name>`**. When `--publish-nuget` is set, the entrypoint injects `--generate-project` into the emitter call, runs `dotnet pack`, discovers the produced `.nupkg`, and pushes it via `dotnet nuget push --skip-duplicate`. All flags are validated before any work begins; `dotnet` on PATH is also checked. Warns to stderr if `--runtime-version` is not supplied (the generated `.csproj` will reference `Daml.Runtime` with a wildcard version). Covered across `dpm-codegen-cs` (POSIX bundle entrypoint), `dpm-codegen-cs.cmd` (Windows bundle entrypoint), and `scripts/codegen-pipeline.sh`.
 
@@ -586,7 +592,7 @@ because they are versioned in lockstep:
   matching the Ledger JSON API and PQS wire format. Previously
   `Party` was serialized as a JSON object, which broke PQS-based consumers.
 
-## [0.1.0] — initial public alpha
+## [0.1.0] — initial alpha (internal, never published to NuGet.org)
 
 Initial release of the three-package suite:
 

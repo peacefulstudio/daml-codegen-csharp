@@ -183,10 +183,9 @@ public interface ILedgerClient : IDisposable
     /// primary authorization-carrying overload.
     /// </summary>
     /// <typeparam name="T">
-    /// The Daml template to filter by. When Daml interface markers are
-    /// integrated upstream (TODO: broaden to <c>IDamlType</c> once
-    /// the interface-marker work lands), this will accept
-    /// interface markers as well.
+    /// The Daml template to filter by. The constraint may be broadened to
+    /// <c>IDamlType</c> in a future release so that interface markers are
+    /// accepted as well.
     /// </typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="fromOffset">
@@ -253,8 +252,9 @@ public interface ILedgerClient : IDisposable
     /// This is the primary authorization-carrying overload.
     /// </summary>
     /// <typeparam name="T">
-    /// The Daml template to filter by. (TODO: broaden to <c>IDamlType</c>
-    /// when interface markers ship — see <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>.)
+    /// The Daml template to filter by. The constraint may be broadened to
+    /// <c>IDamlType</c> in a future release — see
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>.
     /// </typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="cancellationToken">

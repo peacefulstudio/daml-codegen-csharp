@@ -19,8 +19,8 @@ namespace Daml.Codegen.CSharp.Tests;
 /// Catches accidental codegen output changes — even semantically-equivalent
 /// reformatting — before they ship as a behavior change in the published
 /// per-family Splice NuGet packages (the drift-detection suite). When
-/// codegen output legitimately changes, refresh the snapshot by running
-/// the refresh procedure described in <c>Snapshots/&lt;name&gt;/README.md</c>.
+/// codegen output legitimately changes, refresh the snapshot by following the
+/// procedure in <c>Snapshots/&lt;name&gt;/README.md</c>.
 /// </summary>
 public class DriftDetectionTests
 {
@@ -113,8 +113,8 @@ public class DriftDetectionTests
             .ToList();
 
         var refreshHint =
-            $"Codegen output drifted from the snapshot. If the change is intentional, run " +
-            $"the snapshot refresh procedure in Snapshots/{snapshotName}/README.md and re-commit. " +
+            $"Codegen output drifted from the snapshot. If the change is intentional, refresh the snapshot " +
+            $"per tests/Daml.Codegen.CSharp.Tests/Snapshots/{snapshotName}/README.md and re-commit. " +
             $"If the change is unintentional, fix the codegen. " +
             $"Re-run only this snapshot with: dotnet test --filter \"FullyQualifiedName~DriftDetectionTests&DisplayName~{snapshotName}\"";
 

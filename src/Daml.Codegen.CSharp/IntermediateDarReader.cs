@@ -252,7 +252,9 @@ public static class IntermediateDarReader
             "IntermediateDar BuiltinType is BUILTIN_TYPE_UNSPECIFIED — every BuiltinType must be set to a defined value by the producer."),
         _ => throw new NotSupportedException(
             $"IntermediateDar BuiltinType '{builtin}' has no C# mapping yet. " +
-            "Update IntermediateDarReader.ConvertBuiltin (and the emitter, runtime, and JSON serializer) to add the mapping."),
+            "Add the mapping in IntermediateDarReader.ConvertBuiltin, the DamlPrimitive enum (Model/DamlType.cs), " +
+            "the emitter type mapping (CSharpCodeGenerator), the runtime value types (Daml.Runtime/Data/DamlPrimitives.cs), " +
+            "and DamlJsonSerializer."),
     };
 
     private static Version ParseVersion(string raw) =>

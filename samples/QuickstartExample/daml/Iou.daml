@@ -1,0 +1,19 @@
+-- Copyright (c) 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module Iou where
+
+template Iou
+  with
+    issuer : Party
+    owner : Party
+    currency : Text
+    amount : Decimal
+  where
+    signatory issuer
+    observer owner
+
+    choice Transfer : ContractId Iou
+      with
+        newOwner : Party
+      controller owner
+      do create this with owner = newOwner

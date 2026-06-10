@@ -5,7 +5,7 @@ Transport-agnostic abstractions for Daml ledger clients.
 Defines `ILedgerClient` — the single contract any Daml ledger transport
 implements. Implementations live in their respective transport packages:
 
-- `Canton.Ledger.Grpc.Client` — gRPC client for Canton participants
+- (planned, not yet published) gRPC client for Canton participants
 - (planned) HTTP REST client for the Daml JSON Ledger API
 - in-memory test fakes for application testing
 

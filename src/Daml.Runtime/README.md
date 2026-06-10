@@ -25,27 +25,36 @@ Generated template classes implement `ITemplate` and provide:
 - JSON serialization/deserialization
 - Contract ID types
 
+Given a Daml `Iou` template with a `Transfer` choice, the generated code is
+used like this (taken from the compiled `samples/QuickstartExample`):
+
 ```csharp
 using Daml.Runtime.Commands;
-using YourPackage.Templates;
+using Daml.Runtime.Data;
+using Quickstart;
 
-// Create a contract
+var alice = new Party("Alice::1220deadbeef");
+var charlie = new Party("Charlie::1220deadbeef");
+
 var iou = new Iou(
-    Issuer: "Alice",
-    Owner: "Bob",
+    Issuer: alice,
+    Owner: new Party("Bob::1220deadbeef"),
     Currency: "USD",
-    Amount: 100.00m
+    Amount: 1000.00m
 );
 
-// Build a create command
 var createCmd = CreateCommand.For(iou);
 
-// Exercise a choice
+var contractId = new Iou.ContractId("00abc123");
 var exerciseCmd = ExerciseCommand.For(
     contractId,
-    "Transfer",
-    new Transfer.Argument(NewOwner: "Charlie")
-);
+    Iou.ChoiceTransfer.Name,
+    new Iou.Transfer(NewOwner: charlie).ToRecord());
+
+var submission = CommandsSubmission.Single(createCmd)
+    .WithActAs(alice)
+    .WithWorkflowId(new WorkflowId("iou-issuance"))
+    .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
 ```
 
 ### Manual Serialization
@@ -56,34 +65,31 @@ If you need to work with Daml values directly:
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
 
-// Create a record manually
 var record = DamlRecord.Create(
     DamlField.Create("name", new DamlText("Alice")),
     DamlField.Create("amount", new DamlNumeric(42.5m))
 );
 
-// Serialize to JSON
-string json = DamlJsonSerializer.Serialize(record);
+var json = DamlJsonSerializer.Serialize(record);
 
-// Deserialize from JSON
 var parsed = DamlJsonSerializer.DeserializeRecord(json);
 ```
 
 ## Type Mappings
 
-| Daml Type | C# Type |
-|-----------|---------|
-| `Int` | `DamlInt64` / `long` |
-| `Numeric` | `DamlNumeric` / `decimal` |
-| `Text` | `DamlText` / `string` |
-| `Bool` | `DamlBool` / `bool` |
-| `Party` | `DamlParty` |
-| `Date` | `DamlDate` / `DateOnly` |
-| `Time` | `DamlTimestamp` / `DateTimeOffset` |
-| `ContractId T` | `ContractId<T>` |
-| `Optional a` | `DamlOptional` |
-| `List a` | `DamlList` |
-| `TextMap a` | `DamlTextMap` |
+| Daml Type | Generated C# Type | Runtime backing |
+|-----------|-------------------|-----------------|
+| `Int` | `long` | `DamlInt64` |
+| `Numeric n` | `decimal` | `DamlNumeric` |
+| `Text` | `string` | `DamlText` |
+| `Bool` | `bool` | `DamlBool` |
+| `Party` | `Party` | `DamlParty` |
+| `Date` | `DateOnly` | `DamlDate` |
+| `Time` | `DateTimeOffset` | `DamlTimestamp` |
+| `ContractId T` | `ContractId<T>` | `DamlContractId` |
+| `Optional a` | `T?` | `DamlOptional` |
+| `List a` | `IReadOnlyList<T>` | `DamlList` |
+| `TextMap a` | `IReadOnlyDictionary<string, T>` | `DamlTextMap` |
 
 ## License
 
