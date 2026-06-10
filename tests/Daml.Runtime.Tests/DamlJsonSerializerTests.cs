@@ -370,6 +370,31 @@ public class DamlJsonSerializerTests
     }
 
     [Fact]
+    public void DeserializeRecord_should_keep_object_with_properties_beyond_tag_and_value_as_DamlRecord()
+    {
+        var json = """{"payload":{"tag":"Left","value":"err","extra":true}}""";
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        var payload = record.GetRequiredField("payload").As<DamlRecord>();
+        payload.Fields.Should().HaveCount(3);
+        payload.GetRequiredField("tag").Should().Be(new DamlText("Left"));
+        payload.GetRequiredField("extra").Should().Be(new DamlBool(true));
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_keep_object_with_non_string_tag_as_DamlRecord()
+    {
+        var json = """{"payload":{"tag":7,"value":"err"}}""";
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        var payload = record.GetRequiredField("payload").As<DamlRecord>();
+        payload.GetRequiredField("tag").Should().Be(new DamlInt64(7));
+        payload.GetRequiredField("value").Should().Be(new DamlText("err"));
+    }
+
+    [Fact]
     public void DeserializeRecord_should_handle_nested_DamlRecord()
     {
         // Arrange
@@ -608,6 +633,149 @@ public class DamlJsonSerializerTests
         recordJson.Should().Be($"{{\"t\":{valueJson}}}");
     }
 
+    public static TheoryData<string> DateLikeTextOutsideCanonicalFormats() => new()
+    {
+        "12:30",
+        "12/25/2023",
+        "June 15, 2023",
+        "2023-06-15 12:30:45",
+    };
+
+    [Theory]
+    [MemberData(nameof(DateLikeTextOutsideCanonicalFormats))]
+    public void DeserializeRecord_should_keep_non_canonical_date_like_text_as_DamlText(string text)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["note"] = text });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("note").Should().Be(new DamlText(text));
+    }
+
+    public static TheoryData<string, DateTimeOffset> CanonicalLedgerTimestampShapes() => new()
+    {
+        { "2023-06-15T12:30:45Z", new DateTimeOffset(2023, 6, 15, 12, 30, 45, TimeSpan.Zero) },
+        { "2023-06-15T12:30:45.123Z", new DateTimeOffset(2023, 6, 15, 12, 30, 45, 123, TimeSpan.Zero) },
+        { "2023-06-15T12:30:45.0000000+00:00", new DateTimeOffset(2023, 6, 15, 12, 30, 45, TimeSpan.Zero) },
+    };
+
+    [Theory]
+    [MemberData(nameof(CanonicalLedgerTimestampShapes))]
+    public void DeserializeRecord_should_infer_DamlTimestamp_from_canonical_iso8601_text(string text, DateTimeOffset expected)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["at"] = text });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("at").As<DamlTimestamp>().Value.Should().Be(expected);
+    }
+
+    public static TheoryData<string, decimal> CanonicalNumericText() => new()
+    {
+        { "1.5", 1.5m },
+        { "42.0", 42m },
+        { "-1.5", -1.5m },
+        { "0.0000000001", 0.0000000001m },
+    };
+
+    [Theory]
+    [MemberData(nameof(CanonicalNumericText))]
+    public void DeserializeRecord_should_infer_DamlNumeric_from_canonical_numeric_text(string text, decimal expected)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = text });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("amount").As<DamlNumeric>().Value.Should().Be(expected);
+    }
+
+    public static TheoryData<string> NumericLikeTextOutsideCanonicalGrammar() => new()
+    {
+        "42",
+        "-42",
+        ".5",
+        "1.",
+        "1.5.0",
+        "1,5",
+        "1e5",
+        "+1.5",
+    };
+
+    [Theory]
+    [MemberData(nameof(NumericLikeTextOutsideCanonicalGrammar))]
+    public void DeserializeRecord_should_keep_non_canonical_numeric_like_text_as_DamlText(string text)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["note"] = text });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("note").Should().Be(new DamlText(text));
+    }
+
+    [Fact]
+    public void RoundTrip_value_overload_should_preserve_DamlNumeric()
+    {
+        var original = new DamlNumeric(1.5m);
+
+        var json = DamlJsonSerializer.Serialize((DamlValue)original);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().BeOfType<DamlNumeric>();
+        deserialized.As<DamlNumeric>().Value.Should().Be(1.5m);
+    }
+
+    [Fact]
+    public void RoundTrip_should_preserve_DamlNumeric_record_field()
+    {
+        var original = DamlRecord.Create(DamlField.Create("amount", new DamlNumeric(123.456789m)));
+
+        var json = DamlJsonSerializer.Serialize(original);
+        var deserialized = DamlJsonSerializer.DeserializeRecord(json);
+
+        deserialized.GetRequiredField("amount").As<DamlNumeric>().Value.Should().Be(123.456789m);
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_map_explicit_null_field_to_DamlOptional_None()
+    {
+        var record = DamlJsonSerializer.DeserializeRecord("""{"maybeValue":null}""");
+
+        record.GetRequiredField("maybeValue").Should().Be(DamlOptional.None);
+    }
+
+    [Fact]
+    public void Deserialize_should_map_explicit_null_field_to_DamlOptional_None_in_nested_record()
+    {
+        var deserialized = DamlJsonSerializer.Deserialize("""{"person":{"nickname":null}}""");
+
+        var person = deserialized.As<DamlRecord>().GetRequiredField("person").As<DamlRecord>();
+        person.GetRequiredField("nickname").Should().Be(DamlOptional.None);
+    }
+
+    [Fact]
+    public void RoundTrip_should_reconstruct_DamlOptional_None_field()
+    {
+        var original = DamlRecord.Create(DamlField.Create("maybeValue", DamlOptional.None));
+
+        var json = DamlJsonSerializer.Serialize(original);
+        var deserialized = DamlJsonSerializer.DeserializeRecord(json);
+
+        deserialized.GetRequiredField("maybeValue").AsOptional().Should().Be(DamlOptional.None);
+    }
+
+    [Fact]
+    public void RoundTrip_should_recover_DamlOptional_Some_field_through_AsOptional()
+    {
+        var original = DamlRecord.Create(DamlField.Create("maybeValue", DamlOptional.Some(new DamlInt64(42))));
+
+        var json = DamlJsonSerializer.Serialize(original);
+        var deserialized = DamlJsonSerializer.DeserializeRecord(json);
+
+        var optional = deserialized.GetRequiredField("maybeValue").AsOptional();
+        optional.HasValue.Should().BeTrue();
+        optional.Value.Should().Be(new DamlInt64(42));
+    }
+
     [Fact]
     public void RoundTrip_should_preserve_DamlRecord_data()
     {
@@ -699,6 +867,86 @@ public class DamlJsonSerializerTests
 
         act.Should().Throw<JsonException>()
             .WithMessage("Null array elements not supported");
+    }
+
+    private sealed record UnsupportedDamlValue : DamlValue;
+
+    [Fact]
+    public void Serialize_should_throw_JsonException_for_unsupported_DamlValue_subtype()
+    {
+        var act = () => DamlJsonSerializer.Serialize(new UnsupportedDamlValue());
+
+        act.Should().Throw<JsonException>().WithMessage("*UnsupportedDamlValue*");
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_for_number_that_does_not_fit_decimal()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("""{"amount":1e300}""");
+
+        act.Should().Throw<JsonException>().WithMessage("*1e300*");
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_throw_JsonException_when_top_level_json_is_not_an_object()
+    {
+        var act = () => DamlJsonSerializer.DeserializeRecord("[1,2,3]");
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_throw_JsonException_naming_null_for_top_level_null_literal()
+    {
+        var act = () => DamlJsonSerializer.DeserializeRecord("null");
+
+        act.Should().Throw<JsonException>().WithMessage("*null*");
+    }
+
+    private static DamlRecord NestRecord(int levels)
+    {
+        DamlValue value = new DamlInt64(1);
+        for (var i = 0; i < levels; i++)
+        {
+            value = DamlRecord.Create(DamlField.Create("inner", value));
+        }
+        return (DamlRecord)value;
+    }
+
+    [Fact]
+    public void Serialize_should_throw_JsonException_when_nesting_exceeds_supported_depth()
+    {
+        var act = () => DamlJsonSerializer.Serialize(NestRecord(100));
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Serialize_should_allow_nesting_at_exactly_the_supported_depth_matching_SystemTextJson_MaxDepth()
+    {
+        var act = () => DamlJsonSerializer.Serialize(NestRecord(64));
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Serialize_should_throw_JsonException_one_level_beyond_the_supported_depth()
+    {
+        var act = () => DamlJsonSerializer.Serialize(NestRecord(65));
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_when_nesting_exceeds_supported_depth()
+    {
+        var json = string.Concat(Enumerable.Repeat("""{"inner":""", 100))
+            + "1"
+            + new string('}', 100);
+
+        var act = () => DamlJsonSerializer.Deserialize(json);
+
+        act.Should().Throw<JsonException>();
     }
 
     [Fact]

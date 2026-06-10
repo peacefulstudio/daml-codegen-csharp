@@ -2098,7 +2098,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             $"{valueName}.As<{_qualifier.Qualify("DamlNumeric", _currentNamespace)}>().Value",
         // Optional type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
-            $"{valueName}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().HasValue ? {GetFromValueConversion(arg, $"{valueName}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().Value!", dataTypes)} : null",
+            $"{valueName}.AsOptional().HasValue ? {GetFromValueConversion(arg, $"{valueName}.AsOptional().Value!", dataTypes)} : null",
         // List type
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
             $"({_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{MapDamlTypeToCSharp(arg)}>){valueName}.As<{_qualifier.Qualify("DamlList", _currentNamespace)}>().Values.Select(x => {GetFromValueConversion(arg, "x", dataTypes)}).ToList()",

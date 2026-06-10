@@ -175,6 +175,25 @@ public class DamlValueExtensionsTests
         new DamlTimestamp(ts).FromDamlValue<DateTimeOffset?>().Should().Be(ts);
     }
 
+    public static TheoryData<string, DamlOptional> ExistingOptionals() => new()
+    {
+        { "None", DamlOptional.None },
+        { "Some", DamlOptional.Some(new DamlInt64(42)) },
+    };
+
+    [Theory]
+    [MemberData(nameof(ExistingOptionals))]
+    public void AsOptional_returns_existing_DamlOptional_unchanged(string shape, DamlOptional optional)
+    {
+        optional.AsOptional().Should().Be(optional, "an existing {0} optional must pass through untouched", shape);
+    }
+
+    [Fact]
+    public void AsOptional_wraps_bare_value_as_Some()
+    {
+        new DamlInt64(42).AsOptional().Should().Be(DamlOptional.Some(new DamlInt64(42)));
+    }
+
     [Fact]
     public void FromDamlValue_should_convert_DamlParty_to_nullable_Party()
     {

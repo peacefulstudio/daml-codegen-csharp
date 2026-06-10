@@ -17,6 +17,10 @@ public static class DamlJsonSerializer
 {
     private const string VariantTagKey = "tag";
     private const string VariantValueKey = "value";
+    private const string CanonicalDateFormat = "yyyy-MM-dd";
+    private const string CanonicalTimestampEmitFormat = "O";
+    private const string CanonicalTimestampParseFormat = "yyyy-MM-dd'T'HH':'mm':'ss.FFFFFFFK";
+    private const int MaximumNestingDepth = 64;
 
     private static readonly JsonSerializerOptions DefaultOptions = new()
     {
@@ -61,6 +65,16 @@ public static class DamlJsonSerializer
     /// <c>List [[Some 5, None]]</c> shapes both surface the original
     /// "Null array elements not supported" error rather than a misleading
     /// "GenMap key/value must not be null".</description></item>
+    /// <item><description>A JSON string is inferred as <see cref="DamlDate"/>,
+    /// <see cref="DamlTimestamp"/>, or <see cref="DamlNumeric"/> only when it matches the
+    /// exact canonical shape this serializer emits (<c>yyyy-MM-dd</c>, ISO-8601
+    /// <c>T</c>-separated timestamp, or <c>-?digits.digits</c>); every other string stays
+    /// <see cref="DamlText"/>. A Text value that happens to match a canonical shape is
+    /// therefore reinterpreted on an untyped round-trip.</description></item>
+    /// <item><description>An explicit JSON <c>null</c> record field deserializes to
+    /// <see cref="DamlOptional.None"/>; a Some value is flattened to its inner value on
+    /// write, so schema-aware readers recover the wrapper via
+    /// <see cref="DamlValueExtensions.AsOptional"/>.</description></item>
     /// </list>
     /// </remarks>
     public static DamlValue Deserialize(string json, JsonSerializerOptions? options = null) =>
@@ -72,103 +86,124 @@ public static class DamlJsonSerializer
     /// </summary>
     public static DamlRecord DeserializeRecord(string json, JsonSerializerOptions? options = null)
     {
-        var node = JsonNode.Parse(json) ?? throw new JsonException("Invalid JSON");
-        return JsonObjectToRecord(node.AsObject());
+        var node = JsonNode.Parse(json)
+            ?? throw new JsonException("Expected a JSON object for a Daml record but found null");
+        if (node is not JsonObject obj)
+        {
+            throw new JsonException($"Expected a JSON object for a Daml record but found {node.GetValueKind()}");
+        }
+        return JsonObjectToRecord(obj, depth: 0);
     }
 
-    private static JsonObject RecordToJsonObject(DamlRecord record)
+    private static JsonObject RecordToJsonObject(DamlRecord record) =>
+        RecordToJsonObject(record, depth: 0);
+
+    private static JsonObject RecordToJsonObject(DamlRecord record, int depth)
     {
         var obj = new JsonObject();
         foreach (var field in record.Fields)
         {
-            obj[field.Label] = ValueToJsonNode(field.Value);
+            obj[field.Label] = ValueToJsonNode(field.Value, depth + 1);
         }
         return obj;
     }
 
-    internal static JsonNode? ValueToJsonNode(DamlValue value) => value switch
+    internal static JsonNode? ValueToJsonNode(DamlValue value) =>
+        ValueToJsonNode(value, depth: 0);
+
+    private static JsonNode? ValueToJsonNode(DamlValue value, int depth) => value switch
     {
+        _ when depth > MaximumNestingDepth => throw DepthBoundExceeded(),
         DamlInt64 i => JsonValue.Create(i.Value),
         DamlNumeric n => JsonValue.Create(FormatCanonicalNumeric(n.Value)),
         DamlText t => JsonValue.Create(t.Value),
         DamlBool b => JsonValue.Create(b.Value),
         DamlUnit => new JsonObject(),
-        DamlDate d => JsonValue.Create(d.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-        DamlTimestamp ts => JsonValue.Create(ts.Value.ToString("O", CultureInfo.InvariantCulture)),
+        DamlDate d => JsonValue.Create(d.Value.ToString(CanonicalDateFormat, CultureInfo.InvariantCulture)),
+        DamlTimestamp ts => JsonValue.Create(ts.Value.ToString(CanonicalTimestampEmitFormat, CultureInfo.InvariantCulture)),
         DamlParty p => JsonValue.Create(p.Value),
         DamlContractId c => JsonValue.Create(c.Value),
-        DamlOptional opt => opt.Value is null ? null : ValueToJsonNode(opt.Value),
-        DamlList list => new JsonArray(list.Values.Select(ValueToJsonNode).ToArray()),
-        DamlTextMap map => MapToJsonObject(map),
-        DamlGenMap map => GenMapToJsonArray(map),
-        DamlVariant variant => VariantToJsonObject(variant),
+        DamlOptional opt => opt.Value is null ? null : ValueToJsonNode(opt.Value, depth + 1),
+        DamlList list => new JsonArray(list.Values.Select(v => ValueToJsonNode(v, depth + 1)).ToArray()),
+        DamlTextMap map => MapToJsonObject(map, depth),
+        DamlGenMap map => GenMapToJsonArray(map, depth),
+        DamlVariant variant => VariantToJsonObject(variant, depth),
         DamlEnum e => JsonValue.Create(e.Constructor),
-        DamlRecord rec => RecordToJsonObject(rec),
-        _ => throw new NotSupportedException($"Cannot serialize {value.GetType().Name} to JSON")
+        DamlRecord rec => RecordToJsonObject(rec, depth),
+        _ => throw new JsonException($"Cannot serialize {value.GetType().Name} to JSON")
     };
+
+    private static JsonException DepthBoundExceeded() =>
+        new($"Value nesting exceeds the maximum supported depth of {MaximumNestingDepth}");
 
     private static string FormatCanonicalNumeric(decimal value) =>
         value.ToString("0.0###########################", CultureInfo.InvariantCulture);
 
-    private static JsonObject MapToJsonObject(DamlTextMap map)
+    private static JsonObject MapToJsonObject(DamlTextMap map, int depth)
     {
         var obj = new JsonObject();
         foreach (var (key, val) in map.Values)
         {
-            obj[key] = ValueToJsonNode(val);
+            obj[key] = ValueToJsonNode(val, depth + 1);
         }
         return obj;
     }
 
-    private static JsonArray GenMapToJsonArray(DamlGenMap map)
+    private static JsonArray GenMapToJsonArray(DamlGenMap map, int depth)
     {
         var entries = new JsonArray();
         foreach (var (key, val) in map.Entries)
         {
-            entries.Add(new JsonArray(ValueToJsonNode(key), ValueToJsonNode(val)));
+            entries.Add(new JsonArray(ValueToJsonNode(key, depth + 1), ValueToJsonNode(val, depth + 1)));
         }
         return entries;
     }
 
-    private static JsonObject VariantToJsonObject(DamlVariant variant)
+    private static JsonObject VariantToJsonObject(DamlVariant variant, int depth)
     {
         var obj = new JsonObject
         {
             [VariantTagKey] = variant.Constructor,
-            [VariantValueKey] = ValueToJsonNode(variant.Value)
+            [VariantValueKey] = ValueToJsonNode(variant.Value, depth + 1)
         };
         return obj;
     }
 
-    private static DamlRecord JsonObjectToRecord(JsonObject obj)
+    private static DamlRecord JsonObjectToRecord(JsonObject obj, int depth)
     {
-        var fields = new List<DamlField>();
+        var fields = new List<DamlField>(obj.Count);
         foreach (var prop in obj)
         {
-            if (prop.Value is not null)
-            {
-                fields.Add(new DamlField(prop.Key, JsonNodeToValue(prop.Value)));
-            }
+            fields.Add(new DamlField(prop.Key,
+                prop.Value is null ? DamlOptional.None : JsonNodeToValue(prop.Value, depth + 1)));
         }
         return new DamlRecord(null, fields);
     }
 
-    internal static DamlValue JsonNodeToValue(JsonNode node) => node switch
+    internal static DamlValue JsonNodeToValue(JsonNode node) =>
+        JsonNodeToValue(node, depth: 0);
+
+    private static DamlValue JsonNodeToValue(JsonNode node, int depth) => node switch
     {
+        _ when depth > MaximumNestingDepth => throw DepthBoundExceeded(),
         JsonValue val => JsonValueToDamlValue(val),
-        JsonArray arr when LooksLikeGenMapEntries(arr) => GenMapFromJsonArray(arr),
+        JsonArray arr when LooksLikeGenMapEntries(arr) => GenMapFromJsonArray(arr, depth),
         JsonArray arr => new DamlList(arr.Select(n => n is null
             ? throw new JsonException("Null array elements not supported")
-            : JsonNodeToValue(n)).ToList()),
-        JsonObject obj when obj.ContainsKey(VariantTagKey) && obj.ContainsKey(VariantValueKey) =>
+            : JsonNodeToValue(n, depth + 1)).ToList()),
+        JsonObject obj when IsVariantShape(obj) =>
             new DamlVariant(null, obj[VariantTagKey]!.GetValue<string>(),
-                obj[VariantValueKey] is null ? DamlUnit.Instance : JsonNodeToValue(obj[VariantValueKey]!)),
-        JsonObject obj => new DamlRecord(null,
-            obj.Where(p => p.Value is not null)
-               .Select(p => new DamlField(p.Key, JsonNodeToValue(p.Value!)))
-               .ToList()),
+                obj[VariantValueKey] is null ? DamlUnit.Instance : JsonNodeToValue(obj[VariantValueKey]!, depth + 1)),
+        JsonObject obj => JsonObjectToRecord(obj, depth),
         _ => throw new JsonException($"Cannot deserialize {node.GetType().Name}")
     };
+
+    private static bool IsVariantShape(JsonObject obj) =>
+        obj.Count == 2
+        && obj.TryGetPropertyValue(VariantTagKey, out var tag)
+        && tag is JsonValue tagValue
+        && tagValue.TryGetValue<string>(out _)
+        && obj.ContainsKey(VariantValueKey);
 
     private static bool LooksLikeGenMapEntries(JsonArray arr)
     {
@@ -186,13 +221,13 @@ public static class DamlJsonSerializer
         return true;
     }
 
-    private static DamlGenMap GenMapFromJsonArray(JsonArray arr)
+    private static DamlGenMap GenMapFromJsonArray(JsonArray arr, int depth)
     {
         var entries = new List<(DamlValue Key, DamlValue Value)>(arr.Count);
         foreach (var element in arr)
         {
             var pair = (JsonArray)element!;
-            entries.Add((JsonNodeToValue(pair[0]!), JsonNodeToValue(pair[1]!)));
+            entries.Add((JsonNodeToValue(pair[0]!, depth + 1), JsonNodeToValue(pair[1]!, depth + 1)));
         }
         return new DamlGenMap(entries);
     }
@@ -204,7 +239,9 @@ public static class DamlJsonSerializer
         {
             JsonValueKind.String => InferStringValue(element.GetString()!),
             JsonValueKind.Number when element.TryGetInt64(out var i) => new DamlInt64(i),
-            JsonValueKind.Number => new DamlNumeric(element.GetDecimal()),
+            JsonValueKind.Number when element.TryGetDecimal(out var d) => new DamlNumeric(d),
+            JsonValueKind.Number => throw new JsonException(
+                $"Number '{element.GetRawText()}' cannot be represented as a Daml Numeric"),
             JsonValueKind.True => new DamlBool(true),
             JsonValueKind.False => new DamlBool(false),
             JsonValueKind.Null => throw new JsonException("Null values should be handled as Optional.None"),
@@ -214,24 +251,50 @@ public static class DamlJsonSerializer
 
     private static DamlValue InferStringValue(string s)
     {
-        if (DateOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        if (DateOnly.TryParseExact(s, CanonicalDateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
             return new DamlDate(date);
         }
 
-        if (DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
+        if (DateTimeOffset.TryParseExact(s, CanonicalTimestampParseFormat, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
         {
             return new DamlTimestamp(ts);
         }
 
+        if (MatchesCanonicalNumericGrammar(s)
+            && decimal.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var numeric))
+        {
+            return new DamlNumeric(numeric);
+        }
+
         return new DamlText(s);
+    }
+
+    private static bool MatchesCanonicalNumericGrammar(string s)
+    {
+        var digitsStart = s.StartsWith('-') ? 1 : 0;
+        var dotIndex = s.IndexOf('.', StringComparison.Ordinal);
+        if (dotIndex <= digitsStart || dotIndex == s.Length - 1)
+        {
+            return false;
+        }
+
+        for (var i = digitsStart; i < s.Length; i++)
+        {
+            if (i != dotIndex && !char.IsAsciiDigit(s[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
 /// <summary>
 /// JSON converter for DamlValue types. Delegates to the canonical
-/// <see cref="DamlJsonSerializer.ValueToJsonNode"/> /
-/// <see cref="DamlJsonSerializer.JsonNodeToValue"/> mappers so the
+/// <see cref="DamlJsonSerializer.ValueToJsonNode(DamlValue)"/> /
+/// <see cref="DamlJsonSerializer.JsonNodeToValue(JsonNode)"/> mappers so the
 /// top-level <see cref="DamlJsonSerializer.Serialize(DamlValue, JsonSerializerOptions?)"/>
 /// and <see cref="DamlJsonSerializer.Deserialize(string, JsonSerializerOptions?)"/>
 /// paths share semantics with the record-scoped overloads.
@@ -240,16 +303,29 @@ public sealed class DamlValueJsonConverter : JsonConverter<DamlValue>
 {
     public override DamlValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        using var doc = JsonDocument.ParseValue(ref reader);
-        var node = JsonNode.Parse(doc.RootElement.GetRawText());
-        return node is null
-            ? throw new JsonException("Null JSON not supported")
-            : DamlJsonSerializer.JsonNodeToValue(node);
+        var node = JsonNode.Parse(ref reader) ?? throw new JsonException("Null JSON not supported");
+        try
+        {
+            return DamlJsonSerializer.JsonNodeToValue(node);
+        }
+        catch (Exception ex) when (ex is not JsonException)
+        {
+            throw new JsonException("Failed to deserialize JSON to a DamlValue", ex);
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, DamlValue value, JsonSerializerOptions options)
     {
-        var node = DamlJsonSerializer.ValueToJsonNode(value);
+        JsonNode? node;
+        try
+        {
+            node = DamlJsonSerializer.ValueToJsonNode(value);
+        }
+        catch (Exception ex) when (ex is not JsonException)
+        {
+            throw new JsonException($"Failed to serialize {value.GetType().Name} to JSON", ex);
+        }
+
         if (node is null)
         {
             writer.WriteNullValue();

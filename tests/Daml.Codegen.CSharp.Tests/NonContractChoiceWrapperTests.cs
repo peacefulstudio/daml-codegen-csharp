@@ -286,7 +286,7 @@ public class NonContractChoiceWrapperTests
 
         sink.Content.Should().Contain("public static async Task<ExerciseOutcome<Unit?>> MaybeNothingAsync(");
         sink.Content.Should().Contain("new ExerciseOutcome<Unit?>.One(");
-        sink.Content.Should().Contain(".As<DamlOptional>().HasValue ? Unit.Value : null");
+        sink.Content.Should().Contain(".AsOptional().HasValue ? Unit.Value : null");
         sink.Content.Should().Contain("using Daml.Runtime.Stdlib;");
         var nonContractSection = ExtractNonContractExtensionsClass(sink.Content);
         nonContractSection.Should().NotContain("DamlUnit?",

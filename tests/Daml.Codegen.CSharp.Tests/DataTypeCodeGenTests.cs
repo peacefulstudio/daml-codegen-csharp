@@ -246,6 +246,39 @@ public class DataTypeCodeGenTests
     }
 
     [Fact]
+    public void Generate_should_decode_optional_fields_through_AsOptional_in_FromRecord()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "OptionalData",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlField("maybeText", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.Optional),
+                            [new DamlPrimitiveType(DamlPrimitive.Text)]))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var files = CreateGenerator().Generate(CreateTestDar(module));
+        var code = files.First(f => f.RelativePath.EndsWith("OptionalData.cs", StringComparison.Ordinal)).Content;
+
+        code.Should().Contain(
+            "MaybeText: record.GetRequiredField(\"maybeText\").AsOptional().HasValue"
+            + " ? record.GetRequiredField(\"maybeText\").AsOptional().Value!.As<DamlText>().Value : null",
+            "FromRecord must normalize through AsOptional so JSON-decoded records, which flatten Some to the bare value, still decode");
+        code.Should().NotContain(".As<DamlOptional>()");
+    }
+
+    [Fact]
     public void Generate_should_create_record_with_list_fields()
     {
         // Arrange

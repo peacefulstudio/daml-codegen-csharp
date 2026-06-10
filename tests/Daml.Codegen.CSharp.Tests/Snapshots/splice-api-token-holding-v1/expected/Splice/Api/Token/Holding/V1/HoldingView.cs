@@ -28,7 +28,7 @@ public sealed record HoldingView(Party Owner, InstrumentId InstrumentId, decimal
         Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
         InstrumentId: InstrumentId.FromRecord(record.GetRequiredField("instrumentId").As<DamlRecord>()),
         Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value,
-        @lock: record.GetRequiredField("lock").As<DamlOptional>().HasValue ? Lock.FromRecord(record.GetRequiredField("lock").As<DamlOptional>().Value!.As<DamlRecord>()) : null,
+        @lock: record.GetRequiredField("lock").AsOptional().HasValue ? Lock.FromRecord(record.GetRequiredField("lock").AsOptional().Value!.As<DamlRecord>()) : null,
         Meta: Splice.Api.Token.Metadata.V1.Metadata.FromRecord(record.GetRequiredField("meta").As<DamlRecord>())
     );
 

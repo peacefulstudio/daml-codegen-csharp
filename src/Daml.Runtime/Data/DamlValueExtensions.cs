@@ -12,6 +12,19 @@ namespace Daml.Runtime.Data;
 public static class DamlValueExtensions
 {
     /// <summary>
+    /// Normalizes a value into a <see cref="DamlOptional"/>: an existing
+    /// <see cref="DamlOptional"/> passes through unchanged and any other value is
+    /// wrapped as Some. Ledger JSON flattens Some to the inner value, so
+    /// schema-aware readers use this to recover the Optional wrapper that
+    /// <see cref="DamlValue.As{T}"/> would reject.
+    /// </summary>
+    public static DamlOptional AsOptional(this DamlValue value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return value as DamlOptional ?? DamlOptional.Some(value);
+    }
+
+    /// <summary>
     /// Converts a <see cref="DamlValue"/> to a CLR type. Can be invoked either as an extension
     /// method (<c>value.FromDamlValue&lt;T&gt;()</c>) or as a static call
     /// (<c>DamlValueExtensions.FromDamlValue&lt;T&gt;(value)</c>).

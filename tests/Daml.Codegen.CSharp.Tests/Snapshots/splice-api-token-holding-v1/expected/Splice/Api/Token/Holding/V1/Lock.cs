@@ -29,9 +29,9 @@ public sealed record Lock(IReadOnlyList<Party> Holders, DateTimeOffset? ExpiresA
     /// <summary>Creates an instance from a DamlRecord.</summary>
     public static Lock FromRecord(DamlRecord record) => new Lock(
         Holders: (IReadOnlyList<Party>)record.GetRequiredField("holders").As<DamlList>().Values.Select(x => Party.FromDamlValue(x.As<DamlParty>())).ToList(),
-        ExpiresAt: record.GetRequiredField("expiresAt").As<DamlOptional>().HasValue ? record.GetRequiredField("expiresAt").As<DamlOptional>().Value!.As<DamlTimestamp>().Value : null,
-        ExpiresAfter: record.GetRequiredField("expiresAfter").As<DamlOptional>().HasValue ? RelTime.FromRecord(record.GetRequiredField("expiresAfter").As<DamlOptional>().Value!.As<DamlRecord>()) : null,
-        Context: record.GetRequiredField("context").As<DamlOptional>().HasValue ? record.GetRequiredField("context").As<DamlOptional>().Value!.As<DamlText>().Value : null
+        ExpiresAt: record.GetRequiredField("expiresAt").AsOptional().HasValue ? record.GetRequiredField("expiresAt").AsOptional().Value!.As<DamlTimestamp>().Value : null,
+        ExpiresAfter: record.GetRequiredField("expiresAfter").AsOptional().HasValue ? RelTime.FromRecord(record.GetRequiredField("expiresAfter").AsOptional().Value!.As<DamlRecord>()) : null,
+        Context: record.GetRequiredField("context").AsOptional().HasValue ? record.GetRequiredField("context").AsOptional().Value!.As<DamlText>().Value : null
     );
 
 }

@@ -111,7 +111,7 @@ public sealed partial class CSharpCodeGenerator
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => _qualifier.Qualify("Unit", _currentNamespace) + ".Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.As<{_qualifier.Qualify("DamlOptional", _currentNamespace)}>().Value!", dataTypes)} : null",
+            $"{valueExpr}.AsOptional().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.AsOptional().Value!", dataTypes)} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
             $"{valueExpr}.As<{_qualifier.Qualify("DamlList", _currentNamespace)}>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x", dataTypes)}).ToList()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
