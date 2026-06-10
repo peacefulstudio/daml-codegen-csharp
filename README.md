@@ -10,8 +10,8 @@ talk to a Canton/Daml ledger with full type safety.
 ## Status
 
 Active. Curated public releases land here; ongoing development happens
-on a separate working tree. Issues, discussions, and pull requests are
-welcome on this repo.
+in a private development repository. Issues, discussions, and pull
+requests are welcome on this repo.
 
 This project is pre-1.0: under SemVer 0.x, any release may change the
 public API without a major-version bump (see the versioning note at the
@@ -84,8 +84,11 @@ var iou = new Iou(
 var createCmd = CreateCommand.For(iou);
 
 // Exercise a choice
-var contractId = new Iou.IouContractId("00abc123...");
-var transferCmd = contractId.ExerciseTransfer(newOwner: new Party("Charlie"));
+var contractId = new Iou.ContractId("00abc123...");
+var transferCmd = ExerciseCommand.For(
+    contractId,
+    Iou.ChoiceTransfer.Name,
+    new Iou.Transfer(NewOwner: new Party("Charlie")).ToRecord());
 
 // Submit commands
 var submission = CommandsSubmission.Single(createCmd)
@@ -132,9 +135,11 @@ daml-codegen-csharp/
 │   ├── Daml.Codegen.Testing.Conformance.Tests/
 │   ├── Daml.Ledger.Abstractions.Tests/
 │   └── Daml.Runtime.Tests/
+├── conformance/                          # Daml conformance corpus (source of richtypes.dar)
 ├── proto/                                # intermediate DAR proto schema
-└── samples/
-    └── QuickstartExample/                # Working example
+├── samples/
+│   └── QuickstartExample/                # Working example
+└── CONTEXT.md                            # domain model and architecture overview
 ```
 
 ## CLI Reference
@@ -202,7 +207,7 @@ dpm codegen-cs --dar ./my-contracts.dar \
     --out ./generated \
     -n MyCompany.Contracts \
     --generate-project \
-    --runtime-version 1.0.0 \
+    --runtime-version 0.1.8-preview.1 \
     --target-framework net10.0
 
 # Build and pack
@@ -247,7 +252,7 @@ dpm codegen-cs --dar ./my-app.dar \
     --out ./generated \
     --generate-project \
     --include-dependencies \
-    --runtime-version 1.0.0
+    --runtime-version 0.1.8-preview.1
 ```
 
 This generates separate directories and project files for each package:
@@ -289,7 +294,7 @@ dpm codegen-cs --dar ./my-project.dar \
     -n MyCompany.Daml \
     --generate-project \
     --include-dependencies \
-    --runtime-version 1.0.0 \
+    --runtime-version 0.1.8-preview.1 \
     --target-framework net10.0 \
     -V 2
 
@@ -565,7 +570,7 @@ Daml and C# ecosystem; no CLA required.
 
 ### Completed
 
-- [x] Full Daml-LF protobuf parser
+- [x] IntermediateDar proto reader covering the full Daml-LF type surface
 - [x] Interface support (`IDamlInterface`, `IHasView<TView>`, `IImplements<TInterface>`)
 - [x] Contract key support (`IHasKey<TKey>`)
 - [x] Package upgrade support (`IUpgradeable` marker interface)
