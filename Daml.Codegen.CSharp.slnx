@@ -15,6 +15,7 @@
     <Project Path="src/Daml.Runtime/Daml.Runtime.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Daml.Codegen.CSharp.Cli.Tests/Daml.Codegen.CSharp.Cli.Tests.csproj" />
     <Project Path="tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj" />
     <Project Path="tests/Daml.Codegen.Testing.Conformance.Tests/Daml.Codegen.Testing.Conformance.Tests.csproj" />
     <Project Path="tests/Daml.Ledger.Abstractions.Tests/Daml.Ledger.Abstractions.Tests.csproj" />

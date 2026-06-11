@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daml.Codegen.CSharp.Cli\Daml.Codegen.CSharp.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\Daml.Codegen.CSharp.Tests\Snapshots\splice-api-token-holding-v1\intermediate.binpb" Link="Snapshots\splice-api-token-holding-v1\intermediate.binpb">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
