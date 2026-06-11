@@ -15,6 +15,9 @@ jobs:
   publish-nuget-org:
     runs-on: ubuntu-latest
     environment: nuget-publish
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -32,13 +35,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing version $VERSION"
 
-      - name: Detect nuget.org key
-        id: nuget_key
+      - name: Detect nuget.org publisher
+        id: nuget_publisher
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_USER: ${{ secrets.NUGET_USER }}
         run: |
           set -euo pipefail
-          if [ -n "${NUGET_API_KEY:-}" ]; then
+          if [ -n "${NUGET_USER:-}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -74,10 +77,17 @@ jobs:
           path: ./artifacts/*.nupkg
           retention-days: 30
 
+      - name: NuGet login via trusted publishing
+        if: steps.nuget_publisher.outputs.present == 'true'
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to nuget.org
-        if: steps.nuget_key.outputs.present == 'true'
+        if: steps.nuget_publisher.outputs.present == 'true'
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           dotnet nuget push './artifacts/*.nupkg' \
@@ -88,15 +98,16 @@ jobs:
       - name: Summary
         run: |
           set -euo pipefail
-          if [ "${{ steps.nuget_key.outputs.present }}" == "true" ]; then
+          if [ "${{ steps.nuget_publisher.outputs.present }}" == "true" ]; then
             echo "## Published to nuget.org" >> "$GITHUB_STEP_SUMMARY"
           else
             {
               echo "## nuget.org push skipped"
               echo
-              echo "NUGET_API_KEY is not set on the nuget-publish environment, so the"
-              echo "push was skipped. The packages below were packed and uploaded as"
-              echo "run artifacts. Once the key lands, re-run this workflow run."
+              echo "NUGET_USER is not set on the nuget-publish environment, so the"
+              echo "trusted-publishing login and push were skipped. The packages below"
+              echo "were packed and uploaded as run artifacts. Once the nuget.org"
+              echo "trust policy and NUGET_USER secret land, re-run this workflow run."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           echo >> "$GITHUB_STEP_SUMMARY"
