@@ -36,12 +36,17 @@ fi
 
 dotnet build "$PROJECT_ROOT/src/Daml.Codegen.CSharp.Cli" -c Release
 
-rm -rf "$EXPECTED_DIR"
+STAGING_DIR="$(mktemp -d "$SNAPSHOT_DIR/expected.regen.XXXXXX")"
+trap 'rm -rf "$STAGING_DIR"' EXIT
 
 dotnet run --project "$PROJECT_ROOT/src/Daml.Codegen.CSharp.Cli" -c Release --no-build -- \
   --intermediate "$BINPB_PATH" \
-  -o "$EXPECTED_DIR" \
+  -o "$STAGING_DIR" \
   --target-framework net10.0 --verbosity 1
+
+rm -rf "$EXPECTED_DIR"
+mv "$STAGING_DIR" "$EXPECTED_DIR"
+trap - EXIT
 
 dotnet test "$PROJECT_ROOT" --filter "FullyQualifiedName~DriftDetectionTests&DisplayName~$SNAPSHOT_NAME"
 
