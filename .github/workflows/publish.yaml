@@ -3,116 +3,32 @@ name: Publish NuGet Packages
 on:
   release:
     types: [published]
-
-permissions:
-  contents: read
-
-env:
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override version (leave empty for auto-calculated)'
+        required: false
+        type: string
 
 jobs:
-  publish-nuget-org:
+  publish:
     runs-on: ubuntu-latest
     environment: nuget-publish
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          dotnet-version: '10.0.x'
-
-      - name: Resolve version from release tag
-        id: version
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          VERSION="${TAG_NAME#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing version $VERSION"
-
-      - name: Detect nuget.org publisher
-        id: nuget_publisher
-        env:
-          NUGET_USER: ${{ secrets.NUGET_USER }}
-        run: |
-          set -euo pipefail
-          if [ -n "${NUGET_USER:-}" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Restore
-        run: |
-          set -euo pipefail
-          dotnet restore --source https://api.nuget.org/v3/index.json
-
-      - name: Build
-        run: |
-          set -euo pipefail
-          dotnet build --no-restore --configuration Release \
-            -p:Version=${{ steps.version.outputs.version }}
-
-      - name: Test
-        run: |
-          set -euo pipefail
-          dotnet test --no-build --configuration Release
-
-      - name: Pack
-        run: |
-          set -euo pipefail
-          dotnet pack --no-build --configuration Release \
-            -p:PackageVersion=${{ steps.version.outputs.version }} \
-            --output ./artifacts
-
-      - name: Upload packages as artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nuget-packages
-          path: ./artifacts/*.nupkg
-          retention-days: 30
-
-      - name: NuGet login via trusted publishing
-        if: steps.nuget_publisher.outputs.present == 'true'
-        id: nuget_login
+          fetch-depth: 0
+      - name: NuGet login (OIDC -> short-lived key)
+        id: login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
-
-      - name: Push to nuget.org
-        if: steps.nuget_publisher.outputs.present == 'true'
-        env:
-          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
-        run: |
-          set -euo pipefail
-          dotnet nuget push './artifacts/*.nupkg' \
-            --source https://api.nuget.org/v3/index.json \
-            --api-key "$NUGET_API_KEY" \
-            --skip-duplicate
-
-      - name: Summary
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.nuget_publisher.outputs.present }}" == "true" ]; then
-            echo "## Published to nuget.org" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "## nuget.org push skipped"
-              echo
-              echo "NUGET_USER is not set on the nuget-publish environment, so the"
-              echo "trusted-publishing login and push were skipped. The packages below"
-              echo "were packed and uploaded as run artifacts. Once the nuget.org"
-              echo "trust policy and NUGET_USER secret land, re-run this workflow run."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          for package in ./artifacts/*.nupkg; do
-            echo "- $(basename "$package" .nupkg)" >> "$GITHUB_STEP_SUMMARY"
-          done
+      - name: Build, test, pack & push
+        uses: peacefulstudio/github-actions/.github/actions/csharp-publish@v1
+        with:
+          api-key: ${{ steps.login.outputs.NUGET_API_KEY }}
+          version_override: ${{ inputs.version_override }}
