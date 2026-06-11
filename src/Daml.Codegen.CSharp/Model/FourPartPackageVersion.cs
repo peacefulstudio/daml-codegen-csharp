@@ -11,7 +11,7 @@ namespace Daml.Codegen.CSharp.Model;
 /// the monotonic emitter counter that disambiguates content-identical re-emissions
 /// of the same DAR-intrinsic version under different emitter versions.
 /// </summary>
-public readonly record struct FourPartPackageVersion(int Major, int Minor, int Patch, int Revision)
+internal readonly record struct FourPartPackageVersion(int Major, int Minor, int Patch, int Revision)
 {
     /// <summary>
     /// Lifts a 3-part DAR-intrinsic <see cref="Version"/> (as produced by

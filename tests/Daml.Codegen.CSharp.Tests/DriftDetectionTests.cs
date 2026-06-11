@@ -76,11 +76,7 @@ public class DriftDetectionTests
             "the snapshot fixtures directory must ship alongside the test assembly at {0}",
             expectedDir);
 
-        var options = new CodeGenOptions
-        {
-            OutputDirectory = Path.Combine(Path.GetTempPath(), "drift-detection-unused"),
-        };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(new CodeGenOptions(), new ConsoleLogger(0));
 
         IntermediateDar proto;
         await using (var stream = File.OpenRead(protoPath))

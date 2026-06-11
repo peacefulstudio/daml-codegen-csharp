@@ -12,9 +12,11 @@ namespace Daml.Codegen.CSharp;
 /// </summary>
 public sealed class ConsoleLogger(int verbosity) : ICodegenLogger
 {
+    /// <summary>Writes an ERROR line to stderr; always shown regardless of verbosity.</summary>
     public void Error(string message) =>
         Console.Error.WriteLine($"ERROR: {message}");
 
+    /// <summary>Writes a WARN line to stderr when verbosity is 1 or higher.</summary>
     public void Warning(string message)
     {
         if (verbosity >= 1)
@@ -23,6 +25,7 @@ public sealed class ConsoleLogger(int verbosity) : ICodegenLogger
         }
     }
 
+    /// <summary>Writes an INFO line to stdout when verbosity is 2 or higher.</summary>
     public void Info(string message)
     {
         if (verbosity >= 2)
@@ -31,6 +34,7 @@ public sealed class ConsoleLogger(int verbosity) : ICodegenLogger
         }
     }
 
+    /// <summary>Writes a DEBUG line to stdout when verbosity is 3 or higher.</summary>
     public void Debug(string message)
     {
         if (verbosity >= 3)

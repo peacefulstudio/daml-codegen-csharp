@@ -354,9 +354,9 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine("throw new InvalidOperationException(");
         indent.Indent();
         indent.AppendLine($"$\"Submission succeeded but no '{choice.Name}' exercise on contract '{{contractId}}' was recorded on transaction {{tx.UpdateId}}. \" +");
-        indent.AppendLine("\"This is most often caused by the ILedgerClient bridge not populating TransactionResult.ExercisedEvents — \" +");
-        indent.AppendLine("\"the gRPC bridge in canton-ledger-api-csharp is the canonical example and is being updated to project exercised_events. \" +");
-        indent.AppendLine("\"If you have wired up a bridge that does populate ExercisedEvents, ensure the participant is configured to return \" +");
+        indent.AppendLine("\"This is most often caused by the ILedgerClient implementation not populating TransactionResult.ExercisedEvents — \" +");
+        indent.AppendLine("\"your ILedgerClient implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. \" +");
+        indent.AppendLine("\"If your implementation does populate ExercisedEvents, ensure the participant is configured to return \" +");
         indent.AppendLine("\"LedgerEffects with verbose events so the exercise event survives projection.\");");
         indent.Dedent();
 

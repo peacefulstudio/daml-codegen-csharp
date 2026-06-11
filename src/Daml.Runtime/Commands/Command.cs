@@ -26,6 +26,7 @@ public sealed record CreateCommand(
     Identifier TemplateId,
     DamlRecord CreateArguments) : ICommand
 {
+    /// <inheritdoc />
     public string CommandType => "Create";
 
     /// <summary>
@@ -54,6 +55,7 @@ public sealed record ExerciseCommand(
     ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
+    /// <inheritdoc />
     public string CommandType => "Exercise";
 
     /// <summary>
@@ -97,6 +99,7 @@ public sealed record ExerciseByKeyCommand(
     ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
+    /// <inheritdoc />
     public string CommandType => "ExerciseByKey";
 }
 
@@ -113,6 +116,7 @@ public sealed record CreateAndExerciseCommand(
     ChoiceName Choice,
     DamlValue ChoiceArgument) : ICommand
 {
+    /// <inheritdoc />
     public string CommandType => "CreateAndExercise";
 
     /// <summary>

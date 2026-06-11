@@ -21,8 +21,8 @@ public sealed record TransactionResult(
 {
     /// <summary>
     /// Choice-exercise events observed in the transaction, in transaction order.
-    /// Defaults to an empty list — populated by ledger-client bridges (e.g.
-    /// <c>Daml.Runtime.Grpc</c>) when the transaction was requested with
+    /// Defaults to an empty list — populated by ledger-client transport
+    /// implementations when the transaction was requested with
     /// ledger-effects shape. Codegen-emitted choice wrappers deserialize each
     /// <see cref="ExercisedEvent.ExerciseResult"/> through the appropriate typed
     /// projector to surface a typed <c>ExerciseOutcome&lt;TResult&gt;</c> for choices

@@ -8,7 +8,7 @@
 using Daml.Runtime.Data;
 using System;
 
-namespace Richtypes;
+namespace Daml.Codegen.Testing.Conformance.Richtypes;
 
 /// <summary>
 /// Generated from Daml variant Outcome
@@ -33,16 +33,20 @@ public abstract record Outcome : IDamlVariant
     /// <summary>Win constructor.</summary>
     public sealed record Win(Outcome_Win Value) : Outcome
     {
+        /// <inheritdoc />
         public override string Tag => "Win";
 
+        /// <inheritdoc />
         public override DamlVariant ToVariant() => DamlVariant.Create("Win", Value.ToRecord());
     }
 
     /// <summary>Pending constructor (no arguments).</summary>
     public sealed record Pending() : Outcome
     {
+        /// <inheritdoc />
         public override string Tag => "Pending";
 
+        /// <inheritdoc />
         public override DamlVariant ToVariant() => DamlVariant.Create("Pending", DamlUnit.Instance);
     }
 

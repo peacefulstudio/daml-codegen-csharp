@@ -113,67 +113,70 @@ public interface IUpgradeable
 }
 
 /// <summary>
+/// Selects which fully qualified template identifier format
+/// <see cref="TemplateExtensions.GetTemplateId{T}(TemplateIdFormat)"/> produces.
+/// </summary>
+public enum TemplateIdFormat
+{
+    /// <summary>
+    /// The package-name format (<c>{packageName}:{moduleName}:{entityName}</c>),
+    /// expected by read-path consumers: PQS queries and ACS/update filters.
+    /// </summary>
+    PackageName,
+
+    /// <summary>
+    /// The package-hash format (<c>{packageHash}:{moduleName}:{entityName}</c>),
+    /// expected by command submission over the Ledger API.
+    /// </summary>
+    PackageHash,
+}
+
+/// <summary>
 /// Provides extension methods for working with Daml templates.
 /// </summary>
 public static class TemplateExtensions
 {
     /// <summary>
     /// Retrieves the fully qualified template identifier for the specified Daml template type.
-    /// By default uses the package name format ({packageName}:{moduleName}:{entityName}),
-    /// which is compatible with PQS queries. Set <paramref name="usePackageHash"/> to <c>true</c>
-    /// to use the package hash format ({packageHash}:{moduleName}:{entityName}) for Ledger API commands.
+    /// By default uses <see cref="TemplateIdFormat.PackageName"/>
+    /// (<c>{packageName}:{moduleName}:{entityName}</c>), which is compatible with PQS queries;
+    /// pass <see cref="TemplateIdFormat.PackageHash"/> for Ledger API commands.
     /// </summary>
     /// <typeparam name="T">The Daml template type implementing the <see cref="ITemplate"/> interface.</typeparam>
-    /// <param name="usePackageHash">
-    /// When <c>false</c> (default), returns the package-name-based identifier suitable for PQS queries.
-    /// When <c>true</c>, returns the package-hash-based identifier for Ledger API commands.
-    /// </param>
+    /// <param name="format">The identifier format to produce.</param>
     /// <returns>The fully qualified template identifier.</returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown if the specified template type does not define a valid static <c>TemplateId</c> property.
+    /// Thrown if <typeparamref name="T"/>'s static <c>PackageName</c> is empty and the
+    /// package-name format was requested — a silent fall-back to the hash format would
+    /// produce identifiers that match nothing in PQS.
     /// </exception>
-    public static string GetTemplateId<T>(bool usePackageHash = false) where T : ITemplate
+    public static string GetTemplateId<T>(TemplateIdFormat format = TemplateIdFormat.PackageName) where T : ITemplate
     {
-        const string templateIdName = nameof(ITemplate.TemplateId);
-        var templateIdProperty = typeof(T).GetProperty(
-            templateIdName,
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-
-        if (templateIdProperty?.GetValue(null) is Identifier identifier)
+        var identifier = T.TemplateId;
+        if (format == TemplateIdFormat.PackageHash)
         {
-            if (usePackageHash)
-            {
-                return identifier.ToString();
-            }
-
-            var packageNameProperty = typeof(T).GetProperty(
-                nameof(ITemplate.PackageName),
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-
-            if (packageNameProperty?.GetValue(null) is string packageName && !string.IsNullOrEmpty(packageName))
-            {
-                return $"{packageName}:{identifier.ModuleName}:{identifier.EntityName}";
-            }
-
-            // Fallback to hash-based format if PackageName is not available
             return identifier.ToString();
         }
 
-        throw new InvalidOperationException(
-            $"Template type '{typeof(T).FullName}' does not have a valid {templateIdName} static property.");
+        if (string.IsNullOrEmpty(T.PackageName))
+        {
+            throw new InvalidOperationException(
+                $"Template type '{typeof(T).FullName}' has an empty static {nameof(ITemplate.PackageName)}; " +
+                "cannot build the package-name template identifier. " +
+                $"Pass {nameof(TemplateIdFormat)}.{nameof(TemplateIdFormat.PackageHash)} for the package-hash format.");
+        }
+
+        return $"{T.PackageName}:{identifier.ModuleName}:{identifier.EntityName}";
     }
 
     /// <summary>
     /// Retrieves the fully qualified template identifier for the specified Daml template instance.
-    /// By default uses the package name format suitable for PQS queries.
+    /// By default uses <see cref="TemplateIdFormat.PackageName"/>, suitable for PQS queries.
     /// </summary>
     /// <typeparam name="T">The Daml template type implementing the <see cref="ITemplate"/> interface.</typeparam>
     /// <param name="template">The Daml template instance of type <typeparamref name="T"/>.</param>
-    /// <param name="usePackageHash">
-    /// When <c>false</c> (default), returns the package-name-based identifier.
-    /// When <c>true</c>, returns the package-hash-based identifier.
-    /// </param>
+    /// <param name="format">The identifier format to produce.</param>
     /// <returns>The fully qualified template identifier.</returns>
-    public static string GetTemplateId<T>(this T template, bool usePackageHash = false) where T : ITemplate
-        => GetTemplateId<T>(usePackageHash);
+    public static string GetTemplateId<T>(this T template, TemplateIdFormat format = TemplateIdFormat.PackageName) where T : ITemplate
+        => GetTemplateId<T>(format);
 }

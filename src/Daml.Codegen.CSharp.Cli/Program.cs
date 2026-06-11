@@ -10,21 +10,16 @@ using Daml.Codegen.Intermediate;
 
 namespace Daml.Codegen.CSharp.Cli;
 
-/// <summary>
-/// Entry point for the Daml C# code generator CLI, bundled as a
-/// self-contained single-file binary inside the <c>dpm codegen-cs</c> OCI
-/// artifact. Reads an <c>IntermediateDar</c> proto file (produced by the JVM
-/// helper) via <c>--intermediate</c> and emits C# sources.
-/// </summary>
-public static class Program
+internal static class Program
 {
-    public static async Task<int> Main(string[] args)
+    internal static async Task<int> Main(string[] args)
     {
         var rootCommand = new RootCommand("Generate C# code from an IntermediateDar proto");
 
-        var intermediateOption = new Option<FileInfo?>("--intermediate")
+        var intermediateOption = new Option<FileInfo>("--intermediate")
         {
-            Description = "Path to an IntermediateDar proto file produced by the JVM helper."
+            Description = "Path to an IntermediateDar proto file produced by the JVM helper.",
+            Required = true
         };
         intermediateOption.Validators.Add(result =>
         {
@@ -48,7 +43,7 @@ public static class Program
         };
         namespaceOption.Aliases.Add("--namespace");
 
-        var verbosityOption = new Option<int>("-V")
+        var verbosityOption = new Option<int>("-v")
         {
             Description = "Verbosity level: 0=errors only, 1=warnings, 2=info, 3=debug",
             DefaultValueFactory = _ => 1
@@ -60,12 +55,6 @@ public static class Program
             Description = "Regular expression to filter which templates to generate (default: .*)"
         };
         rootOption.Aliases.Add("--root");
-
-        var jsonOption = new Option<bool>("--json")
-        {
-            Description = "Generate JSON serialization support",
-            DefaultValueFactory = _ => true
-        };
 
         var nullableOption = new Option<bool>("--nullable")
         {
@@ -155,7 +144,6 @@ public static class Program
         rootCommand.Options.Add(namespaceOption);
         rootCommand.Options.Add(verbosityOption);
         rootCommand.Options.Add(rootOption);
-        rootCommand.Options.Add(jsonOption);
         rootCommand.Options.Add(nullableOption);
         rootCommand.Options.Add(generateProjectOption);
         rootCommand.Options.Add(includeDepsOption);
@@ -166,30 +154,31 @@ public static class Program
         rootCommand.Options.Add(releaseCountersOption);
         rootCommand.Options.Add(packageLicenseOption);
 
-        Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, _) =>
-            RunCodegen(new CodegenArgs(
-                parseResult.GetValue(intermediateOption),
-                parseResult.GetValue(outputOption)!,
-                parseResult.GetValue(namespaceOption),
-                parseResult.GetValue(verbosityOption),
-                parseResult.GetValue(rootOption),
-                parseResult.GetValue(jsonOption),
-                parseResult.GetValue(nullableOption),
-                parseResult.GetValue(generateProjectOption),
-                parseResult.GetValue(includeDepsOption),
-                parseResult.GetValue(targetFrameworkOption)!,
-                parseResult.GetValue(runtimeVersionOption),
-                parseResult.GetValue(contractIdentifiersOption),
-                parseResult.GetValue(emitterCounterOption),
-                parseResult.GetValue(releaseCountersOption),
-                parseResult.GetValue(packageLicenseOption)!));
+        Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, cancellationToken) =>
+            RunCodegen(
+                new CodegenArgs(
+                    parseResult.GetValue(intermediateOption)!,
+                    parseResult.GetValue(outputOption)!,
+                    parseResult.GetValue(namespaceOption),
+                    parseResult.GetValue(verbosityOption),
+                    parseResult.GetValue(rootOption),
+                    parseResult.GetValue(nullableOption),
+                    parseResult.GetValue(generateProjectOption),
+                    parseResult.GetValue(includeDepsOption),
+                    parseResult.GetValue(targetFrameworkOption)!,
+                    parseResult.GetValue(runtimeVersionOption),
+                    parseResult.GetValue(contractIdentifiersOption),
+                    parseResult.GetValue(emitterCounterOption),
+                    parseResult.GetValue(releaseCountersOption),
+                    parseResult.GetValue(packageLicenseOption)!),
+                cancellationToken);
         rootCommand.SetAction(action);
 
         var parseResult = rootCommand.Parse(args);
         return await parseResult.InvokeAsync();
     }
 
-    private static async Task<int> RunCodegen(CodegenArgs args)
+    internal static async Task<int> RunCodegen(CodegenArgs args, CancellationToken cancellationToken)
     {
         var logger = new ConsoleLogger(args.Verbosity);
 
@@ -204,24 +193,24 @@ public static class Program
                 logger.Debug($"Created output directory: {args.OutputDirectory.FullName}");
             }
 
-            if (args.ReleaseCountersFile is not null && args.IntermediateFile is null)
-            {
-                logger.Error("--release-counters requires --intermediate. The 4th NuGet version segment is keyed off the IntermediateDar content hash.");
-                return 1;
-            }
-
-            if (args.IntermediateFile is not null)
-            {
-                await GenerateFromIntermediate(args.IntermediateFile, args, logger);
-                return 0;
-            }
-
-            logger.Error("--intermediate <path> is required.");
-            return 1;
+            await GenerateFromIntermediate(args.IntermediateFile, args, logger, cancellationToken);
+            return 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            logger.Error(
+                "Code generation was canceled. " +
+                $"Partially written files may remain in '{args.OutputDirectory.FullName}'.");
+            return 130;
         }
         catch (Exception ex)
         {
             logger.Error($"Code generation failed: {ex.Message}");
+            var rootCauseMessage = ex.GetBaseException().Message;
+            if (rootCauseMessage != ex.Message)
+            {
+                logger.Error($"Root cause: {rootCauseMessage}");
+            }
             if (args.Verbosity >= 3)
             {
                 logger.Error(ex.ToString());
@@ -230,7 +219,7 @@ public static class Program
         }
     }
 
-    private static async Task GenerateFromIntermediate(FileInfo file, CodegenArgs args, ConsoleLogger logger)
+    private static async Task GenerateFromIntermediate(FileInfo file, CodegenArgs args, ConsoleLogger logger, CancellationToken cancellationToken)
     {
         logger.Info($"Reading IntermediateDar: {file.Name}");
         IntermediateDar proto;
@@ -238,6 +227,7 @@ public static class Program
         {
             proto = IntermediateDar.Parser.ParseFrom(stream);
         }
+        cancellationToken.ThrowIfCancellationRequested();
 
         var dar = IntermediateDarReader.Read(proto);
         logger.Info($"  Package: {dar.MainPackage.Name} v{dar.MainPackage.Version}");
@@ -250,7 +240,7 @@ public static class Program
 
         var generator = new CSharpCodeGenerator(BuildOptions(args, effectiveCounter), logger);
         var generatedFiles = generator.Generate(dar);
-        await WriteGeneratedFiles(generatedFiles, args, logger);
+        await WriteGeneratedFiles(generatedFiles, args, logger, cancellationToken);
     }
 
     private static int ResolveReleaseCounter(
@@ -262,7 +252,7 @@ public static class Program
     {
         var hash = IntermediatePackageContentHash.Compute(proto.Main);
         var store = JsonReleaseCounterStore.OpenOrCreate(storeFile.FullName);
-        var version = SpliceNuGetVersion.Compute(packageName, packageVersion, hash, store);
+        var version = NuGetVersionResolver.Compute(packageName, packageVersion, hash, store);
 
         var truncated = hash[..Math.Min(12, hash.Length)];
         logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… version={version}");
@@ -273,12 +263,9 @@ public static class Program
     private static CodeGenOptions BuildOptions(CodegenArgs args, int emitterCounter) =>
         new()
         {
-            OutputDirectory = args.OutputDirectory.FullName,
             RootNamespace = args.RootNamespace,
             RootFilter = args.RootFilter,
-            GenerateJsonSupport = args.GenerateJson,
             EnableNullableReferenceTypes = args.EnableNullable,
-            Verbosity = args.Verbosity,
             GenerateProjectFile = args.GenerateProjectFile,
             IncludeDependencies = args.IncludeDependencies,
             TargetFramework = args.TargetFramework,
@@ -288,7 +275,7 @@ public static class Program
             PackageLicenseExpression = args.PackageLicenseExpression,
         };
 
-    private static async Task<int> WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ConsoleLogger logger)
+    private static async Task<int> WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ConsoleLogger logger, CancellationToken cancellationToken)
     {
         var written = 0;
         foreach (var file in generatedFiles)
@@ -300,7 +287,7 @@ public static class Program
                 Directory.CreateDirectory(fileDir);
             }
 
-            await File.WriteAllTextAsync(filePath, file.Content);
+            await File.WriteAllTextAsync(filePath, file.Content, cancellationToken);
             logger.Debug($"  Generated: {file.RelativePath}");
             written++;
         }
@@ -309,12 +296,11 @@ public static class Program
 }
 
 internal sealed record CodegenArgs(
-    FileInfo? IntermediateFile,
+    FileInfo IntermediateFile,
     DirectoryInfo OutputDirectory,
     string? RootNamespace,
     int Verbosity,
     string? RootFilter,
-    bool GenerateJson,
     bool EnableNullable,
     bool GenerateProjectFile,
     bool IncludeDependencies,

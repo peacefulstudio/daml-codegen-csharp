@@ -50,7 +50,7 @@ public class NonContractChoiceProjectorTests
                 new DamlTemplate
                 {
                     Name = EntityName,
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -69,7 +69,7 @@ public class NonContractChoiceProjectorTests
                 {
                     Name = EntityName,
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -87,8 +87,6 @@ public class NonContractChoiceProjectorTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -228,7 +226,7 @@ public class NonContractChoiceProjectorTests
     }
 
     [Fact]
-    public void projector_throws_canton_bridge_diagnostic_when_no_exercise_event_present()
+    public void projector_throws_self_contained_ExercisedEvents_diagnostic_when_no_exercise_event_present()
     {
         var tx = TransactionWith();
 
@@ -237,7 +235,7 @@ public class NonContractChoiceProjectorTests
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*no 'GetCount' exercise on contract 'contract-1'*")
             .WithMessage("*TransactionResult.ExercisedEvents*")
-            .WithMessage("*canton-ledger-api-csharp*");
+            .WithMessage("*must project the transaction's exercised events*");
     }
 
     [Fact]
@@ -250,6 +248,6 @@ public class NonContractChoiceProjectorTests
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*no 'GetCount' exercise on contract 'contract-1'*")
             .WithMessage("*TransactionResult.ExercisedEvents*")
-            .WithMessage("*canton-ledger-api-csharp*");
+            .WithMessage("*must project the transaction's exercised events*");
     }
 }

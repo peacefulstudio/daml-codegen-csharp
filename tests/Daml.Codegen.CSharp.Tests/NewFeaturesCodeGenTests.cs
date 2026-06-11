@@ -17,8 +17,6 @@ public class NewFeaturesCodeGenTests
     {
         options ??= new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -68,8 +66,8 @@ public class NewFeaturesCodeGenTests
                     Name = "AssetWithKey",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text)
@@ -82,8 +80,8 @@ public class NewFeaturesCodeGenTests
                     Name = "AssetWithKey",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -130,8 +128,8 @@ public class NewFeaturesCodeGenTests
                     Name = "UserProfile",
                     Fields =
                     [
-                        new DamlField("user", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("user", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party)
@@ -144,8 +142,8 @@ public class NewFeaturesCodeGenTests
                     Name = "UserProfile",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("user", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("user", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -183,8 +181,8 @@ public class NewFeaturesCodeGenTests
                     Name = "CompositeKeyTemplate",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = [],
                     Key = new DamlTypeRef("", "Test.Module", "AssetKey")
@@ -197,8 +195,8 @@ public class NewFeaturesCodeGenTests
                     Name = "CompositeKeyTemplate",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 },
                 new DamlDataType
@@ -206,8 +204,8 @@ public class NewFeaturesCodeGenTests
                     Name = "AssetKey",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -250,7 +248,7 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "ListKeyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                     Key = new DamlTypeApp(
                         new DamlPrimitiveType(DamlPrimitive.List),
@@ -262,7 +260,7 @@ public class NewFeaturesCodeGenTests
                 new DamlDataType
                 {
                     Name = "ListKeyTemplate",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -300,7 +298,7 @@ public class NewFeaturesCodeGenTests
                     Name = "NoKeyTemplate",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))
                     ],
                     Choices = [],
                     Key = null
@@ -313,7 +311,7 @@ public class NewFeaturesCodeGenTests
                     Name = "NoKeyTemplate",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))
                     ])
                 }
             ],
@@ -357,7 +355,7 @@ public class NewFeaturesCodeGenTests
                     Name = "DocumentedKey",
                     Fields =
                     [
-                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text)
@@ -370,7 +368,7 @@ public class NewFeaturesCodeGenTests
                     Name = "DocumentedKey",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -529,8 +527,8 @@ public class NewFeaturesCodeGenTests
                     Name = "AssetView",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 }
             ],
@@ -643,8 +641,6 @@ public class NewFeaturesCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -706,7 +702,7 @@ public class NewFeaturesCodeGenTests
                     TypeParams = ["a"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlTypeVar("a"))
+                        new DamlFieldDefinition("value", new DamlTypeVar("a"))
                     ])
                 }
             ],
@@ -744,8 +740,8 @@ public class NewFeaturesCodeGenTests
                     TypeParams = ["a", "b"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("first", new DamlTypeVar("a")),
-                        new DamlField("second", new DamlTypeVar("b"))
+                        new DamlFieldDefinition("first", new DamlTypeVar("a")),
+                        new DamlFieldDefinition("second", new DamlTypeVar("b"))
                     ])
                 }
             ],
@@ -824,7 +820,7 @@ public class NewFeaturesCodeGenTests
                     TypeParams = ["t"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("contents", new DamlTypeVar("t"))
+                        new DamlFieldDefinition("contents", new DamlTypeVar("t"))
                     ])
                 }
             ],
@@ -861,7 +857,7 @@ public class NewFeaturesCodeGenTests
                     TypeParams = [], // Empty type params
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -899,8 +895,8 @@ public class NewFeaturesCodeGenTests
                     TypeParams = ["some_type", "another-type"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("val1", new DamlTypeVar("some_type")),
-                        new DamlField("val2", new DamlTypeVar("another-type"))
+                        new DamlFieldDefinition("val1", new DamlTypeVar("some_type")),
+                        new DamlFieldDefinition("val2", new DamlTypeVar("another-type"))
                     ])
                 }
             ],
@@ -940,7 +936,7 @@ public class NewFeaturesCodeGenTests
                     Name = "UpgradedTemplate",
                     Fields =
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = []
                 }
@@ -952,7 +948,7 @@ public class NewFeaturesCodeGenTests
                     Name = "UpgradedTemplate",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -988,7 +984,7 @@ public class NewFeaturesCodeGenTests
                     Name = "NormalTemplate",
                     Fields =
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = []
                 }
@@ -1000,7 +996,7 @@ public class NewFeaturesCodeGenTests
                     Name = "NormalTemplate",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1036,7 +1032,7 @@ public class NewFeaturesCodeGenTests
                     Name = "DocumentedUpgrade",
                     Fields =
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ],
                     Choices = []
                 }
@@ -1048,7 +1044,7 @@ public class NewFeaturesCodeGenTests
                     Name = "DocumentedUpgrade",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1083,8 +1079,8 @@ public class NewFeaturesCodeGenTests
                     Name = "FullFeaturedTemplate",
                     Fields =
                     [
-                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text)
@@ -1097,8 +1093,8 @@ public class NewFeaturesCodeGenTests
                     Name = "FullFeaturedTemplate",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 }
             ],
@@ -1140,8 +1136,8 @@ public class NewFeaturesCodeGenTests
                     Name = "Asset",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party)
@@ -1154,8 +1150,8 @@ public class NewFeaturesCodeGenTests
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 },
                 new DamlDataType
@@ -1164,7 +1160,7 @@ public class NewFeaturesCodeGenTests
                     TypeParams = ["t"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlTypeVar("t"))
+                        new DamlFieldDefinition("value", new DamlTypeVar("t"))
                     ])
                 }
             ],

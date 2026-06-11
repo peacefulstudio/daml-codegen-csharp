@@ -49,9 +49,11 @@ public readonly record struct SynchronizerId
         _id = id;
     }
 
+    /// <summary>Extracts the wire-format id; explicit so it is never silently used as arbitrary text.</summary>
     public static explicit operator string(SynchronizerId id) =>
         id._id ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) SynchronizerId to string.");
 
+    /// <summary>Parses a wire-format id; explicit so arbitrary strings never silently become synchronizer ids.</summary>
     public static explicit operator SynchronizerId(string id) => new(id);
 
     /// <remarks>

@@ -951,10 +951,10 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void GetTemplateId_with_usePackageHash_should_return_hash_format()
+    public void GetTemplateId_with_PackageHash_format_should_return_hash_format()
     {
         // Act
-        var templateId = TemplateExtensions.GetTemplateId<TestTemplate>(usePackageHash: true);
+        var templateId = TemplateExtensions.GetTemplateId<TestTemplate>(TemplateIdFormat.PackageHash);
 
         // Assert - uses PackageId (hash) from Identifier
         templateId.Should().Be($"{TestPackageId}:{TestModuleName}:{nameof(TestTemplate)}");
@@ -974,13 +974,13 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void GetTemplateId_extension_method_with_usePackageHash_should_return_hash_format()
+    public void GetTemplateId_extension_method_with_PackageHash_format_should_return_hash_format()
     {
         // Arrange
         var template = new TestTemplate(new Party("Alice"), 100);
 
         // Act
-        var templateId = template.GetTemplateId(usePackageHash: true);
+        var templateId = template.GetTemplateId(TemplateIdFormat.PackageHash);
 
         // Assert
         templateId.Should().Be($"{TestPackageId}:{TestModuleName}:{nameof(TestTemplate)}");
@@ -1001,12 +1001,12 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void GetTemplateId_with_usePackageHash_should_work_with_different_templates()
+    public void GetTemplateId_with_PackageHash_format_should_work_with_different_templates()
     {
         // Act
-        var keyedTemplateId = TemplateExtensions.GetTemplateId<KeyedTemplate>(usePackageHash: true);
-        var viewedTemplateId = TemplateExtensions.GetTemplateId<ViewedTemplate>(usePackageHash: true);
-        var upgradeableTemplateId = TemplateExtensions.GetTemplateId<UpgradeableTemplate>(usePackageHash: true);
+        var keyedTemplateId = TemplateExtensions.GetTemplateId<KeyedTemplate>(TemplateIdFormat.PackageHash);
+        var viewedTemplateId = TemplateExtensions.GetTemplateId<ViewedTemplate>(TemplateIdFormat.PackageHash);
+        var upgradeableTemplateId = TemplateExtensions.GetTemplateId<UpgradeableTemplate>(TemplateIdFormat.PackageHash);
 
         // Assert - all use PackageId (hash) format
         keyedTemplateId.Should().Be($"{TestPackageId}:{TestModuleName}:{nameof(KeyedTemplate)}");
@@ -1029,17 +1029,36 @@ public class ContractTypesTests
     }
 
     [Fact]
-    public void GetTemplateId_extension_with_usePackageHash_should_return_same_result_as_static_method()
+    public void GetTemplateId_extension_with_PackageHash_format_should_return_same_result_as_static_method()
     {
         // Arrange
         var template = new KeyedTemplate(new Party("Bob"), "asset-123");
 
         // Act
-        var staticResult = TemplateExtensions.GetTemplateId<KeyedTemplate>(usePackageHash: true);
-        var extensionResult = template.GetTemplateId(usePackageHash: true);
+        var staticResult = TemplateExtensions.GetTemplateId<KeyedTemplate>(TemplateIdFormat.PackageHash);
+        var extensionResult = template.GetTemplateId(TemplateIdFormat.PackageHash);
 
         // Assert
         staticResult.Should().Be(extensionResult);
+    }
+
+    private sealed record EmptyPackageNameTemplate : ITemplate
+    {
+        public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(EmptyPackageNameTemplate));
+        public static string PackageId => TestPackageId;
+        public static string PackageName => string.Empty;
+        public static Version PackageVersion => TestPackageV1;
+
+        public DamlRecord ToRecord() => DamlRecord.Create();
+        public static EmptyPackageNameTemplate FromRecord(DamlRecord record) => new();
+    }
+
+    [Fact]
+    public void GetTemplateId_should_throw_for_empty_PackageName_instead_of_silently_falling_back_to_hash_format()
+    {
+        var act = () => TemplateExtensions.GetTemplateId<EmptyPackageNameTemplate>();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*{nameof(ITemplate.PackageName)}*");
     }
 
     #endregion

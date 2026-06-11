@@ -15,19 +15,14 @@ public class CodeGenOptionsTests
     public void CodeGenOptions_should_have_correct_defaults()
     {
         // Arrange & Act
-        var options = new CodeGenOptions
-        {
-            OutputDirectory = "/tmp/output"
-        };
+        var options = new CodeGenOptions();
 
         // Assert
-        options.GenerateJsonSupport.Should().BeTrue();
         options.EnableNullableReferenceTypes.Should().BeTrue();
         options.GenerateXmlDocs.Should().BeTrue();
         options.UseFileScopedNamespaces.Should().BeTrue();
         options.UseRecordTypes.Should().BeTrue();
         options.UsePrimaryConstructors.Should().BeTrue();
-        options.Verbosity.Should().Be(1);
     }
 
     [Fact]
@@ -36,30 +31,22 @@ public class CodeGenOptionsTests
         // Arrange & Act
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/output",
             RootNamespace = "MyCompany.Contracts",
             RootFilter = ".*Iou.*",
-            GenerateJsonSupport = false,
             EnableNullableReferenceTypes = false,
-            Verbosity = 3
         };
 
         // Assert
         options.RootNamespace.Should().Be("MyCompany.Contracts");
         options.RootFilter.Should().Be(".*Iou.*");
-        options.GenerateJsonSupport.Should().BeFalse();
         options.EnableNullableReferenceTypes.Should().BeFalse();
-        options.Verbosity.Should().Be(3);
     }
 
     [Fact]
     public void CodeGenOptions_should_have_correct_new_option_defaults()
     {
         // Arrange & Act
-        var options = new CodeGenOptions
-        {
-            OutputDirectory = "/tmp/output"
-        };
+        var options = new CodeGenOptions();
 
         // Assert - new options should have correct defaults
         options.GenerateProjectFile.Should().BeFalse();
@@ -88,7 +75,7 @@ public class CodeGenOptionsTests
                 new DamlTemplate
                 {
                     Name = templateName,
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -97,7 +84,7 @@ public class CodeGenOptionsTests
                 new DamlDataType
                 {
                     Name = templateName,
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -133,7 +120,6 @@ public class CodeGenOptionsTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             GenerateProjectFile = true,
             TargetFramework = "net10.0"
         };
@@ -156,7 +142,6 @@ public class CodeGenOptionsTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             GenerateProjectFile = false
         };
         var generator = CreateGenerator(options);
@@ -191,7 +176,6 @@ public class CodeGenOptionsTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             IncludeDependencies = true
         };
         var generator = CreateGenerator(options);
@@ -225,7 +209,6 @@ public class CodeGenOptionsTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             IncludeDependencies = false
         };
         var generator = CreateGenerator(options);
@@ -270,7 +253,6 @@ public class CodeGenOptionsTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             IncludeDependencies = true
         };
         var generator = CreateGenerator(options);
@@ -310,7 +292,6 @@ public class CodeGenOptionsTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             GenerateProjectFile = true,
             IncludeDependencies = true,
             TargetFramework = "net10.0"
@@ -337,7 +318,6 @@ public class CodeGenOptionsTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             GenerateProjectFile = true,
             RuntimePackageVersion = "1.2.3"
         };

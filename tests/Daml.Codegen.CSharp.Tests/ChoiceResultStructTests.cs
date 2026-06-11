@@ -24,8 +24,6 @@ public class ChoiceResultStructTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -92,7 +90,7 @@ public class ChoiceResultStructTests
         new()
         {
             Name = name,
-            Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+            Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
             Choices =
             [
                 new DamlChoice
@@ -114,7 +112,7 @@ public class ChoiceResultStructTests
             new()
             {
                 Name = template.Name,
-                Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
             }
         };
         foreach (var sibling in siblingTemplateNames)

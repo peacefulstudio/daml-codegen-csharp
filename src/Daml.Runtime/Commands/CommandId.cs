@@ -33,9 +33,11 @@ public readonly record struct CommandId
         _value = value;
     }
 
+    /// <summary>Extracts the command id; explicit so it is never silently used as arbitrary text.</summary>
     public static explicit operator string(CommandId id) =>
         id._value ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) CommandId to string.");
 
+    /// <summary>Parses a command id; explicit so arbitrary strings never silently become command ids.</summary>
     public static explicit operator CommandId(string value) => new(value);
 
     /// <remarks>

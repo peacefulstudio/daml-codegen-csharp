@@ -56,7 +56,7 @@ public sealed partial class CSharpCodeGenerator
     private bool TryWriteNamedSubmitterExtensions(
         IndentWriter indent,
         DamlTemplate template,
-        IReadOnlyList<DamlField> fields,
+        IReadOnlyList<DamlFieldDefinition> fields,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         var className = SanitizeIdentifier(template.Name);
@@ -181,7 +181,7 @@ public sealed partial class CSharpCodeGenerator
     /// </summary>
     private static DamlPartyAnalysis ValidatePayloadParties(
         DamlPartyAnalysis analysis,
-        IReadOnlyDictionary<string, DamlField> partyFields)
+        IReadOnlyDictionary<string, DamlFieldDefinition> partyFields)
     {
         if (analysis.Source != DamlPartySource.Static)
         {

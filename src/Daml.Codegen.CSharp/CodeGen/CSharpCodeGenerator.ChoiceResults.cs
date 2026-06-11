@@ -167,6 +167,8 @@ public sealed partial class CSharpCodeGenerator
     /// <paramref name="template"/> whose return type carries one or more
     /// <c>ContractId T</c>s. See <see cref="ExtractCreatedSlots"/>.
     /// </summary>
+    /// <param name="indent">Writer positioned at the emission point in the template's file.</param>
+    /// <param name="template">The template whose choices are scanned for created-contract slots.</param>
     /// <param name="moduleNamespace">
     /// Fully-qualified C# namespace of the emitted template. Used to <c>global::</c>-qualify
     /// in-package template references inside the projector body so positional record
@@ -241,7 +243,7 @@ public sealed partial class CSharpCodeGenerator
         IndentWriter indent,
         DamlTemplate template,
         string templateClassName,
-        IReadOnlyList<DamlField> fields,
+        IReadOnlyList<DamlFieldDefinition> fields,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
         if (!TemplateHasEmittableAsyncExercisers(template, dataTypes))

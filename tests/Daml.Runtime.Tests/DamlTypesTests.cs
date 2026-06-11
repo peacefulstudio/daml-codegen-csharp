@@ -40,6 +40,23 @@ public class DamlTypesTests
     }
 
     [Fact]
+    public void DamlNumeric_equality_should_compare_value_only_ignoring_scale()
+    {
+        var nonDefaultScale = new DamlNumeric(1.5m, 38);
+        var defaultScale = new DamlNumeric(1.5m);
+
+        nonDefaultScale.Should().Be(defaultScale,
+            "Scale is not serialized and deserialization reconstructs the default, so it must not participate in equality");
+        nonDefaultScale.GetHashCode().Should().Be(defaultScale.GetHashCode());
+    }
+
+    [Fact]
+    public void DamlNumeric_equality_should_still_distinguish_different_values()
+    {
+        new DamlNumeric(1.5m, 38).Should().NotBe(new DamlNumeric(2.5m, 38));
+    }
+
+    [Fact]
     public void DamlNumeric_should_support_implicit_conversions()
     {
         // Arrange
@@ -533,6 +550,27 @@ public class DamlTypesTests
         map.Entries[0].Value.As<DamlText>().Value.Should().Be("one");
         map.Entries[1].Key.As<DamlInt64>().Value.Should().Be(2);
         map.Entries[1].Value.As<DamlText>().Value.Should().Be("two");
+    }
+
+    [Fact]
+    public void DamlGenMap_Create_should_throw_on_structurally_equal_duplicate_keys()
+    {
+        var act = () => DamlGenMap.Create(
+            (new DamlText("k"), new DamlInt64(1)),
+            (new DamlText("k"), new DamlInt64(2)));
+
+        act.Should().Throw<ArgumentException>().WithMessage("*duplicate*",
+            "DamlTextMap.Create rejects duplicate keys, and GenMap keys are unique on the ledger too");
+    }
+
+    [Fact]
+    public void DamlGenMap_Create_should_accept_distinct_keys_of_equal_shape()
+    {
+        var act = () => DamlGenMap.Create(
+            (new DamlText("k1"), new DamlInt64(1)),
+            (new DamlText("k2"), new DamlInt64(2)));
+
+        act.Should().NotThrow();
     }
 
     [Fact]

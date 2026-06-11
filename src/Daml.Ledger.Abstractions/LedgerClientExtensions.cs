@@ -15,7 +15,7 @@ public static class LedgerClientExtensions
 {
     /// <summary>
     /// Exercises a choice and returns the typed result. Throws
-    /// <see cref="InvalidOperationException"/> on Daml or infrastructure errors.
+    /// <see cref="LedgerOperationException"/> on Daml or infrastructure errors.
     /// For structured error handling, use
     /// <see cref="ILedgerClient.TryExerciseAsync{TResult}(ExerciseCommand,Party,string?,CancellationToken)"/> instead.
     /// </summary>
@@ -27,13 +27,13 @@ public static class LedgerClientExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
-        var outcome = await client.TryExerciseAsync<TResult>(command, actAs, workflowId, cancellationToken);
+        var outcome = await client.TryExerciseAsync<TResult>(command, actAs, workflowId, cancellationToken).ConfigureAwait(false);
         return outcome.GetResultOrThrow();
     }
 
     /// <summary>
     /// Exercises a choice using a multi-party <see cref="SubmitterInfo"/> and returns
-    /// the typed result. Throws <see cref="InvalidOperationException"/> on error.
+    /// the typed result. Throws <see cref="LedgerOperationException"/> on error.
     /// </summary>
     public static async Task<TResult> ExerciseAsync<TResult>(
         this ILedgerClient client,
@@ -43,13 +43,13 @@ public static class LedgerClientExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
-        var outcome = await client.TryExerciseAsync<TResult>(command, submitter, workflowId, cancellationToken);
+        var outcome = await client.TryExerciseAsync<TResult>(command, submitter, workflowId, cancellationToken).ConfigureAwait(false);
         return outcome.GetResultOrThrow();
     }
 
     /// <summary>
     /// Exercises a choice without returning a result. Throws
-    /// <see cref="InvalidOperationException"/> on Daml or infrastructure errors.
+    /// <see cref="LedgerOperationException"/> on Daml or infrastructure errors.
     /// <c>One</c>, <c>None</c>, and <c>Many</c> outcomes are all treated as success —
     /// a void caller has discarded the result and no distinction between them is needed.
     /// Use <see cref="ILedgerClient.TryExerciseAsync{TResult}(ExerciseCommand,Party,string?,CancellationToken)"/>
@@ -68,13 +68,13 @@ public static class LedgerClientExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
-        var outcome = await client.TryExerciseAsync<object>(command, actAs, workflowId, cancellationToken);
+        var outcome = await client.TryExerciseAsync<object>(command, actAs, workflowId, cancellationToken).ConfigureAwait(false);
         outcome.ThrowIfError();
     }
 
     /// <summary>
     /// Exercises a choice using a multi-party <see cref="SubmitterInfo"/> without
-    /// returning a result. Throws <see cref="InvalidOperationException"/> on error.
+    /// returning a result. Throws <see cref="LedgerOperationException"/> on error.
     /// <c>One</c>, <c>None</c>, and <c>Many</c> outcomes are all treated as success.
     /// </summary>
     /// <remarks>
@@ -90,7 +90,7 @@ public static class LedgerClientExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
-        var outcome = await client.TryExerciseAsync<object>(command, submitter, workflowId, cancellationToken);
+        var outcome = await client.TryExerciseAsync<object>(command, submitter, workflowId, cancellationToken).ConfigureAwait(false);
         outcome.ThrowIfError();
     }
 
@@ -98,15 +98,13 @@ public static class LedgerClientExtensions
         outcome switch
         {
             ExerciseOutcome<T>.One success => success.Result,
-            ExerciseOutcome<T>.None => throw new InvalidOperationException(
+            ExerciseOutcome<T>.None => throw new LedgerOperationException(
                 "TryExerciseAsync returned no result (None); expected exactly one. Use TryExerciseAsync for structured handling."),
-            ExerciseOutcome<T>.Many m => throw new InvalidOperationException(
+            ExerciseOutcome<T>.Many m => throw new LedgerOperationException(
                 $"TryExerciseAsync returned Many ({m.Count} results); use TryExerciseForCreatedAsync or inspect the TransactionResult directly."),
-            ExerciseOutcome<T>.DamlError e => throw new InvalidOperationException(
-                $"Daml error [{e.Category}/{e.ErrorId}]: {e.Message}"),
-            ExerciseOutcome<T>.InfraError e => throw new InvalidOperationException(
-                $"Infrastructure error [{e.StatusCode}]: {e.Message}"),
-            _ => throw new InvalidOperationException(
+            ExerciseOutcome<T>.DamlError e => throw e.ToException(),
+            ExerciseOutcome<T>.InfraError e => throw e.ToException(),
+            _ => throw new LedgerOperationException(
                 $"Unexpected outcome {outcome.GetType().Name} from TryExerciseAsync."),
         };
 
@@ -115,9 +113,16 @@ public static class LedgerClientExtensions
         switch (outcome)
         {
             case ExerciseOutcome<T>.DamlError e:
-                throw new InvalidOperationException($"Daml error [{e.Category}/{e.ErrorId}]: {e.Message}");
+                throw e.ToException();
             case ExerciseOutcome<T>.InfraError e:
-                throw new InvalidOperationException($"Infrastructure error [{e.StatusCode}]: {e.Message}");
+                throw e.ToException();
         }
     }
+
+    private static LedgerOperationException ToException<T>(this ExerciseOutcome<T>.DamlError error) =>
+        new($"Daml error [{error.Category}/{error.ErrorId}]: {error.Message}",
+            error.Category, error.ErrorId, error.Metadata);
+
+    private static LedgerOperationException ToException<T>(this ExerciseOutcome<T>.InfraError error) =>
+        new($"Infrastructure error [{error.StatusCode}]: {error.Message}", error.StatusCode);
 }

@@ -5,7 +5,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using FluentAssertions;
-using Richtypes;
+using Daml.Codegen.Testing.Conformance.Richtypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;

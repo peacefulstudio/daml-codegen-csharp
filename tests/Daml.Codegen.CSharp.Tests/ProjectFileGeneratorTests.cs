@@ -3,6 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using System.Reflection;
 using FluentAssertions;
 using Xunit;
 
@@ -17,7 +18,6 @@ public class ProjectFileGeneratorTests
     {
         return new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = targetFramework,
             RuntimePackageVersion = runtimeVersion,
             EnableNullableReferenceTypes = enableNullable,
@@ -143,7 +143,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             GenerateProjectFile = true,
             EmitterCounter = -1,
@@ -162,7 +161,7 @@ public class ProjectFileGeneratorTests
         var act = () => generator.GenerateProjectFile(package);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*EmitterCounter*ADR 0002*");
+            .WithMessage("*EmitterCounter*M.m.p.r*");
     }
 
     [Fact]
@@ -183,7 +182,7 @@ public class ProjectFileGeneratorTests
         var act = () => generator.GenerateProjectFile(package);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*3-part*ADR 0002*");
+            .WithMessage("*3-part*M.m.p.r*");
     }
 
     [Fact]
@@ -191,7 +190,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             GenerateProjectFile = true,
             EmitterCounter = 7,
@@ -237,7 +235,7 @@ public class ProjectFileGeneratorTests
     }
 
     [Fact]
-    public void GenerateProjectFile_should_use_wildcard_version_when_runtime_version_not_specified()
+    public void GenerateProjectFile_should_default_runtime_reference_to_the_emitter_lockstep_version()
     {
         // Arrange
         var options = CreateOptions(runtimeVersion: null);
@@ -256,7 +254,19 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Daml.Runtime\" Version=\"*\" />");
+        var lockstepVersion = typeof(ProjectFileGenerator).Assembly
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Split('+')[0];
+        file.Content.Should().Contain(
+            $"<PackageReference Include=\"Daml.Runtime\" Version=\"{lockstepVersion}\" />",
+            "with --runtime-version omitted, the generated project must pin the runtime that is lockstep-versioned with this emitter");
+        lockstepVersion.Should().NotContain("+",
+            "NuGet version ranges reject SemVer build metadata, so the source-revision suffix must be stripped");
+        lockstepVersion.Should().MatchRegex(
+            @"^\d+\.\d+\.\d+(\.\d+)?(-[0-9A-Za-z][0-9A-Za-z.-]*)?$",
+            "the emitted reference must parse as a NuGet package version");
+        file.Content.Should().NotContain("Version=\"*\"",
+            "a floating * matches stable versions only and fails restore when the runtime ships as a prerelease");
     }
 
     [Fact]
@@ -408,6 +418,28 @@ public class ProjectFileGeneratorTests
     }
 
     [Fact]
+    public void GenerateProjectFile_should_xml_escape_the_package_name_in_the_description()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my<package>&co",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<Description>C# bindings for Daml package my&lt;package&gt;&amp;co</Description>",
+            "a package name is foreign input and must be XML-escaped like the sibling fields");
+    }
+
+    [Fact]
     public void GenerateProjectFile_should_emit_apache_2_0_license_expression_by_default()
     {
         var options = CreateOptions();
@@ -432,7 +464,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             GenerateProjectFile = true,
             PackageLicenseExpression = "MIT",
@@ -458,7 +489,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             GenerateProjectFile = true,
             PackageLicenseExpression = "MIT & Apache-2.0 <or> later",
@@ -698,7 +728,7 @@ public class ProjectFileGeneratorTests
                         new DamlTemplate
                         {
                             Name = "KeyedTemplate",
-                            Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                            Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                             Choices = [],
                             Key = new DamlPrimitiveType(DamlPrimitive.Text),
                         },
@@ -743,7 +773,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0 & <evil>",
             GenerateProjectFile = true,
         };
@@ -770,7 +799,6 @@ public class ProjectFileGeneratorTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             RuntimePackageVersion = "1.0.0\"injected",
             GenerateProjectFile = true,

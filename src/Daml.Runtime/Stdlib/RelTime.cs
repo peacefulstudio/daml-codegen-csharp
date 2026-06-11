@@ -12,10 +12,12 @@ namespace Daml.Runtime.Stdlib;
 /// </summary>
 public sealed record RelTime(long Microseconds) : IDamlRecord
 {
+    /// <summary>Encodes this RelTime as the single-field <c>microseconds</c> wire record.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
         DamlField.Create("microseconds", new DamlInt64(Microseconds))
     );
 
+    /// <summary>Decodes a RelTime from its <c>microseconds</c> wire record.</summary>
     public static RelTime FromRecord(DamlRecord record) => new(
         Microseconds: record.GetRequiredField("microseconds").As<DamlInt64>().Value
     );

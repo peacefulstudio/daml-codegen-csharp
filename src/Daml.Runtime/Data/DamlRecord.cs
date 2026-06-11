@@ -35,6 +35,29 @@ public sealed record DamlRecord(
     /// </summary>
     public DamlValue GetRequiredField(string name) =>
         GetField(name) ?? throw new InvalidOperationException($"Required field '{name}' not found in record.");
+
+    /// <summary>
+    /// Compares two records by <see cref="RecordId"/> and field-by-field content.
+    /// The record-synthesized equality compares the backing
+    /// <see cref="IReadOnlyList{T}"/> by reference — a footgun for a value type —
+    /// so we override it with structural element comparison.
+    /// </summary>
+    public bool Equals(DamlRecord? other) =>
+        other is not null
+        && Equals(RecordId, other.RecordId)
+        && Fields.SequenceEqual(other.Fields);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(RecordId);
+        foreach (var field in Fields)
+        {
+            hash.Add(field);
+        }
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>

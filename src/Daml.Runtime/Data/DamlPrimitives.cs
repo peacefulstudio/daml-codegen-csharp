@@ -11,19 +11,51 @@ namespace Daml.Runtime.Data;
 /// </summary>
 public sealed record DamlInt64(long Value) : DamlValue
 {
+    /// <summary>Unwraps the underlying 64-bit integer.</summary>
     public static implicit operator long(DamlInt64 value) => value.Value;
+
+    /// <summary>Wraps a 64-bit integer as a Daml Int value.</summary>
     public static implicit operator DamlInt64(long value) => new(value);
 }
 
 /// <summary>
-/// Represents a Daml Numeric value (arbitrary precision decimal).
+/// Represents a Daml Numeric value (fixed-point decimal).
 /// </summary>
+/// <remarks>
+/// A Daml Numeric carries up to 38 significant digits on the ledger, but the
+/// backing <see cref="decimal"/> holds at most 28-29. Ledger values that need
+/// more digits cannot be represented losslessly by this type:
+/// <see cref="Serialization.DamlJsonSerializer"/> rounds excess fractional
+/// precision to the nearest representable <see cref="decimal"/> and throws
+/// <see cref="System.Text.Json.JsonException"/> for magnitudes beyond
+/// <see cref="decimal.MaxValue"/>.
+/// <para>
+/// Equality compares <see cref="Value"/> only: <see cref="Scale"/> is not part
+/// of the wire format (<see cref="Serialization.DamlJsonSerializer"/> never
+/// writes it and deserialization reconstructs the default of 10), so two
+/// Numerics with the same value but different scales are equal. The
+/// <see cref="Scale"/> property is retained as the hook for future
+/// scale-padded reading.
+/// </para>
+/// </remarks>
 /// <param name="Value">The decimal value.</param>
 /// <param name="Scale">The scale (number of decimal places) of the numeric.</param>
 public sealed record DamlNumeric(decimal Value, int Scale = 10) : DamlValue
 {
+    /// <summary>Unwraps the underlying decimal, discarding the Daml scale.</summary>
     public static implicit operator decimal(DamlNumeric value) => value.Value;
+
+    /// <summary>Wraps a decimal as a Daml Numeric with the default scale of 10.</summary>
     public static implicit operator DamlNumeric(decimal value) => new(value);
+
+    /// <summary>
+    /// Compares by <see cref="Value"/> only; <see cref="Scale"/> never reaches the
+    /// wire, so including it would break round-trip equality for any non-default scale.
+    /// </summary>
+    public bool Equals(DamlNumeric? other) => other is not null && Value == other.Value;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => Value.GetHashCode();
 }
 
 /// <summary>
@@ -31,7 +63,10 @@ public sealed record DamlNumeric(decimal Value, int Scale = 10) : DamlValue
 /// </summary>
 public sealed record DamlText(string Value) : DamlValue
 {
+    /// <summary>Unwraps the underlying string.</summary>
     public static implicit operator string(DamlText value) => value.Value;
+
+    /// <summary>Wraps a string as a Daml Text value.</summary>
     public static implicit operator DamlText(string value) => new(value);
 }
 
@@ -40,7 +75,10 @@ public sealed record DamlText(string Value) : DamlValue
 /// </summary>
 public sealed record DamlBool(bool Value) : DamlValue
 {
+    /// <summary>Unwraps the underlying boolean.</summary>
     public static implicit operator bool(DamlBool value) => value.Value;
+
+    /// <summary>Wraps a boolean as a Daml Bool value.</summary>
     public static implicit operator DamlBool(bool value) => new(value);
 }
 
@@ -49,6 +87,7 @@ public sealed record DamlBool(bool Value) : DamlValue
 /// </summary>
 public sealed record DamlUnit : DamlValue
 {
+    /// <summary>The single Unit value; Unit carries no data, so one shared instance suffices.</summary>
     public static readonly DamlUnit Instance = new();
     private DamlUnit() { }
 }
@@ -70,7 +109,10 @@ public sealed record DamlDate(DateOnly Value) : DamlValue
     public int DaysSinceEpoch =>
         Value.DayNumber - DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
 
+    /// <summary>Unwraps the underlying calendar date.</summary>
     public static implicit operator DateOnly(DamlDate value) => value.Value;
+
+    /// <summary>Wraps a calendar date as a Daml Date value.</summary>
     public static implicit operator DamlDate(DateOnly value) => new(value);
 }
 
@@ -91,7 +133,10 @@ public sealed record DamlTimestamp(DateTimeOffset Value) : DamlValue
     public long MicrosecondsSinceEpoch =>
         (Value - DateTimeOffset.UnixEpoch).Ticks / 10;
 
+    /// <summary>Unwraps the underlying timestamp.</summary>
     public static implicit operator DateTimeOffset(DamlTimestamp value) => value.Value;
+
+    /// <summary>Wraps a timestamp as a Daml Time value. The conversion preserves the full 100ns tick precision; the ledger truncates to microseconds.</summary>
     public static implicit operator DamlTimestamp(DateTimeOffset value) => new(value);
 }
 
@@ -106,25 +151,37 @@ public readonly record struct Party
 {
     private readonly string? _id;
 
+    /// <summary>
+    /// The full party identifier string (e.g. "Alice::1220abcd..."); throws
+    /// <see cref="InvalidOperationException"/> for a default-constructed Party.
+    /// </summary>
     public string Id =>
         _id ?? throw new InvalidOperationException("Cannot access Id of a default (uninitialized) Party.");
 
+    /// <summary>
+    /// Creates a Party from its identifier string; rejects null or whitespace ids.
+    /// </summary>
     public Party(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id, nameof(id));
         _id = id;
     }
 
+    /// <summary>Extracts the party identifier; explicit so a Party is never silently used as text.</summary>
     public static explicit operator string(Party party) =>
         party._id ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) Party to string.");
 
+    /// <summary>Parses a party identifier; explicit so arbitrary strings never silently become parties.</summary>
     public static explicit operator Party(string id) => new(id);
 
+    /// <summary>Returns the party identifier, or a placeholder for a default-constructed Party.</summary>
     public override string ToString() => _id ?? "<uninitialized Party>";
 
+    /// <summary>Converts this Party to its wire-level <see cref="DamlParty"/> carrier.</summary>
     public DamlParty ToDamlValue() =>
         new(_id ?? throw new InvalidOperationException("Cannot serialize a default (uninitialized) Party."));
 
+    /// <summary>Builds a validated Party from a wire-level <see cref="DamlParty"/> carrier.</summary>
     public static Party FromDamlValue(DamlParty value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -194,8 +251,12 @@ internal sealed class PartyJsonConverter : JsonConverter<Party>
 /// </summary>
 public sealed record DamlParty(string Value) : DamlValue
 {
+    /// <summary>Unwraps the underlying party identifier string.</summary>
     public static implicit operator string(DamlParty value) => value.Value;
+
+    /// <summary>Wraps a party identifier string as a wire-level Daml Party value.</summary>
     public static implicit operator DamlParty(string value) => new(value);
 
+    /// <summary>Returns the party identifier string.</summary>
     public override string ToString() => Value;
 }

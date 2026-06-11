@@ -18,9 +18,8 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// <para><b>Single-writer precondition.</b> Instances are not thread-safe and
 /// the on-disk file uses no cross-process locking. Callers must serialize
 /// access to a given store path — both across threads in one process and
-/// across processes. The M1 path satisfies this naturally: the CI publish
-/// workflow that owns the store path runs as a single job, sequentially per
-/// package. If concurrent writers were ever allowed against the same path,
+/// across processes. The release pipeline that owns the store path satisfies
+/// this naturally: it runs as a single job, sequentially per package. If concurrent writers were ever allowed against the same path,
 /// the last-writer-wins truncating write would silently drop a revision
 /// bump and two distinct content hashes could end up sharing the same
 /// 4th-segment value.</para>
@@ -30,7 +29,7 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// leaves the previous valid file intact rather than truncating it to
 /// empty.</para>
 /// </remarks>
-public sealed class JsonReleaseCounterStore
+internal sealed class JsonReleaseCounterStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

@@ -279,7 +279,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         if (_currentArchive is null)
         {
             throw new InvalidOperationException(
-                $"Cross-package type ref {typeRef.Module}:{typeRef.Name} (package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}…) cannot be resolved — no archive context. Codegen requires a DarArchive that includes every transitively-referenced package.");
+                $"Cross-package type ref {typeRef.Module}:{typeRef.Name} (package {typeRef.PackageId[..Math.Min(16, typeRef.PackageId.Length)]}…) cannot be resolved — no archive context. The IntermediateDar input must include every transitively-referenced package.");
         }
 
         var foreignPkg = _currentArchive.GetPackageById(typeRef.PackageId);
@@ -522,7 +522,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         DamlPackage package,
         DamlModule module,
         DamlTemplate template,
-        IReadOnlyList<DamlField> fields,
+        IReadOnlyList<DamlFieldDefinition> fields,
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         string moduleNamespace)
     {
@@ -1333,7 +1333,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine();
     }
 
-    private void WriteRecordParameters(IndentWriter indent, IReadOnlyList<DamlField> fields)
+    private void WriteRecordParameters(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
     {
         var first = true;
         foreach (var field in fields)
@@ -1351,7 +1351,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         }
     }
 
-    private void WriteProperties(IndentWriter indent, IReadOnlyList<DamlField> fields)
+    private void WriteProperties(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
     {
         foreach (var field in fields)
         {
@@ -1369,7 +1369,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         }
     }
 
-    private void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlField> fields)
+    private void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
     {
         // Wording is "this value" rather than "this template" because the same
         // method is emitted for templates, plain records, and choice argument
@@ -1403,7 +1403,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine();
     }
 
-    private void WriteFromRecordMethod(IndentWriter indent, string className, IReadOnlyList<DamlField> fields, IReadOnlyDictionary<string, DamlDataType>? dataTypes = null)
+    private void WriteFromRecordMethod(IndentWriter indent, string className, IReadOnlyList<DamlFieldDefinition> fields, IReadOnlyDictionary<string, DamlDataType>? dataTypes = null)
     {
         indent.AppendLine("/// <summary>Creates an instance from a DamlRecord.</summary>");
 
@@ -1463,7 +1463,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.AppendLine();
     }
 
-    private (string TypeName, IReadOnlyList<DamlField>? Fields, bool IsFallback, bool IsNestedTemplateArg) GetChoiceArgumentInfo(
+    private (string TypeName, IReadOnlyList<DamlFieldDefinition>? Fields, bool IsFallback, bool IsNestedTemplateArg) GetChoiceArgumentInfo(
         DamlChoice choice,
         IReadOnlyDictionary<string, DamlDataType> dataTypes)
     {
@@ -1673,7 +1673,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     /// Emits the C# placeholder for a Daml interface declaration. The Daml-LF emits a
     /// same-named empty record alongside every <c>interface I where ...</c> so that
     /// <c>ContractId I</c> can be expressed at the type level. We surface that record
-    /// as a sealed record implementing <see cref="ITemplate"/> with throwing static
+    /// as a sealed record implementing <see cref="Daml.Runtime.Contracts.ITemplate"/> with throwing static
     /// metadata: it lets <c>ContractId&lt;I&gt;</c> compile (the runtime constraint is
     /// <c>where T : ITemplate</c>) but loudly fails any code path that tries to read
     /// <c>I.TemplateId</c> directly — which would be a logic error, since interface
@@ -1819,11 +1819,13 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("{");
             indent.Indent();
 
+            indent.AppendLine("/// <inheritdoc />");
             indent.AppendLine($"public override string Tag => \"{ctor.Name}\";");
             indent.AppendLine();
             var payload = hasArg
                 ? GetToValueConversion(ctor.ArgumentType!, "Value")
                 : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
+            indent.AppendLine("/// <inheritdoc />");
             indent.AppendLine($"public override {_qualifier.Qualify("DamlVariant", _currentNamespace)} ToVariant() => {_qualifier.Qualify("DamlVariant", _currentNamespace)}.Create(\"{ctor.Name}\", {payload});");
 
             indent.Dedent();

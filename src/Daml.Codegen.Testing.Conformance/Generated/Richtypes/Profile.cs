@@ -7,7 +7,7 @@
 
 using Daml.Runtime.Data;
 
-namespace Richtypes;
+namespace Daml.Codegen.Testing.Conformance.Richtypes;
 
 /// <summary>
 /// Generated from Daml record Profile

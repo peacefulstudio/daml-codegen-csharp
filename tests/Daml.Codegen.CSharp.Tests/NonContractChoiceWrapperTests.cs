@@ -23,8 +23,6 @@ public class NonContractChoiceWrapperTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -89,7 +87,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Oracle",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -108,7 +106,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Oracle",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -150,7 +148,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Reporter",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -169,15 +167,15 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Reporter",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Report",
                     Definition = new DamlRecordDefinition(
                         [
-                            new DamlField("twap", new DamlPrimitiveType(DamlPrimitive.Numeric)),
-                            new DamlField("samples", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                            new DamlFieldDefinition("twap", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+                            new DamlFieldDefinition("samples", new DamlPrimitiveType(DamlPrimitive.Int64)),
                         ]),
                 }
             ],
@@ -202,7 +200,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         // A non-consuming `()`-returning choice that *isn't* the synthetic Archive.
@@ -224,7 +222,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Sink",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -254,7 +252,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -275,7 +273,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Sink",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -304,7 +302,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -325,7 +323,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Sink",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -353,7 +351,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -374,7 +372,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Sink",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -399,7 +397,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Oracle",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -420,7 +418,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Oracle",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -445,7 +443,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Factory",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -466,13 +464,13 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Factory",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Coin",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -515,7 +513,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Factory",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -538,13 +536,13 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Factory",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Coin",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -573,7 +571,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Item",
-                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -592,7 +590,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Item",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -627,7 +625,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Item",
-                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -646,7 +644,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Item",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -694,7 +692,7 @@ public class NonContractChoiceWrapperTests
                         {
                             Name = "Archive",
                             Definition = new DamlRecordDefinition(
-                                [new DamlField("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                                [new DamlFieldDefinition("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
                         }
                     ],
                     Interfaces = [],
@@ -711,7 +709,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Item",
-                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -730,7 +728,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Item",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -784,7 +782,7 @@ public class NonContractChoiceWrapperTests
                         {
                             Name = "Archive",
                             Definition = new DamlRecordDefinition(
-                                [new DamlField("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                                [new DamlFieldDefinition("reason", new DamlPrimitiveType(DamlPrimitive.Text))]),
                         }
                     ],
                     Interfaces = [],
@@ -855,7 +853,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "OrderRequest",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -878,7 +876,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -897,7 +895,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Trader",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -935,7 +933,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "TransferRequest",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                        [new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
                 }
             ],
             Interfaces = [],
@@ -1043,7 +1041,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Quote",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("text", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("text", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -1066,7 +1064,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1085,13 +1083,13 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Trader",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Quote",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("local", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("local", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -1127,7 +1125,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1150,7 +1148,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Sink",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -1174,7 +1172,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1193,7 +1191,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Trader",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -1217,7 +1215,7 @@ public class NonContractChoiceWrapperTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1236,7 +1234,7 @@ public class NonContractChoiceWrapperTests
                 {
                     Name = "Trader",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -1250,17 +1248,16 @@ public class NonContractChoiceWrapperTests
     }
 
     [Fact]
-    public void Generate_csproj_should_not_reference_Canton_Ledger_Grpc_Client()
+    public void Generate_csproj_should_not_reference_a_transport_specific_grpc_package()
     {
         // After the lift the codegen-emitted wrappers reference
         // `ILedgerClient`, `TransactionResult`, and `ExerciseOutcome<>` from
         // the transport-agnostic `Daml.Ledger.Abstractions` package, not from
-        // `Canton.Ledger.Grpc.Client`. The csproj generator must not pull
+        // a transport-specific gRPC client package. The csproj generator must not pull
         // pure-projector consumers into a gRPC dep just to compile the
         // non-CID exerciser wrappers.
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             TargetFramework = "net10.0",
             GenerateProjectFile = true,
         };
@@ -1277,7 +1274,7 @@ public class NonContractChoiceWrapperTests
 
         var file = generator.GenerateProjectFile(package);
 
-        file.Content.Should().NotContain("Canton.Ledger.Grpc.Client");
+        file.Content.Should().NotContain("Canton.Ledger.");
         file.Content.Should().Contain("<PackageReference Include=\"Daml.Ledger.Abstractions\"");
     }
 }

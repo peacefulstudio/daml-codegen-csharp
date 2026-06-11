@@ -712,6 +712,72 @@ public class DamlJsonSerializerTests
         record.GetRequiredField("note").Should().Be(new DamlText(text));
     }
 
+    public static TheoryData<string> CanonicalNumericTextBeyondDecimalRange() => new()
+    {
+        new string('9', 38) + ".0",
+        "-" + new string('9', 38) + ".0",
+        "79228162514264337593543950336.0",
+    };
+
+    [Theory]
+    [MemberData(nameof(CanonicalNumericTextBeyondDecimalRange))]
+    public void DeserializeRecord_should_throw_JsonException_for_canonical_numeric_text_beyond_decimal_range(string text)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = text });
+
+        var act = () => DamlJsonSerializer.DeserializeRecord(json);
+
+        act.Should().Throw<JsonException>().WithMessage($"*{text}*");
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_for_canonical_numeric_text_beyond_decimal_range()
+    {
+        var thirtyEightNines = new string('9', 38) + ".0";
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = thirtyEightNines });
+
+        var act = () => DamlJsonSerializer.Deserialize(json);
+
+        act.Should().Throw<JsonException>().WithMessage($"*{thirtyEightNines}*");
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_round_canonical_numeric_text_beyond_decimal_precision_per_documented_bound()
+    {
+        var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = thirtyEightSignificantDigits });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("amount").As<DamlNumeric>().Value
+            .Should().Be(decimal.Parse(thirtyEightSignificantDigits, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_round_raw_json_number_beyond_decimal_precision_per_documented_bound()
+    {
+        var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
+        var json = $"{{\"amount\":{thirtyEightSignificantDigits}}}";
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("amount").As<DamlNumeric>().Value
+            .Should().Be(decimal.Parse(thirtyEightSignificantDigits, System.Globalization.CultureInfo.InvariantCulture),
+                "a raw JSON number takes the TryGetDecimal path, which rounds excess fractional precision to the nearest representable decimal");
+    }
+
+    [Fact]
+    public void RoundTrip_should_preserve_equality_for_DamlNumeric_with_non_default_scale()
+    {
+        var original = new DamlNumeric(123.456789m, 38);
+
+        var json = DamlJsonSerializer.Serialize((DamlValue)original);
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().Be(original,
+            "Scale is not part of the wire format, so a Numeric constructed with a non-default scale must still round-trip equal");
+    }
+
     [Fact]
     public void RoundTrip_value_overload_should_preserve_DamlNumeric()
     {
@@ -903,6 +969,9 @@ public class DamlJsonSerializerTests
         act.Should().Throw<JsonException>().WithMessage("*null*");
     }
 
+    private const int SupportedNestingDepth = 128;
+    private const int DamlLfValueDepthLimit = 100;
+
     private static DamlRecord NestRecord(int levels)
     {
         DamlValue value = new DamlInt64(1);
@@ -913,18 +982,15 @@ public class DamlJsonSerializerTests
         return (DamlRecord)value;
     }
 
-    [Fact]
-    public void Serialize_should_throw_JsonException_when_nesting_exceeds_supported_depth()
-    {
-        var act = () => DamlJsonSerializer.Serialize(NestRecord(100));
-
-        act.Should().Throw<JsonException>();
-    }
+    private static string NestJson(int levels) =>
+        string.Concat(Enumerable.Repeat("""{"inner":""", levels))
+        + "1"
+        + new string('}', levels);
 
     [Fact]
-    public void Serialize_should_allow_nesting_at_exactly_the_supported_depth_matching_SystemTextJson_MaxDepth()
+    public void Serialize_should_allow_nesting_at_exactly_the_supported_depth()
     {
-        var act = () => DamlJsonSerializer.Serialize(NestRecord(64));
+        var act = () => DamlJsonSerializer.Serialize(NestRecord(SupportedNestingDepth));
 
         act.Should().NotThrow();
     }
@@ -932,7 +998,7 @@ public class DamlJsonSerializerTests
     [Fact]
     public void Serialize_should_throw_JsonException_one_level_beyond_the_supported_depth()
     {
-        var act = () => DamlJsonSerializer.Serialize(NestRecord(65));
+        var act = () => DamlJsonSerializer.Serialize(NestRecord(SupportedNestingDepth + 1));
 
         act.Should().Throw<JsonException>();
     }
@@ -940,13 +1006,84 @@ public class DamlJsonSerializerTests
     [Fact]
     public void Deserialize_should_throw_JsonException_when_nesting_exceeds_supported_depth()
     {
-        var json = string.Concat(Enumerable.Repeat("""{"inner":""", 100))
-            + "1"
-            + new string('}', 100);
-
-        var act = () => DamlJsonSerializer.Deserialize(json);
+        var act = () => DamlJsonSerializer.Deserialize(NestJson(SupportedNestingDepth + 1));
 
         act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void RoundTrip_should_support_values_at_the_DamlLf_depth_limit()
+    {
+        var json = DamlJsonSerializer.Serialize(NestRecord(DamlLfValueDepthLimit));
+        var deserialized = DamlJsonSerializer.Deserialize(json);
+
+        deserialized.Should().Be(NestRecord(DamlLfValueDepthLimit));
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_support_json_at_the_DamlLf_depth_limit()
+    {
+        var act = () => DamlJsonSerializer.DeserializeRecord(NestJson(DamlLfValueDepthLimit));
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_throw_JsonException_for_duplicate_json_properties()
+    {
+        var act = () => DamlJsonSerializer.DeserializeRecord("""{"amount":"1.0","amount":"2.0"}""");
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_for_duplicate_json_properties()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("""{"amount":"1.0","amount":"2.0"}""");
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_for_duplicate_json_properties_in_nested_object()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("""{"outer":{"a":1,"a":2}}""");
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_assume_utc_for_offsetless_canonical_timestamp()
+    {
+        var record = DamlJsonSerializer.DeserializeRecord("""{"at":"2023-06-15T12:30:45"}""");
+
+        var timestamp = record.GetRequiredField("at").As<DamlTimestamp>().Value;
+        timestamp.Offset.Should().Be(TimeSpan.Zero);
+        timestamp.Should().Be(new DateTimeOffset(2023, 6, 15, 12, 30, 45, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void Serialize_should_throw_JsonException_for_duplicate_DamlField_labels()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("amount", new DamlNumeric(1.0m)),
+            DamlField.Create("amount", new DamlNumeric(2.0m)));
+
+        var act = () => DamlJsonSerializer.Serialize(record);
+
+        act.Should().Throw<JsonException>().WithMessage("*amount*");
+    }
+
+    [Fact]
+    public void Serialize_value_overload_should_throw_JsonException_for_duplicate_DamlField_labels()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("amount", new DamlNumeric(1.0m)),
+            DamlField.Create("amount", new DamlNumeric(2.0m)));
+
+        var act = () => DamlJsonSerializer.Serialize((DamlValue)record);
+
+        act.Should().Throw<JsonException>().WithMessage("*amount*");
     }
 
     [Fact]

@@ -8,15 +8,15 @@ using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
 
-public class SpliceNuGetVersionTests : IDisposable
+public class NuGetVersionResolverTests : IDisposable
 {
     private readonly string _storePath;
 
-    public SpliceNuGetVersionTests()
+    public NuGetVersionResolverTests()
     {
         _storePath = Path.Combine(
             Path.GetTempPath(),
-            $"splice-version-{Guid.NewGuid():N}.json");
+            $"nuget-version-resolver-{Guid.NewGuid():N}.json");
     }
 
     public void Dispose()
@@ -30,7 +30,7 @@ public class SpliceNuGetVersionTests : IDisposable
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
-        var version = SpliceNuGetVersion.Compute(
+        var version = NuGetVersionResolver.Compute(
             packageName: "Splice.Amulet",
             intrinsicVersion: new Version(0, 1, 17),
             contentHash: "deadbeef",
@@ -45,9 +45,9 @@ public class SpliceNuGetVersionTests : IDisposable
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
-        SpliceNuGetVersion.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-a", store)
+        NuGetVersionResolver.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-a", store)
             .Should().Be(new FourPartPackageVersion(0, 1, 17, 0));
-        SpliceNuGetVersion.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-b", store)
+        NuGetVersionResolver.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-b", store)
             .Should().Be(new FourPartPackageVersion(0, 1, 17, 1));
     }
 }

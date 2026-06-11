@@ -14,8 +14,6 @@ public class ContractIdentifiersTests
     {
         options ??= new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -59,7 +57,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -68,7 +66,7 @@ public class ContractIdentifiersTests
                 new DamlDataType
                 {
                     Name = "MyTemplate",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -97,7 +95,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -130,13 +128,13 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "FirstTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 },
                 new DamlTemplate
                 {
                     Name = "SecondTemplate",
-                    Fields = [new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
@@ -171,7 +169,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "TemplateA",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -187,7 +185,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "TemplateB",
-                    Fields = [new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
@@ -226,7 +224,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -268,7 +266,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -303,7 +301,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -337,7 +335,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -372,7 +370,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -406,7 +404,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -442,7 +440,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -474,7 +472,6 @@ public class ContractIdentifiersTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             GenerateContractIdentifiers = false
         };
 
@@ -486,7 +483,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -518,7 +515,7 @@ public class ContractIdentifiersTests
                 new DamlDataType
                 {
                     Name = "SomeRecord",
-                    Definition = new DamlRecordDefinition([new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -541,7 +538,6 @@ public class ContractIdentifiersTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             UseFileScopedNamespaces = false,
             GenerateContractIdentifiers = true
         };
@@ -554,7 +550,7 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -586,7 +582,6 @@ public class ContractIdentifiersTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             RootFilter = ".*:IncludedTemplate",
             GenerateContractIdentifiers = true
         };
@@ -599,13 +594,13 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "IncludedTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 },
                 new DamlTemplate
                 {
                     Name = "ExcludedTemplate",
-                    Fields = [new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],

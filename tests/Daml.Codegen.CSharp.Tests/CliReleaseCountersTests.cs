@@ -95,7 +95,7 @@ public class CliReleaseCountersTests : IDisposable
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
         document.RootElement.EnumerateObject().Single().Value
             .GetProperty("revision").GetInt32().Should().Be(0,
-                "content-identical re-emissions must hold the revision steady per ADR 0002");
+                "content-identical re-emissions must hold the revision steady per the M.m.p.r versioning scheme");
     }
 
     [Fact]
@@ -140,6 +140,6 @@ public class CliReleaseCountersTests : IDisposable
         var segments = version.Split('.');
         segments.Should().HaveCount(4);
         segments[3].Should().Be("0",
-            "segment 4 specifically must be 0 on a first emission per ADR 0002; EndsWith(\".0\") would also match e.g. 10.0 or 0.20");
+            "segment 4 specifically must be 0 on a first emission per the M.m.p.r versioning scheme; EndsWith(\".0\") would also match e.g. 10.0 or 0.20");
     }
 }

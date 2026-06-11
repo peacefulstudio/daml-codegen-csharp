@@ -15,8 +15,6 @@ public class ChoiceCodeGenTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -61,8 +59,8 @@ public class ChoiceCodeGenTests
         // Arrange
         var transferArgFields = new[]
         {
-            new DamlField("newOwner", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+            new DamlFieldDefinition("newOwner", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
         };
 
         var module = new DamlModule
@@ -75,8 +73,8 @@ public class ChoiceCodeGenTests
                     Name = "Asset",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Int64))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Int64))
                     ],
                     Choices =
                     [
@@ -97,8 +95,8 @@ public class ChoiceCodeGenTests
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Int64))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Int64))
                     ])
                 },
                 new DamlDataType
@@ -137,6 +135,68 @@ public class ChoiceCodeGenTests
     }
 
     [Fact]
+    public void GenerateNestedChoiceArgumentType_emits_indented_signature_without_stray_spaces()
+    {
+        var module = NestedTransferArgumentModule();
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar);
+        var nestedFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.Transfer.cs", StringComparison.Ordinal));
+
+        nestedFile.Should().NotBeNull("the choice argument record is emitted as a nested type in a partial template file");
+        nestedFile!.Content.Should().Contain(
+            "\n    public sealed record Transfer(Party NewOwner, decimal Amount) : IDamlRecord",
+            "the nested record signature must be indented one level and the parameter list must close without trailing whitespace");
+    }
+
+    private static DamlModule NestedTransferArgumentModule()
+    {
+        DamlFieldDefinition[] transferArgFields =
+        [
+            new DamlFieldDefinition("newOwner", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+        ];
+
+        return new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Asset",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Transfer",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "Transfer"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Asset",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                },
+                new DamlDataType
+                {
+                    Name = "Transfer",
+                    Definition = new DamlRecordDefinition(transferArgFields)
+                },
+            ],
+            Interfaces = []
+        };
+    }
+
+    [Fact]
     public void Generate_should_use_DamlUnit_for_Unit_argument()
     {
         // Arrange
@@ -148,7 +208,7 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Contract",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -166,7 +226,7 @@ public class ChoiceCodeGenTests
                 new DamlDataType
                 {
                     Name = "Contract",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -200,7 +260,7 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -218,7 +278,7 @@ public class ChoiceCodeGenTests
                 new DamlDataType
                 {
                     Name = "MyTemplate",
-                    Definition = new DamlRecordDefinition([new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -252,7 +312,7 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Factory",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -272,12 +332,12 @@ public class ChoiceCodeGenTests
                 new DamlDataType
                 {
                     Name = "Factory",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 },
                 new DamlDataType
                 {
                     Name = "CreateArgs",
-                    Definition = new DamlRecordDefinition([new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text))])
                 },
                 new DamlDataType
                 {
@@ -315,7 +375,7 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Counter",
-                    Fields = [new DamlField("count", new DamlPrimitiveType(DamlPrimitive.Int64))],
+                    Fields = [new DamlFieldDefinition("count", new DamlPrimitiveType(DamlPrimitive.Int64))],
                     Choices =
                     [
                         new DamlChoice
@@ -347,7 +407,7 @@ public class ChoiceCodeGenTests
                 new DamlDataType
                 {
                     Name = "Counter",
-                    Definition = new DamlRecordDefinition([new DamlField("count", new DamlPrimitiveType(DamlPrimitive.Int64))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("count", new DamlPrimitiveType(DamlPrimitive.Int64))])
                 }
             ],
             Interfaces = []
@@ -387,7 +447,7 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))],
+                    Fields = [new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))],
                     Choices =
                     [
                         // Local data type argument
@@ -422,12 +482,12 @@ public class ChoiceCodeGenTests
                 new DamlDataType
                 {
                     Name = "Holding",
-                    Definition = new DamlRecordDefinition([new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
                 },
                 new DamlDataType
                 {
                     Name = "Split",
-                    Definition = new DamlRecordDefinition([new DamlField("splitAmount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("splitAmount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
                 },
                 new DamlDataType
                 {

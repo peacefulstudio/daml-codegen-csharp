@@ -4,10 +4,17 @@
     <PackageId>Daml.Codegen.CSharp</PackageId>
     <Description>C# code generator library for Daml smart contracts. Consumes an IntermediateDar protobuf (see Daml.Codegen.Intermediate) and emits strongly-typed C# bindings.</Description>
     <PackageTags>daml;canton;blockchain;smart-contracts;codegen</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Daml.Codegen.CSharp.Tests" />
+    <InternalsVisibleTo Include="Daml.Codegen.CSharp.Cli" />
   </ItemGroup>
 
   <ItemGroup>

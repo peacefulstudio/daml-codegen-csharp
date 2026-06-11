@@ -14,8 +14,6 @@ public class DataTypeCodeGenTests
     {
         options ??= new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -61,9 +59,9 @@ public class DataTypeCodeGenTests
                     Name = "PersonInfo",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("age", new DamlPrimitiveType(DamlPrimitive.Int64)),
-                        new DamlField("active", new DamlPrimitiveType(DamlPrimitive.Bool))
+                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("age", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("active", new DamlPrimitiveType(DamlPrimitive.Bool))
                     ])
                 }
             ],
@@ -103,8 +101,8 @@ public class DataTypeCodeGenTests
                     Name = "Amount",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Numeric)),
-                        new DamlField("currency", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+                        new DamlFieldDefinition("currency", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -141,8 +139,8 @@ public class DataTypeCodeGenTests
                     Name = "Event",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("eventDate", new DamlPrimitiveType(DamlPrimitive.Date)),
-                        new DamlField("createdAt", new DamlPrimitiveType(DamlPrimitive.Timestamp))
+                        new DamlFieldDefinition("eventDate", new DamlPrimitiveType(DamlPrimitive.Date)),
+                        new DamlFieldDefinition("createdAt", new DamlPrimitiveType(DamlPrimitive.Timestamp))
                     ])
                 }
             ],
@@ -179,8 +177,8 @@ public class DataTypeCodeGenTests
                     Name = "Ownership",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("receiver", new DamlPrimitiveType(DamlPrimitive.Party))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("receiver", new DamlPrimitiveType(DamlPrimitive.Party))
                     ])
                 }
             ],
@@ -218,10 +216,10 @@ public class DataTypeCodeGenTests
                     Name = "OptionalData",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("maybeText", new DamlTypeApp(
+                        new DamlFieldDefinition("maybeText", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Optional),
                             [new DamlPrimitiveType(DamlPrimitive.Text)])),
-                        new DamlField("maybeNumber", new DamlTypeApp(
+                        new DamlFieldDefinition("maybeNumber", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Optional),
                             [new DamlPrimitiveType(DamlPrimitive.Int64)]))
                     ])
@@ -259,7 +257,7 @@ public class DataTypeCodeGenTests
                     Name = "OptionalData",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("maybeText", new DamlTypeApp(
+                        new DamlFieldDefinition("maybeText", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Optional),
                             [new DamlPrimitiveType(DamlPrimitive.Text)]))
                     ])
@@ -293,10 +291,10 @@ public class DataTypeCodeGenTests
                     Name = "Collection",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("items", new DamlTypeApp(
+                        new DamlFieldDefinition("items", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.List),
                             [new DamlPrimitiveType(DamlPrimitive.Text)])),
-                        new DamlField("counts", new DamlTypeApp(
+                        new DamlFieldDefinition("counts", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.List),
                             [new DamlPrimitiveType(DamlPrimitive.Int64)]))
                     ])
@@ -335,7 +333,7 @@ public class DataTypeCodeGenTests
                     Name = "Metadata",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("attributes", new DamlTypeApp(
+                        new DamlFieldDefinition("attributes", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.TextMap),
                             [new DamlPrimitiveType(DamlPrimitive.Text)]))
                     ])
@@ -373,7 +371,7 @@ public class DataTypeCodeGenTests
                     Name = "Reference",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("assetRef", new DamlTypeApp(
+                        new DamlFieldDefinition("assetRef", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.ContractId),
                             [new DamlTypeRef("", "Test.Module", "Asset")]))
                     ])
@@ -411,7 +409,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -449,7 +447,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -523,6 +521,42 @@ public class DataTypeCodeGenTests
         code.Should().Contain("public override string Tag => \"Cash\"");
         code.Should().Contain("public override string Tag => \"Card\"");
         code.Should().Contain("public override string Tag => \"BankTransfer\"");
+    }
+
+    [Fact]
+    public void Generate_should_document_variant_case_Tag_and_ToVariant_overrides()
+    {
+        // Arrange
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "PaymentMethod",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Cash", null),
+                        new DamlVariantConstructor("Card", new DamlPrimitiveType(DamlPrimitive.Text))
+                    ])
+                }
+            ],
+            Interfaces = []
+        };
+
+        var dar = CreateTestDar(module);
+        var generator = CreateGenerator();
+
+        // Act
+        var files = generator.Generate(dar);
+        var paymentFile = files.First(f => f.RelativePath.EndsWith("PaymentMethod.cs", StringComparison.Ordinal));
+
+        // Assert - overrides inherit the base member docs so docs-enabled consumer projects get no CS1591
+        paymentFile.Content.Should().MatchRegex(@"/// <inheritdoc />\s*\n\s*public override string Tag => ""Cash"";");
+        paymentFile.Content.Should().MatchRegex(@"/// <inheritdoc />\s*\n\s*public override string Tag => ""Card"";");
+        paymentFile.Content.Should().MatchRegex(@"/// <inheritdoc />\s*\n\s*public override (global::)?(Daml\.Runtime\.Data\.)?DamlVariant ToVariant\(\)");
     }
 
     [Fact]
@@ -680,7 +714,7 @@ public class DataTypeCodeGenTests
                     Name = "Holder",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("pick", new DamlTypeRef(string.Empty, "Test.Module", "Choice"))
+                        new DamlFieldDefinition("pick", new DamlTypeRef(string.Empty, "Test.Module", "Choice"))
                     ])
                 }
             ],
@@ -854,8 +888,6 @@ public class DataTypeCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -904,8 +936,6 @@ public class DataTypeCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = false,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = false,
             UseRecordTypes = true,
@@ -923,7 +953,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -961,7 +991,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -996,7 +1026,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1020,8 +1050,6 @@ public class DataTypeCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = false,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1039,7 +1067,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1070,8 +1098,6 @@ public class DataTypeCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1090,7 +1116,7 @@ public class DataTypeCodeGenTests
                     Name = "Simple",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1127,7 +1153,7 @@ public class DataTypeCodeGenTests
                     Name = "class", // C# keyword
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1163,7 +1189,7 @@ public class DataTypeCodeGenTests
                     Name = "123Type", // Starts with digit
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1199,9 +1225,9 @@ public class DataTypeCodeGenTests
                     Name = "CasingTest",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("lower_case_field", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("camelCaseField", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("kebab-case-field", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("lower_case_field", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("camelCaseField", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("kebab-case-field", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1239,9 +1265,9 @@ public class DataTypeCodeGenTests
                     Name = "TupleType",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("_1", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("_2", new DamlPrimitiveType(DamlPrimitive.Int64)),
-                        new DamlField("_3", new DamlPrimitiveType(DamlPrimitive.Bool))
+                        new DamlFieldDefinition("_1", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("_2", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("_3", new DamlPrimitiveType(DamlPrimitive.Bool))
                     ])
                 }
             ],
@@ -1280,8 +1306,6 @@ public class DataTypeCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1297,13 +1321,13 @@ public class DataTypeCodeGenTests
                 new DamlTemplate
                 {
                     Name = "IncludeThis",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 },
                 new DamlTemplate
                 {
                     Name = "ExcludeThis",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -1312,12 +1336,12 @@ public class DataTypeCodeGenTests
                 new DamlDataType
                 {
                     Name = "IncludeThis",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 },
                 new DamlDataType
                 {
                     Name = "ExcludeThis",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -1354,8 +1378,8 @@ public class DataTypeCodeGenTests
                     Name = "Address",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("street", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("city", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("street", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("city", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 },
                 new DamlDataType
@@ -1363,8 +1387,8 @@ public class DataTypeCodeGenTests
                     Name = "Person",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlField("homeAddress", new DamlTypeRef("", "Test.Module", "Address"))
+                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("homeAddress", new DamlTypeRef("", "Test.Module", "Address"))
                     ])
                 }
             ],

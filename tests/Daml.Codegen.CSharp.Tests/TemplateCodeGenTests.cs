@@ -14,8 +14,6 @@ public class TemplateCodeGenTests
     {
         options ??= new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -58,7 +56,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "SimpleTemplate",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -67,7 +65,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "SimpleTemplate",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -100,7 +98,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -109,7 +107,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "Asset",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -147,7 +145,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Token",
-                    Fields = [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -156,7 +154,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "Token",
-                    Definition = new DamlRecordDefinition([new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -190,7 +188,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))],
+                    Fields = [new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))],
                     Choices = []
                 }
             ],
@@ -199,7 +197,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "Holding",
-                    Definition = new DamlRecordDefinition([new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))])
                 }
             ],
             Interfaces = []
@@ -231,13 +229,13 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("textField", new DamlPrimitiveType(DamlPrimitive.Text)),
-            new DamlField("intField", new DamlPrimitiveType(DamlPrimitive.Int64)),
-            new DamlField("boolField", new DamlPrimitiveType(DamlPrimitive.Bool)),
-            new DamlField("numericField", new DamlPrimitiveType(DamlPrimitive.Numeric)),
-            new DamlField("partyField", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("dateField", new DamlPrimitiveType(DamlPrimitive.Date)),
-            new DamlField("timestampField", new DamlPrimitiveType(DamlPrimitive.Timestamp))
+            new DamlFieldDefinition("textField", new DamlPrimitiveType(DamlPrimitive.Text)),
+            new DamlFieldDefinition("intField", new DamlPrimitiveType(DamlPrimitive.Int64)),
+            new DamlFieldDefinition("boolField", new DamlPrimitiveType(DamlPrimitive.Bool)),
+            new DamlFieldDefinition("numericField", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+            new DamlFieldDefinition("partyField", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("dateField", new DamlPrimitiveType(DamlPrimitive.Date)),
+            new DamlFieldDefinition("timestampField", new DamlPrimitiveType(DamlPrimitive.Timestamp))
         };
 
         var module = new DamlModule
@@ -289,13 +287,13 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("items", new DamlTypeApp(
+            new DamlFieldDefinition("items", new DamlTypeApp(
                 new DamlPrimitiveType(DamlPrimitive.List),
                 [new DamlPrimitiveType(DamlPrimitive.Text)])),
-            new DamlField("maybeValue", new DamlTypeApp(
+            new DamlFieldDefinition("maybeValue", new DamlTypeApp(
                 new DamlPrimitiveType(DamlPrimitive.Optional),
                 [new DamlPrimitiveType(DamlPrimitive.Int64)])),
-            new DamlField("metadata", new DamlTypeApp(
+            new DamlFieldDefinition("metadata", new DamlTypeApp(
                 new DamlPrimitiveType(DamlPrimitive.TextMap),
                 [new DamlPrimitiveType(DamlPrimitive.Text)]))
         };
@@ -349,8 +347,8 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text)),
-            new DamlField("count", new DamlPrimitiveType(DamlPrimitive.Int64))
+            new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text)),
+            new DamlFieldDefinition("count", new DamlPrimitiveType(DamlPrimitive.Int64))
         };
 
         var module = new DamlModule
@@ -398,8 +396,8 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("isActive", new DamlPrimitiveType(DamlPrimitive.Bool)),
-            new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+            new DamlFieldDefinition("isActive", new DamlPrimitiveType(DamlPrimitive.Bool)),
+            new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
         };
 
         var module = new DamlModule
@@ -447,7 +445,7 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("tags", new DamlTypeApp(
+            new DamlFieldDefinition("tags", new DamlTypeApp(
                 new DamlPrimitiveType(DamlPrimitive.List),
                 [new DamlPrimitiveType(DamlPrimitive.Text)]))
         };
@@ -497,7 +495,7 @@ public class TemplateCodeGenTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("maybeText", new DamlTypeApp(
+            new DamlFieldDefinition("maybeText", new DamlTypeApp(
                 new DamlPrimitiveType(DamlPrimitive.Optional),
                 [new DamlPrimitiveType(DamlPrimitive.Text)]))
         };
@@ -549,8 +547,6 @@ public class TemplateCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -559,7 +555,7 @@ public class TemplateCodeGenTests
 
         var fields = new[]
         {
-            new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+            new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
         };
 
         var module = new DamlModule
@@ -607,8 +603,6 @@ public class TemplateCodeGenTests
         // Arrange
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = false,
@@ -617,7 +611,7 @@ public class TemplateCodeGenTests
 
         var fields = new[]
         {
-            new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+            new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
         };
 
         var module = new DamlModule
@@ -721,7 +715,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
@@ -730,7 +724,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "MyTemplate",
-                    Definition = new DamlRecordDefinition([new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -765,7 +759,7 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Versioned",
-                    Fields = [new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
@@ -774,7 +768,7 @@ public class TemplateCodeGenTests
                 new DamlDataType
                 {
                     Name = "Versioned",
-                    Definition = new DamlRecordDefinition([new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []

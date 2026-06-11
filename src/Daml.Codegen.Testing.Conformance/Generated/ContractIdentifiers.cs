@@ -8,7 +8,7 @@
 using Daml.Runtime.Contracts;
 using static Daml.Runtime.Contracts.TemplateExtensions;
 
-namespace Richtypes;
+namespace Daml.Codegen.Testing.Conformance.Richtypes;
 
 /// <summary>
 /// Provides fully qualified contract identifiers for all templates in this package.

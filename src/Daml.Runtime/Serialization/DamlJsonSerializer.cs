@@ -20,25 +20,44 @@ public static class DamlJsonSerializer
     private const string CanonicalDateFormat = "yyyy-MM-dd";
     private const string CanonicalTimestampEmitFormat = "O";
     private const string CanonicalTimestampParseFormat = "yyyy-MM-dd'T'HH':'mm':'ss.FFFFFFFK";
-    private const int MaximumNestingDepth = 64;
+    private const int MaximumNestingDepth = 128;
+    private const int JsonReaderWriterMaxDepth = 4 * MaximumNestingDepth;
 
     private static readonly JsonSerializerOptions DefaultOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        MaxDepth = JsonReaderWriterMaxDepth,
+        AllowDuplicateProperties = false,
         Converters = { new DamlValueJsonConverter() }
+    };
+
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        MaxDepth = JsonReaderWriterMaxDepth,
+        AllowDuplicateProperties = false
     };
 
     /// <summary>
     /// Serializes a DamlValue to JSON.
     /// </summary>
+    /// <remarks>
+    /// Supplying <paramref name="options"/> replaces the hardened defaults entirely:
+    /// re-apply <c>AllowDuplicateProperties = false</c> and a bounded <c>MaxDepth</c>
+    /// on the caller-supplied options or those protections are bypassed.
+    /// </remarks>
     public static string Serialize(DamlValue value, JsonSerializerOptions? options = null) =>
         JsonSerializer.Serialize(value, options ?? DefaultOptions);
 
     /// <summary>
     /// Serializes a DamlRecord to JSON.
     /// </summary>
+    /// <remarks>
+    /// Supplying <paramref name="options"/> replaces the hardened defaults entirely:
+    /// re-apply <c>AllowDuplicateProperties = false</c> and a bounded <c>MaxDepth</c>
+    /// on the caller-supplied options or those protections are bypassed.
+    /// </remarks>
     public static string Serialize(DamlRecord record, JsonSerializerOptions? options = null) =>
         JsonSerializer.Serialize(RecordToJsonObject(record), options ?? DefaultOptions);
 
@@ -71,11 +90,43 @@ public static class DamlJsonSerializer
     /// <c>T</c>-separated timestamp, or <c>-?digits.digits</c>); every other string stays
     /// <see cref="DamlText"/>. A Text value that happens to match a canonical shape is
     /// therefore reinterpreted on an untyped round-trip.</description></item>
+    /// <item><description>Daml Numeric carries up to 38 significant digits but the backing
+    /// <see cref="decimal"/> holds 28-29: a canonical numeric string (or JSON number) with
+    /// more fractional precision than <see cref="decimal"/> can hold is rounded to the
+    /// nearest representable value, and one whose magnitude exceeds the
+    /// <see cref="decimal"/> range throws <see cref="JsonException"/> rather than
+    /// degrading to <see cref="DamlText"/>.</description></item>
+    /// <item><description><see cref="DamlNumeric.Scale"/> is never written to JSON and
+    /// deserialization always reconstructs the default scale of 10. This is why
+    /// <see cref="DamlNumeric"/> equality compares <see cref="DamlNumeric.Value"/> only —
+    /// a Numeric constructed with a non-default scale still round-trips equal, but the
+    /// original scale itself is lost.</description></item>
     /// <item><description>An explicit JSON <c>null</c> record field deserializes to
     /// <see cref="DamlOptional.None"/>; a Some value is flattened to its inner value on
     /// write, so schema-aware readers recover the wrapper via
     /// <see cref="DamlValueExtensions.AsOptional"/>.</description></item>
+    /// <item><description>A two-property JSON object whose properties are exactly
+    /// <c>tag</c> (a string) and <c>value</c> is reconstructed as a
+    /// <see cref="DamlVariant"/>, so a genuine two-field record with those labels is
+    /// reinterpreted as a variant.</description></item>
+    /// <item><description>A <see cref="DamlTextMap"/> serializes as a JSON object and is
+    /// reconstructed as a <see cref="DamlRecord"/> on an untyped round-trip.</description></item>
+    /// <item><description><see cref="DamlParty"/>, <see cref="DamlContractId"/>, and
+    /// <see cref="DamlEnum"/> serialize as JSON strings and come back as
+    /// <see cref="DamlText"/> on an untyped round-trip.</description></item>
     /// </list>
+    /// Because of these collisions, untyped deserialization output is a best-effort
+    /// reconstruction and must not back security or authorization decisions; use a
+    /// type schema when the distinction matters. JSON objects containing duplicate
+    /// property names are rejected with <see cref="JsonException"/>, and value
+    /// nesting is bounded (at a depth above Daml-LF's 100-level value limit).
+    /// <para>
+    /// Those two protections live on the default options: supplying
+    /// <paramref name="options"/> replaces them entirely, so caller-supplied
+    /// <see cref="JsonSerializerOptions"/> must re-apply
+    /// <c>AllowDuplicateProperties = false</c> and a bounded <c>MaxDepth</c>
+    /// (and register <see cref="DamlValueJsonConverter"/>) or the hardening is bypassed.
+    /// </para>
     /// </remarks>
     public static DamlValue Deserialize(string json, JsonSerializerOptions? options = null) =>
         JsonSerializer.Deserialize<DamlValue>(json, options ?? DefaultOptions)
@@ -86,7 +137,7 @@ public static class DamlJsonSerializer
     /// </summary>
     public static DamlRecord DeserializeRecord(string json, JsonSerializerOptions? options = null)
     {
-        var node = JsonNode.Parse(json)
+        var node = JsonNode.Parse(json, nodeOptions: null, DocumentOptions)
             ?? throw new JsonException("Expected a JSON object for a Daml record but found null");
         if (node is not JsonObject obj)
         {
@@ -103,6 +154,11 @@ public static class DamlJsonSerializer
         var obj = new JsonObject();
         foreach (var field in record.Fields)
         {
+            if (obj.ContainsKey(field.Label))
+            {
+                throw new JsonException(
+                    $"Duplicate field label '{field.Label}' in Daml record; refusing to serialize last-wins");
+            }
             obj[field.Label] = ValueToJsonNode(field.Value, depth + 1);
         }
         return obj;
@@ -256,15 +312,16 @@ public static class DamlJsonSerializer
             return new DamlDate(date);
         }
 
-        if (DateTimeOffset.TryParseExact(s, CanonicalTimestampParseFormat, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
+        if (DateTimeOffset.TryParseExact(s, CanonicalTimestampParseFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var ts))
         {
             return new DamlTimestamp(ts);
         }
 
-        if (MatchesCanonicalNumericGrammar(s)
-            && decimal.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var numeric))
+        if (MatchesCanonicalNumericGrammar(s))
         {
-            return new DamlNumeric(numeric);
+            return decimal.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var numeric)
+                ? new DamlNumeric(numeric)
+                : throw new JsonException($"Number '{s}' cannot be represented as a Daml Numeric");
         }
 
         return new DamlText(s);
@@ -301,6 +358,7 @@ public static class DamlJsonSerializer
 /// </summary>
 public sealed class DamlValueJsonConverter : JsonConverter<DamlValue>
 {
+    /// <summary>Reads a JSON node and maps it to a <see cref="DamlValue"/>; all failures surface as <see cref="JsonException"/>.</summary>
     public override DamlValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var node = JsonNode.Parse(ref reader) ?? throw new JsonException("Null JSON not supported");
@@ -314,6 +372,7 @@ public sealed class DamlValueJsonConverter : JsonConverter<DamlValue>
         }
     }
 
+    /// <summary>Writes a <see cref="DamlValue"/> as its canonical JSON form; all failures surface as <see cref="JsonException"/>.</summary>
     public override void Write(Utf8JsonWriter writer, DamlValue value, JsonSerializerOptions options)
     {
         JsonNode? node;

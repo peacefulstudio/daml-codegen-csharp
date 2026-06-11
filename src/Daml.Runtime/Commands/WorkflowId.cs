@@ -36,9 +36,11 @@ public readonly record struct WorkflowId
         _value = value;
     }
 
+    /// <summary>Extracts the workflow id; explicit so it is never silently used as arbitrary text.</summary>
     public static explicit operator string(WorkflowId id) =>
         id._value ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) WorkflowId to string.");
 
+    /// <summary>Parses a workflow id; explicit so arbitrary strings never silently become workflow ids.</summary>
     public static explicit operator WorkflowId(string value) => new(value);
 
     /// <remarks>

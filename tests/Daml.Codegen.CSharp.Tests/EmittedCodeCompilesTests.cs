@@ -25,8 +25,6 @@ public class EmittedCodeCompilesTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = useRecordTypes,
@@ -69,7 +67,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -90,7 +88,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "Agreement",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -134,7 +132,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -152,7 +150,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "Agreement",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -248,7 +246,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "OrderRequest",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                        [new DamlFieldDefinition("payload", new DamlPrimitiveType(DamlPrimitive.Text))]),
                 }
             ],
             Interfaces = [],
@@ -271,7 +269,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -290,7 +288,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Trader",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -309,8 +307,6 @@ public class EmittedCodeCompilesTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -364,8 +360,8 @@ public class EmittedCodeCompilesTests
                     Name = "Alert",
                     Fields =
                     [
-                        new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
+                        new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
                     ],
                     Choices = [],
                 },
@@ -377,8 +373,8 @@ public class EmittedCodeCompilesTests
                     Name = "Alert",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
+                        new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
                     ]),
                 },
             ],
@@ -398,8 +394,6 @@ public class EmittedCodeCompilesTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -427,7 +421,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Sink",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -465,7 +459,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "Sink",
-                    Definition = new DamlRecordDefinition([new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -502,7 +496,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -513,7 +507,7 @@ public class EmittedCodeCompilesTests
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ])
                 },
                 new DamlDataType
@@ -521,7 +515,7 @@ public class EmittedCodeCompilesTests
                     Name = "InstrumentId",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("id", new DamlPrimitiveType(DamlPrimitive.Text)),
+                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text)),
                     ])
                 },
                 new DamlDataType
@@ -529,7 +523,7 @@ public class EmittedCodeCompilesTests
                     Name = "BatchResult",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("senderChangeMap", new DamlTypeApp(
+                        new DamlFieldDefinition("senderChangeMap", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.GenMap),
                             [
                                 new DamlTypeRef("", "Test.Module", "InstrumentId"),
@@ -571,7 +565,7 @@ public class EmittedCodeCompilesTests
         var files = GenerateKeyBearingTemplate();
 
         var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion",
-            "the MSBuild integration reads this state file to bump LangVersion").Subject;
+            "build-integration tooling reads this state file to bump LangVersion").Subject;
         marker.Content.Trim().Should().Be("13",
             "key-bearing output requires C# 13 partial-property syntax");
     }
@@ -587,7 +581,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "NoKey",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                     Key = null,
                 },
@@ -597,7 +591,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "NoKey",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -616,7 +610,7 @@ public class EmittedCodeCompilesTests
 
         var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion").Subject;
         marker.Content.Should().BeEmpty(
-            "keyless output records no required version, so the MSBuild bump is skipped");
+            "keyless output records no required version, so the LangVersion bump is skipped");
     }
 
     [Fact]
@@ -671,7 +665,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Probe",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -691,7 +685,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "Probe",
-                    Definition = new DamlRecordDefinition([new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -740,7 +734,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Oracle",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -772,15 +766,15 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "Oracle",
-                    Definition = new DamlRecordDefinition([new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Report",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("twap", new DamlPrimitiveType(DamlPrimitive.Numeric)),
-                        new DamlField("samples", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("twap", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+                        new DamlFieldDefinition("samples", new DamlPrimitiveType(DamlPrimitive.Int64)),
                     ]),
                 },
             ],
@@ -817,7 +811,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "AssetWithKey",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text),
                 },
@@ -827,7 +821,7 @@ public class EmittedCodeCompilesTests
                 new DamlDataType
                 {
                     Name = "AssetWithKey",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -870,9 +864,9 @@ public class EmittedCodeCompilesTests
                     Name = "Agreement",
                     Fields =
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ],
                     Choices =
                     [
@@ -900,9 +894,9 @@ public class EmittedCodeCompilesTests
                     Name = "Agreement",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ]),
                 },
             ],
@@ -940,7 +934,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "MergeDelegation",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -959,23 +953,23 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "MergeDelegation",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "MergeDelegation_Merge",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("quantity", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                        [new DamlFieldDefinition("quantity", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
                 },
                 new DamlDataType
                 {
                     Name = "MergeDelegationCall",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("delegationCid", new DamlTypeApp(
+                        new DamlFieldDefinition("delegationCid", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.ContractId),
                             [new DamlTypeRef("", "Test.Module", "MergeDelegation")])),
-                        new DamlField("choiceArg", new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge")),
+                        new DamlFieldDefinition("choiceArg", new DamlTypeRef("", "Test.Module", "MergeDelegation_Merge")),
                     ]),
                 },
             ],
@@ -1013,7 +1007,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "DsoRules",
-                    Fields = [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("dso", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1032,13 +1026,13 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "DsoRules",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("dso", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("dso", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "DsoRules_AddSv",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("svParty", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("svParty", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
@@ -1084,7 +1078,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "AmuletRules",
-                    Fields = [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1103,13 +1097,13 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "AmuletRules",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "AmuletRules_MiningRound_Archive",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("roundId", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                        [new DamlFieldDefinition("roundId", new DamlPrimitiveType(DamlPrimitive.Int64))]),
                 },
             ],
             Interfaces = [],
@@ -1158,8 +1152,6 @@ public class EmittedCodeCompilesTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1187,7 +1179,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -1197,7 +1189,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
@@ -1303,7 +1295,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Holder",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("pick", new DamlTypeRef("", "Test.Module", "Choice"))]),
+                        [new DamlFieldDefinition("pick", new DamlTypeRef("", "Test.Module", "Choice"))]),
                 },
             ],
             Interfaces = [],
@@ -1392,7 +1384,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -1402,13 +1394,13 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "Holder",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("pair", contractIdTimesInt)]),
+                        [new DamlFieldDefinition("pair", contractIdTimesInt)]),
                 },
             ],
             Interfaces = [],
@@ -1454,9 +1446,9 @@ public class EmittedCodeCompilesTests
                     Name = "Holding",
                     Fields =
                     [
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
                     ],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party),
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
@@ -1482,9 +1474,9 @@ public class EmittedCodeCompilesTests
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
                     ]),
                 },
             ],
@@ -1541,7 +1533,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlField("custodian", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("custodian", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -1551,13 +1543,13 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Vault",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("custodian", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("custodian", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
                 new DamlDataType
                 {
                     Name = "VaultRef",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("vaultCid", ContractIdOf("Vault"))]),
+                        [new DamlFieldDefinition("vaultCid", ContractIdOf("Vault"))]),
                 },
             ],
             Interfaces = [],
@@ -1609,7 +1601,7 @@ public class EmittedCodeCompilesTests
                     Name = "Bag",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("items", new DamlTypeApp(
+                        new DamlFieldDefinition("items", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.List),
                             [new DamlPrimitiveType(DamlPrimitive.Text)])),
                     ]),
@@ -1658,7 +1650,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -1669,7 +1661,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -1717,7 +1709,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Payload",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64))]),
+                        [new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Int64))]),
                 },
             ],
             Interfaces = [],
@@ -1820,7 +1812,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1839,7 +1831,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "HoldingView",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces =
@@ -1916,7 +1908,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices =
                     [
@@ -1938,7 +1930,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -1993,7 +1985,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -2004,7 +1996,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -2083,7 +2075,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Decision",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("outcome", eitherTextInt)]),
+                        [new DamlFieldDefinition("outcome", eitherTextInt)]),
                 },
             ],
             Interfaces = [],
@@ -2130,8 +2122,8 @@ public class EmittedCodeCompilesTests
                     Name = "Asset",
                     Fields =
                     [
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ],
                     Signatories = DamlPartyAnalysis.Static(
                     [
@@ -2160,8 +2152,8 @@ public class EmittedCodeCompilesTests
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ]),
                 },
             ],
@@ -2203,7 +2195,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -2214,7 +2206,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -2263,8 +2255,8 @@ public class EmittedCodeCompilesTests
                     Name = "Payload",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
                     ]),
                 },
             ],
@@ -2311,7 +2303,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices =
                     [
@@ -2333,7 +2325,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -2384,7 +2376,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party),
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
                     Choices = [],
@@ -2396,7 +2388,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -2444,7 +2436,7 @@ public class EmittedCodeCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Key = new DamlTypeApp(
                         new DamlPrimitiveType(DamlPrimitive.List),
                         [new DamlPrimitiveType(DamlPrimitive.Party)]),
@@ -2458,7 +2450,7 @@ public class EmittedCodeCompilesTests
                 {
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ],
             Interfaces = [],
@@ -2627,8 +2619,8 @@ public class EmittedCodeCompilesTests
                     Name = "Lock",
                     Fields =
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("duration", relTime),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("duration", relTime),
                     ],
                     Choices =
                     [
@@ -2649,8 +2641,8 @@ public class EmittedCodeCompilesTests
                     Name = "Lock",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("duration", relTime),
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("duration", relTime),
                     ]),
                 },
                 new DamlDataType
@@ -2658,15 +2650,15 @@ public class EmittedCodeCompilesTests
                     Name = "Bag",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("outcome", eitherTextInt),
-                        new DamlField("pair", tuple2TextInt),
-                        new DamlField("tags", setText),
-                        new DamlField("scores", mapTextInt),
-                        new DamlField("required", nonEmptyText),
-                        new DamlField("triple", tuple3TextIntText),
-                        new DamlField("internalScores", internalMapTextInt),
-                        new DamlField("outcomes", listOfEither),
-                        new DamlField("pairSet", setOfTuple2),
+                        new DamlFieldDefinition("outcome", eitherTextInt),
+                        new DamlFieldDefinition("pair", tuple2TextInt),
+                        new DamlFieldDefinition("tags", setText),
+                        new DamlFieldDefinition("scores", mapTextInt),
+                        new DamlFieldDefinition("required", nonEmptyText),
+                        new DamlFieldDefinition("triple", tuple3TextIntText),
+                        new DamlFieldDefinition("internalScores", internalMapTextInt),
+                        new DamlFieldDefinition("outcomes", listOfEither),
+                        new DamlFieldDefinition("pairSet", setOfTuple2),
                     ]),
                 },
             ],

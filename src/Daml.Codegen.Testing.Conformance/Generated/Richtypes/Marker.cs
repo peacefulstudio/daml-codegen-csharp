@@ -15,7 +15,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Richtypes;
+namespace Daml.Codegen.Testing.Conformance.Richtypes;
 
 /// <summary>
 /// Generated from Daml template RichTypes:Marker

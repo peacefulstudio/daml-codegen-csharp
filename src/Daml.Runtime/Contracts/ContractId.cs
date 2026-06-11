@@ -30,6 +30,7 @@ public abstract record ContractId
         Value = value;
     }
 
+    /// <summary>Returns the verbatim contract-id string.</summary>
     public sealed override string ToString() => Value;
 }
 
@@ -53,7 +54,10 @@ public record ContractId<T> : ContractId where T : IDamlType
     {
     }
 
+    /// <summary>Extracts the contract-id string; explicit so a contract id is never silently used as text.</summary>
     public static explicit operator string(ContractId<T> id) => id.Value;
+
+    /// <summary>Parses and validates a contract-id string; explicit so arbitrary strings never silently become contract ids.</summary>
     public static explicit operator ContractId<T>(string value) => new(value);
 
     /// <summary>
@@ -79,7 +83,8 @@ public sealed record DamlContractId(string Value, Identifier? TemplateId = null)
     /// <summary>
     /// Produces a validated <see cref="ContractId{T}"/> from this raw wire carrier.
     /// <see cref="DamlContractId"/> itself carries the contract-id string unvalidated
-    /// (per ADR 0009, the erased/wire contract id stays an unvalidated string); this
+    /// (by design, the erased/wire contract id stays an unvalidated string; validation
+    /// happens at the typed <see cref="ContractId{T}"/> boundary); this
     /// method — together with the typed <see cref="ContractId{T}"/> constructors and
     /// casts — is the validation boundary for raw wire values.
     /// </summary>
@@ -89,6 +94,7 @@ public sealed record DamlContractId(string Value, Identifier? TemplateId = null)
     /// </exception>
     public ContractId<T> ToTyped<T>() where T : IDamlType => new(Value);
 
+    /// <summary>Returns the carried (unvalidated) contract-id string.</summary>
     public override string ToString() => Value;
 }
 

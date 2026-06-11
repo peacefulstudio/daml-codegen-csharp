@@ -45,7 +45,6 @@ public class NuGetPackIntegrationTests
         {
             var options = new CodeGenOptions
             {
-                OutputDirectory = workspace,
                 GenerateProjectFile = true,
                 TargetFramework = "net10.0",
                 RuntimePackageVersion = ReadRepoVersion(),
@@ -94,13 +93,13 @@ public class NuGetPackIntegrationTests
             var nupkg = producedNupkgs[0];
             var fileName = Path.GetFileName(nupkg);
             fileName.Should().StartWith("Splice.Api.Token.Holding.V1.",
-                "the .nupkg id must match the Daml package name converted to PascalCase per ADR 0002");
+                "the .nupkg id must match the Daml package name converted to PascalCase per the generated-package naming convention");
 
             var nuspecVersion = ReadNuspecVersion(nupkg);
             nuspecVersion.Should().MatchRegex(@"^\d+\.\d+\.\d+(\.\d+)?$",
                 "the .nuspec must carry an M.m.p[.r] version (4th segment is normalized away by NuGet when r=0)");
             nuspecVersion.Split('.').Length.Should().BeGreaterThanOrEqualTo(3,
-                "ADR 0002 requires at least the 3-part DAR-intrinsic version in the manifest");
+                "the M.m.p.r versioning scheme requires at least the 3-part DAR-intrinsic version in the manifest");
 
             var nuspecLicense = ReadNuspecLicense(nupkg);
             nuspecLicense.Should().Be("Apache-2.0",

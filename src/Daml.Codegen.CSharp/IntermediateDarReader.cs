@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.RegularExpressions;
 using Daml.Codegen.CSharp.Model;
 using PbBuiltin = Daml.Codegen.Intermediate.BuiltinType;
 using PbChoice = Daml.Codegen.Intermediate.Choice;
@@ -18,9 +19,10 @@ using PbTypeConName = Daml.Codegen.Intermediate.TypeConName;
 namespace Daml.Codegen.CSharp;
 
 /// <summary>
-/// Maps a <see cref="PbDar"/> protobuf message (produced by the JVM helper,
-/// per the schema in <c>proto/intermediate_dar.proto</c>) into
-/// the emitter's in-memory <see cref="DarModel"/>. Static party analysis
+/// Maps a <see cref="PbDar"/> protobuf message (produced by the JVM helper
+/// bundled in <c>dpm codegen-cs</c>, against the schema in
+/// <c>proto/intermediate_dar.proto</c>) into the emitter's in-memory
+/// <see cref="DarModel"/>. Static party analysis
 /// (<c>signatories</c>, <c>observers</c>, <c>controllers</c>,
 /// <c>choiceObservers</c>) is preserved through the proto when the JVM
 /// helper runs in its default full-decode mode. When the helper runs with
@@ -28,8 +30,57 @@ namespace Daml.Codegen.CSharp;
 /// on every template and choice and the typed-<c>actAs</c> codegen path
 /// falls back to an explicit <c>SubmitterInfo</c> parameter.
 /// </summary>
-public static class IntermediateDarReader
+public static partial class IntermediateDarReader
 {
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_$]*$")]
+    private static partial Regex IdentifierGrammar();
+
+    [GeneratedRegex(@"^[A-Za-z0-9._-]+$")]
+    private static partial Regex PackageCoordinateGrammar();
+
+    private static string RequireIdentifier(string value, string kind)
+    {
+        if (!IdentifierGrammar().IsMatch(value))
+        {
+            throw new InvalidDataException(
+                $"IntermediateDar {kind} '{value}' is not a valid Daml-LF identifier " +
+                "([A-Za-z_][A-Za-z0-9_$]*). Names outside the grammar are rejected because the " +
+                "emitter interpolates them into generated C# source and string literals.");
+        }
+        return value;
+    }
+
+    private static string JoinValidatedSegments(IEnumerable<string> segments, string kind) =>
+        string.Join(".", segments.Select(segment => RequireIdentifier(segment, kind)));
+
+    private static string RequireDottedIdentifier(string value, string kind)
+    {
+        if (value.Length == 0 || !value.Split('.').All(segment => IdentifierGrammar().IsMatch(segment)))
+        {
+            throw new InvalidDataException(
+                $"IntermediateDar {kind} '{value}' is not a valid dotted Daml-LF identifier " +
+                "(period-separated [A-Za-z_][A-Za-z0-9_$]* segments). Names outside the grammar are rejected " +
+                "because the emitter interpolates them into generated C# source and string literals.");
+        }
+        return value;
+    }
+
+    private static string RequirePackageCoordinate(string value, string kind)
+    {
+        if (!PackageCoordinateGrammar().IsMatch(value))
+        {
+            throw new InvalidDataException(
+                $"IntermediateDar {kind} '{value}' is not a valid package coordinate " +
+                "(non-empty [A-Za-z0-9._-]+). Values outside the grammar are rejected because the " +
+                "emitter interpolates them into generated C# source and string literals.");
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// Converts the proto graph into a <see cref="DarModel"/>; requires
+    /// <c>proto.Main</c> to be set and throws <see cref="InvalidDataException"/> otherwise.
+    /// </summary>
     public static DarModel Read(PbDar proto)
     {
         ArgumentNullException.ThrowIfNull(proto);
@@ -45,13 +96,15 @@ public static class IntermediateDarReader
     private static DamlPackage ConvertPackage(PbPackage pkg) =>
         new()
         {
-            PackageId = pkg.PackageId,
-            Name = pkg.PackageName,
+            PackageId = RequirePackageCoordinate(pkg.PackageId, "package id"),
+            Name = RequirePackageCoordinate(pkg.PackageName, "package name"),
             Version = ParseVersion(pkg.PackageVersion),
             LfVersion = pkg.LanguageVersion,
             Modules = pkg.Modules.Select(ConvertModule).ToList(),
             DependencyReferences = [],
-            UpgradedPackageId = string.IsNullOrEmpty(pkg.UpgradedPackageId) ? null : pkg.UpgradedPackageId,
+            UpgradedPackageId = string.IsNullOrEmpty(pkg.UpgradedPackageId)
+                ? null
+                : RequirePackageCoordinate(pkg.UpgradedPackageId, "upgraded package id"),
         };
 
     private static DamlModule ConvertModule(PbModule module)
@@ -63,7 +116,7 @@ public static class IntermediateDarReader
 
         return new DamlModule
         {
-            Name = string.Join(".", module.NameSegments),
+            Name = JoinValidatedSegments(module.NameSegments, "module name segment"),
             Templates = templates,
             DataTypes = dataTypes,
             Interfaces = interfaces,
@@ -79,7 +132,9 @@ public static class IntermediateDarReader
             PbDataType.ShapeOneofCase.Variant =>
                 new DamlVariantDefinition(dt.Variant.Constructors.Select(ConvertVariantConstructor).ToList()),
             PbDataType.ShapeOneofCase.EnumType =>
-                new DamlEnumDefinition(dt.EnumType.Constructors.ToList()),
+                new DamlEnumDefinition(dt.EnumType.Constructors
+                    .Select(ctor => RequireIdentifier(ctor, "enum constructor"))
+                    .ToList()),
             PbDataType.ShapeOneofCase.None => throw new InvalidDataException(
                 $"IntermediateDar DataType '{dt.Name}' has no shape set — every DataType must populate exactly one of {{record, variant, enum_type}}."),
             _ => throw new InvalidDataException(
@@ -89,19 +144,19 @@ public static class IntermediateDarReader
 
         return new DamlDataType
         {
-            Name = dt.Name,
-            TypeParams = dt.TypeParameters.ToList(),
+            Name = RequireDottedIdentifier(dt.Name, "DataType name"),
+            TypeParams = dt.TypeParameters.Select(tp => RequireIdentifier(tp, "type parameter")).ToList(),
             Serializable = dt.IsSerializable,
             Definition = definition,
         };
     }
 
-    private static DamlField ConvertField(PbField field)
+    private static DamlFieldDefinition ConvertField(PbField field)
     {
         if (field.Type is null)
             throw new InvalidDataException(
                 $"IntermediateDar Field '{field.Name}' is missing type — every field must declare its type.");
-        return new DamlField(field.Name, ConvertType(field.Type));
+        return new DamlFieldDefinition(RequireIdentifier(field.Name, "field name"), ConvertType(field.Type));
     }
 
     private static DamlVariantConstructor ConvertVariantConstructor(PbField field)
@@ -109,7 +164,7 @@ public static class IntermediateDarReader
         if (field.Type is null)
             throw new InvalidDataException(
                 $"IntermediateDar Variant constructor '{field.Name}' is missing type — every constructor must declare its argument type (use BuiltinType.UNIT for a no-arg constructor).");
-        return new DamlVariantConstructor(field.Name, ConvertType(field.Type));
+        return new DamlVariantConstructor(RequireIdentifier(field.Name, "variant constructor"), ConvertType(field.Type));
     }
 
     private static DamlTemplate ConvertTemplate(PbTemplate template, IReadOnlyDictionary<string, DamlDataType> dataTypesByName)
@@ -121,7 +176,7 @@ public static class IntermediateDarReader
 
         return new DamlTemplate
         {
-            Name = template.Name,
+            Name = RequireDottedIdentifier(template.Name, "template name"),
             Fields = fields,
             Choices = template.Choices.Select(ConvertChoice).ToList(),
             Key = template.KeyType is not null ? ConvertType(template.KeyType) : null,
@@ -142,7 +197,7 @@ public static class IntermediateDarReader
 
         return new DamlChoice
         {
-            Name = choice.Name,
+            Name = RequireIdentifier(choice.Name, "choice name"),
             Consuming = choice.Consuming,
             ArgumentType = ConvertType(choice.ArgumentType),
             ReturnType = ConvertType(choice.ReturnType),
@@ -158,9 +213,8 @@ public static class IntermediateDarReader
     /// <c>--schema-only</c> mode) is read as <see cref="DamlPartyAnalysis.Dynamic"/>.
     /// <para>
     /// Interface-choice party analysis is currently always <c>Dynamic</c>:
-    /// <c>PartyAnalyses.compute</c> on the JVM side iterates
-    /// <c>mod.templates</c> only, and <c>translateInterface</c> stamps
-    /// <c>ChoicePartyAnalysis.dynamic</c> on every interface choice. Adding
+    /// the JVM helper computes static party analysis for template choices
+    /// only and reports every interface choice as dynamic. Adding
     /// typed-<c>actAs</c> derivation for interface choices is a separate
     /// follow-up.
     /// </para>
@@ -174,7 +228,8 @@ public static class IntermediateDarReader
         {
             PbPartyAnalysis.ShapeOneofCase.Static =>
                 DamlPartyAnalysis.Static(analysis.Static.PayloadFields
-                    .Select(field => (DamlPartyReference)new DamlPartyPayloadField(field))
+                    .Select(field => (DamlPartyReference)new DamlPartyPayloadField(
+                        RequireIdentifier(field, "party payload field")))
                     .ToList()),
             PbPartyAnalysis.ShapeOneofCase.Dynamic => DamlPartyAnalysis.Dynamic,
             PbPartyAnalysis.ShapeOneofCase.None => DamlPartyAnalysis.Dynamic,
@@ -187,7 +242,7 @@ public static class IntermediateDarReader
     private static DamlInterface ConvertInterface(PbInterface iface) =>
         new()
         {
-            Name = iface.Name,
+            Name = RequireDottedIdentifier(iface.Name, "interface name"),
             Choices = iface.Choices.Select(ConvertChoice).ToList(),
             ViewType = iface.ViewType is not null ? ConvertType(iface.ViewType) : null,
         };
@@ -201,7 +256,7 @@ public static class IntermediateDarReader
             PbType.SortOneofCase.Builtin => new DamlPrimitiveType(ConvertBuiltin(type.Builtin)),
             PbType.SortOneofCase.TypeCon => ConvertTypeConRef(type.TypeCon),
             PbType.SortOneofCase.TypeApp => ConvertTypeApp(type),
-            PbType.SortOneofCase.TypeVar => new DamlTypeVar(type.TypeVar),
+            PbType.SortOneofCase.TypeVar => new DamlTypeVar(RequireIdentifier(type.TypeVar, "type variable")),
             PbType.SortOneofCase.Nat => new DamlTypeVar(type.Nat.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             PbType.SortOneofCase.None => throw new InvalidDataException(
                 "IntermediateDar Type has no sort set — every Type must populate exactly one of {builtin, type_con, type_app, type_var, nat}."),
@@ -227,8 +282,14 @@ public static class IntermediateDarReader
         return new DamlTypeApp(head, args);
     }
 
+    private static string RequirePackageCoordinateOrSamePackageMarker(string packageId, string kind) =>
+        packageId.Length == 0 ? packageId : RequirePackageCoordinate(packageId, kind);
+
     private static DamlTypeRef ConvertTypeConRef(PbTypeConName tcn) =>
-        new(tcn.PackageId, string.Join(".", tcn.ModuleNameSegments), string.Join(".", tcn.NameSegments));
+        new(
+            RequirePackageCoordinateOrSamePackageMarker(tcn.PackageId, "type-constructor package id"),
+            JoinValidatedSegments(tcn.ModuleNameSegments, "type-constructor module segment"),
+            JoinValidatedSegments(tcn.NameSegments, "type-constructor name segment"));
 
     private static string FormatTypeConName(PbTypeConName tcn) =>
         $"{string.Join(".", tcn.ModuleNameSegments)}.{string.Join(".", tcn.NameSegments)}";

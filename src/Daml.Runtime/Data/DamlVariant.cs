@@ -14,15 +14,19 @@ public sealed record DamlVariant(
     string Constructor,
     DamlValue Value) : DamlValue
 {
+    /// <summary>Builds a variant without a type identifier, e.g. when the type is implied by context.</summary>
     public static DamlVariant Create(string constructor, DamlValue value) =>
         new(null, constructor, value);
 
+    /// <summary>Builds a variant tagged with its Daml type identifier.</summary>
     public static DamlVariant Create(Identifier variantId, string constructor, DamlValue value) =>
         new(variantId, constructor, value);
 
+    /// <summary>True when this variant was built with the given constructor name.</summary>
     public bool Is(string constructor) =>
         Constructor == constructor;
 
+    /// <summary>The carried value downcast to <typeparamref name="T"/>; throws <see cref="InvalidCastException"/> on mismatch.</summary>
     public T GetValue<T>() where T : DamlValue =>
         (T)Value;
 }
@@ -34,8 +38,12 @@ public sealed record DamlVariant(
 /// <param name="Constructor">The enum constructor name.</param>
 public sealed record DamlEnum(Identifier? EnumId, string Constructor) : DamlValue
 {
+    /// <summary>Builds an enum value without a type identifier, e.g. when the type is implied by context.</summary>
     public static DamlEnum Create(string constructor) => new(null, constructor);
+
+    /// <summary>Builds an enum value tagged with its Daml type identifier.</summary>
     public static DamlEnum Create(Identifier enumId, string constructor) => new(enumId, constructor);
 
+    /// <summary>True when this enum value is the given constructor.</summary>
     public bool Is(string constructor) => Constructor == constructor;
 }

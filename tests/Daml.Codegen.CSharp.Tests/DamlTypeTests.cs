@@ -66,8 +66,8 @@ public class DamlDataTypeTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text)),
-            new DamlField("age", new DamlPrimitiveType(DamlPrimitive.Int64))
+            new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text)),
+            new DamlFieldDefinition("age", new DamlPrimitiveType(DamlPrimitive.Int64))
         };
         var record = new DamlRecordDefinition(fields);
 

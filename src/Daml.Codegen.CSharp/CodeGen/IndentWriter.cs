@@ -23,10 +23,29 @@ internal sealed class IndentWriter(StringBuilder sb)
     /// <summary>Returns the sorted set of namespaces required by this file.</summary>
     public IReadOnlyCollection<string> RequiredUsings => _requiredUsings;
 
+    private bool _atLineStart = true;
+
     public void Indent() => _indentLevel++;
     public void Dedent() => _indentLevel = Math.Max(0, _indentLevel - 1);
 
-    public void Append(string text) => sb.Append(text);
+    public void Append(string text)
+    {
+        WriteIndentIfAtLineStart();
+        sb.Append(text);
+    }
+
+    private void WriteIndentIfAtLineStart()
+    {
+        if (!_atLineStart)
+        {
+            return;
+        }
+        for (int i = 0; i < _indentLevel; i++)
+        {
+            sb.Append(IndentString);
+        }
+        _atLineStart = false;
+    }
 
     // Emit LF explicitly rather than via `StringBuilder.AppendLine` (which uses
     // `Environment.NewLine`). Generated source is published in NuGet packages
@@ -41,12 +60,10 @@ internal sealed class IndentWriter(StringBuilder sb)
     {
         if (line is not null)
         {
-            for (int i = 0; i < _indentLevel; i++)
-            {
-                sb.Append(IndentString);
-            }
+            WriteIndentIfAtLineStart();
             sb.Append(line);
         }
         sb.Append(Newline);
+        _atLineStart = true;
     }
 }

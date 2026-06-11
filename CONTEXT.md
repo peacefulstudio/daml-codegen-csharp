@@ -22,7 +22,8 @@ _Avoid_: "decoded DAR", "AST file"
 The Scala binary that reads a `.dar` via `daml-lf-archive` and emits an Intermediate DAR.
 Runs only at codegen time — never at application runtime. Coupling to `daml-lf-archive`
 is confined to this binary. Shipped as a JAR inside the `dpm codegen-cs` bundle and
-executed against the host JDK (a dpm install precondition).
+executed against the host JDK (a dpm install precondition). The helper ships only
+inside that OCI bundle — its source is not part of the public repository.
 _Avoid_: "Scala helper", "decoder service", "ast extractor"
 
 **AstToIntermediate translator**:
@@ -33,8 +34,9 @@ the Intermediate AST.
 _Avoid_: "AST converter", "Scala-to-proto mapper"
 
 **C# emitter**:
-The .NET binary that consumes an Intermediate DAR and writes `.cs` files. Replaces today's
-`CSharpCodeGenerator` walking `DamlPackage`; the new walk is over `IntermediatePackage`.
+The .NET binary that consumes an Intermediate DAR and writes `.cs` files. Implemented by
+`CSharpCodeGenerator`, which walks the model that `IntermediateDarReader` builds from the
+`IntermediatePackage` proto.
 Shipped as a self-contained, single-file .NET binary inside the `dpm codegen-cs` bundle —
 one per target RID, with the .NET runtime statically bundled — so consumers do not need
 a host .NET runtime to run codegen. **DPM does not embed the emitter**: DPM is the
@@ -59,9 +61,11 @@ helper on the input DAR, hands the Intermediate DAR to the bundled C# emitter, w
 right RID lazily on first invocation (requires `DPM_AUTO_INSTALL=true`) and dispatches
 to its launcher at `dpm codegen-cs` invocation time. Users opt in by listing every
 component they need — SDK ones and `codegen-cs` — under `components:` in `daml.yaml`,
-with no `sdk-version` key (the two are mutually exclusive by upstream design). The
-supply chain is the OCI registry plus stock dpm — the codegen toolchain is not
-distributed as a `dotnet tool`, a Docker image, or a NuGet package.
+with no `sdk-version` key (the two are mutually exclusive by upstream design).
+The toolchain's supply chain is the OCI registry plus stock dpm — the codegen
+toolchain is not distributed as a `dotnet tool`, a Docker image, or a NuGet
+package. (The `Daml.Codegen.CSharp` emitter library is separately published
+as a NuGet library for programmatic use.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
 ## Example dialogue
@@ -70,7 +74,7 @@ _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 >
 > **Domain expert**: They don't. The JVM helper only runs at codegen time — when you
 > regenerate against a new DAR. The generated `.cs` is plain .NET; once it lands in your
-> repo (or a Canton.Splice NuGet), the JVM is gone from the picture.
+> repo (or a NuGet package generated from a DAR), the JVM is gone from the picture.
 >
 > **Dev**: So if Splice ships a patch release, do we have to regenerate?
 >

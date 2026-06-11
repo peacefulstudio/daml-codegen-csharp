@@ -11,18 +11,18 @@ namespace Daml.Codegen.CSharp.Model;
 /// </summary>
 public sealed class DarModel : IDarSource
 {
+    /// <inheritdoc />
     public required DamlPackage MainPackage { get; init; }
+
+    /// <inheritdoc />
     public required IReadOnlyList<DamlPackage> Dependencies { get; init; }
 
     private Dictionary<string, DamlPackage>? _index;
 
+    /// <inheritdoc />
     public DamlPackage? GetPackageById(string packageId)
     {
         _index ??= ((IDarSource)this).AllPackages.ToDictionary(p => p.PackageId);
         return _index.GetValueOrDefault(packageId);
-    }
-
-    public void ResolveAllDependencyReferences()
-    {
     }
 }

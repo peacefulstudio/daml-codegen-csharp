@@ -37,7 +37,7 @@ public abstract record DamlDataTypeDefinition;
 /// <summary>
 /// A record (product) type definition.
 /// </summary>
-public sealed record DamlRecordDefinition(IReadOnlyList<DamlField> Fields) : DamlDataTypeDefinition;
+public sealed record DamlRecordDefinition(IReadOnlyList<DamlFieldDefinition> Fields) : DamlDataTypeDefinition;
 
 /// <summary>
 /// A variant (sum) type definition.
@@ -57,4 +57,4 @@ public sealed record DamlVariantConstructor(string Name, DamlType? ArgumentType)
 /// <summary>
 /// Represents a field in a record.
 /// </summary>
-public sealed record DamlField(string Name, DamlType Type);
+public sealed record DamlFieldDefinition(string Name, DamlType Type);

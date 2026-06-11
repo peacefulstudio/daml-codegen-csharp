@@ -28,17 +28,15 @@ public class DependencyTests
     }
 
     [Fact]
-    public void DamlPackageReference_should_allow_setting_name_and_version()
+    public void DamlPackageReference_should_carry_name_and_version_set_at_construction()
     {
-        // Arrange
+        // Arrange & Act
         var reference = new DamlPackageReference
         {
-            PackageId = "abc123def456"
+            PackageId = "abc123def456",
+            Name = "my-dependency",
+            Version = new Version(1, 2, 3)
         };
-
-        // Act
-        reference.Name = "my-dependency";
-        reference.Version = new Version(1, 2, 3);
 
         // Assert
         reference.Name.Should().Be("my-dependency");

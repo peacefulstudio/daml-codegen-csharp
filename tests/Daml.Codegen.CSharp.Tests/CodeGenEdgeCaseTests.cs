@@ -17,8 +17,6 @@ public class CodeGenEdgeCaseTests
     {
         options ??= new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -83,7 +81,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Amount",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlTypeApp(
+                        new DamlFieldDefinition("value", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Numeric),
                             [new DamlTypeVar("10")])) // Numeric 10 scale
                     ])
@@ -122,7 +120,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Amount",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlTypeApp(
+                        new DamlFieldDefinition("value", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Numeric),
                             [new DamlTypeVar("10")]))
                     ])
@@ -163,7 +161,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Container",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("item", new DamlTypeVar("a"))
+                        new DamlFieldDefinition("item", new DamlTypeVar("a"))
                     ])
                 }
             ],
@@ -199,7 +197,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Container",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("item", new DamlTypeVar("a"))
+                        new DamlFieldDefinition("item", new DamlTypeVar("a"))
                     ])
                 }
             ],
@@ -267,7 +265,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Container",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("items", new DamlTypeApp(
+                        new DamlFieldDefinition("items", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.List),
                             [new DamlTypeVar("a")]))
                     ])
@@ -305,7 +303,7 @@ public class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Contract",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -324,7 +322,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Contract",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -357,7 +355,7 @@ public class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Contract",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -375,7 +373,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Contract",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -408,7 +406,7 @@ public class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Contract",
-                    Fields = [new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -429,7 +427,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Contract",
-                    Definition = new DamlRecordDefinition([new DamlField("data", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -480,8 +478,8 @@ public class CodeGenEdgeCaseTests
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 }
             ],
@@ -520,7 +518,7 @@ public class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Token",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -529,12 +527,12 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Token", // Same name as template
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 },
                 new DamlDataType
                 {
                     Name = "OtherType", // Different name
-                    Definition = new DamlRecordDefinition([new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -578,8 +576,8 @@ public class CodeGenEdgeCaseTests
                     Name = "DateRecord",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("startDate", new DamlPrimitiveType(DamlPrimitive.Date)),
-                        new DamlField("endDate", new DamlPrimitiveType(DamlPrimitive.Date))
+                        new DamlFieldDefinition("startDate", new DamlPrimitiveType(DamlPrimitive.Date)),
+                        new DamlFieldDefinition("endDate", new DamlPrimitiveType(DamlPrimitive.Date))
                     ])
                 }
             ],
@@ -616,7 +614,7 @@ public class CodeGenEdgeCaseTests
                     Name = "TimestampRecord",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("createdAt", new DamlPrimitiveType(DamlPrimitive.Timestamp))
+                        new DamlFieldDefinition("createdAt", new DamlPrimitiveType(DamlPrimitive.Timestamp))
                     ])
                 }
             ],
@@ -653,7 +651,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Reference",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("target", new DamlTypeApp(
+                        new DamlFieldDefinition("target", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.ContractId),
                             [new DamlTypeRef("", "Test.Module", "Asset")]))
                     ])
@@ -692,7 +690,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Inner",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 },
                 new DamlDataType
@@ -700,7 +698,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Outer",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("inner", new DamlTypeRef("", "Test.Module", "Inner"))
+                        new DamlFieldDefinition("inner", new DamlTypeRef("", "Test.Module", "Inner"))
                     ])
                 }
             ],
@@ -778,7 +776,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Type1",
-                    Definition = new DamlRecordDefinition([new DamlField("v", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("v", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -793,7 +791,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Type2",
-                    Definition = new DamlRecordDefinition([new DamlField("v", new DamlPrimitiveType(DamlPrimitive.Int64))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("v", new DamlPrimitiveType(DamlPrimitive.Int64))])
                 }
             ],
             Interfaces = []
@@ -959,7 +957,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 }
             ],
@@ -1013,7 +1011,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Token",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("symbol", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("symbol", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1080,7 +1078,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Transfer",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
+                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
                     ])
                 },
                 new DamlDataType
@@ -1220,7 +1218,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Meta",
-                    Definition = new DamlRecordDefinition([new DamlField("note", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("note", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -1238,7 +1236,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Wrapper",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("meta", new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Meta"))
+                        new DamlFieldDefinition("meta", new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Meta"))
                     ])
                 }
             ],
@@ -1295,8 +1293,8 @@ public class CodeGenEdgeCaseTests
                     Name = "Owner",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("a", new DamlTypeRef("foreign-a-id", "A.Module", "AType")),
-                        new DamlField("b", new DamlTypeRef("foreign-b-id", "B.Module", "BType"))
+                        new DamlFieldDefinition("a", new DamlTypeRef("foreign-a-id", "A.Module", "AType")),
+                        new DamlFieldDefinition("b", new DamlTypeRef("foreign-b-id", "B.Module", "BType"))
                     ])
                 }
             ],
@@ -1307,7 +1305,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1346,7 +1343,7 @@ public class CodeGenEdgeCaseTests
                     Name = "RelTime",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("microseconds", new DamlPrimitiveType(DamlPrimitive.Int64))
+                        new DamlFieldDefinition("microseconds", new DamlPrimitiveType(DamlPrimitive.Int64))
                     ])
                 }
             ],
@@ -1365,7 +1362,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Timer",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("d", new DamlTypeRef(StdlibTimePackageId, "DA.Time.Types", "RelTime"))
+                        new DamlFieldDefinition("d", new DamlTypeRef(StdlibTimePackageId, "DA.Time.Types", "RelTime"))
                     ])
                 }
             ],
@@ -1376,7 +1373,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1422,8 +1418,8 @@ public class CodeGenEdgeCaseTests
                     TypeParams = ["a", "b"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("_1", new DamlTypeVar("a")),
-                        new DamlField("_2", new DamlTypeVar("b"))
+                        new DamlFieldDefinition("_1", new DamlTypeVar("a")),
+                        new DamlFieldDefinition("_2", new DamlTypeVar("b"))
                     ])
                 }
             ],
@@ -1442,7 +1438,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Pair",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("p", new DamlTypeApp(
+                        new DamlFieldDefinition("p", new DamlTypeApp(
                             new DamlTypeRef(DamlPrimPackageId, "DA.Types", "Tuple2"),
                             [
                                 new DamlPrimitiveType(DamlPrimitive.Int64),
@@ -1458,7 +1454,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1498,7 +1493,7 @@ public class CodeGenEdgeCaseTests
                     TypeParams = ["k"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("map", new DamlTypeApp(
+                        new DamlFieldDefinition("map", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.GenMap),
                             [new DamlTypeVar("k"), new DamlPrimitiveType(DamlPrimitive.Unit)]))
                     ])
@@ -1519,7 +1514,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Roster",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("members", new DamlTypeApp(
+                        new DamlFieldDefinition("members", new DamlTypeApp(
                             new DamlTypeRef(SetPackageId, "DA.Set.Types", "Set"),
                             [new DamlPrimitiveType(DamlPrimitive.Party)]))
                     ])
@@ -1532,7 +1527,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1570,8 +1564,8 @@ public class CodeGenEdgeCaseTests
                     TypeParams = ["a", "b"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("_1", new DamlTypeVar("a")),
-                        new DamlField("_2", new DamlTypeVar("b"))
+                        new DamlFieldDefinition("_1", new DamlTypeVar("a")),
+                        new DamlFieldDefinition("_2", new DamlTypeVar("b"))
                     ])
                 }
             ],
@@ -1590,7 +1584,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Pair",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("p", new DamlTypeApp(
+                        new DamlFieldDefinition("p", new DamlTypeApp(
                             new DamlTypeRef(UserPackageId, "DA.Types", "Tuple2"),
                             [
                                 new DamlPrimitiveType(DamlPrimitive.Int64),
@@ -1606,7 +1600,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1638,7 +1631,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Meta",
-                    Definition = new DamlRecordDefinition([new DamlField("note", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("note", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -1656,7 +1649,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Wrapper",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("meta", new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Meta"))
+                        new DamlFieldDefinition("meta", new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Meta"))
                     ])
                 }
             ],
@@ -1667,7 +1660,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1715,7 +1707,7 @@ public class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -1733,7 +1725,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Holding",
-                    Definition = new DamlRecordDefinition([new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
             Interfaces = []
@@ -1743,7 +1735,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1819,7 +1810,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1860,8 +1850,8 @@ public class CodeGenEdgeCaseTests
                     TypeParams = ["a", "b"],
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("_1", new DamlTypeVar("a")),
-                        new DamlField("_2", new DamlTypeVar("b"))
+                        new DamlFieldDefinition("_1", new DamlTypeVar("a")),
+                        new DamlFieldDefinition("_2", new DamlTypeVar("b"))
                     ])
                 }
             ],
@@ -1880,7 +1870,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Pair",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("p", new DamlTypeApp(
+                        new DamlFieldDefinition("p", new DamlTypeApp(
                             new DamlTypeRef(PlaceholderPackageId, "DA.Types", "Tuple2"),
                             [
                                 new DamlPrimitiveType(DamlPrimitive.Int64),
@@ -1896,7 +1886,6 @@ public class CodeGenEdgeCaseTests
 
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -1947,7 +1936,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Token",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("symbol", new DamlPrimitiveType(DamlPrimitive.Text))
+                        new DamlFieldDefinition("symbol", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
             ],
@@ -1980,7 +1969,7 @@ public class CodeGenEdgeCaseTests
                     [
                         // Refers to the record-shaped Token in App.Records, NOT the enum
                         // of the same name in App.Config.
-                        new DamlField("t", new DamlTypeRef("test-package-id", "App.Records", "Token"))
+                        new DamlFieldDefinition("t", new DamlTypeRef("test-package-id", "App.Records", "Token"))
                     ])
                 }
             ],
@@ -2014,7 +2003,7 @@ public class CodeGenEdgeCaseTests
                 new DamlDataType
                 {
                     Name = "Token",
-                    Definition = new DamlRecordDefinition([new DamlField("symbol", new DamlPrimitiveType(DamlPrimitive.Text))])
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("symbol", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
             Interfaces = []
@@ -2044,7 +2033,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Holder",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("t", new DamlTypeRef("test-package-id", "App.Config", "Token"))
+                        new DamlFieldDefinition("t", new DamlTypeRef("test-package-id", "App.Config", "Token"))
                     ])
                 }
             ],
@@ -2091,7 +2080,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Holder",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("t", new DamlTypeRef("test-package-id", "App.Config", "Token"))
+                        new DamlFieldDefinition("t", new DamlTypeRef("test-package-id", "App.Config", "Token"))
                     ])
                 }
             ],
@@ -2133,7 +2122,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Locked",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("lock", new DamlTypeApp(
+                        new DamlFieldDefinition("lock", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.Optional),
                             [new DamlPrimitiveType(DamlPrimitive.Text)]))
                     ])
@@ -2186,8 +2175,8 @@ public class CodeGenEdgeCaseTests
                     Name = "Rectangle",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("width", new DamlPrimitiveType(DamlPrimitive.Int64)),
-                        new DamlField("height", new DamlPrimitiveType(DamlPrimitive.Int64))
+                        new DamlFieldDefinition("width", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlFieldDefinition("height", new DamlPrimitiveType(DamlPrimitive.Int64))
                     ])
                 }
             ],
@@ -2234,7 +2223,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Bag",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("counts", new DamlTypeApp(
+                        new DamlFieldDefinition("counts", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.GenMap),
                             [
                                 new DamlPrimitiveType(DamlPrimitive.Text),
@@ -2278,7 +2267,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Buckets",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("items", new DamlTypeApp(
+                        new DamlFieldDefinition("items", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.TextMap),
                             [
                                 new DamlTypeApp(
@@ -2319,7 +2308,7 @@ public class CodeGenEdgeCaseTests
                     Name = "Ledger",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("entries", new DamlTypeApp(
+                        new DamlFieldDefinition("entries", new DamlTypeApp(
                             new DamlPrimitiveType(DamlPrimitive.GenMap),
                             [
                                 new DamlPrimitiveType(DamlPrimitive.Text),

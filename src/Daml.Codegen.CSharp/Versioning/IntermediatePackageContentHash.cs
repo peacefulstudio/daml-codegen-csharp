@@ -14,7 +14,7 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// <c>IntermediatePackage</c> serializes byte-for-byte the same will resolve to the
 /// same 4th-segment revision; any difference bumps the revision.
 /// </summary>
-public static class IntermediatePackageContentHash
+internal static class IntermediatePackageContentHash
 {
     /// <summary>
     /// Returns the lowercase hex SHA-256 of the package's deterministic proto bytes.

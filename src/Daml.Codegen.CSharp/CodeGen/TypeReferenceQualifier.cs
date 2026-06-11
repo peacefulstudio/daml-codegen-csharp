@@ -74,8 +74,10 @@ public sealed class TypeReferenceQualifier
             ["HashSet"] = "System.Collections.Generic",
         };
 
+    /// <summary>Every generated namespace plus all its ancestor prefixes, used for shadowing checks.</summary>
     public IReadOnlySet<string> AllNamespaces { get; }
 
+    /// <summary>Creates a qualifier scoped to the given generated namespaces (ancestors are derived automatically).</summary>
     public TypeReferenceQualifier(IEnumerable<string> generatedNamespaces)
     {
         var all = new HashSet<string>(StringComparer.Ordinal);

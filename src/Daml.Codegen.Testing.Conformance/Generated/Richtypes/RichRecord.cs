@@ -17,7 +17,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Richtypes;
+namespace Daml.Codegen.Testing.Conformance.Richtypes;
 
 /// <summary>
 /// Generated from Daml template RichTypes:RichRecord
@@ -63,7 +63,7 @@ public sealed partial record RichRecord(Party Owner, long Count, decimal Amount,
         Active: record.GetRequiredField("active").As<DamlBool>().Value,
         AsOf: record.GetRequiredField("asOf").As<DamlDate>().Value,
         ObservedAt: record.GetRequiredField("observedAt").As<DamlTimestamp>().Value,
-        Note: record.GetRequiredField("note").As<DamlOptional>().HasValue ? record.GetRequiredField("note").As<DamlOptional>().Value!.As<DamlText>().Value : null,
+        Note: record.GetRequiredField("note").AsOptional().HasValue ? record.GetRequiredField("note").AsOptional().Value!.As<DamlText>().Value : null,
         Tags: (IReadOnlyList<string>)record.GetRequiredField("tags").As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList(),
         Attributes: record.GetRequiredField("attributes").As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => kv.Value.As<DamlText>().Value),
         Marker: new ContractId<Marker>(record.GetRequiredField("marker").As<DamlContractId>().Value),
@@ -133,8 +133,8 @@ public sealed record RelabelResult(ContractId<RichRecord> RichRecord)
         var templateMatches0 = new List<string>();
         foreach (var item in created)
         {
-            if (string.Equals(item.TemplateId.ModuleName, global::Richtypes.RichRecord.TemplateId.ModuleName, StringComparison.Ordinal)
-                && string.Equals(item.TemplateId.EntityName, global::Richtypes.RichRecord.TemplateId.EntityName, StringComparison.Ordinal))
+            if (string.Equals(item.TemplateId.ModuleName, global::Daml.Codegen.Testing.Conformance.Richtypes.RichRecord.TemplateId.ModuleName, StringComparison.Ordinal)
+                && string.Equals(item.TemplateId.EntityName, global::Daml.Codegen.Testing.Conformance.Richtypes.RichRecord.TemplateId.EntityName, StringComparison.Ordinal))
             {
                 templateMatches0.Add(item.ContractId);
             }
@@ -165,7 +165,7 @@ public sealed record RelabelResult(ContractId<RichRecord> RichRecord)
         }
 
         return new ExerciseOutcome<RelabelResult>.One(new RelabelResult(
-            RichRecord: new ContractId<global::Richtypes.RichRecord>(matches0[0])
+            RichRecord: new ContractId<global::Daml.Codegen.Testing.Conformance.Richtypes.RichRecord>(matches0[0])
         ));
     }
 

@@ -22,11 +22,4 @@ public interface IDarSource
 
     /// <summary>Returns the package with the given id, or null if absent.</summary>
     DamlPackage? GetPackageById(string packageId);
-
-    /// <summary>
-    /// Resolves dependency-reference name/version metadata against the
-    /// loaded packages. Idempotent. Implementations that don't carry
-    /// dependency references (e.g. the proto-direct path) may no-op.
-    /// </summary>
-    void ResolveAllDependencyReferences();
 }

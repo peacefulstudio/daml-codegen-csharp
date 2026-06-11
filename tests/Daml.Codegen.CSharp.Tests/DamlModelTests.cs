@@ -153,8 +153,8 @@ public class DamlModelTests
         // Arrange
         var fields = new[]
         {
-            new DamlField("name", new DamlPrimitiveType(DamlPrimitive.Text)),
-            new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Int64))
+            new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text)),
+            new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Int64))
         };
 
         // Act
@@ -225,7 +225,7 @@ public class DamlModelTests
     public void DamlDataType_should_store_name_and_definition()
     {
         // Arrange
-        var recordDef = new DamlRecordDefinition([new DamlField("value", new DamlPrimitiveType(DamlPrimitive.Text))]);
+        var recordDef = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))]);
 
         // Act
         var dataType = new DamlDataType
@@ -241,13 +241,13 @@ public class DamlModelTests
 
     #endregion
 
-    #region DamlField Tests
+    #region DamlFieldDefinition Tests
 
     [Fact]
-    public void DamlField_should_store_name_and_type()
+    public void DamlFieldDefinition_should_store_name_and_type()
     {
         // Arrange & Act
-        var field = new DamlField("myField", new DamlPrimitiveType(DamlPrimitive.Bool));
+        var field = new DamlFieldDefinition("myField", new DamlPrimitiveType(DamlPrimitive.Bool));
 
         // Assert
         field.Name.Should().Be("myField");
@@ -263,7 +263,7 @@ public class DamlModelTests
     public void DamlTemplate_should_store_all_properties()
     {
         // Arrange
-        var fields = new[] { new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party)) };
+        var fields = new[] { new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)) };
         var choices = new[]
         {
             new DamlChoice
@@ -489,6 +489,14 @@ public class DamlModelTests
     #endregion
 
     #region DarModel IDarSource Tests
+
+    [Fact]
+    public void IDarSource_does_not_force_implementations_to_carry_dependency_reference_resolution()
+    {
+        typeof(IDarSource).GetMethod("ResolveAllDependencyReferences").Should().BeNull(
+            "the member was leftover two-phase-init scaffolding with an empty proto-path implementation; " +
+            "custom IDarSource implementations must not be forced to implement it");
+    }
 
     [Fact]
     public void DarModel_AllPackages_should_include_main_and_dependencies()

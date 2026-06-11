@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OU
+// Copyright (c) 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
@@ -12,7 +12,8 @@ option csharp_namespace = "Daml.Codegen.Intermediate";
 message IntermediateDar {
   IntermediatePackage main = 1;
   // Sorted lexicographically by `dependencies[i].package_id` — load-bearing
-  // for determinism (see ADR 0002 and AstToIntermediate.translate).
+  // for determinism. Producers must emit this ordering; the JVM helper
+  // bundled in `dpm codegen-cs` guarantees it.
   repeated IntermediatePackage dependencies = 2;
 }
 
@@ -22,8 +23,7 @@ message IntermediatePackage {
   string package_version = 3;
   string language_version = 4;
   // Sorted lexicographically by qualified module name (segments joined with
-  // `.`) — load-bearing for determinism (see ADR 0002 and
-  // AstToIntermediate.translatePackage).
+  // `.`) — load-bearing for determinism. Producers must emit this ordering.
   repeated IntermediateModule modules = 5;
   // Set when this package is an upgrade of another package; carries the
   // package id of the predecessor. Empty means "no upgrade predecessor".
@@ -35,14 +35,14 @@ message IntermediatePackage {
 message IntermediateModule {
   repeated string name_segments = 1;
   // Sorted lexicographically by `data_types[i].name` — load-bearing for
-  // determinism (see ADR 0002 and AstToIntermediate.translateModule).
+  // determinism. Producers must emit this ordering.
   repeated DataType data_types = 2;
   // Sorted lexicographically by `templates[i].name`.
   repeated Template templates = 3;
   // Sorted lexicographically by `interfaces[i].name`.
   repeated Interface interfaces = 4;
-  // Daml user-defined exceptions are intentionally absent for M1 — no
-  // C# emitter mapping for exceptions yet. Field number 5 is reserved
+  // Daml user-defined exceptions are intentionally absent from the current
+  // schema — no C# emitter mapping for exceptions yet. Field number 5 is reserved
   // so adding a `repeated Exception exceptions = 5;` later doesn't
   // shift adjacent fields.
   reserved 5;
@@ -150,8 +150,9 @@ message Type {
 
 message TypeApp {
   // Invariant: `function.sort` is never another `TypeApp` — the JVM helper
-  // normalises curried `T A B C` into a single `TypeApp(function=T, arguments=[A,B,C])`
-  // (see `AstToIntermediate.collectApp`). Emitters can rely on this; producers must preserve it.
+  // bundled in `dpm codegen-cs` normalises curried `T A B C` into a single
+  // `TypeApp(function=T, arguments=[A,B,C])`. Emitters can rely on this;
+  // producers must preserve it.
   Type function = 1;
   repeated Type arguments = 2;
 }

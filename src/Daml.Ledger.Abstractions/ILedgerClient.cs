@@ -15,8 +15,21 @@ namespace Daml.Ledger.Abstractions;
 /// subscribing to update streams. Implementations target a specific
 /// transport (gRPC Canton, HTTP REST, in-memory test fake).
 /// </summary>
-public interface ILedgerClient : IDisposable
+public interface ILedgerClient : IDisposable, IAsyncDisposable
 {
+    /// <summary>
+    /// Default bridge so <c>await using</c> works against any implementation:
+    /// delegates to <see cref="IDisposable.Dispose"/>. Implementations that hold
+    /// asynchronously-released resources (e.g. gRPC channels) should override
+    /// with a genuinely asynchronous implementation.
+    /// </summary>
+    ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        Dispose();
+        GC.SuppressFinalize(this);
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// Exercises a choice using a <see cref="SubmitterInfo"/> and returns a structured
     /// outcome distinguishing success, Daml errors, and infrastructure errors. The

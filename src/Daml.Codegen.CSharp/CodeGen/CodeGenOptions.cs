@@ -9,11 +9,6 @@ namespace Daml.Codegen.CSharp.CodeGen;
 public sealed class CodeGenOptions
 {
     /// <summary>
-    /// Gets or sets the output directory for generated files.
-    /// </summary>
-    public required string OutputDirectory { get; init; }
-
-    /// <summary>
     /// Gets or sets the root namespace for generated code.
     /// If null, the namespace is derived from the package name.
     /// </summary>
@@ -26,19 +21,9 @@ public sealed class CodeGenOptions
     public string? RootFilter { get; init; }
 
     /// <summary>
-    /// Gets or sets whether to generate JSON serialization support.
-    /// </summary>
-    public bool GenerateJsonSupport { get; init; } = true;
-
-    /// <summary>
     /// Gets or sets whether to enable nullable reference types.
     /// </summary>
     public bool EnableNullableReferenceTypes { get; init; } = true;
-
-    /// <summary>
-    /// Gets or sets the verbosity level for logging.
-    /// </summary>
-    public int Verbosity { get; init; } = 1;
 
     /// <summary>
     /// Gets or sets whether to generate XML documentation comments.
@@ -77,6 +62,8 @@ public sealed class CodeGenOptions
 
     /// <summary>
     /// Gets or sets the version of the Daml.Runtime package to reference.
+    /// When null, the generated project pins the Daml.Runtime version that is
+    /// lockstep-versioned with this emitter build.
     /// </summary>
     public string? RuntimePackageVersion { get; init; }
 

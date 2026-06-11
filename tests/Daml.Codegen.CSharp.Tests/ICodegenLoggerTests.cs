@@ -14,7 +14,7 @@ public class ICodegenLoggerTests
     public void code_generator_accepts_icodegenlogger_implementation()
     {
         var captured = new CapturingLogger();
-        var options = new CodeGenOptions { OutputDirectory = "/tmp/test-168-logger" };
+        var options = new CodeGenOptions();
 
         var generator = new CSharpCodeGenerator(options, captured);
         generator.Should().NotBeNull("CSharpCodeGenerator's constructor must accept any ICodegenLogger, not only ConsoleLogger");

@@ -14,14 +14,18 @@ public sealed class DamlPackageReference
     public required string PackageId { get; init; }
 
     /// <summary>
-    /// Gets the package name if known (resolved from dependencies).
+    /// Gets the package name if known (resolved from dependencies); <c>null</c>
+    /// when the referenced package is not bundled in the source DAR and must be
+    /// provided externally (e.g. by the participant's package store).
     /// </summary>
-    public string? Name { get; set; }
+    public string? Name { get; init; }
 
     /// <summary>
-    /// Gets the package version if known (resolved from dependencies).
+    /// Gets the package version if known (resolved from dependencies); <c>null</c>
+    /// when the referenced package is not bundled in the source DAR and must be
+    /// provided externally (e.g. by the participant's package store).
     /// </summary>
-    public Version? Version { get; set; }
+    public Version? Version { get; init; }
 }
 
 /// <summary>

@@ -31,10 +31,9 @@ namespace Daml.Runtime.Commands;
 /// </para>
 /// <para>
 /// This is the canonical home of <c>SubmitterInfo</c>: <c>Party</c> already lives in
-/// <c>Daml.Runtime</c>, so command submitters belong here too. The
-/// <c>Canton.Ledger.Grpc.Client</c> package consumes this type via its
-/// <c>Daml.Runtime</c> package reference once the <c>Daml.Runtime</c> version that
-/// ships this type is in use.
+/// <c>Daml.Runtime</c>, so command submitters belong here too. Ledger-client
+/// transport implementations consume this type via their <c>Daml.Runtime</c>
+/// package reference.
 /// </para>
 /// </remarks>
 public readonly record struct SubmitterInfo

@@ -266,6 +266,94 @@ public class LedgerClientExtensionsTests
             .WithMessage("*Connection reset*");
     }
 
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_carrying_the_DamlError_outcome()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string> { ["cid"] = "00abc" });
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.Category.Should().Be(DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing);
+        exception.ErrorId.Should().Be("CONTRACT_NOT_FOUND");
+        exception.Metadata.Should().ContainKey("cid").WhoseValue.Should().Be("00abc");
+        exception.StatusCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_carrying_the_InfraError_outcome()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.StatusCode.Should().Be(14);
+        exception.Category.Should().BeNull();
+        exception.ErrorId.Should().BeNull();
+        exception.Metadata.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_without_error_detail_for_None_and_Many()
+    {
+        ILedgerClient noneClient = new StubLedgerClient(new ExerciseOutcome<int>.None());
+        ILedgerClient manyClient = new StubLedgerClient(new ExerciseOutcome<int>.Many(2, ["cid-1", "cid-2"]));
+
+        Func<Task> noneAct = () => noneClient.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+        Func<Task> manyAct = () => manyClient.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var noneException = (await noneAct.Should().ThrowAsync<LedgerOperationException>()).Which;
+        var manyException = (await manyAct.Should().ThrowAsync<LedgerOperationException>()).Which;
+        noneException.Category.Should().BeNull();
+        noneException.StatusCode.Should().BeNull();
+        manyException.Category.Should().BeNull();
+        manyException.StatusCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_throws_LedgerOperationException_carrying_the_DamlError_outcome()
+    {
+        var outcome = new ExerciseOutcome<object>.DamlError(
+            DamlErrorCategory.ContentionOnSharedResources,
+            "LOCAL_VERDICT_LOCKED_CONTRACTS",
+            "Contract is locked",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.Category.Should().Be(DamlErrorCategory.ContentionOnSharedResources);
+        exception.ErrorId.Should().Be("LOCAL_VERDICT_LOCKED_CONTRACTS");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_throws_LedgerOperationException_carrying_the_InfraError_outcome()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<object>.InfraError(4, "Deadline exceeded"));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.StatusCode.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_default_bridge_delegates_to_Dispose()
+    {
+        var client = new StubLedgerClient(new ExerciseOutcome<int>.None());
+
+        await ((IAsyncDisposable)(ILedgerClient)client).DisposeAsync();
+
+        client.Disposed.Should().BeTrue();
+    }
+
     /// <summary>
     /// Minimal <see cref="ILedgerClient"/> stub that returns a pre-configured
     /// <see cref="ExerciseOutcome{T}"/> from the <see cref="SubmitterInfo"/>
@@ -329,7 +417,9 @@ public class LedgerClientExtensionsTests
         public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(0L);
 
-        public void Dispose() { }
+        public bool Disposed { get; private set; }
+
+        public void Dispose() => Disposed = true;
 
         private static async IAsyncEnumerable<TItem> EmptyAsync<TItem>(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)

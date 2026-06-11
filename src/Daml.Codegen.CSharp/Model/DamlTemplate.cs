@@ -16,7 +16,7 @@ public sealed class DamlTemplate
     /// <summary>
     /// Gets the template fields.
     /// </summary>
-    public required IReadOnlyList<DamlField> Fields { get; init; }
+    public required IReadOnlyList<DamlFieldDefinition> Fields { get; init; }
 
     /// <summary>
     /// Gets the choices defined on this template.

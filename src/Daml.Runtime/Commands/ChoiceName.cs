@@ -34,9 +34,11 @@ public readonly record struct ChoiceName
         _value = value;
     }
 
+    /// <summary>Extracts the choice name; explicit so it is never silently used as arbitrary text.</summary>
     public static explicit operator string(ChoiceName name) =>
         name._value ?? throw new InvalidOperationException("Cannot convert a default (uninitialized) ChoiceName to string.");
 
+    /// <summary>Parses a choice name; explicit so arbitrary strings never silently become choice names.</summary>
     public static explicit operator ChoiceName(string value) => new(value);
 
     /// <remarks>

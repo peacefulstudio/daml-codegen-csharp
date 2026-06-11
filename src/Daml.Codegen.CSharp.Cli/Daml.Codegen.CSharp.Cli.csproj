@@ -8,7 +8,13 @@
     <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
     <AssemblyName>Daml.Codegen.CSharp.Cli</AssemblyName>
     <RollForward>Major</RollForward>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daml.Codegen.CSharp.Tests" />
+    <InternalsVisibleTo Include="Daml.Codegen.CSharp.Cli.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />

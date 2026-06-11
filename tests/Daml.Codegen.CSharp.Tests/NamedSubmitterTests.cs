@@ -28,8 +28,6 @@ public class NamedSubmitterTests
     {
         var options = new CodeGenOptions
         {
-            OutputDirectory = "/tmp/test",
-            GenerateJsonSupport = true,
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
             UseRecordTypes = true,
@@ -73,10 +71,10 @@ public class NamedSubmitterTests
     {
         var fields = new[]
         {
-            new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("totalAmount", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+            new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("totalAmount", new DamlPrimitiveType(DamlPrimitive.Numeric)),
         };
 
         return new DamlModule
@@ -247,8 +245,8 @@ public class NamedSubmitterTests
                     Name = "Offer",
                     Fields =
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ],
                     Choices =
                     [
@@ -278,8 +276,8 @@ public class NamedSubmitterTests
                     Name = "Offer",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ]),
                 },
                 new DamlDataType
@@ -321,9 +319,9 @@ public class NamedSubmitterTests
                     Name = "Agreement",
                     Fields =
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ],
                     Choices =
                     [
@@ -357,9 +355,9 @@ public class NamedSubmitterTests
                     Name = "Agreement",
                     Definition = new DamlRecordDefinition(
                     [
-                        new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlField("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
+                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
                     ]),
                 }
             ],
@@ -394,7 +392,7 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -415,7 +413,7 @@ public class NamedSubmitterTests
                 {
                     Name = "Holding",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -442,7 +440,7 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         // Synthetic Archive matches the shape Daml-LF emits at
@@ -472,7 +470,7 @@ public class NamedSubmitterTests
                 {
                     Name = "Asset",
                     Definition = new DamlRecordDefinition(
-                        [new DamlField("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 }
             ],
             Interfaces = [],
@@ -496,8 +494,8 @@ public class NamedSubmitterTests
     {
         // Generated templates reference ILedgerClient — that interface lifted to
         // Daml.Ledger.Abstractions, so the using is brought in
-        // unconditionally so consumers don't need to add it. The transport-
-        // specific Canton.Ledger.Grpc.Client using is no longer emitted.
+        // unconditionally so consumers don't need to add it. No transport-
+        // specific gRPC client using is emitted.
         var module = MakeAgreementModule(DamlPartyAnalysis.Static(
             [new DamlPartyPayloadField("platform")]));
 
@@ -505,7 +503,7 @@ public class NamedSubmitterTests
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
         content.Should().Contain("using Daml.Ledger.Abstractions;");
-        content.Should().NotContain("using Canton.Ledger.Grpc.Client;");
+        content.Should().NotContain("using Canton.Ledger.");
     }
 
     #endregion
@@ -526,9 +524,9 @@ public class NamedSubmitterTests
     {
         var fields = new[]
         {
-            new DamlField("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
-            new DamlField("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
+            new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
         };
 
         return new DamlModule

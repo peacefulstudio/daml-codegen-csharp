@@ -12,7 +12,7 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// <see cref="JsonReleaseCounterStore"/>. Intended to be called by the NuGet packing
 /// step once per package being packed.
 /// </summary>
-public static class SpliceNuGetVersion
+internal static class NuGetVersionResolver
 {
     /// <summary>
     /// Computes the 4-part NuGet version for one package being packed. The

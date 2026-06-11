@@ -19,6 +19,7 @@ public sealed record Identifier(
     /// </summary>
     public string FullyQualifiedName => $"{ModuleName}:{EntityName}";
 
+    /// <summary>Returns the canonical <c>packageId:module:entity</c> form accepted by <see cref="Parse"/>.</summary>
     public override string ToString() => $"{PackageId}:{ModuleName}:{EntityName}";
 
     /// <summary>
