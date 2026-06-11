@@ -26,8 +26,11 @@ generated headers carry no `#pragma warning disable CS8019`.
 
 The `expected/` tree is the emitter's output for the vendored
 `intermediate.binpb`. To refresh it after an intentional codegen change,
-re-run the emitter against the proto input and overwrite the `expected/`
-files with the new output, then re-commit.
+run from the repo root (POSIX shell; on Windows, use WSL or Git Bash):
+
+```bash
+scripts/refresh-snapshot.sh splice-api-token-holding-v1
+```
 
 ## The vendored inputs
 
