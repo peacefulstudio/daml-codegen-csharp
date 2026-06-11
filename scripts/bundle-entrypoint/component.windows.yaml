@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/digital-asset/dpm/refs/heads/main/schema/component.v1.schema.json
+apiVersion: digitalasset.com/v1
+kind: Component
+spec:
+  commands:
+    - path: ./dpm-codegen-cs.cmd
+      name: codegen-cs
+      desc: Daml to C# code generator
