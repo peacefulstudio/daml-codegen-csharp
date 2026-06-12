@@ -33,6 +33,12 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.1.8-preview.2] — 2026-06-12
+
+### Changed
+
+- Bump `Google.Protobuf` to 3.35.1 — raises the dependency floor of the `Daml.Codegen.CSharp` package.
+
 ## [0.1.8-preview.1] — 2026-06-11
 
 ### Added
@@ -646,5 +652,6 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...HEAD
+[0.1.8-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...v0.1.8-preview.2
 [0.1.8-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.8-preview.1
