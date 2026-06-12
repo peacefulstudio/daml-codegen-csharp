@@ -209,7 +209,8 @@ jobs:
             exit 1
           fi
           echo "Copied $DAR_COUNT DARs:"
-          find splice-dars -maxdepth 1 -name '*.dar' | head -20
+          # `|| true` works around SIGPIPE killing `find` when `head -20` closes the pipe; pipefail otherwise surfaces SIGPIPE (141) as step failure.
+          find splice-dars -maxdepth 1 -name '*.dar' | head -20 || true
 
       - name: Fetch release-counter store from repo variable
         env:
