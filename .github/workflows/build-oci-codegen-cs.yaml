@@ -1,0 +1,600 @@
+name: Build codegen-cs OCI artifact
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Artifact version tag (e.g. 1.0.0). Required when called from another workflow.'
+        required: true
+        type: string
+      push:
+        description: 'When true, push per-RID artifacts + multi-arch index to GHCR. When false, build and smoke-test only.'
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      reference:
+        description: 'Final multi-arch OCI reference pushed (empty when push=false).'
+        value: ${{ jobs.compose-index.outputs.reference }}
+      index_digest:
+        description: 'Digest of the multi-arch index pushed (empty when push=false).'
+        value: ${{ jobs.compose-index.outputs.index_digest }}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Artifact version tag (e.g. 1.0.0).'
+        required: true
+        type: string
+      push:
+        description: 'Push to GHCR. Uncheck to dry-run the build + smoke test without publishing.'
+        required: false
+        type: boolean
+        default: true
+
+# No release trigger: releases on this repo are immutable, so the bundle must
+# exist before the release is published — dispatch this workflow first, attach
+# the bundle artifacts to the draft release, then publish. A release trigger
+# would also rebuild and overwrite already-released GHCR tags with new digests.
+
+concurrency:
+  group: build-oci-codegen-cs-v${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: peacefulstudio/dpm-codegen-cs
+  ORAS_VERSION: '1.3.1'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  ARTIFACT_TYPE: application/vnd.peacefulstudio.dpm-codegen-cs.bundle.v1+json
+
+jobs:
+  validate-inputs:
+    name: Validate version tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    env:
+      VERSION_INPUT: ${{ inputs.version }}
+    steps:
+      - name: Resolve and validate version
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ -n "${VERSION_INPUT}" ]; then
+            RESOLVED="${VERSION_INPUT}"
+          else
+            echo "::error::No version input — cannot resolve version."
+            exit 1
+          fi
+          if ! [[ "${RESOLVED}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::version='${RESOLVED}' must match ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?$"
+            exit 1
+          fi
+          echo "Version tag accepted: ${RESOLVED}"
+          echo "version=${RESOLVED}" >> "$GITHUB_OUTPUT"
+
+  build-jvm-helper:
+    name: Build JVM helper JAR
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup JDK
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@4ed7b7ec4bfa2074fe48554c09e341267397247c # v1.2.0
+
+      - name: Cache sbt
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.coursier/cache
+          key: sbt-${{ runner.os }}-${{ hashFiles('jvm-helper/build.sbt', 'jvm-helper/project/**') }}
+
+      - name: Assemble JAR
+        working-directory: jvm-helper
+        run: sbt 'clean; assembly'
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jvm-helper-jar
+          path: jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  build-per-rid:
+    name: Build bundle (${{ matrix.rid }})
+    needs: [validate-inputs, build-jvm-helper]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            exe: Daml.Codegen.CSharp.Cli
+            entrypoint: dpm-codegen-cs
+            manifest: component.posix.yaml
+          - rid: linux-arm64
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            exe: Daml.Codegen.CSharp.Cli
+            entrypoint: dpm-codegen-cs
+            manifest: component.posix.yaml
+          - rid: osx-arm64
+            os: darwin
+            arch: arm64
+            runner: macos-15
+            exe: Daml.Codegen.CSharp.Cli
+            entrypoint: dpm-codegen-cs
+            manifest: component.posix.yaml
+          - rid: win-x64
+            os: windows
+            arch: amd64
+            runner: windows-latest
+            exe: Daml.Codegen.CSharp.Cli.exe
+            entrypoint: dpm-codegen-cs.cmd
+            manifest: component.windows.yaml
+
+    env:
+      VERSION_INPUT: ${{ needs.validate-inputs.outputs.version }}
+      RID: ${{ matrix.rid }}
+      BUNDLE_OS: ${{ matrix.os }}
+      BUNDLE_ARCH: ${{ matrix.arch }}
+      EXE_NAME: ${{ matrix.exe }}
+      ENTRYPOINT_NAME: ${{ matrix.entrypoint }}
+      MANIFEST_NAME: ${{ matrix.manifest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup JDK (smoke test only)
+        if: matrix.rid == 'linux-x64'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup oras
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
+        with:
+          version: ${{ env.ORAS_VERSION }}
+
+      - name: Download JVM helper JAR
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: jvm-helper-jar
+          path: jvm-helper-artifact
+
+      # workaround for grpc/grpc#38538 — bundled Grpc.Tools linux_arm64 protoc
+      # segfaults (SIGSEGV, MSB6006 exit 139) on ubuntu-24.04-arm runners.
+      # No released Grpc.Tools has the fix; override with the system protoc.
+      - name: Install system protoc (linux-arm64 workaround for grpc/grpc#38538)
+        if: matrix.rid == 'linux-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler
+          protoc --version
+          echo "PROTOBUF_PROTOC=/usr/bin/protoc" >> "${GITHUB_ENV}"
+
+      - name: Publish self-contained CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet publish src/Daml.Codegen.CSharp.Cli \
+            -c Release \
+            -r "${RID}" \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -o "publish/${RID}"
+
+      - name: Assemble bundle directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="bundle/${RID}"
+          mkdir -p "${BUNDLE}/bin"
+          cp "publish/${RID}/${EXE_NAME}" "${BUNDLE}/bin/${EXE_NAME}"
+          cp jvm-helper-artifact/daml-codegen-jvm-helper.jar "${BUNDLE}/bin/daml-codegen-jvm-helper.jar"
+          cp "scripts/bundle-entrypoint/${ENTRYPOINT_NAME}" "${BUNDLE}/${ENTRYPOINT_NAME}"
+          cp "scripts/bundle-entrypoint/${MANIFEST_NAME}" "${BUNDLE}/component.yaml"
+          if [ "${BUNDLE_OS}" != "windows" ]; then
+            chmod +x "${BUNDLE}/${ENTRYPOINT_NAME}" "${BUNDLE}/bin/${EXE_NAME}"
+          fi
+          ls -la "${BUNDLE}" "${BUNDLE}/bin"
+
+      - name: Archive bundle for release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "dpm-codegen-cs-${VERSION_INPUT}-${BUNDLE_OS}-${BUNDLE_ARCH}.tar.gz" \
+            -C "bundle/${RID}" .
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.rid }}
+          path: dpm-codegen-cs-*.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Smoke test bundle (linux-x64 only)
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        env:
+          FIXTURE_DAR: tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/splice-api-token-holding-v1.dar
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/smoke-out"
+          COUNTERS="${RUNNER_TEMP}/counters.json"
+          rm -rf "${OUT}" "${COUNTERS}"
+          mkdir -p "${OUT}"
+          "./bundle/${RID}/${ENTRYPOINT_NAME}" --dar "${FIXTURE_DAR}" --out "${OUT}" \
+            -- --release-counters "${COUNTERS}" --generate-project
+
+          first_cs="$(find "${OUT}" -type f -name '*.cs' -print -quit)"
+          if [ -z "${first_cs}" ]; then
+            echo "::error::Smoke test produced no .cs files in ${OUT}"
+            exit 1
+          fi
+          echo "Smoke test OK — first generated file: ${first_cs}"
+
+          if [ ! -f "${COUNTERS}" ]; then
+            echo "::error::--release-counters did not write ${COUNTERS}"
+            exit 1
+          fi
+          entry_count="$(jq 'length' "${COUNTERS}")"
+          if [ "${entry_count}" != "1" ]; then
+            echo "::error::expected exactly one release-counter entry, got ${entry_count}"
+            jq . "${COUNTERS}" >&2
+            exit 1
+          fi
+          revision="$(jq -r 'to_entries[0].value.revision' "${COUNTERS}")"
+          if [ "${revision}" != "0" ]; then
+            echo "::error::expected first-emission revision 0, got ${revision}"
+            jq . "${COUNTERS}" >&2
+            exit 1
+          fi
+          echo "Release-counter OK — first emission recorded revision 0"
+
+          csproj="$(find "${OUT}" -type f -name '*.csproj' -print -quit)"
+          if [ -z "${csproj}" ]; then
+            echo "::error::--generate-project produced no .csproj in ${OUT}"
+            exit 1
+          fi
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "${csproj}")"
+          if ! printf '%s' "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.0$'; then
+            echo "::error::expected 4-segment <Version> ending in .0, got '${version}' in ${csproj}"
+            exit 1
+          fi
+          echo "Generated-project OK — ${csproj} <Version>${version}</Version>"
+
+      - name: Login to GHCR
+        if: inputs.push == true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${GITHUB_TOKEN}" | oras login "${REGISTRY}" \
+            --username "${GITHUB_ACTOR}" \
+            --password-stdin
+
+      - name: Push per-RID artifact
+        if: inputs.push == true
+        id: push
+        shell: bash
+        env:
+          COMPONENT_FILE_MEDIA_TYPE: application/vnd.component.file
+        run: |
+          set -euo pipefail
+          REF="${REGISTRY}/${IMAGE}:${VERSION_INPUT}-${BUNDLE_OS}-${BUNDLE_ARCH}"
+          pushd "bundle/${RID}" > /dev/null
+
+          declare -a FILES=(
+            "component.yaml:644"
+            "${ENTRYPOINT_NAME}:755"
+            "bin/${EXE_NAME}:755"
+            "bin/daml-codegen-jvm-helper.jar:644"
+          )
+
+          ANNOTATIONS_JSON="${RUNNER_TEMP}/oras-annotations-${RID}.json"
+          jq -n \
+            --arg title "dpm-codegen-cs" \
+            --arg version "${VERSION_INPUT}" \
+            --arg source "https://github.com/${GITHUB_REPOSITORY}" \
+            --arg os "${BUNDLE_OS}" \
+            --arg arch "${BUNDLE_ARCH}" \
+            --arg entrypoint "${ENTRYPOINT_NAME}" \
+            '{
+              "$manifest": {
+                "org.opencontainers.image.title": $title,
+                "org.opencontainers.image.version": $version,
+                "org.opencontainers.image.source": $source,
+                "org.opencontainers.image.licenses": "Apache-2.0",
+                "org.opencontainers.image.os": $os,
+                "org.opencontainers.image.architecture": $arch,
+                "studio.peaceful.dpm.os": $os,
+                "studio.peaceful.dpm.arch": $arch,
+                "studio.peaceful.dpm.entrypoint": $entrypoint
+              }
+            }' > "${ANNOTATIONS_JSON}"
+
+          for entry in "${FILES[@]}"; do
+            path="${entry%:*}"
+            mode="${entry##*:}"
+            if stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${path}" > /dev/null 2>&1; then
+              modtime_iso=$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${path}")
+            else
+              modtime_iso=$(date -u -d "@$(stat -c '%Y' "${path}")" '+%Y-%m-%dT%H:%M:%SZ')
+            fi
+            tmp="${ANNOTATIONS_JSON}.tmp"
+            jq \
+              --arg path "${path}" \
+              --arg mode "${mode}" \
+              --arg modtime "${modtime_iso}" \
+              '.[$path] = {
+                "network.canton.dpm.file-mode": $mode,
+                "network.canton.dpm.file-modtime": $modtime,
+                "network.canton.dpm.file-name": $path,
+                "com.digitalasset.file-mode": $mode,
+                "com.digitalasset.file-modtime": $modtime,
+                "com.digitalasset.file-name": $path
+              }' \
+              "${ANNOTATIONS_JSON}" > "${tmp}"
+            mv "${tmp}" "${ANNOTATIONS_JSON}"
+          done
+
+          oras push "${REF}" \
+            --artifact-type "${ARTIFACT_TYPE}" \
+            --annotation-file "${ANNOTATIONS_JSON}" \
+            "component.yaml:${COMPONENT_FILE_MEDIA_TYPE}" \
+            "${ENTRYPOINT_NAME}:${COMPONENT_FILE_MEDIA_TYPE}" \
+            "bin/${EXE_NAME}:${COMPONENT_FILE_MEDIA_TYPE}" \
+            "bin/daml-codegen-jvm-helper.jar:${COMPONENT_FILE_MEDIA_TYPE}"
+          digest=$(oras resolve "${REF}")
+          popd > /dev/null
+          echo "ref=${REF}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Pushed ${REF} -> ${digest}"
+
+      - name: Write per-RID manifest descriptor
+        if: inputs.push == true
+        shell: bash
+        env:
+          REF: ${{ steps.push.outputs.ref }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "manifest-descriptors"
+          jq -n \
+            --arg ref "${REF}" \
+            --arg digest "${DIGEST}" \
+            --arg os "${BUNDLE_OS}" \
+            --arg arch "${BUNDLE_ARCH}" \
+            '{ref: $ref, digest: $digest, os: $os, arch: $arch}' \
+            > "manifest-descriptors/${BUNDLE_OS}-${BUNDLE_ARCH}.json"
+
+      - name: Upload manifest descriptor artifact
+        if: inputs.push == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifest-descriptor-${{ matrix.rid }}
+          path: manifest-descriptors/*.json
+          retention-days: 1
+          if-no-files-found: error
+
+  compose-index:
+    name: Compose multi-arch index
+    needs: [validate-inputs, build-per-rid]
+    if: inputs.push == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      reference: ${{ steps.compose.outputs.reference }}
+      index_digest: ${{ steps.compose.outputs.index_digest }}
+
+    env:
+      VERSION_INPUT: ${{ needs.validate-inputs.outputs.version }}
+
+    steps:
+      - name: Setup oras
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
+        with:
+          version: ${{ env.ORAS_VERSION }}
+
+      - name: Login to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GITHUB_TOKEN}" | oras login "${REGISTRY}" \
+            --username "${GITHUB_ACTOR}" \
+            --password-stdin
+
+      - name: Download all manifest descriptors
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: manifest-descriptor-*
+          path: manifest-descriptors
+          merge-multiple: true
+
+      - name: Compose index
+        id: compose
+        run: |
+          set -euo pipefail
+          INDEX_REF="${REGISTRY}/${IMAGE}:${VERSION_INPUT}"
+          INDEX_REPO="${REGISTRY}/${IMAGE}"
+          per_rid_refs=()
+          platforms_json='{}'
+          for descriptor in manifest-descriptors/*.json; do
+            ref=$(jq -r '.ref' "${descriptor}")
+            digest=$(jq -r '.digest' "${descriptor}")
+            os=$(jq -r '.os' "${descriptor}")
+            arch=$(jq -r '.arch' "${descriptor}")
+            per_rid_refs+=("${ref}@${digest}")
+            platforms_json=$(jq -c \
+              --arg digest "${digest}" \
+              --arg os "${os}" \
+              --arg arch "${arch}" \
+              '.[$digest] = {os: $os, architecture: $arch}' \
+              <<<"${platforms_json}")
+          done
+          if [ "${#per_rid_refs[@]}" -eq 0 ]; then
+            echo "::error::No per-RID manifest descriptors found — nothing to index."
+            exit 1
+          fi
+          echo "Composing index ${INDEX_REF} from ${#per_rid_refs[@]} per-RID manifests:"
+          printf '  - %s\n' "${per_rid_refs[@]}"
+
+          oras manifest index create \
+            --artifact-type "${ARTIFACT_TYPE}" \
+            --output index.raw.json \
+            "${INDEX_REPO}" \
+            "${per_rid_refs[@]}"
+
+          jq \
+            --argjson platforms "${platforms_json}" \
+            '.manifests |= map(. + {platform: $platforms[.digest]})' \
+            index.raw.json > index.json
+
+          missing=$(jq -r '[.manifests[] | select((.platform.os // "" | . == "" or . == "null") or (.platform.architecture // "" | . == "" or . == "null"))] | length' index.json)
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::Index has ${missing} descriptor(s) with missing/empty platform fields after patching."
+            jq . index.json
+            exit 1
+          fi
+
+          oras manifest push \
+            --media-type application/vnd.oci.image.index.v1+json \
+            "${INDEX_REF}" \
+            index.json
+          digest=$(oras resolve "${INDEX_REF}")
+          echo "reference=${INDEX_REF}" >> "${GITHUB_OUTPUT}"
+          echo "index_digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "Index pushed: ${INDEX_REF} -> ${digest}"
+
+      - name: Summary
+        env:
+          REF: ${{ steps.compose.outputs.reference }}
+          DIGEST: ${{ steps.compose.outputs.index_digest }}
+        run: |
+          {
+            echo "## dpm-codegen-cs ${VERSION_INPUT}"
+            echo ""
+            echo "**Multi-arch index:** \`${REF}\`"
+            echo ""
+            echo "**Digest:** \`${DIGEST}\`"
+            echo ""
+            echo "### Per-RID manifests"
+            echo ""
+            echo "| OS / Arch | Reference |"
+            echo "|-----------|-----------|"
+            for descriptor in manifest-descriptors/*.json; do
+              os=$(jq -r '.os' "${descriptor}")
+              arch=$(jq -r '.arch' "${descriptor}")
+              ref=$(jq -r '.ref' "${descriptor}")
+              echo "| ${os}/${arch} | \`${ref}\` |"
+            done
+            echo ""
+            echo "### GHCR package visibility"
+            echo ""
+            echo 'New GHCR packages default to **private**. After the first push of this artifact, an org admin must flip ghcr.io/peacefulstudio/dpm-codegen-cs to public via the GHCR package settings, otherwise unauthenticated dpm pulls will 404. This step is one-time per package.'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  dpm-component-smoke:
+    name: Smoke test (stock dpm pull)
+    needs: [validate-inputs, compose-index]
+    if: inputs.push == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      VERSION_INPUT: ${{ needs.validate-inputs.outputs.version }}
+      FIXTURE_DAR: tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/splice-api-token-holding-v1.dar
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup JDK
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dpm 1.0.16 from GitHub release (oci:// component URIs need >= 1.0.12)
+        env:
+          DPM_VERSION: '1.0.16'
+          DPM_SHA256: '387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874'
+        run: |
+          set -euo pipefail
+          TARBALL="dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+          URL="https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/${TARBALL}"
+          STAGE="${RUNNER_TEMP}/dpm-install"
+          rm -rf "${STAGE}"
+          mkdir -p "${STAGE}" "${HOME}/.dpm/bin"
+          curl -fsSL "${URL}" -o "${STAGE}/${TARBALL}"
+          echo "${DPM_SHA256}  ${STAGE}/${TARBALL}" | sha256sum -c -
+          tar -xzf "${STAGE}/${TARBALL}" -C "${STAGE}"
+          install -m 0755 "${STAGE}/dpm" "${HOME}/.dpm/bin/dpm"
+          echo "${HOME}/.dpm/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.dpm/bin/dpm" --version
+
+      - name: Pull freshly-pushed canary via dpm and exercise codegen-cs
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          set -euo pipefail
+          WORK="${RUNNER_TEMP}/dpm-smoke"
+          OUT="${WORK}/out"
+          rm -rf "${WORK}"
+          mkdir -p "${WORK}" "${OUT}"
+          cp "${GITHUB_WORKSPACE}/${FIXTURE_DAR}" "${WORK}/fixture.dar"
+          cat > "${WORK}/daml.yaml" <<EOF
+          components:
+            - "oci://${REGISTRY}/${IMAGE}:${VERSION_INPUT}"
+          EOF
+          cd "${WORK}"
+          DPM_AUTO_INSTALL=true dpm codegen-cs --dar ./fixture.dar --out "${OUT}"
+          first_cs="$(find "${OUT}" -type f -name '*.cs' -print -quit)"
+          if [ -z "${first_cs}" ]; then
+            echo "::error::dpm codegen-cs produced no .cs files in ${OUT}"
+            exit 1
+          fi
+          echo "dpm codegen-cs OK — first generated file: ${first_cs}"
