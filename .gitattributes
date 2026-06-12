@@ -1,0 +1,10 @@
+# Snapshot tests compare generated output byte-for-byte against checked-in
+# fixtures, so working-tree text must stay LF on every platform (Windows
+# runners default to core.autocrlf=true and would check out CRLF).
+* text=auto eol=lf
+*.dar binary
+*.binpb binary
+*.png binary
+*.bundle binary
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -15,9 +15,23 @@ jobs:
     uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@v2
     with:
       dotnet-version: '10.0.x'
-      build-matrix: '[{"name":"ubuntu-latest","runner":"ubuntu-latest","coverage":false}]'
+      build-matrix: >-
+        [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":false},
+         {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
+         {"name":"windows-amd64","runner":"windows-latest","coverage":false},
+         {"name":"windows-arm64","runner":"windows-11-arm","coverage":false},
+         {"name":"macos-arm64","runner":"macos-latest","coverage":false},
+         {"name":"macos-amd64","runner":"macos-15-intel","coverage":false}]
 
   jvm-helper-ci:
     uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@v2
     with:
       working-directory: jvm-helper
+      # No windows-arm64 shard: Maven Central publishes no windows-aarch_64 protoc
+      # binary at any version, so sbt-protoc cannot resolve a compiler there.
+      build-matrix: >-
+        [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":false},
+         {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
+         {"name":"windows-amd64","runner":"windows-latest","coverage":false},
+         {"name":"macos-arm64","runner":"macos-latest","coverage":false},
+         {"name":"macos-amd64","runner":"macos-15-intel","coverage":false}]

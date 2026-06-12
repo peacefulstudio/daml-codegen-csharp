@@ -93,7 +93,7 @@ public class DriftDetectionTests
         var actualFiles = allGenerated
             .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
                      || f.RelativePath.EndsWith(".daml-langversion", StringComparison.Ordinal))
-            .Select(f => new { RelativePath = f.RelativePath.Replace('\\', '/'), f.Content })
+            .Select(f => new { f.RelativePath, f.Content })
             .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
             .ToList();
 

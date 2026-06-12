@@ -100,6 +100,6 @@ public sealed class CodeGenOptions
 /// <summary>
 /// Represents a generated source file.
 /// </summary>
-/// <param name="RelativePath">The path relative to the output directory.</param>
+/// <param name="RelativePath">The path relative to the output directory, '/'-separated on every platform.</param>
 /// <param name="Content">The file content.</param>
 public sealed record GeneratedFile(string RelativePath, string Content);
