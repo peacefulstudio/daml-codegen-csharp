@@ -87,7 +87,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v5.0.0
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -123,7 +123,7 @@ jobs:
           if [ -n "$RUNTIME_VERSION_INPUT" ]; then
             EFFECTIVE_RUNTIME="$RUNTIME_VERSION_INPUT"
           else
-            # `|| true` works around SIGPIPE killing `grep` when `head -1` closes the pipe; pipefail otherwise surfaces SIGPIPE (141) as step failure.
+            # `|| true` works around grep exiting 1 under pipefail when Directory.Build.props has no <Version>; the empty value then fails the explicit validation below instead of aborting the step opaquely.
             EFFECTIVE_RUNTIME=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1 || true)
           fi
           EFFECTIVE_ATTACH="$ATTACH_TO_RELEASE_INPUT"
@@ -132,7 +132,7 @@ jobs:
 
           EFFECTIVE_CODEGEN_CS="$CODEGEN_CS_VERSION_INPUT"
           if [ -z "$EFFECTIVE_CODEGEN_CS" ]; then
-            # `|| true` works around SIGPIPE killing `grep` when `head -1` closes the pipe; pipefail otherwise surfaces SIGPIPE (141) as step failure.
+            # `|| true` works around grep exiting 1 under pipefail when Directory.Build.props has no <Version>; the empty value then fails the explicit validation below instead of aborting the step opaquely.
             EFFECTIVE_CODEGEN_CS=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1 || true)
           fi
 
@@ -200,9 +200,16 @@ jobs:
           echo "Downloading $ARTIFACT_URL"
           curl --fail --silent --show-error --location "$ARTIFACT_URL" -o splice-node.tar.gz
           tar -xzf splice-node.tar.gz
-          find . -path '*/dars/*.dar' -exec cp -n {} splice-dars/ \;
-          # `|| true` works around SIGPIPE killing `ls` when `head -20` closes the pipe; pipefail otherwise surfaces SIGPIPE (141) as step failure.
-          ls splice-dars | head -20 || true
+          while IFS= read -r -d '' dar; do
+            cp -n "$dar" splice-dars/ || [ -e "splice-dars/$(basename "$dar")" ]
+          done < <(find . -path '*/dars/*.dar' -print0)
+          DAR_COUNT=$(find splice-dars -name '*.dar' | wc -l)
+          if [ "$DAR_COUNT" -eq 0 ]; then
+            echo "::error::No .dar files found in ${SPLICE_VERSION}_splice-node.tar.gz — upstream archive layout may have changed."
+            exit 1
+          fi
+          echo "Copied $DAR_COUNT DARs:"
+          find splice-dars -maxdepth 1 -name '*.dar' | head -20
 
       - name: Fetch release-counter store from repo variable
         env:
@@ -219,10 +226,23 @@ jobs:
           case "$HTTP_STATUS" in
             200)
               jq -r '.value' < "$API_BODY" > "$COUNTERS_PATH"
+              if ! jq -e 'type == "object"' "$COUNTERS_PATH" >/dev/null; then
+                echo "::error::Repo variable ${COUNTER_VARIABLE_NAME} does not contain a JSON object — refusing to run codegen against a corrupted counter store."
+                exit 1
+              fi
               echo "Loaded $(jq 'length' < "$COUNTERS_PATH") entries from repo variable ${COUNTER_VARIABLE_NAME}"
               ;;
             404)
-              echo "Repo variable ${COUNTER_VARIABLE_NAME} not found — seeding an empty store (first-run bootstrap)."
+              PROBE_STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "Accept: application/vnd.github+json" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/variables?per_page=1")
+              if [ "$PROBE_STATUS" != "200" ]; then
+                echo "::error::HTTP 404 for ${COUNTER_VARIABLE_NAME} and the variables-list probe returned HTTP $PROBE_STATUS — SPLICE_COUNTERS_TOKEN likely lacks 'Variables: read & write' on this repo (a bad token also yields 404). Refusing to bootstrap an empty store."
+                exit 1
+              fi
+              echo "::warning::Repo variable ${COUNTER_VARIABLE_NAME} not found — seeding an empty store (first-run bootstrap)."
               echo '{}' > "$COUNTERS_PATH"
               ;;
             *)
@@ -240,17 +260,21 @@ jobs:
           INTERVAL=15
           PACKAGE_ID=$(echo "Daml.Runtime" | tr '[:upper:]' '[:lower:]')
           ENDPOINT="https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID}/index.json"
+          LAST_ERROR=""
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
             if versions=$(curl --fail --silent --show-error --location "$ENDPOINT" 2>&1); then
               if echo "$versions" | jq -r '.versions[]' | grep -qix "$RUNTIME_VERSION"; then
                 echo "Daml.Runtime $RUNTIME_VERSION is available on nuget.org."
                 exit 0
               fi
+              LAST_ERROR="version list fetched but $RUNTIME_VERSION is absent"
+            else
+              LAST_ERROR="$versions"
             fi
-            echo "Daml.Runtime $RUNTIME_VERSION not yet visible on nuget.org — sleeping ${INTERVAL}s (deadline in $((DEADLINE - $(date +%s)))s)"
+            echo "Daml.Runtime $RUNTIME_VERSION not yet visible on nuget.org ($LAST_ERROR) — sleeping ${INTERVAL}s (deadline in $((DEADLINE - $(date +%s)))s)"
             sleep "$INTERVAL"
           done
-          echo "::error::Timed out waiting for Daml.Runtime $RUNTIME_VERSION on nuget.org."
+          echo "::error::Timed out waiting for Daml.Runtime $RUNTIME_VERSION on nuget.org. Last error: $LAST_ERROR"
           exit 1
 
       - name: Check codegen-cs OCI image is available on GHCR
@@ -274,7 +298,7 @@ jobs:
             echo "dpm-codegen-cs:$CODEGEN_CS_VERSION not yet visible — sleeping ${INTERVAL}s (deadline in $((DEADLINE - $(date +%s)))s)"
             sleep "$INTERVAL"
           done
-          echo "::error::Timed out waiting for dpm-codegen-cs:$CODEGEN_CS_VERSION on GHCR."
+          echo "::error::Timed out waiting for dpm-codegen-cs:$CODEGEN_CS_VERSION on GHCR. A persistent 404 can also mean the package does not exist or GITHUB_TOKEN lacks packages:read on org peacefulstudio."
           exit 1
 
       - name: Generate, build, pack (per family, multi-pass) via dpm codegen-cs
@@ -289,18 +313,25 @@ jobs:
           mkdir -p "$OUT_DIR" "$NUPKG_DIR" "$LOCAL_FEED"
 
           mapfile -t families < <(
-            ls "$DARS_DIR"/splice-*.dar 2>/dev/null \
-              | xargs -I{} basename {} .dar \
+            find "$DARS_DIR" -maxdepth 1 -name 'splice-*.dar' -exec basename {} .dar \; \
               | grep -v -- '-current$' \
               | sed -E 's/-[0-9].*$//' \
               | sort -u
           )
           echo "Found ${#families[@]} Splice families: ${families[*]}"
+          if [ "${#families[@]}" -eq 0 ]; then
+            echo "::error::No splice-*.dar families found in $DARS_DIR — DAR naming convention may have changed."
+            exit 1
+          fi
 
           declare -A latest_dar
           for fam in "${families[@]}"; do
-            latest=$(ls "$DARS_DIR" | grep -E "^${fam}-[0-9].*\\.dar$" | grep -v -- '-current' | sort -V | tail -n 1 || true)
-            [ -n "$latest" ] && latest_dar[$fam]="$DARS_DIR/$latest"
+            latest=$(find "$DARS_DIR" -maxdepth 1 -name "${fam}-[0-9]*.dar" ! -name '*-current*' -exec basename {} \; | sort -V | tail -n 1)
+            if [ -z "$latest" ]; then
+              echo "::error::Family $fam matched the glob but has no versioned DAR in $DARS_DIR — naming convention drift?"
+              exit 1
+            fi
+            latest_dar[$fam]="$DARS_DIR/$latest"
           done
 
           declare -A status
@@ -342,6 +373,13 @@ jobs:
 
             local csproj="$out/$pkg_id.csproj"
             if [ ! -f "$csproj" ]; then
+              local other_csprojs
+              other_csprojs=$(find "$out" -maxdepth 1 -name '*.csproj')
+              if [ -n "$other_csprojs" ]; then
+                echo "::error::[$fam] expected $pkg_id.csproj but codegen produced: $other_csprojs"
+                reason[$fam]="csproj-name-mismatch"
+                return 1
+              fi
               status[$fam]="skip"
               return 0
             fi
@@ -349,7 +387,7 @@ jobs:
             (cd "$out" && dotnet build -c Release "$csproj") || { reason[$fam]="build"; return 1; }
             (cd "$out" && dotnet pack -c Release -o "$NUPKG_DIR" "$csproj") || { reason[$fam]="pack"; return 1; }
 
-            cp "$NUPKG_DIR"/"$pkg_id".*.nupkg "$LOCAL_FEED/" || true
+            cp "$NUPKG_DIR"/"$pkg_id".*.nupkg "$LOCAL_FEED/" || { reason[$fam]="local-feed-copy"; return 1; }
             status[$fam]="ok"
             return 0
           }
@@ -399,6 +437,16 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
+          if [ "$fail_count" -gt 0 ]; then
+            for fam in "${families[@]}"; do
+              case "${status[$fam]:-fail}" in
+                ok|skip) ;;
+                *) echo "::error::Family $fam failed at stage: ${reason[$fam]:-unknown}" ;;
+              esac
+            done
+            echo "::error::$fail_count of ${#families[@]} families failed — refusing to push a partial Splice package set."
+            exit 1
+          fi
           if [ "$ok_count" -eq 0 ]; then
             echo "::error::No families packed (0 of ${#families[@]}). See per-family logs above."
             exit 1
@@ -433,16 +481,28 @@ jobs:
             exit 1
           fi
           push_failed=0
+          duplicate_count=0
           for pkg in "${PKGS[@]}"; do
             echo "Pushing $pkg"
-            if ! dotnet nuget push "$pkg" \
+            if PUSH_OUTPUT=$(dotnet nuget push "$pkg" \
               --source "https://api.nuget.org/v3/index.json" \
               --api-key "$NUGET_API_KEY" \
-              --skip-duplicate; then
+              --skip-duplicate 2>&1); then
+              echo "$PUSH_OUTPUT"
+              if echo "$PUSH_OUTPUT" | grep -qiE 'already exists|conflict'; then
+                echo "::warning::$(basename "$pkg") already existed on nuget.org — push skipped. If unexpected, the counter store may be stale or reset."
+                duplicate_count=$((duplicate_count + 1))
+              fi
+            else
+              echo "$PUSH_OUTPUT" >&2
               echo "::error::push failed for $pkg"
               push_failed=1
             fi
           done
+          if [ "$push_failed" -eq 0 ] && [ "$duplicate_count" -eq "${#PKGS[@]}" ]; then
+            echo "::error::All ${#PKGS[@]} packages already existed on nuget.org — nothing was published. The counter store is likely stale (reset, or a prior run pushed but failed to persist counters). Inspect the release-counters-snapshot artifact before re-running."
+            exit 1
+          fi
           if [ "$push_failed" -ne 0 ]; then
             echo "::error::One or more dotnet nuget push calls failed — failing the job so the release-counter persist step does not run. The locally-mutated counter file is uploaded as the release-counters-snapshot artifact for inspection; restore SPLICE_RELEASE_COUNTERS from a prior snapshot if needed."
             exit 1
@@ -460,13 +520,25 @@ jobs:
           VALUE_JSON=$(jq -Rs '.' < "$COUNTERS_PATH")
           PAYLOAD=$(jq -nc --arg name "$COUNTER_VARIABLE_NAME" --argjson value "$VALUE_JSON" \
             '{name: $name, value: $value}')
-          if gh api "/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}" >/dev/null 2>&1; then
-            echo "$PAYLOAD" | gh api -X PATCH "/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}" --input -
-            echo "Updated repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
-          else
-            echo "$PAYLOAD" | gh api -X POST "/repos/${GITHUB_REPOSITORY}/actions/variables" --input -
-            echo "Created repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
-          fi
+          GET_STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}")
+          case "$GET_STATUS" in
+            200)
+              echo "$PAYLOAD" | gh api -X PATCH "/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}" --input -
+              echo "Updated repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
+              ;;
+            404)
+              echo "$PAYLOAD" | gh api -X POST "/repos/${GITHUB_REPOSITORY}/actions/variables" --input -
+              echo "Created repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
+              ;;
+            *)
+              echo "::error::Existence check for ${COUNTER_VARIABLE_NAME} returned HTTP $GET_STATUS — not persisting. The mutated counter store is in the release-counters-snapshot artifact; re-run the persist manually once the API issue is resolved."
+              exit 1
+              ;;
+          esac
 
       - name: Note dry-run skip
         if: env.DRY_RUN == 'true'
@@ -518,15 +590,15 @@ jobs:
           shopt -s nullglob
           PKGS=(splice-nupkgs/*.nupkg)
           if [ "${#PKGS[@]}" -eq 0 ]; then
-            echo "No packages downloaded — nothing to attach."
-            exit 0
+            echo "::error::nupkg artifact contained no packages — the publish job guarantees at least one, so the artifact name or path has drifted."
+            exit 1
           fi
           echo "Attaching ${#PKGS[@]} package(s) to release $RELEASE_TAG"
           if ! OUTPUT=$(gh release upload "$RELEASE_TAG" "${PKGS[@]}" --clobber --repo "$GITHUB_REPOSITORY" 2>&1); then
+            echo "$OUTPUT" >&2
             if echo "$OUTPUT" | grep -q "immutable release"; then
               echo "::warning::Release $RELEASE_TAG is immutable — asset attachment skipped. Packages are published to nuget.org."
             else
-              echo "$OUTPUT" >&2
               exit 1
             fi
           fi
