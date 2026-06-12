@@ -58,9 +58,11 @@ env:
 jobs:
   publish-splice:
     runs-on: ubuntu-latest
+    environment: nuget-publish
     permissions:
       contents: read
-      packages: write
+      packages: read
+      id-token: write
 
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
@@ -411,11 +413,17 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Push to GitHub Packages
+      - name: NuGet login (OIDC -> short-lived key)
+        id: login
+        if: env.DRY_RUN != 'true'
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to nuget.org
         if: env.DRY_RUN != 'true'
         env:
-          # The existing Splice.* packages were created by the internal repo; this repo's GITHUB_TOKEN can push to them only after a per-package Actions-access grant. SPLICE_PACKAGES_TOKEN (classic PAT, write:packages) is the alternative when no grants exist.
-          PUSH_TOKEN: ${{ secrets.SPLICE_PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -428,8 +436,8 @@ jobs:
           for pkg in "${PKGS[@]}"; do
             echo "Pushing $pkg"
             if ! dotnet nuget push "$pkg" \
-              --source "https://nuget.pkg.github.com/peacefulstudio/index.json" \
-              --api-key "$PUSH_TOKEN" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "$NUGET_API_KEY" \
               --skip-duplicate; then
               echo "::error::push failed for $pkg"
               push_failed=1
@@ -516,7 +524,7 @@ jobs:
           echo "Attaching ${#PKGS[@]} package(s) to release $RELEASE_TAG"
           if ! OUTPUT=$(gh release upload "$RELEASE_TAG" "${PKGS[@]}" --clobber --repo "$GITHUB_REPOSITORY" 2>&1); then
             if echo "$OUTPUT" | grep -q "immutable release"; then
-              echo "::warning::Release $RELEASE_TAG is immutable — asset attachment skipped. Packages are published to GitHub Packages."
+              echo "::warning::Release $RELEASE_TAG is immutable — asset attachment skipped. Packages are published to nuget.org."
             else
               echo "$OUTPUT" >&2
               exit 1
