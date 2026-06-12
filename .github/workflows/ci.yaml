@@ -12,12 +12,12 @@ permissions:
 
 jobs:
   csharp-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@86bd4d05f0ab39f7469b37379c08d33211b82aeb # v1
+    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@f06d3a97dfdfeac1eed7ccc6f576e52f384aab42 # v2.1.0
     with:
       dotnet-version: '10.0.x'
       build-matrix: '[{"name":"ubuntu-latest","runner":"ubuntu-latest","coverage":false}]'
 
   jvm-helper-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@86bd4d05f0ab39f7469b37379c08d33211b82aeb # v1
+    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@f06d3a97dfdfeac1eed7ccc6f576e52f384aab42 # v2.1.0
     with:
       working-directory: jvm-helper
