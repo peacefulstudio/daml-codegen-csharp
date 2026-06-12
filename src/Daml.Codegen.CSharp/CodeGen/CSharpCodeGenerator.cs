@@ -415,9 +415,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                     : (dataTypesByName.TryGetValue(template.Name, out var recordDef) ? recordDef.Fields : []);
 
                 var code = GenerateTemplate(package, module, template, fields, allDataTypesInGroup, rootNamespace);
-                var path = Path.Combine(
-                    rootNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
-                    $"{SanitizeIdentifier(template.Name)}.cs");
+                var path = RelativeFilePath(rootNamespace, $"{SanitizeIdentifier(template.Name)}.cs");
 
                 yield return new GeneratedFile(path, code);
             }
@@ -438,9 +436,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 }
 
                 var code = GenerateDataType(package, module, dataType, rootNamespace, allDataTypesInGroup);
-                var path = Path.Combine(
-                    rootNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
-                    $"{SanitizeIdentifier(dataType.Name)}.cs");
+                var path = RelativeFilePath(rootNamespace, $"{SanitizeIdentifier(dataType.Name)}.cs");
 
                 yield return new GeneratedFile(path, code);
             }
@@ -462,8 +458,8 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                     {
                         var code = GenerateNestedChoiceArgumentType(
                             package, module, template, choice, argDataType, rootNamespace, allDataTypesInGroup);
-                        var path = Path.Combine(
-                            rootNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
+                        var path = RelativeFilePath(
+                            rootNamespace,
                             $"{SanitizeIdentifier(template.Name)}.{SanitizeIdentifier(choice.Name)}.cs");
 
                         yield return new GeneratedFile(path, code);
@@ -481,9 +477,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 }
 
                 var code = GenerateInterface(package, module, iface, allDataTypesInGroup, rootNamespace);
-                var path = Path.Combine(
-                    rootNamespace.Replace(".", Path.DirectorySeparatorChar.ToString()),
-                    $"I{SanitizeIdentifier(iface.Name)}.cs");
+                var path = RelativeFilePath(rootNamespace, $"I{SanitizeIdentifier(iface.Name)}.cs");
 
                 yield return new GeneratedFile(path, code);
             }
@@ -1009,13 +1003,15 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("}");
         }
 
-        // Place the file one level above the package folder (beside it, not inside)
-        var namespacePath = moduleNamespace.Replace(".", Path.DirectorySeparatorChar.ToString());
-        var parentPath = Path.GetDirectoryName(namespacePath) ?? string.Empty;
-        var path = Path.Combine(parentPath, "ContractIdentifiers.cs");
+        var lastDot = moduleNamespace.LastIndexOf('.');
+        var namespaceBesidePackageFolder = lastDot < 0 ? string.Empty : moduleNamespace[..lastDot];
+        var path = RelativeFilePath(namespaceBesidePackageFolder, "ContractIdentifiers.cs");
 
         return new GeneratedFile(path, BuildFileContent(indent, bodySb));
     }
+
+    private static string RelativeFilePath(string dottedNamespace, string fileName) =>
+        dottedNamespace.Length == 0 ? fileName : $"{dottedNamespace.Replace('.', '/')}/{fileName}";
 
     /// <summary>
     /// Generates a partial file with the choice argument type nested inside the template.

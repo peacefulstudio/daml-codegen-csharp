@@ -33,6 +33,18 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.1.8-preview.2] — 2026-06-12
+
+### Added
+
+- Add CI-verified platform support across the full OS × architecture matrix: every shipped package builds and passes the complete test suite on Linux, Windows, and macOS, on both amd64 and arm64.
+  The JVM DAR-parsing helper is verified on the same matrix minus windows-arm64, where upstream publishes no protoc binary. A .Net native DAR parser could fill the gap, but is out of scope.
+
+### Changed
+
+- Bump `Google.Protobuf` to 3.35.1 — raises the dependency floor of the `Daml.Codegen.CSharp` package.
+- `GeneratedFile.RelativePath` is now `/`-separated on every platform (previously `\` on Windows), so codegen output layout is identical across operating systems. Paths with `/` are accepted by Windows file APIs; only callers that parsed the separator are affected.
+
 ## [0.1.8-preview.1] — 2026-06-11
 
 ### Added
@@ -646,5 +658,6 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...HEAD
+[0.1.8-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...v0.1.8-preview.2
 [0.1.8-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.8-preview.1
