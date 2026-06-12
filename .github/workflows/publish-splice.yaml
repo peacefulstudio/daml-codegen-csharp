@@ -1,0 +1,604 @@
+name: Publish Splice DAR Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      splice_version:
+        description: 'Splice version (digital-asset/decentralized-canton-sync release tag, e.g. 0.6.5). Empty = workflow-level RELEASE_DEFAULT_SPLICE_VERSION.'
+        required: false
+        type: string
+        default: ''
+      codegen_cs_version:
+        description: 'Version of ghcr.io/peacefulstudio/dpm-codegen-cs to pull. Empty = the default from Directory.Build.props.'
+        required: false
+        type: string
+        default: ''
+      damlc_version:
+        description: 'damlc component version listed under daml.yaml `components:`.'
+        required: false
+        type: string
+        default: '3.4.11'
+      runtime_version:
+        description: 'Daml.Runtime NuGet version to reference from generated csprojs (defaults to Directory.Build.props).'
+        required: false
+        type: string
+        default: ''
+      package_license:
+        description: 'SPDX license expression emitted into generated csprojs (default Apache-2.0).'
+        required: false
+        type: string
+        default: 'Apache-2.0'
+      dry_run:
+        description: 'Build + pack everything but skip both the NuGet push AND the SPLICE_RELEASE_COUNTERS variable write-back. Use for end-to-end validation without burning counter values.'
+        required: false
+        type: boolean
+        default: false
+      attach_to_release:
+        description: 'Attach generated .nupkg files to a GitHub Release. Requires release_tag.'
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: 'GitHub Release tag to attach assets to. Required when attach_to_release is true.'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: publish-splice-counter
+  cancel-in-progress: false
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DPM_AUTO_INSTALL: 'true'
+  RELEASE_DEFAULT_SPLICE_VERSION: '0.6.5'
+  COUNTER_VARIABLE_NAME: 'SPLICE_RELEASE_COUNTERS'
+
+jobs:
+  publish-splice:
+    runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      attach_to_release: ${{ steps.resolve.outputs.attach_to_release }}
+      splice_version: ${{ steps.resolve.outputs.splice_version }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+
+    env:
+      SPLICE_VERSION_INPUT: ${{ inputs.splice_version }}
+      CODEGEN_CS_VERSION_INPUT: ${{ inputs.codegen_cs_version }}
+      DAMLC_VERSION_INPUT: ${{ inputs.damlc_version }}
+      RUNTIME_VERSION_INPUT: ${{ inputs.runtime_version }}
+      PACKAGE_LICENSE_INPUT: ${{ inputs.package_license }}
+      DRY_RUN_INPUT: ${{ inputs.dry_run }}
+      ATTACH_TO_RELEASE_INPUT: ${{ inputs.attach_to_release }}
+      RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup JDK
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dpm 1.0.16 from GitHub release (oci:// component URIs need >= 1.0.12)
+        env:
+          DPM_VERSION: '1.0.16'
+          DPM_SHA256: '387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874'
+        run: |
+          set -euo pipefail
+          TARBALL="dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+          URL="https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/${TARBALL}"
+          STAGE="${RUNNER_TEMP}/dpm-install"
+          rm -rf "${STAGE}"
+          mkdir -p "${STAGE}" "${HOME}/.dpm/bin"
+          curl -fsSL "${URL}" -o "${STAGE}/${TARBALL}"
+          echo "${DPM_SHA256}  ${STAGE}/${TARBALL}" | sha256sum -c -
+          tar -xzf "${STAGE}/${TARBALL}" -C "${STAGE}"
+          install -m 0755 "${STAGE}/dpm" "${HOME}/.dpm/bin/dpm"
+          echo "${HOME}/.dpm/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.dpm/bin/dpm" --version
+
+      - name: Resolve and validate effective inputs
+        id: resolve
+        run: |
+          set -euo pipefail
+          EFFECTIVE_SPLICE="${SPLICE_VERSION_INPUT:-$RELEASE_DEFAULT_SPLICE_VERSION}"
+          if [ -n "$RUNTIME_VERSION_INPUT" ]; then
+            EFFECTIVE_RUNTIME="$RUNTIME_VERSION_INPUT"
+          else
+            # `|| true` works around grep exiting 1 under pipefail when Directory.Build.props has no <Version>; the empty value then fails the explicit validation below instead of aborting the step opaquely.
+            EFFECTIVE_RUNTIME=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1 || true)
+          fi
+          EFFECTIVE_ATTACH="$ATTACH_TO_RELEASE_INPUT"
+          EFFECTIVE_RELEASE_TAG="$RELEASE_TAG_INPUT"
+          EFFECTIVE_DRY_RUN="$DRY_RUN_INPUT"
+
+          EFFECTIVE_CODEGEN_CS="$CODEGEN_CS_VERSION_INPUT"
+          if [ -z "$EFFECTIVE_CODEGEN_CS" ]; then
+            # `|| true` works around grep exiting 1 under pipefail when Directory.Build.props has no <Version>; the empty value then fails the explicit validation below instead of aborting the step opaquely.
+            EFFECTIVE_CODEGEN_CS=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1 || true)
+          fi
+
+          EFFECTIVE_DAMLC="${DAMLC_VERSION_INPUT:-3.4.11}"
+          EFFECTIVE_PACKAGE_LICENSE="${PACKAGE_LICENSE_INPUT:-Apache-2.0}"
+
+          if ! [[ "$EFFECTIVE_SPLICE" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::splice_version='$EFFECTIVE_SPLICE' must match ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$"; exit 1
+          fi
+          if ! [[ "$EFFECTIVE_RUNTIME" =~ ^[A-Za-z0-9.+-]+$ ]]; then
+            echo "::error::runtime_version='$EFFECTIVE_RUNTIME' must be a NuGet version string"; exit 1
+          fi
+          if ! [[ "$EFFECTIVE_CODEGEN_CS" =~ ^[A-Za-z0-9.+-]+$ ]]; then
+            echo "::error::codegen_cs_version='$EFFECTIVE_CODEGEN_CS' must be a valid version string"; exit 1
+          fi
+          if ! [[ "$EFFECTIVE_DAMLC" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::damlc_version='$EFFECTIVE_DAMLC' must match ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$"; exit 1
+          fi
+          if ! [[ "$EFFECTIVE_PACKAGE_LICENSE" =~ ^[A-Za-z0-9.+-]+$ ]]; then
+            echo "::error::package_license='$EFFECTIVE_PACKAGE_LICENSE' must be a valid SPDX expression"; exit 1
+          fi
+          if [ "$EFFECTIVE_ATTACH" = "true" ] && [ -z "$EFFECTIVE_RELEASE_TAG" ]; then
+            echo "::error::attach_to_release=true requires release_tag"; exit 1
+          fi
+          if [ -n "$EFFECTIVE_RELEASE_TAG" ] && ! [[ "$EFFECTIVE_RELEASE_TAG" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "::error::release_tag='$EFFECTIVE_RELEASE_TAG' must match ^[A-Za-z0-9._+-]+$"; exit 1
+          fi
+
+          {
+            echo "SPLICE_VERSION=$EFFECTIVE_SPLICE"
+            echo "RUNTIME_VERSION=$EFFECTIVE_RUNTIME"
+            echo "CODEGEN_CS_VERSION=$EFFECTIVE_CODEGEN_CS"
+            echo "DAMLC_VERSION=$EFFECTIVE_DAMLC"
+            echo "PACKAGE_LICENSE=$EFFECTIVE_PACKAGE_LICENSE"
+            echo "ATTACH_TO_RELEASE=$EFFECTIVE_ATTACH"
+            echo "RELEASE_TAG=$EFFECTIVE_RELEASE_TAG"
+            echo "DRY_RUN=$EFFECTIVE_DRY_RUN"
+          } >> "$GITHUB_ENV"
+          {
+            echo "splice_version=$EFFECTIVE_SPLICE"
+            echo "attach_to_release=$EFFECTIVE_ATTACH"
+            echo "release_tag=$EFFECTIVE_RELEASE_TAG"
+            echo "dry_run=$EFFECTIVE_DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved: splice=$EFFECTIVE_SPLICE runtime=$EFFECTIVE_RUNTIME codegen-cs=$EFFECTIVE_CODEGEN_CS damlc=$EFFECTIVE_DAMLC license=$EFFECTIVE_PACKAGE_LICENSE dry_run=$EFFECTIVE_DRY_RUN"
+
+      - name: Write daml.yaml with opt-in components
+        run: |
+          set -euo pipefail
+          mkdir -p splice-workspace
+          cat > splice-workspace/daml.yaml <<EOF
+          components:
+            - damlc:${DAMLC_VERSION}
+            - daml-script:${DAMLC_VERSION}
+            - oci://ghcr.io/peacefulstudio/dpm-codegen-cs:${CODEGEN_CS_VERSION}
+          EOF
+          echo "Written daml.yaml:"
+          cat splice-workspace/daml.yaml
+
+      - name: Download Splice release artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p splice-dars
+          ARTIFACT_URL="https://github.com/digital-asset/decentralized-canton-sync/releases/download/v${SPLICE_VERSION}/${SPLICE_VERSION}_splice-node.tar.gz"
+          echo "Downloading $ARTIFACT_URL"
+          curl --fail --silent --show-error --location "$ARTIFACT_URL" -o splice-node.tar.gz
+          tar -xzf splice-node.tar.gz
+          while IFS= read -r -d '' dar; do
+            cp -n "$dar" splice-dars/ || [ -e "splice-dars/$(basename "$dar")" ]
+          done < <(find . -path '*/dars/*.dar' -print0)
+          DAR_COUNT=$(find splice-dars -name '*.dar' | wc -l)
+          if [ "$DAR_COUNT" -eq 0 ]; then
+            echo "::error::No .dar files found in ${SPLICE_VERSION}_splice-node.tar.gz — upstream archive layout may have changed."
+            exit 1
+          fi
+          echo "Copied $DAR_COUNT DARs:"
+          find splice-dars -maxdepth 1 -name '*.dar' | head -20
+
+      - name: Fetch release-counter store from repo variable
+        env:
+          GH_TOKEN: ${{ secrets.SPLICE_COUNTERS_TOKEN }}
+        run: |
+          set -euo pipefail
+          COUNTERS_PATH="$RUNNER_TEMP/release-counters.json"
+          API_BODY="$RUNNER_TEMP/counter-api-body.json"
+          HTTP_STATUS=$(curl --silent --show-error --output "$API_BODY" --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}")
+          case "$HTTP_STATUS" in
+            200)
+              jq -r '.value' < "$API_BODY" > "$COUNTERS_PATH"
+              if ! jq -e 'type == "object"' "$COUNTERS_PATH" >/dev/null; then
+                echo "::error::Repo variable ${COUNTER_VARIABLE_NAME} does not contain a JSON object — refusing to run codegen against a corrupted counter store."
+                exit 1
+              fi
+              echo "Loaded $(jq 'length' < "$COUNTERS_PATH") entries from repo variable ${COUNTER_VARIABLE_NAME}"
+              ;;
+            404)
+              PROBE_STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "Accept: application/vnd.github+json" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/variables?per_page=1")
+              if [ "$PROBE_STATUS" != "200" ]; then
+                echo "::error::HTTP 404 for ${COUNTER_VARIABLE_NAME} and the variables-list probe returned HTTP $PROBE_STATUS — SPLICE_COUNTERS_TOKEN likely lacks 'Variables: read & write' on this repo (a bad token also yields 404). Refusing to bootstrap an empty store."
+                exit 1
+              fi
+              echo "::warning::Repo variable ${COUNTER_VARIABLE_NAME} not found — seeding an empty store (first-run bootstrap)."
+              echo '{}' > "$COUNTERS_PATH"
+              ;;
+            *)
+              echo "::error::Failed to read ${COUNTER_VARIABLE_NAME} (HTTP $HTTP_STATUS). Check that SPLICE_COUNTERS_TOKEN has 'Variables: read & write' on this repo. Body:"
+              cat "$API_BODY" >&2
+              exit 1
+              ;;
+          esac
+          echo "COUNTERS_PATH=$COUNTERS_PATH" >> "$GITHUB_ENV"
+
+      - name: Check Daml.Runtime is available on nuget.org
+        run: |
+          set -euo pipefail
+          DEADLINE=$(( $(date +%s) + 900 ))
+          INTERVAL=15
+          PACKAGE_ID=$(echo "Daml.Runtime" | tr '[:upper:]' '[:lower:]')
+          ENDPOINT="https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID}/index.json"
+          LAST_ERROR=""
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if versions=$(curl --fail --silent --show-error --location "$ENDPOINT" 2>&1); then
+              if echo "$versions" | jq -r '.versions[]' | grep -qix "$RUNTIME_VERSION"; then
+                echo "Daml.Runtime $RUNTIME_VERSION is available on nuget.org."
+                exit 0
+              fi
+              LAST_ERROR="version list fetched but $RUNTIME_VERSION is absent"
+            else
+              LAST_ERROR="$versions"
+            fi
+            echo "Daml.Runtime $RUNTIME_VERSION not yet visible on nuget.org ($LAST_ERROR) — sleeping ${INTERVAL}s (deadline in $((DEADLINE - $(date +%s)))s)"
+            sleep "$INTERVAL"
+          done
+          echo "::error::Timed out waiting for Daml.Runtime $RUNTIME_VERSION on nuget.org. Last error: $LAST_ERROR"
+          exit 1
+
+      - name: Check codegen-cs OCI image is available on GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          DEADLINE=$(( $(date +%s) + 900 ))
+          INTERVAL=15
+          ENDPOINT="/orgs/peacefulstudio/packages/container/dpm-codegen-cs/versions"
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if api_out=$(gh api "$ENDPOINT" --paginate 2>&1); then
+              if echo "$api_out" | jq -r '.[].metadata.container.tags // [] | .[]' | grep -qx "$CODEGEN_CS_VERSION"; then
+                echo "dpm-codegen-cs:$CODEGEN_CS_VERSION is available on GHCR."
+                exit 0
+              fi
+            elif ! echo "$api_out" | grep -qE "HTTP 404"; then
+              echo "::error::GHCR API error while polling for dpm-codegen-cs:$CODEGEN_CS_VERSION:"
+              echo "$api_out"; exit 1
+            fi
+            echo "dpm-codegen-cs:$CODEGEN_CS_VERSION not yet visible — sleeping ${INTERVAL}s (deadline in $((DEADLINE - $(date +%s)))s)"
+            sleep "$INTERVAL"
+          done
+          echo "::error::Timed out waiting for dpm-codegen-cs:$CODEGEN_CS_VERSION on GHCR. A persistent 404 can also mean the package does not exist or GITHUB_TOKEN lacks packages:read on org peacefulstudio."
+          exit 1
+
+      - name: Generate, build, pack (per family, multi-pass) via dpm codegen-cs
+        env:
+          DOTNET_NOLOGO: 1
+        run: |
+          set -euo pipefail
+          DARS_DIR="$PWD/splice-dars"
+          OUT_DIR="$RUNNER_TEMP/splice-out"
+          NUPKG_DIR="$RUNNER_TEMP/splice-nupkgs"
+          LOCAL_FEED="$RUNNER_TEMP/splice-local-feed"
+          mkdir -p "$OUT_DIR" "$NUPKG_DIR" "$LOCAL_FEED"
+
+          mapfile -t families < <(
+            find "$DARS_DIR" -maxdepth 1 -name 'splice-*.dar' -exec basename {} .dar \; \
+              | grep -v -- '-current$' \
+              | sed -E 's/-[0-9].*$//' \
+              | sort -u
+          )
+          echo "Found ${#families[@]} Splice families: ${families[*]}"
+          if [ "${#families[@]}" -eq 0 ]; then
+            echo "::error::No splice-*.dar families found in $DARS_DIR — DAR naming convention may have changed."
+            exit 1
+          fi
+
+          declare -A latest_dar
+          for fam in "${families[@]}"; do
+            latest=$(find "$DARS_DIR" -maxdepth 1 -name "${fam}-[0-9]*.dar" ! -name '*-current*' -exec basename {} \; | sort -V | tail -n 1)
+            if [ -z "$latest" ]; then
+              echo "::error::Family $fam matched the glob but has no versioned DAR in $DARS_DIR — naming convention drift?"
+              exit 1
+            fi
+            latest_dar[$fam]="$DARS_DIR/$latest"
+          done
+
+          declare -A status
+          declare -A reason
+
+          build_one() {
+            local fam=$1
+            local dar=${latest_dar[$fam]}
+            local out="$OUT_DIR/$fam"
+            local pkg_id
+            pkg_id=$(echo "$fam" | awk -F- '{
+              for (i=1;i<=NF;i++) { $i = toupper(substr($i,1,1)) substr($i,2); }
+              OFS="."; $1=$1; print
+            }')
+
+            rm -rf "$out"; mkdir -p "$out"
+
+            cat > "$out/NuGet.config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local-feed" value="$LOCAL_FEED" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+
+            (cd splice-workspace && dpm codegen-cs \
+              --dar "$dar" \
+              --out "$out" \
+              -- \
+              --release-counters "$COUNTERS_PATH" \
+              --generate-project \
+              --runtime-version "$RUNTIME_VERSION" \
+              --package-license "$PACKAGE_LICENSE" \
+              --target-framework net10.0 \
+              --verbosity 1) || { reason[$fam]="codegen"; return 1; }
+
+            local csproj="$out/$pkg_id.csproj"
+            if [ ! -f "$csproj" ]; then
+              local other_csprojs
+              other_csprojs=$(find "$out" -maxdepth 1 -name '*.csproj')
+              if [ -n "$other_csprojs" ]; then
+                echo "::error::[$fam] expected $pkg_id.csproj but codegen produced: $other_csprojs"
+                reason[$fam]="csproj-name-mismatch"
+                return 1
+              fi
+              status[$fam]="skip"
+              return 0
+            fi
+
+            (cd "$out" && dotnet build -c Release "$csproj") || { reason[$fam]="build"; return 1; }
+            (cd "$out" && dotnet pack -c Release -o "$NUPKG_DIR" "$csproj") || { reason[$fam]="pack"; return 1; }
+
+            cp "$NUPKG_DIR"/"$pkg_id".*.nupkg "$LOCAL_FEED/" || { reason[$fam]="local-feed-copy"; return 1; }
+            status[$fam]="ok"
+            return 0
+          }
+
+          pass=1
+          while :; do
+            echo ""
+            echo "########## PASS $pass ##########"
+            progress=0
+            for fam in "${families[@]}"; do
+              [ -n "${status[$fam]:-}" ] && continue
+              echo "[$fam] $(basename "${latest_dar[$fam]}")"
+              if build_one "$fam"; then
+                progress=1
+              fi
+            done
+            [ "$progress" -eq 0 ] && break
+            pass=$((pass + 1))
+            [ "$pass" -gt 5 ] && { echo "Hit 5-pass cap."; break; }
+          done
+
+          ok_count=0; skip_count=0; fail_count=0
+          for fam in "${families[@]}"; do
+            case "${status[$fam]:-fail}" in
+              ok)   ok_count=$((ok_count + 1)) ;;
+              skip) skip_count=$((skip_count + 1)) ;;
+              *)    fail_count=$((fail_count + 1)) ;;
+            esac
+          done
+          echo "Result: $ok_count packed, $skip_count skipped, $fail_count failed (of ${#families[@]})"
+
+          {
+            echo "## Splice $SPLICE_VERSION — Build Summary"
+            echo ""
+            echo "**Daml.Runtime:** \`$RUNTIME_VERSION\`  "
+            echo "**codegen-cs:** \`$CODEGEN_CS_VERSION\`  "
+            echo "**dry_run:** \`$DRY_RUN\`"
+            echo ""
+            echo "| Family | Result | Notes |"
+            echo "|--------|--------|-------|"
+            for fam in "${families[@]}"; do
+              case "${status[$fam]:-fail}" in
+                ok)   echo "| \`$fam\` | OK | |" ;;
+                skip) echo "| \`$fam\` | SKIP | no exposed types |" ;;
+                *)    echo "| \`$fam\` | FAIL | ${reason[$fam]:-unknown} |" ;;
+              esac
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$fail_count" -gt 0 ]; then
+            for fam in "${families[@]}"; do
+              case "${status[$fam]:-fail}" in
+                ok|skip) ;;
+                *) echo "::error::Family $fam failed at stage: ${reason[$fam]:-unknown}" ;;
+              esac
+            done
+            echo "::error::$fail_count of ${#families[@]} families failed — refusing to push a partial Splice package set."
+            exit 1
+          fi
+          if [ "$ok_count" -eq 0 ]; then
+            echo "::error::No families packed (0 of ${#families[@]}). See per-family logs above."
+            exit 1
+          fi
+
+      - name: Upload release-counter snapshot artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-counters-snapshot-${{ steps.resolve.outputs.splice_version }}
+          path: ${{ runner.temp }}/release-counters.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: NuGet login (OIDC -> short-lived key)
+        id: login
+        if: env.DRY_RUN != 'true'
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to nuget.org
+        if: env.DRY_RUN != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          PKGS=("$RUNNER_TEMP"/splice-nupkgs/*.nupkg)
+          if [ "${#PKGS[@]}" -eq 0 ]; then
+            echo "::error::No packages produced — refusing to advance the release counter against an empty publish."
+            exit 1
+          fi
+          push_failed=0
+          duplicate_count=0
+          for pkg in "${PKGS[@]}"; do
+            echo "Pushing $pkg"
+            if PUSH_OUTPUT=$(dotnet nuget push "$pkg" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate 2>&1); then
+              echo "$PUSH_OUTPUT"
+              if echo "$PUSH_OUTPUT" | grep -qiE 'already exists|conflict'; then
+                echo "::warning::$(basename "$pkg") already existed on nuget.org — push skipped. If unexpected, the counter store may be stale or reset."
+                duplicate_count=$((duplicate_count + 1))
+              fi
+            else
+              echo "$PUSH_OUTPUT" >&2
+              echo "::error::push failed for $pkg"
+              push_failed=1
+            fi
+          done
+          if [ "$push_failed" -eq 0 ] && [ "$duplicate_count" -eq "${#PKGS[@]}" ]; then
+            echo "::error::All ${#PKGS[@]} packages already existed on nuget.org — nothing was published. The counter store is likely stale (reset, or a prior run pushed but failed to persist counters). Inspect the release-counters-snapshot artifact before re-running."
+            exit 1
+          fi
+          if [ "$push_failed" -ne 0 ]; then
+            echo "::error::One or more dotnet nuget push calls failed — failing the job so the release-counter persist step does not run. The locally-mutated counter file is uploaded as the release-counters-snapshot artifact for inspection; restore SPLICE_RELEASE_COUNTERS from a prior snapshot if needed."
+            exit 1
+          fi
+
+      - name: Persist release-counter store back to repo variable
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SPLICE_COUNTERS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$COUNTERS_PATH" ]; then
+            echo "::error::release-counters file missing at $COUNTERS_PATH"; exit 1
+          fi
+          VALUE_JSON=$(jq -Rs '.' < "$COUNTERS_PATH")
+          PAYLOAD=$(jq -nc --arg name "$COUNTER_VARIABLE_NAME" --argjson value "$VALUE_JSON" \
+            '{name: $name, value: $value}')
+          GET_STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}")
+          case "$GET_STATUS" in
+            200)
+              echo "$PAYLOAD" | gh api -X PATCH "/repos/${GITHUB_REPOSITORY}/actions/variables/${COUNTER_VARIABLE_NAME}" --input -
+              echo "Updated repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
+              ;;
+            404)
+              echo "$PAYLOAD" | gh api -X POST "/repos/${GITHUB_REPOSITORY}/actions/variables" --input -
+              echo "Created repo variable ${COUNTER_VARIABLE_NAME} ($(jq 'length' < "$COUNTERS_PATH") entries)."
+              ;;
+            *)
+              echo "::error::Existence check for ${COUNTER_VARIABLE_NAME} returned HTTP $GET_STATUS — not persisting. The mutated counter store is in the release-counters-snapshot artifact; re-run the persist manually once the API issue is resolved."
+              exit 1
+              ;;
+          esac
+
+      - name: Note dry-run skip
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "dry_run=true — skipped NuGet push and SPLICE_RELEASE_COUNTERS write-back. Counter values were NOT burned. nupkgs were still produced and uploaded as an artifact for inspection." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload nupkgs as artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: splice-nuget-${{ steps.resolve.outputs.splice_version }}
+          path: ${{ runner.temp }}/splice-nupkgs/*.nupkg
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload build logs on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: splice-build-out-${{ steps.resolve.outputs.splice_version }}
+          path: ${{ runner.temp }}/splice-out/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  attach-to-release:
+    needs: publish-splice
+    if: needs.publish-splice.outputs.attach_to_release == 'true' && needs.publish-splice.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    env:
+      RELEASE_TAG: ${{ needs.publish-splice.outputs.release_tag }}
+      SPLICE_VERSION: ${{ needs.publish-splice.outputs.splice_version }}
+
+    steps:
+      - name: Download nupkgs artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: splice-nuget-${{ needs.publish-splice.outputs.splice_version }}
+          path: splice-nupkgs
+
+      - name: Attach nupkgs to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          PKGS=(splice-nupkgs/*.nupkg)
+          if [ "${#PKGS[@]}" -eq 0 ]; then
+            echo "::error::nupkg artifact contained no packages — the publish job guarantees at least one, so the artifact name or path has drifted."
+            exit 1
+          fi
+          echo "Attaching ${#PKGS[@]} package(s) to release $RELEASE_TAG"
+          if ! OUTPUT=$(gh release upload "$RELEASE_TAG" "${PKGS[@]}" --clobber --repo "$GITHUB_REPOSITORY" 2>&1); then
+            echo "$OUTPUT" >&2
+            if echo "$OUTPUT" | grep -q "immutable release"; then
+              echo "::warning::Release $RELEASE_TAG is immutable — asset attachment skipped. Packages are published to nuget.org."
+            else
+              exit 1
+            fi
+          fi
