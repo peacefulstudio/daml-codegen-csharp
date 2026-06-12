@@ -16,7 +16,7 @@ jobs:
     with:
       dotnet-version: '10.0.x'
       build-matrix: >-
-        [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":false},
+        [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":true},
          {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
          {"name":"windows-amd64","runner":"windows-latest","coverage":false},
          {"name":"windows-arm64","runner":"windows-11-arm","coverage":false},
