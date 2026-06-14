@@ -1,6 +1,7 @@
 # Daml C# Code Generator
 
 [![CI](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml/badge.svg)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/coverage.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![.NET](https://img.shields.io/badge/.NET-10.0-white.svg)](https://dotnet.microsoft.com/)
 
