@@ -1,12 +1,39 @@
 # Daml C# Code Generator
 
 [![CI](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml/badge.svg)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/coverage.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/coverage-csharp.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![Release](https://img.shields.io/github/v/release/peacefulstudio/daml-codegen-csharp?label=latest%20stable)](https://github.com/peacefulstudio/daml-codegen-csharp/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![.NET](https://img.shields.io/badge/.NET-10.0-white.svg)](https://dotnet.microsoft.com/)
 
 Generates strongly-typed C# from Daml `.dar` archives so .NET applications can
 talk to a Canton/Daml ledger with full type safety.
+
+## Platform Support
+
+CI builds and tests on every supported OS × architecture. Each badge reflects the latest `main` run.
+
+**C# (`Daml.Codegen.CSharp`)**
+
+[![ubuntu amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-ubuntu-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![ubuntu arm64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-ubuntu-arm64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![windows amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-windows-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![windows arm64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-windows-arm64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![macos arm64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-macos-arm64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![macos amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-csharp-macos-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+
+**Scala/JVM helper**
+
+[![ubuntu amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-scala-ubuntu-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![ubuntu arm64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-scala-ubuntu-arm64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![windows amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-scala-windows-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![macos arm64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-scala-macos-arm64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![macos amd64](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/ci-scala-macos-amd64.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+
+## Coverage
+
+[![coverage (C#)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/coverage-csharp.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
+[![coverage (Scala)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/peacefulstudio/daml-codegen-csharp/badges/coverage-scala.json)](https://github.com/peacefulstudio/daml-codegen-csharp/actions/workflows/ci.yaml)
 
 ## Status
 
@@ -98,6 +125,9 @@ var submission = CommandsSubmission.Single(createCmd)
 ```
 
 ## NuGet Packages
+
+[![latest stable](https://img.shields.io/github/v/release/peacefulstudio/daml-codegen-csharp?label=latest%20stable)](https://github.com/peacefulstudio/daml-codegen-csharp/releases/latest)
+[![latest](https://img.shields.io/github/v/release/peacefulstudio/daml-codegen-csharp?include_prereleases&label=latest)](https://github.com/peacefulstudio/daml-codegen-csharp/releases)
 
 The following packages are published to NuGet.org, starting with
 `0.1.8-preview.1` (earlier versions in the CHANGELOG were internal
