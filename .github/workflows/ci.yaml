@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/coverage-badge]
   pull_request:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
 
   badges:
     needs: csharp-ci
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/coverage-badge' }}
     permissions:
       contents: write
     uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@feat/coverage-badges
