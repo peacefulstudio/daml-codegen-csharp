@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/coverage-badge]
+    branches: [main]
   pull_request:
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
 
   badges:
     needs: [csharp-ci, jvm-helper-ci, assemble-badge-data]
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/coverage-badge') && !cancelled() }}
+    if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
     permissions:
       contents: write
     uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@feat/coverage-badges
@@ -52,7 +52,7 @@ jobs:
 
   assemble-badge-data:
     needs: [csharp-ci, jvm-helper-ci]
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/coverage-badge') && !cancelled() }}
+    if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
     runs-on: ubuntu-latest
     outputs:
       matrix-data: ${{ steps.merge.outputs.matrix-data }}
