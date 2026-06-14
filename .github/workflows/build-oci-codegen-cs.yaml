@@ -49,11 +49,6 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   ARTIFACT_TYPE: application/vnd.peacefulstudio.dpm-codegen-cs.bundle.v1+json
 
-# The darwin (osx-arm64) bundle builds on a macOS runner — free on public repos,
-# billed on private ones. The OCI artifact is therefore published only where repo
-# variable OCI_PUBLISH_ENABLED=true (the public repo); it is unset/false on the
-# private repo so every job here cascades to skipped. The file is kept identical
-# across both repos.
 jobs:
   validate-inputs:
     name: Validate version tag
