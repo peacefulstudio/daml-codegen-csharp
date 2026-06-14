@@ -15,6 +15,7 @@ jobs:
     uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@feat/coverage-badges
     with:
       dotnet-version: '10.0.x'
+      artifact-prefix: csharp
       build-matrix: >-
         [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":true},
          {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
@@ -39,6 +40,7 @@ jobs:
     uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@feat/coverage-badges
     with:
       working-directory: jvm-helper
+      artifact-prefix: scala
       # No windows-arm64 shard: Maven Central publishes no windows-aarch_64 protoc
       # binary at any version, so sbt-protoc cannot resolve a compiler there.
       build-matrix: >-
