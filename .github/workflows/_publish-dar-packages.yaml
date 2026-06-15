@@ -1,0 +1,201 @@
+name: Publish DAR Packages (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      source_label:
+        description: 'Short label for summaries/artifacts/concurrency, e.g. Splice or DamlFinance.'
+        required: true
+        type: string
+      download_url:
+        description: 'Full URL to the source bundle tarball (the caller interpolates its own version).'
+        required: true
+        type: string
+      dar_find_path:
+        description: "find -path glob locating DARs inside the extracted tree, relative to ./extracted (e.g. '*/dars/*.dar' or '*.dar')."
+        required: true
+        type: string
+      dar_patterns:
+        description: 'Newline-separated basename globs (without .dar) selecting which DARs to publish.'
+        required: true
+        type: string
+      counter_variable:
+        description: 'Repo variable name holding the release-counter store for this source.'
+        required: true
+        type: string
+      codegen_cs_version:
+        description: 'Version of ghcr.io/peacefulstudio/dpm-codegen-cs to pull. Empty = Directory.Build.props <Version>.'
+        required: false
+        type: string
+        default: ''
+      damlc_version:
+        description: 'damlc component version listed under daml.yaml components.'
+        required: false
+        type: string
+        default: '3.4.11'
+      runtime_version:
+        description: 'Daml.Runtime NuGet version referenced from generated csprojs. Empty = Directory.Build.props <Version>.'
+        required: false
+        type: string
+        default: ''
+      package_license:
+        description: 'SPDX license expression emitted into generated csprojs.'
+        required: false
+        type: string
+        default: 'Apache-2.0'
+      dry_run:
+        description: 'Build + pack + verify but skip the NuGet push AND the counter write-back.'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      COUNTERS_TOKEN:
+        description: 'Token with Variables: read & write on this repo (used to read/persist the counter store).'
+        required: true
+
+concurrency:
+  group: publish-${{ inputs.counter_variable }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DPM_AUTO_INSTALL: 'true'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      SOURCE_LABEL: ${{ inputs.source_label }}
+      DOWNLOAD_URL: ${{ inputs.download_url }}
+      DAR_FIND_PATH: ${{ inputs.dar_find_path }}
+      DAR_PATTERNS: ${{ inputs.dar_patterns }}
+      COUNTER_VARIABLE_NAME: ${{ inputs.counter_variable }}
+      CODEGEN_CS_VERSION_INPUT: ${{ inputs.codegen_cs_version }}
+      DAMLC_VERSION_INPUT: ${{ inputs.damlc_version }}
+      RUNTIME_VERSION_INPUT: ${{ inputs.runtime_version }}
+      PACKAGE_LICENSE_INPUT: ${{ inputs.package_license }}
+      DRY_RUN_INPUT: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup JDK
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dpm 1.0.19 from GitHub release (oci:// component URIs need >= 1.0.12)
+        env:
+          DPM_VERSION: '1.0.19'
+          DPM_SHA256: '36edd37025d6c1e8a72b5502234b6fea859be78950909733bc8a82bbb1c57798'
+        run: |
+          set -euo pipefail
+          TARBALL="dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+          URL="https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/${TARBALL}"
+          STAGE="${RUNNER_TEMP}/dpm-install"
+          rm -rf "${STAGE}"
+          mkdir -p "${STAGE}" "${HOME}/.dpm/bin"
+          curl -fsSL "${URL}" -o "${STAGE}/${TARBALL}"
+          echo "${DPM_SHA256}  ${STAGE}/${TARBALL}" | sha256sum -c -
+          tar -xzf "${STAGE}/${TARBALL}" -C "${STAGE}"
+          install -m 0755 "${STAGE}/dpm" "${HOME}/.dpm/bin/dpm"
+          echo "${HOME}/.dpm/bin" >> "${GITHUB_PATH}"
+          "${HOME}/.dpm/bin/dpm" --version
+
+      - name: Resolve and validate effective inputs
+        id: resolve
+        run: .github/scripts/resolve-inputs.sh
+
+      - name: Write daml.yaml with opt-in components
+        run: |
+          set -euo pipefail
+          mkdir -p dpm-workspace
+          cat > dpm-workspace/daml.yaml <<EOF
+          components:
+            - damlc:${DAMLC_VERSION}
+            - daml-script:${DAMLC_VERSION}
+            - oci://ghcr.io/peacefulstudio/dpm-codegen-cs:${CODEGEN_CS_VERSION}
+          EOF
+          echo "Written daml.yaml:"
+          cat dpm-workspace/daml.yaml
+
+      - name: Download source bundle and select DARs
+        run: .github/scripts/select-dars.sh
+
+      - name: Fetch release-counter store from repo variable
+        env:
+          GH_TOKEN: ${{ secrets.COUNTERS_TOKEN }}
+        run: .github/scripts/fetch-counters.sh
+
+      - name: Generate, build, pack (multi-pass) via dpm codegen-cs
+        env:
+          DOTNET_NOLOGO: 1
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/build-pack.sh
+
+      - name: Guard — a prerelease codegen-cs must not emit stable packages
+        run: .github/scripts/guard-prerelease.sh
+
+      - name: Upload release-counter snapshot artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-counters-snapshot-${{ inputs.source_label }}
+          path: ${{ runner.temp }}/release-counters.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Verify generated packages compile in a fresh consumer (local feed + nuget.org only)
+        env:
+          DOTNET_NOLOGO: 1
+        run: .github/scripts/verify-consumer.sh
+
+      - name: Push to GitHub Packages
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/push-packages.sh
+
+      - name: Persist release-counter store back to repo variable
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COUNTERS_TOKEN }}
+        run: .github/scripts/persist-counters.sh
+
+      - name: Note dry-run skip
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "dry_run=true — skipped NuGet push and ${COUNTER_VARIABLE_NAME} write-back. Counter values were NOT burned. nupkgs were still produced and uploaded as an artifact for inspection." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload nupkgs as artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.source_label }}-nuget
+          path: ${{ env.NUPKG_DIR }}/*.nupkg
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.source_label }}-build-out
+          path: ${{ runner.temp }}/dar-out/
+          retention-days: 7
+          if-no-files-found: ignore

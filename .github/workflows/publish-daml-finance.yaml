@@ -1,0 +1,63 @@
+name: Publish Daml.Finance DAR Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      daml_finance_version:
+        description: 'Daml.Finance SDK release version (digital-asset/daml-finance sdk/<ver> tag).'
+        required: false
+        type: string
+        default: '2.10.0'
+      codegen_cs_version:
+        description: 'Version of ghcr.io/peacefulstudio/dpm-codegen-cs to pull. Empty = Directory.Build.props <Version>.'
+        required: false
+        type: string
+        default: ''
+      damlc_version:
+        description: 'damlc component version listed under daml.yaml components.'
+        required: false
+        type: string
+        default: '3.4.11'
+      runtime_version:
+        description: 'Daml.Runtime NuGet version referenced from generated csprojs. Empty = Directory.Build.props <Version>.'
+        required: false
+        type: string
+        default: ''
+      package_license:
+        description: 'SPDX license expression emitted into generated csprojs.'
+        required: false
+        type: string
+        default: 'Apache-2.0'
+      dry_run:
+        description: 'Build + pack + verify but skip the NuGet push AND the DAML_FINANCE_RELEASE_COUNTERS write-back.'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_publish-dar-packages.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      source_label: DamlFinance
+      download_url: https://github.com/digital-asset/daml-finance/releases/download/sdk/${{ inputs.daml_finance_version }}/daml-finance-bundle-sdk-${{ inputs.daml_finance_version }}.tar.gz
+      dar_find_path: '*.dar'
+      dar_patterns: |
+        daml-finance-interface-types-common-v3-*
+        daml-finance-interface-types-date-v3-*
+        daml-finance-interface-util-v3-*
+        daml-finance-interface-holding-v4-*
+        daml-finance-interface-instrument-base-v4-*
+        daml-finance-interface-instrument-token-v4-*
+        daml-finance-util-v4-*
+        daml-finance-instrument-token-v4-*
+      counter_variable: DAML_FINANCE_RELEASE_COUNTERS
+      codegen_cs_version: ${{ inputs.codegen_cs_version }}
+      damlc_version: ${{ inputs.damlc_version }}
+      runtime_version: ${{ inputs.runtime_version }}
+      package_license: ${{ inputs.package_license }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      COUNTERS_TOKEN: ${{ secrets.RELEASE_COUNTERS_TOKEN }}
