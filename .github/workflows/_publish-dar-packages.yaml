@@ -66,7 +66,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     env:
@@ -176,6 +176,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.COUNTERS_TOKEN }}
         run: .github/scripts/persist-counters.sh
+
+      - name: Attach packages to draft release (best-effort, never fails)
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          TAG="v${CODEGEN_CS_VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            shopt -s nullglob
+            files=("$NUPKG_DIR"/*.nupkg)
+            if [ ${#files[@]} -gt 0 ]; then
+              gh release upload "$TAG" "${files[@]}" --clobber || echo "release upload failed for $TAG; continuing"
+            else
+              echo "no nupkgs under $NUPKG_DIR to attach"
+            fi
+          else
+            echo "no draft release $TAG; skipping attach"
+          fi
 
       - name: Note dry-run skip
         if: env.DRY_RUN == 'true'
