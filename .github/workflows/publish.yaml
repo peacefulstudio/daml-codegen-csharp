@@ -1,8 +1,9 @@
 name: Publish NuGet Packages
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version_override:
@@ -15,20 +16,56 @@ jobs:
     runs-on: ubuntu-latest
     environment: nuget-publish
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      - name: Resolve version
+        id: ver
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version_override }}
+        run: |
+          set -euo pipefail
+          if [ -n "${VERSION_OVERRIDE}" ]; then
+            RESOLVED="${VERSION_OVERRIDE}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RESOLVED="${GITHUB_REF_NAME#v}"
+            if ! [[ "${RESOLVED}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::warning::tag '${GITHUB_REF_NAME}' is not a release version; skipping publish"
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "::warning::no version_override and not a tag — skipping publish"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Publishing version: ${RESOLVED}"
+          echo "version=${RESOLVED}" >> "$GITHUB_OUTPUT"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
       - name: NuGet login (OIDC -> short-lived key)
         id: login
+        if: steps.ver.outputs.should_publish == 'true'
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
       - name: Build, test, pack & push
+        if: steps.ver.outputs.should_publish == 'true'
         uses: peacefulstudio/github-actions/.github/actions/csharp-publish@v1
         with:
           api-key: ${{ steps.login.outputs.NUGET_API_KEY }}
-          version_override: ${{ inputs.version_override }}
+          version_override: ${{ steps.ver.outputs.version }}
+      - name: Attach packages to draft release (never publish)
+        if: steps.ver.outputs.should_publish == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --prerelease --verify-tag --title "$TAG" --notes "Draft release assembled by CI. OCI bundle + NuGet packages are attached automatically; attach Splice/Daml.Finance packages, then publish manually." || true
+          shopt -s nullglob
+          files=(output/nuget/*.nupkg output/nuget/*.snupkg)
+          [ ${#files[@]} -gt 0 ] && gh release upload "$TAG" "${files[@]}" --clobber || echo "no packages to attach"
