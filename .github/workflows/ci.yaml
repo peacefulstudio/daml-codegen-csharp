@@ -12,11 +12,10 @@ permissions:
 
 jobs:
   csharp-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@v2.3.0
+    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@v2
     with:
       dotnet-version: '10.0.x'
       artifact-prefix: csharp
-      matrix-mode: full
       build-matrix: >-
         [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":true},
          {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
@@ -26,11 +25,24 @@ jobs:
          {"name":"macos-amd64","runner":"macos-15-intel","coverage":false}]
 
   integration-tests:
-    name: integration-tests (ubuntu-amd64)
-    runs-on: ubuntu-latest
+    name: integration-tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: ubuntu-amd64, runner: ubuntu-latest}
+          - {name: ubuntu-arm64, runner: ubuntu-24.04-arm}
+          - {name: windows-amd64, runner: windows-latest}
+          - {name: windows-arm64, runner: windows-11-arm}
+          - {name: macos-arm64, runner: macos-latest}
+          - {name: macos-amd64, runner: macos-15-intel}
     permissions:
       contents: read
       packages: read
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -66,7 +78,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
     permissions:
       contents: write
-    uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@v2.3.0
+    uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@v2
     with:
       coverage-data: >-
         [{"slug":"csharp","label":"coverage (C#)","percent":"${{ needs.csharp-ci.outputs.coverage }}"},
@@ -74,11 +86,10 @@ jobs:
       matrix-data: ${{ needs.assemble-badge-data.outputs.matrix-data }}
 
   jvm-helper-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@v2.3.0
+    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@v2
     with:
       working-directory: jvm-helper
       artifact-prefix: scala
-      matrix-mode: full
       # No windows-arm64 shard: Maven Central publishes no windows-aarch_64 protoc
       # binary at any version, so sbt-protoc cannot resolve a compiler there.
       build-matrix: >-
