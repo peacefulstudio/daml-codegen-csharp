@@ -195,7 +195,7 @@ public class TransactionResultTests
     [Fact]
     public void ExercisedEvent_supports_inherited_interface_choice()
     {
-        var interfaceId = new RuntimeIdentifier("pkg", "Sample.Iface", "IThing");
+        var interfaceId = new RuntimeIdentifier("pkg", "Acme.Iface", "IThing");
         var exercised = new ExercisedEvent(
             ContractId: "00a",
             TemplateId: FooBar.TemplateId,
@@ -227,7 +227,7 @@ public class TransactionResultTests
 
     private sealed record FooBar(string Owner) : ITemplate
     {
-        public static RuntimeIdentifier TemplateId { get; } = new("test-pkg", "Sample.Foo", "FooBar");
+        public static RuntimeIdentifier TemplateId { get; } = new("test-pkg", "Acme.Foo", "FooBar");
         public static string PackageId => "test-pkg";
         public static string PackageName => "test-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);

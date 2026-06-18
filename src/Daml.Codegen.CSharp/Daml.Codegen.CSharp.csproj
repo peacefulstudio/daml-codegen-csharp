@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\icon.png" LogicalName="icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Daml.Codegen.CSharp.Tests" />
     <InternalsVisibleTo Include="Daml.Codegen.CSharp.Cli" />
   </ItemGroup>
@@ -25,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Daml.Runtime\Daml.Runtime.csproj" />
+    <ProjectReference Include="..\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

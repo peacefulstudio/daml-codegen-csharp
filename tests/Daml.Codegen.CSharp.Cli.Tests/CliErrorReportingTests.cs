@@ -66,7 +66,9 @@ public class CliErrorReportingTests : IDisposable
             GenerateContractIdentifiers: true,
             EmitterCounter: 0,
             ReleaseCountersFile: null,
-            PackageLicenseExpression: "Apache-2.0");
+            PackageLicenseExpression: "Apache-2.0",
+            VersionSuffix: null,
+            RepositoryUrl: null);
 
         var (exit, stderr) = await RunCapturingStdErr(() => Program.RunCodegen(args, cts.Token));
 
@@ -74,6 +76,23 @@ public class CliErrorReportingTests : IDisposable
         stderr.Should().Contain("canceled");
         stderr.Should().Contain("Partially written files may remain",
             "an interrupted run can leave a half-emitted output tree and the operator must know to clean it");
+    }
+
+    [Fact]
+    public async Task invalid_version_suffix_is_rejected_at_the_cli_boundary_with_a_clean_error()
+    {
+        var (exit, stderr) = await RunCapturingStdErr(() => Program.Main(
+        [
+            "--intermediate", FixtureIntermediatePath,
+            "-o", _workspace,
+            "--version-suffix", "bad suffix"
+        ]));
+
+        exit.Should().NotBe(0,
+            "an unvalidated suffix would otherwise reach <Version> and only fail late at dotnet pack");
+        stderr.Should().Contain("--version-suffix");
+        stderr.Should().Contain("bad suffix",
+            "the error must name the rejected value so the operator can see what was wrong");
     }
 
     private static async Task<(int Exit, string StdErr)> RunCapturingStdErr(Func<Task<int>> run)

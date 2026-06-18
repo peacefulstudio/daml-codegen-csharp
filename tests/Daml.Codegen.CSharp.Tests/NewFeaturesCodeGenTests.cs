@@ -396,8 +396,6 @@ public class NewFeaturesCodeGenTests
         code.Should().Contain(
             "/// Gets the contract key of type <c>string</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
             "the cref targets the open generic by its declared type-parameter name TKey while the concrete key type appears in prose, because a keyword/constructed type inside cref braces is CS1584/CS1658");
-        code.Should().Contain("until the full DALF key-expression analysis lands",
-            "the remarks breadcrumb is the in-source signal explaining the body-less partial property");
     }
 
     #endregion

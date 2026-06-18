@@ -68,6 +68,71 @@ package. (The `Daml.Codegen.CSharp` emitter library is separately published
 as a NuGet library for programmatic use.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
+**Dpm mode**:
+The `Daml.Codegen.CSharp.MSBuild` adapter that runs codegen via `dpm codegen-cs` (the OCI
+bundle: JVM helper + emitter). Needs `dpm` + a JDK at build time. The default `DamlCodegenMode`.
+_Avoid_: "dpm plugin", "online mode"
+
+**`PackageEmitContext`**:
+The immutable per-package value the C# emitter threads through its emit methods: the root
+namespace, the `TypeReferenceQualifier`, the per-package data-type lookup, and the local
+enum / variant / interface-placeholder / choice-argument name sets. Built once per package by
+`PackageEmitContext.ForPackage`; read-only during emission. Replaces the mutable `_current*`
+/ `_local*` instance fields the emitter used to clear at the start of each package.
+_Avoid_: "codegen state", "the current-package fields", "emit scratch"
+
+**`CrossPackageResolver`**:
+The DAR-scoped module (`ICrossPackageResolver`) that resolves a `DamlTypeRef` to a C# name.
+It owns the archive lookup, the foreign-choice-argument memo, and the set of external package
+ids it has discovered — read after emission to emit a `<PackageReference>` per id. Lives for
+one `Generate` call. Replaces `ResolveTypeRefName` plus the `_currentArchive` /
+`_foreignChoiceArgCache` / `_externalPackageIds` instance fields. The prod adapter
+(`DarCrossPackageResolver`) resolves against an `IDarSource`; tests use a canned stub.
+_Avoid_: "type resolver", "package resolver service", "the cross-package cache"
+
+**`PartyAnalysis`**:
+The pure module that reasons about a template's parties: classifying controller / signatory /
+observer sets as statically-resolvable or `Dynamic`, unioning them, partitioning them into
+controller-params and observer-only-params, and validating a `DamlPartyAnalysis` against the
+real template fields. Shared dependency of `ChoiceEmitter` and `SubmissionExtensionsEmitter`;
+party sets in, partitioned params out, so it is trivially unit-testable.
+_Avoid_: "party helper", "the party utils", "controller logic"
+
+**`DamlTypeMapper`**:
+The module that turns a `DamlType` into C#: `MapType` (→ a C# type name), `ToValue` and
+`FromValue` (→ serialize / deserialize expressions). An instance constructed per package over a
+`PackageEmitContext` and an `ICrossPackageResolver`, which it calls into for cross-package names
+— it does not own resolution. Pure functions of its inputs: `DamlType` in, C# fragment out, with
+a trivially-constructible context, so it is unit-testable without a real DAR. Extracted from the
+emitter's `MapDamlTypeToCSharp` / `GetToValueConversion` / `GetFromValueConversion` once
+`PackageEmitContext` exists.
+_Avoid_: "type converter", "the mapping switch", "serializer"
+
+**`SubmissionExtensionsEmitter`**:
+The module that emits the template *create / submission* path — `CreateAsync`, the optional
+`Observers(payload)` helper, and the `SubmissionExtensions` class — deriving signatories and
+observers from the payload via `PartyAnalysis`. Distinct from `ChoiceEmitter`: creating a
+contract is not exercising a choice. Extracted from the `NamedSubmitters` partial.
+_Avoid_: "submitter", "the create wrapper", "named-submitter partial"
+
+**`ChoiceEmitter`**:
+The module that emits the C# to *exercise* a choice: the `<Choice>Arg` fallback type, the
+`Choice<Template, Arg, Result>` descriptor with its result decoder, the typed `<Choice>Async`
+exercisers (both the contract-id-returning and the value-returning flavour, kept as private
+detail of one home — not pre-split), and the interface-choice extensions. An instance
+constructed per package over a `PackageEmitContext`, an `ICrossPackageResolver`, the package's
+`DamlTypeMapper`, and the shared `PartyAnalysis`; methods take `(IndentWriter, template/interface)`.
+It *calls* the mapper for every type fragment and *reads* — does not own — the resolved
+choice-argument metadata. The created-slot extraction (return type → list of `ContractId T`
+slots) is pulled out as the pure `ChoiceCreatedSlots.Extract` helper and unit-tested directly.
+Distinct from `SubmissionExtensionsEmitter`: creating a contract is not exercising a choice.
+_Avoid_: "choice helper", "the exercise writer", "the async wrapper generator", "choice-arg owner"
+
+**`DamlCodegenMode`**:
+The MSBuild seam (a property) that selects which `$(DamlCodegenTool)` adapter runs — `Dpm` or
+`Standalone`.
+_Avoid_: "codegen backend", "toolchain flag"
+
 ## Example dialogue
 
 > **Dev**: Where does the JVM dependency go? I thought consumers shouldn't need a JDK.

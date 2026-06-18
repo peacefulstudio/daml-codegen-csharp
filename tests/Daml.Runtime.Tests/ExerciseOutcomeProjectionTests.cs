@@ -22,9 +22,9 @@ public class ExerciseOutcomeProjectionTests
     /// <summary>Stand-in for a Daml template (the choice's first created type).</summary>
     private sealed record Agreement : ITemplate
     {
-        public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "Agreement");
+        public static Identifier TemplateId => new("pkg-1", "Acme.Agreements", "Agreement");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "sample-agreements";
+        public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Agreement FromRecord(DamlRecord record) => new();
@@ -33,9 +33,9 @@ public class ExerciseOutcomeProjectionTests
     /// <summary>Stand-in for a Daml template (the choice's second created type).</summary>
     private sealed record SwapRecord : ITemplate
     {
-        public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "SwapRecord");
+        public static Identifier TemplateId => new("pkg-1", "Acme.Agreements", "SwapRecord");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "sample-agreements";
+        public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static SwapRecord FromRecord(DamlRecord record) => new();
@@ -44,9 +44,9 @@ public class ExerciseOutcomeProjectionTests
     /// <summary>Stand-in for the choice's optional third created type.</summary>
     private sealed record AgreementRecord : ITemplate
     {
-        public static Identifier TemplateId => new("pkg-1", "Sample.Agreements", "AgreementRecord");
+        public static Identifier TemplateId => new("pkg-1", "Acme.Agreements", "AgreementRecord");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "sample-agreements";
+        public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static AgreementRecord FromRecord(DamlRecord record) => new();
@@ -243,9 +243,9 @@ public class ExerciseOutcomeProjectionTests
     /// </summary>
     private sealed record Half : ITemplate
     {
-        public static Identifier TemplateId => new("pkg-1", "Sample.Splitters", "Half");
+        public static Identifier TemplateId => new("pkg-1", "Acme.Splitters", "Half");
         public static string PackageId => "pkg-1";
-        public static string PackageName => "sample-splitters";
+        public static string PackageName => "peaceful-acme-splitters";
         public static Version PackageVersion => new(0, 0, 1);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Half FromRecord(DamlRecord record) => new();

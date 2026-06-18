@@ -171,6 +171,10 @@ public class ContractTypesTests
     [Fact]
     public void InterfacePlaceholder_can_satisfy_ContractId_T_constraint()
     {
+        // Compile-time check: the line below would not compile if `where T : ITemplate`
+        // were not satisfied by the placeholder. Construction itself must not throw —
+        // a placeholder ContractId is exactly what splice-api-token-allocation-v1's
+        // `Reference.Cid` field carries, and Acme will receive it pre-coercion.
         var cid = new ContractId<TestInterfacePlaceholder>("placeholder-cid-123");
 
         cid.Value.Should().Be("placeholder-cid-123");

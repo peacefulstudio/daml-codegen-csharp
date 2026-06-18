@@ -212,9 +212,9 @@ public class EmittedCodeCompilesTests
         // package name (`Test.Package`), not the module name. Mismatched namespaces
         // are silently treated as different types, so neither partial finds its
         // counterpart and Roslyn emits CS9248 + CS9249 simultaneously.
-        var consumerPartial = new GeneratedFile(
-            RelativePath: "AssetWithKey.Consumer.cs",
-            Content: """
+        var consumerPartial = GeneratedFile.Text(
+            "AssetWithKey.Consumer.cs",
+            """
                 // Copyright (c) 2026 Peaceful Studio OÜ
                 // SPDX-License-Identifier: Apache-2.0
                 using Daml.Runtime.Data;
@@ -627,9 +627,9 @@ public class EmittedCodeCompilesTests
         // Implementing partial declared as `partial class` to match the
         // generator's class-mode output. `Owner` is a regular property on the
         // generated class body (not a primary-constructor parameter).
-        var consumerPartial = new GeneratedFile(
-            RelativePath: "AssetWithKey.Consumer.cs",
-            Content: """
+        var consumerPartial = GeneratedFile.Text(
+            "AssetWithKey.Consumer.cs",
+            """
                 // Copyright (c) 2026 Peaceful Studio OÜ
                 // SPDX-License-Identifier: Apache-2.0
                 using Daml.Runtime.Data;
@@ -1334,8 +1334,19 @@ public class EmittedCodeCompilesTests
             nestedBase,
             [ContractIdOf("Asset")]);
 
-        var generator = CreateGenerator();
-        generator.RequireForFieldType(indent, nestedAppCarryingContractId);
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+        var resolver = new DarCrossPackageResolver(
+            new DarModel { MainPackage = package, Dependencies = [] }, new ConsoleLogger(0));
+
+        StdlibPackages.RequireForFieldType(resolver, indent, nestedAppCarryingContractId);
 
         indent.RequiredUsings.Should().Contain(
             "Daml.Runtime.Contracts",
@@ -1503,9 +1514,9 @@ public class EmittedCodeCompilesTests
         // The key-bearing template emits a body-less `public partial ... Key { get; }`;
         // the consumer must supply the implementing partial. Declaring it in the
         // shadowing namespace also exercises the key type's global:: qualification.
-        var consumerPartial = new GeneratedFile(
-            RelativePath: "Holding.Consumer.cs",
-            Content: """
+        var consumerPartial = GeneratedFile.Text(
+            "Holding.Consumer.cs",
+            """
                 // Copyright (c) 2026 Peaceful Studio OÜ
                 // SPDX-License-Identifier: Apache-2.0
                 namespace Canton.Party;

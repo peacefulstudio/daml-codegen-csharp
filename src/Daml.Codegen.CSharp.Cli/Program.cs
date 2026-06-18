@@ -125,6 +125,19 @@ internal static class Program
             Description = "Path to a JSON release-counter store. Requires --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store, overriding --emitter-counter. The store is created on first use and atomically updated on each run."
         };
 
+        var versionSuffixOption = new Option<string?>("--version-suffix")
+        {
+            Description = "SemVer prerelease suffix appended to generated package versions, e.g. 'preview.2'. Mirrors the emitter prerelease tag. No leading dash."
+        };
+        versionSuffixOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(versionSuffixOption);
+            if (value is not null && !FourPartPackageVersion.IsValidPrereleaseSuffix(value))
+            {
+                result.AddError($"--version-suffix '{value}' is not a valid SemVer prerelease suffix: it must be a non-empty dot-separated sequence of [0-9A-Za-z-] identifiers (e.g. preview.2), with no leading dash.");
+            }
+        });
+
         var packageLicenseOption = new Option<string>("--package-license")
         {
             Description = "SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0.",
@@ -136,6 +149,19 @@ internal static class Program
             if (string.IsNullOrWhiteSpace(value))
             {
                 result.AddError("--package-license must be a non-empty SPDX license expression (e.g. Apache-2.0, MIT, BSD-3-Clause).");
+            }
+        });
+
+        var repositoryUrlOption = new Option<string?>("--repository-url")
+        {
+            Description = "Repository URL emitted in the generated .csproj's <PackageProjectUrl>/<RepositoryUrl>/<RepositoryType>. When omitted, those elements are not emitted."
+        };
+        repositoryUrlOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(repositoryUrlOption);
+            if (value is not null && string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("--repository-url must be a non-empty URL when specified (e.g. https://github.com/acme/widgets).");
             }
         });
 
@@ -153,6 +179,8 @@ internal static class Program
         rootCommand.Options.Add(emitterCounterOption);
         rootCommand.Options.Add(releaseCountersOption);
         rootCommand.Options.Add(packageLicenseOption);
+        rootCommand.Options.Add(versionSuffixOption);
+        rootCommand.Options.Add(repositoryUrlOption);
 
         Func<ParseResult, CancellationToken, Task<int>> action = (parseResult, cancellationToken) =>
             RunCodegen(
@@ -170,7 +198,9 @@ internal static class Program
                     parseResult.GetValue(contractIdentifiersOption),
                     parseResult.GetValue(emitterCounterOption),
                     parseResult.GetValue(releaseCountersOption),
-                    parseResult.GetValue(packageLicenseOption)!),
+                    parseResult.GetValue(packageLicenseOption)!,
+                    parseResult.GetValue(versionSuffixOption),
+                    parseResult.GetValue(repositoryUrlOption)),
                 cancellationToken);
         rootCommand.SetAction(action);
 
@@ -273,6 +303,8 @@ internal static class Program
             GenerateContractIdentifiers = args.GenerateContractIdentifiers,
             EmitterCounter = emitterCounter,
             PackageLicenseExpression = args.PackageLicenseExpression,
+            VersionSuffix = args.VersionSuffix,
+            RepositoryUrl = args.RepositoryUrl,
         };
 
     private static async Task<int> WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ConsoleLogger logger, CancellationToken cancellationToken)
@@ -287,7 +319,14 @@ internal static class Program
                 Directory.CreateDirectory(fileDir);
             }
 
-            await File.WriteAllTextAsync(filePath, file.Content, cancellationToken);
+            if (file.IsBinary)
+            {
+                await File.WriteAllBytesAsync(filePath, file.BinaryContent!, cancellationToken);
+            }
+            else
+            {
+                await File.WriteAllTextAsync(filePath, file.Content, cancellationToken);
+            }
             logger.Debug($"  Generated: {file.RelativePath}");
             written++;
         }
@@ -309,4 +348,6 @@ internal sealed record CodegenArgs(
     bool GenerateContractIdentifiers,
     int EmitterCounter,
     FileInfo? ReleaseCountersFile,
-    string PackageLicenseExpression);
+    string PackageLicenseExpression,
+    string? VersionSuffix,
+    string? RepositoryUrl);

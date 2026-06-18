@@ -9,7 +9,7 @@ using Xunit;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Codegen-shape tests for typed CreateAsync / &lt;Choice&gt;Async with one
+/// Codegen-shape tests for the typed CreateAsync / &lt;Choice&gt;Async surface, with one
 /// parameter per signatory / controller. The static analyzer in the
 /// <c>DarReader</c> namespace walks the Daml-LF expression tree; in unit
 /// tests we pre-build the analysis directly on the model classes (bypassing
@@ -64,7 +64,7 @@ public class NamedSubmitterTests
 
     /// <summary>
     /// Helper for the common shape: a template with three Party signatories,
-    /// all referenced as payload fields. Mirrors a canonical
+    /// all referenced as payload fields. Mirrors the canonical Acme
     /// <c>Agreement</c> template (<c>signatory platform, initiator, counterparty</c>).
     /// </summary>
     private static DamlModule MakeAgreementModule(DamlPartyAnalysis signatories, DamlPartyAnalysis? archiveControllers = null)
@@ -79,7 +79,7 @@ public class NamedSubmitterTests
 
         return new DamlModule
         {
-            Name = "Sample.Agreements",
+            Name = "Acme.Agreements",
             Templates =
             [
                 new DamlTemplate
@@ -237,7 +237,7 @@ public class NamedSubmitterTests
         // and no fallback `SubmitterInfo submitter`.
         var module = new DamlModule
         {
-            Name = "Sample.Agreements",
+            Name = "Acme.Agreements",
             Templates =
             [
                 new DamlTemplate
@@ -257,7 +257,7 @@ public class NamedSubmitterTests
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
                             ReturnType = new DamlTypeApp(
                                 new DamlPrimitiveType(DamlPrimitive.ContractId),
-                                [new DamlTypeRef("test-pkg", "Sample.Agreements", "Agreement")]),
+                                [new DamlTypeRef("test-pkg", "Acme.Agreements", "Agreement")]),
                             Controllers = DamlPartyAnalysis.Static(
                                 [new DamlPartyPayloadField("counterparty")]),
                         }
@@ -311,7 +311,7 @@ public class NamedSubmitterTests
         // type is a list of created contracts.
         var module = new DamlModule
         {
-            Name = "Sample.Agreements",
+            Name = "Acme.Agreements",
             Templates =
             [
                 new DamlTemplate
@@ -332,7 +332,7 @@ public class NamedSubmitterTests
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
                             ReturnType = new DamlTypeApp(
                                 new DamlPrimitiveType(DamlPrimitive.ContractId),
-                                [new DamlTypeRef("test-pkg", "Sample.Agreements", "Agreement")]),
+                                [new DamlTypeRef("test-pkg", "Acme.Agreements", "Agreement")]),
                             Controllers = DamlPartyAnalysis.Static(
                             [
                                 new DamlPartyPayloadField("initiator"),
@@ -531,7 +531,7 @@ public class NamedSubmitterTests
 
         return new DamlModule
         {
-            Name = "Sample.Agreements",
+            Name = "Acme.Agreements",
             Templates =
             [
                 new DamlTemplate
@@ -547,7 +547,7 @@ public class NamedSubmitterTests
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
                             ReturnType = new DamlTypeApp(
                                 new DamlPrimitiveType(DamlPrimitive.ContractId),
-                                [new DamlTypeRef("test-pkg", "Sample.Agreements", "Agreement")]),
+                                [new DamlTypeRef("test-pkg", "Acme.Agreements", "Agreement")]),
                             Controllers = choiceControllers,
                             Observers = choiceObservers,
                         }

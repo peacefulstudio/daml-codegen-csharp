@@ -488,7 +488,7 @@ public class DamlModelTests
 
     #endregion
 
-    #region DarModel IDarSource Tests
+    #region DarModel Tests
 
     [Fact]
     public void IDarSource_does_not_force_implementations_to_carry_dependency_reference_resolution()
@@ -499,7 +499,7 @@ public class DamlModelTests
     }
 
     [Fact]
-    public void DarModel_AllPackages_should_include_main_and_dependencies()
+    public void DarArchive_AllPackages_should_include_main_and_dependencies()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -548,7 +548,7 @@ public class DamlModelTests
     }
 
     [Fact]
-    public void DarModel_AllPackages_should_work_with_no_dependencies()
+    public void DarArchive_AllPackages_should_work_with_no_dependencies()
     {
         // Arrange
         var mainPackage = new DamlPackage

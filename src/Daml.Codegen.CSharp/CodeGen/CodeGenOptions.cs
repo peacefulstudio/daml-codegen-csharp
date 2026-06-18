@@ -95,11 +95,72 @@ public sealed class CodeGenOptions
     /// the source DAR's license.
     /// </summary>
     public string PackageLicenseExpression { get; init; } = "Apache-2.0";
+
+    /// <summary>
+    /// Gets or sets the SemVer prerelease suffix appended to the generated
+    /// package <c>&lt;Version&gt;</c> (e.g. <c>preview.2</c>, producing
+    /// <c>0.1.6.1-preview.2</c>). Stored without the leading dash; empty, null,
+    /// or whitespace means no suffix. Mirrors the emitter's own prerelease tag.
+    /// Affects only the generated package version; the
+    /// <see cref="RuntimePackageVersion"/> reference is unaffected.
+    /// </summary>
+    public string? VersionSuffix { get; init; }
+
+    /// <summary>
+    /// Gets or sets the repository URL emitted in the generated <c>.csproj</c>'s
+    /// <c>&lt;PackageProjectUrl&gt;</c>, <c>&lt;RepositoryUrl&gt;</c>, and
+    /// <c>&lt;RepositoryType&gt;</c>. When null, empty, or whitespace, those three
+    /// elements are omitted entirely rather than defaulting to a wrong value —
+    /// third-party emitter users must supply their own URL (or via
+    /// <c>--repository-url</c> on the CLI) so the published package never points at
+    /// an unrelated repository. Independent of the generator-tool attribution link
+    /// in the README, which always identifies this codegen tool.
+    /// </summary>
+    public string? RepositoryUrl { get; init; }
 }
 
 /// <summary>
-/// Represents a generated source file.
+/// Represents a generated output file — either a text file (created with
+/// <see cref="Text"/>) or a binary file such as the package icon (created with
+/// <see cref="Binary"/>). The two are mutually exclusive and constructed only
+/// through those factories: a text file leaves <see cref="BinaryContent"/> null,
+/// a binary file leaves <see cref="Content"/> empty.
 /// </summary>
-/// <param name="RelativePath">The path relative to the output directory, '/'-separated on every platform.</param>
-/// <param name="Content">The file content.</param>
-public sealed record GeneratedFile(string RelativePath, string Content);
+public sealed record GeneratedFile
+{
+    private GeneratedFile(string relativePath, string content, byte[]? binaryContent)
+    {
+        RelativePath = relativePath;
+        Content = content;
+        BinaryContent = binaryContent;
+    }
+
+    /// <summary>The path relative to the output directory, '/'-separated on every platform.</summary>
+    public string RelativePath { get; }
+
+    /// <summary>The text content, or empty for a binary file.</summary>
+    public string Content { get; }
+
+    /// <summary>The raw bytes for a binary file, or null for a text file.</summary>
+    public byte[]? BinaryContent { get; }
+
+    /// <summary>True when this file carries binary bytes rather than text.</summary>
+    public bool IsBinary => BinaryContent is not null;
+
+    /// <summary>Creates a text file at <paramref name="relativePath"/>.</summary>
+    public static GeneratedFile Text(string relativePath, string content) =>
+        new(relativePath, content, null);
+
+    /// <summary>
+    /// Creates a binary file at <paramref name="relativePath"/> carrying
+    /// <paramref name="binaryContent"/>. The bytes must be non-empty.
+    /// </summary>
+    public static GeneratedFile Binary(string relativePath, byte[] binaryContent)
+    {
+        if (binaryContent is null || binaryContent.Length == 0)
+        {
+            throw new ArgumentException("A binary generated file must carry non-empty content.", nameof(binaryContent));
+        }
+        return new GeneratedFile(relativePath, string.Empty, binaryContent);
+    }
+}

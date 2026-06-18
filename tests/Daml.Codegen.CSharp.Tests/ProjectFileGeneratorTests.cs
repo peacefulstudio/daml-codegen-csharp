@@ -14,14 +14,18 @@ public class ProjectFileGeneratorTests
     private static CodeGenOptions CreateOptions(
         string targetFramework = "net10.0",
         string? runtimeVersion = null,
-        bool enableNullable = true)
+        bool enableNullable = true,
+        string? repositoryUrl = null,
+        string? versionSuffix = null)
     {
         return new CodeGenOptions
         {
             TargetFramework = targetFramework,
             RuntimePackageVersion = runtimeVersion,
             EnableNullableReferenceTypes = enableNullable,
-            GenerateProjectFile = true
+            GenerateProjectFile = true,
+            RepositoryUrl = repositoryUrl,
+            VersionSuffix = versionSuffix
         };
     }
 
@@ -208,6 +212,35 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package);
 
         file.Content.Should().Contain("<Version>0.1.17.7</Version>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_append_version_suffix_to_package_version_only()
+    {
+        var options = new CodeGenOptions
+        {
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            RuntimePackageVersion = "1.2.3",
+            EmitterCounter = 5,
+            VersionSuffix = "preview.2",
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(0, 1, 6),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<Version>0.1.6.5-preview.2</Version>");
+        file.Content.Should().Contain("<PackageReference Include=\"Daml.Runtime\" Version=\"1.2.3\" />");
+        file.Content.Should().NotContain("Version=\"1.2.3-preview.2\"");
     }
 
     [Fact]
@@ -658,9 +691,9 @@ public class ProjectFileGeneratorTests
         };
         var emittedFiles = new[]
         {
-            new GeneratedFile(
-                RelativePath: "Foo.cs",
-                Content: "namespace Test; public sealed partial record Foo { public partial string Key { get; } }"),
+            GeneratedFile.Text(
+                "Foo.cs",
+                "namespace Test; public sealed partial record Foo { public partial string Key { get; } }"),
         };
 
         var file = generator.GenerateProjectFile(package, externalReferences: null, emittedFiles: emittedFiles);
@@ -690,9 +723,9 @@ public class ProjectFileGeneratorTests
         };
         var emittedFiles = new[]
         {
-            new GeneratedFile(
-                RelativePath: "Foo.cs",
-                Content: "namespace Test; public sealed partial record Foo(Party Owner) : ITemplate;"),
+            GeneratedFile.Text(
+                "Foo.cs",
+                "namespace Test; public sealed partial record Foo(Party Owner) : ITemplate;"),
         };
 
         var file = generator.GenerateProjectFile(package, externalReferences: null, emittedFiles: emittedFiles);
@@ -819,5 +852,291 @@ public class ProjectFileGeneratorTests
         file.Content.Should().Contain(
             "Version=\"1.0.0&quot;injected\"",
             "user-supplied runtime version flows into a csproj attribute and embedded quotes must be escaped");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_declare_the_packed_readme_file()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<PackageReadmeFile>README.md</PackageReadmeFile>");
+        file.Content.Should().Contain("<None Include=\"README.md\" Pack=\"true\" PackagePath=\"\\\" />");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_declare_the_packed_icon_file()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain("<PackageIcon>icon.png</PackageIcon>");
+        file.Content.Should().Contain("<None Include=\"icon.png\" Pack=\"true\" PackagePath=\"\\\" />");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_emit_the_configured_repository_urls()
+    {
+        var options = CreateOptions(repositoryUrl: "https://github.com/acme/widgets");
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<PackageProjectUrl>https://github.com/acme/widgets</PackageProjectUrl>");
+        file.Content.Should().Contain(
+            "<RepositoryUrl>https://github.com/acme/widgets</RepositoryUrl>");
+        file.Content.Should().Contain("<RepositoryType>git</RepositoryType>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_xml_escape_the_repository_url()
+    {
+        var options = CreateOptions(repositoryUrl: "https://example.com/repo?a=1&b=<2>");
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<RepositoryUrl>https://example.com/repo?a=1&amp;b=&lt;2&gt;</RepositoryUrl>",
+            "a user-supplied repository URL flows into csproj element text and must be XML-escaped");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_omit_repository_urls_when_unset()
+    {
+        var options = CreateOptions(repositoryUrl: null);
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().NotContain("<PackageProjectUrl>");
+        file.Content.Should().NotContain("<RepositoryUrl>");
+        file.Content.Should().NotContain("<RepositoryType>");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_should_include_package_tags_with_the_daml_package_name()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateProjectFile(package);
+
+        file.Content.Should().Contain(
+            "<PackageTags>daml;canton;codegen;generated;splice-amulet</PackageTags>");
+    }
+
+    [Fact]
+    public void GenerateReadme_should_be_emitted_at_the_project_root()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        file.RelativePath.Should().Be("README.md");
+    }
+
+    [Fact]
+    public void GenerateIcon_should_return_the_png_icon_bytes_at_the_project_root()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+
+        var file = generator.GenerateIcon();
+
+        file.RelativePath.Should().Be("icon.png");
+        file.BinaryContent.Should().NotBeNullOrEmpty();
+        file.BinaryContent!.Take(4).Should().Equal(
+            new byte[] { 0x89, 0x50, 0x4E, 0x47 },
+            "the emitted icon must be a real PNG (magic bytes 0x89 'P' 'N' 'G')");
+    }
+
+    [Fact]
+    public void GenerateReadme_should_contain_the_package_id_daml_name_and_license()
+    {
+        var options = new CodeGenOptions
+        {
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            RuntimePackageVersion = "1.2.3",
+            PackageLicenseExpression = "MIT",
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        file.Content.Should().Contain("# Splice.Amulet");
+        file.Content.Should().Contain("`splice-amulet`");
+        file.Content.Should().Contain("1.2.3");
+        file.Content.Should().Contain("MIT");
+        file.Content.Should().Contain("https://github.com/peacefulstudio/daml-codegen-csharp");
+    }
+
+    [Fact]
+    public void GenerateReadme_should_show_the_runtime_row_with_the_lockstep_fallback_when_runtime_version_is_null()
+    {
+        var options = CreateOptions(runtimeVersion: null);
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        var lockstepVersion = typeof(ProjectFileGenerator).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Split('+')[0];
+        file.Content.Should().Contain(
+            $"| Runtime dependency  | `Daml.Runtime` `{lockstepVersion}` |",
+            "with --runtime-version omitted the README must document the same lockstep runtime the csproj pins");
+    }
+
+    [Fact]
+    public void GenerateReadme_should_add_prerelease_flag_to_install_hint_for_a_prerelease_package()
+    {
+        var options = CreateOptions(versionSuffix: "preview.2");
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        file.Content.Should().Contain("dotnet add package Splice.Amulet --prerelease");
+    }
+
+    [Fact]
+    public void GenerateReadme_should_not_add_prerelease_flag_to_install_hint_for_a_stable_package()
+    {
+        var options = CreateOptions(versionSuffix: null);
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        file.Content.Should().Contain("dotnet add package Splice.Amulet");
+        file.Content.Should().NotContain("--prerelease");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://github.com/acme/widgets")]
+    public void GenerateReadme_should_keep_the_generator_attribution_link_regardless_of_repository_url(string? repositoryUrl)
+    {
+        var options = CreateOptions(repositoryUrl: repositoryUrl);
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "splice-amulet",
+            Version = new Version(1, 2, 3),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var file = generator.GenerateReadme(package);
+
+        file.Content.Should().Contain(
+            "[Daml.Codegen.CSharp]: https://github.com/peacefulstudio/daml-codegen-csharp",
+            "the attribution link identifies the generator tool, not the consumer's repository");
     }
 }

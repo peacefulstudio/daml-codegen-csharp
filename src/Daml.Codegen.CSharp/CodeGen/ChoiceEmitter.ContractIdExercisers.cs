@@ -5,167 +5,13 @@ using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
-/// <summary>
-/// Codegen for typed choice-result structs and projectors. Emits a
-/// <c>&lt;Choice&gt;Result</c> nested record per choice that creates one or more
-/// contracts, plus a static
-/// <c>FromCreatedContracts(IEnumerable&lt;CreatedContract&gt;) -&gt; ExerciseOutcome&lt;&lt;Choice&gt;Result&gt;</c>
-/// projector that walks a transaction's created contracts and validates cardinality
-/// per declared template field.
-/// </summary>
-public sealed partial class CSharpCodeGenerator
+public sealed partial class ChoiceEmitter
 {
-    /// <summary>
-    /// Cardinality of an expected created contract slot in a choice's return type.
-    /// </summary>
-    private enum CreatedCardinality
-    {
-        /// <summary>Single <c>ContractId T</c> — exactly one created contract of <c>T</c> is expected.</summary>
-        Single,
-        /// <summary>Optional <c>ContractId T</c> — zero or one created contracts of <c>T</c> is expected.</summary>
-        Optional,
-        /// <summary>List <c>[ContractId T]</c> — any number of created contracts of <c>T</c> is expected.</summary>
-        List,
-    }
-
-    /// <summary>
-    /// One declared <c>ContractId T</c>-bearing slot in a choice's return type.
-    /// </summary>
-    /// <param name="FieldName">PascalCase C# field name on the emitted <c>&lt;Choice&gt;Result</c> record.</param>
-    /// <param name="CSharpTemplateType">C# name of the template type (e.g. <c>Agreement</c>, <c>SwapRecord</c>).</param>
-    /// <param name="Cardinality">How many created contracts of this template the choice should produce.</param>
-    private sealed record ChoiceCreatedSlot(
-        string FieldName,
-        string CSharpTemplateType,
-        CreatedCardinality Cardinality);
-
-    /// <summary>
-    /// Walks the choice's return type for embedded <c>ContractId T</c> references and
-    /// returns one slot per reference (preserving declaration order). Returns an empty
-    /// list when the return type carries no contract IDs — those choices don't get a
-    /// <c>&lt;Choice&gt;Result</c> emitted.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    ///   Recognised return-type shapes:
-    ///   <list type="bullet">
-    ///     <item><c>ContractId T</c> — single-create.</item>
-    ///     <item><c>Optional (ContractId T)</c> — optional-create.</item>
-    ///     <item><c>[ContractId T]</c> — list-create.</item>
-    ///     <item><c>(ContractId A, ContractId B, ...)</c> — Daml tuples (LF: <c>DA.Types:Tuple{N}</c>) — flattened across components.</item>
-    ///   </list>
-    /// </para>
-    /// <para>
-    ///   Anything else (records, primitives, plain <c>Unit</c>) yields an empty list —
-    ///   the choice is treated as non-creating from the codegen's perspective. This
-    ///   intentionally undershoots: a choice whose body creates contracts but returns
-    ///   <c>Unit</c> won't get a typed projector. Consumers can fall back to walking
-    ///   <c>tx.CreatedContracts</c> manually for those cases.
-    /// </para>
-    /// </remarks>
-    private IReadOnlyList<ChoiceCreatedSlot> ExtractCreatedSlots(DamlType returnType)
-    {
-        var slots = new List<ChoiceCreatedSlot>();
-        WalkForCreatedSlots(returnType, slots, parentCardinality: CreatedCardinality.Single);
-        // Disambiguate field names when the same template appears more than once in the
-        // same choice's return type. The first occurrence keeps the bare template name;
-        // subsequent occurrences get a numeric suffix matching their position. Without
-        // this, a choice returning `(ContractId Foo, ContractId Foo)` would emit two
-        // record fields named `Foo` and fail to compile.
-        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var i = 0; i < slots.Count; i++)
-        {
-            var slot = slots[i];
-            if (seen.TryGetValue(slot.FieldName, out var count))
-            {
-                seen[slot.FieldName] = count + 1;
-                slots[i] = slot with { FieldName = $"{slot.FieldName}{count + 1}" };
-            }
-            else
-            {
-                seen[slot.FieldName] = 1;
-            }
-        }
-        return slots;
-    }
-
-    private void WalkForCreatedSlots(
-        DamlType type,
-        List<ChoiceCreatedSlot> slots,
-        CreatedCardinality parentCardinality)
-    {
-        switch (type)
-        {
-            // ContractId T — single-create slot. Inherit `parentCardinality` from any
-            // wrapping Optional/List so a `[ContractId T]` becomes a List slot rather
-            // than a Single one.
-            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
-            {
-                var (templateName, csharpName) = ResolveContractIdTarget(arg);
-                slots.Add(new ChoiceCreatedSlot(
-                    FieldName: templateName,
-                    CSharpTemplateType: csharpName,
-                    Cardinality: parentCardinality));
-                return;
-            }
-            // Optional (ContractId T) — recurse with Optional cardinality.
-            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var inner] }:
-                WalkForCreatedSlots(inner, slots, CreatedCardinality.Optional);
-                return;
-            // [ContractId T] — recurse with List cardinality.
-            case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var inner] }:
-                WalkForCreatedSlots(inner, slots, CreatedCardinality.List);
-                return;
-            // Daml tuple (DA.Types:Tuple2/3/.../N) — flatten over the components.
-            case DamlTypeApp { Base: DamlTypeRef { Module: "DA.Types", Name: var tupleName } } app
-                when tupleName.StartsWith("Tuple", StringComparison.Ordinal):
-                for (var i = 0; i < app.Arguments.Count; i++)
-                {
-                    WalkForCreatedSlots(app.Arguments[i], slots, parentCardinality);
-                }
-                return;
-            default:
-                // Records, variants, primitives, type vars, plain Unit — no created-slot
-                // contribution. Codegen treats these as non-creating return types.
-                return;
-        }
-    }
-
-    /// <summary>
-    /// Resolves a <c>ContractId T</c>'s argument to (PascalCaseFieldName, FullyQualifiedCSharpName).
-    /// The field name is the unqualified template name; the C# type is the resolved name (which
-    /// may be cross-package qualified).
-    /// </summary>
-    private (string FieldName, string CSharpTemplateType) ResolveContractIdTarget(DamlType arg)
-    {
-        switch (arg)
-        {
-            case DamlTypeRef typeRef:
-            {
-                var fieldName = SanitizeIdentifier(typeRef.Name);
-                var csharpName = ResolveTypeRefName(typeRef);
-                return (fieldName, csharpName);
-            }
-            case DamlTypeApp { Base: DamlTypeRef typeRef }:
-            {
-                var fieldName = SanitizeIdentifier(typeRef.Name);
-                var csharpName = MapDamlTypeToCSharp(arg);
-                return (fieldName, csharpName);
-            }
-            default:
-                // Type variable or otherwise opaque target — fall back to the mapped C#
-                // name and a synthetic field name. Generated code may not compile in this
-                // case; callers will see a clear loud failure at consumer build time.
-                var mapped = MapDamlTypeToCSharp(arg);
-                return ("Created", mapped);
-        }
-    }
-
     /// <summary>
     /// Emits the <c>&lt;Choice&gt;Result</c> nested record (typed result struct) and a
     /// static <c>FromCreatedContracts(...)</c> projector for every choice on
     /// <paramref name="template"/> whose return type carries one or more
-    /// <c>ContractId T</c>s. See <see cref="ExtractCreatedSlots"/>.
+    /// <c>ContractId T</c>s. See <see cref="ChoiceCreatedSlots.Extract"/>.
     /// </summary>
     /// <param name="indent">Writer positioned at the emission point in the template's file.</param>
     /// <param name="template">The template whose choices are scanned for created-contract slots.</param>
@@ -175,11 +21,11 @@ public sealed partial class CSharpCodeGenerator
     /// properties on the result type (e.g. a slot named <c>Agreement</c>) cannot shadow
     /// the template type when looking up <c>Agreement.TemplateId</c>.
     /// </param>
-    private void WriteChoiceResultStructs(IndentWriter indent, DamlTemplate template, string moduleNamespace)
+    internal void WriteChoiceResultStructs(IndentWriter indent, DamlTemplate template, string moduleNamespace)
     {
         foreach (var choice in template.Choices)
         {
-            var slots = ExtractCreatedSlots(choice.ReturnType);
+            var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, choice.ReturnType);
             if (slots.Count == 0)
             {
                 continue;
@@ -191,7 +37,7 @@ public sealed partial class CSharpCodeGenerator
 
     /// <summary>
     /// Returns <c>true</c> when <paramref name="template"/> has at least one choice that
-    /// (a) creates contracts (<see cref="ExtractCreatedSlots"/> yields a non-empty list) and
+    /// (a) creates contracts (<see cref="ChoiceCreatedSlots.Extract"/> yields a non-empty list) and
     /// (b) does not go through the codegen's argument-type fallback (B3 — no
     /// <c>argument.ToRecord()</c> on a stub).
     /// </summary>
@@ -201,7 +47,7 @@ public sealed partial class CSharpCodeGenerator
     {
         foreach (var choice in template.Choices)
         {
-            var slots = ExtractCreatedSlots(choice.ReturnType);
+            var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, choice.ReturnType);
             if (slots.Count == 0)
             {
                 continue;
@@ -239,7 +85,7 @@ public sealed partial class CSharpCodeGenerator
     /// </list>
     /// </para>
     /// </summary>
-    private void WriteChoiceAsyncExercisersClass(
+    internal void WriteChoiceAsyncExercisersClass(
         IndentWriter indent,
         DamlTemplate template,
         string templateClassName,
@@ -259,7 +105,7 @@ public sealed partial class CSharpCodeGenerator
 
         // Re-validate template-level observers against actual payload fields
         // — same defensive check the SubmissionExtensions emitter does.
-        var templateObservers = ValidatePayloadParties(template.Observers, partyFields);
+        var templateObservers = party.ValidatePayloadParties(template.Observers, partyFields);
 
         indent.AppendLine();
         if (options.GenerateXmlDocs)
@@ -278,7 +124,7 @@ public sealed partial class CSharpCodeGenerator
         var first = true;
         foreach (var choice in template.Choices)
         {
-            var slots = ExtractCreatedSlots(choice.ReturnType);
+            var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, choice.ReturnType);
             if (slots.Count == 0)
             {
                 continue;
@@ -294,9 +140,9 @@ public sealed partial class CSharpCodeGenerator
             {
                 indent.AppendLine();
             }
-            var controllers = ValidatePayloadParties(choice.Controllers, partyFields);
-            var choiceObservers = ValidatePayloadParties(choice.Observers, partyFields);
-            var effectiveReadAs = UnionStaticParties(templateObservers, choiceObservers);
+            var controllers = party.ValidatePayloadParties(choice.Controllers, partyFields);
+            var choiceObservers = party.ValidatePayloadParties(choice.Observers, partyFields);
+            var effectiveReadAs = party.UnionStaticParties(templateObservers, choiceObservers);
             WriteSingleChoiceAsyncExerciser(
                 indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
             first = false;
@@ -304,45 +150,6 @@ public sealed partial class CSharpCodeGenerator
 
         indent.Dedent();
         indent.AppendLine("}");
-    }
-
-    /// <summary>
-    /// Computes the effective <c>readAs</c> set for a choice as the union of
-    /// the template-level observers and the choice-level observers, preserving
-    /// declaration order and deduplicating by payload field name. Returns a
-    /// <see cref="DamlPartySource.Static"/> result iff both inputs are static
-    /// (a <see cref="DamlPartySource.Dynamic"/> verdict on either side is
-    /// contagious for the <em>readAs</em> projection — the choice exerciser
-    /// continues to emit named controller params off the controller analysis,
-    /// but no <c>readAs</c> params are emitted because the dynamic component
-    /// can't be synthesized at compile time).
-    /// </summary>
-    private static DamlPartyAnalysis UnionStaticParties(
-        DamlPartyAnalysis a,
-        DamlPartyAnalysis b)
-    {
-        if (a.Source != DamlPartySource.Static || b.Source != DamlPartySource.Static)
-        {
-            return DamlPartyAnalysis.Dynamic;
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var union = new List<DamlPartyReference>();
-        foreach (var p in a.Parties)
-        {
-            if (p is DamlPartyPayloadField pf && seen.Add(pf.FieldName))
-            {
-                union.Add(p);
-            }
-        }
-        foreach (var p in b.Parties)
-        {
-            if (p is DamlPartyPayloadField pf && seen.Add(pf.FieldName))
-            {
-                union.Add(p);
-            }
-        }
-        return DamlPartyAnalysis.Static(union);
     }
 
     private void WriteSingleChoiceAsyncExerciser(
@@ -368,7 +175,7 @@ public sealed partial class CSharpCodeGenerator
         // of the controller params; the body then routes controllers into
         // SubmitterInfo.actAs and observers into SubmitterInfo.readAs.
         var (controllerParams, readAsParams) = staticControllers
-            ? PartitionControllersAndObservers(controllers, observers)
+            ? party.PartitionControllersAndObservers(controllers, observers)
             : (new List<string>(), new List<string>());
 
         if (options.GenerateXmlDocs)
@@ -412,10 +219,10 @@ public sealed partial class CSharpCodeGenerator
         }
 
         // Method signature.
-        indent.AppendLine($"public static async Task<{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{_qualifier.Qualify("ILedgerClient", _currentNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -428,16 +235,16 @@ public sealed partial class CSharpCodeGenerator
         {
             foreach (var paramName in controllerParams)
             {
-                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} {paramName},");
             }
             foreach (var paramName in readAsParams)
             {
-                indent.AppendLine($"{_qualifier.Qualify("Party", _currentNamespace)} {paramName},");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} {paramName},");
             }
         }
         else
         {
-            indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter,");
+            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
         }
         indent.AppendLine("string? workflowId = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
@@ -462,47 +269,47 @@ public sealed partial class CSharpCodeGenerator
             {
                 // Single controller, no extra readAs — rely on Party ->
                 // SubmitterInfo implicit conversion. Avoids a HashSet allocation.
-                indent.AppendLine($"{_qualifier.Qualify("SubmitterInfo", _currentNamespace)} submitter = {controllerParams[0]};");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter = {controllerParams[0]};");
             }
             else if (readAsParams.Count == 0)
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
-                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }});");
+                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// actAs unions every named controller; readAs unions every observer that is");
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
-                indent.AppendLine($"var submitter = new {_qualifier.Qualify("SubmitterInfo", _currentNamespace)}(");
+                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(");
                 indent.Indent();
-                indent.AppendLine($"actAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", controllerParams)} }},");
-                indent.AppendLine($"readAs: new {_qualifier.Qualify("HashSet", _currentNamespace)}<{_qualifier.Qualify("Party", _currentNamespace)}> {{ {string.Join(", ", readAsParams)} }});");
+                indent.AppendLine($"actAs: new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", readAsParams)} }});");
                 indent.Dedent();
             }
         }
 
         indent.AppendLine();
-        var argExpr = hasArg ? "argument.ToRecord()" : $"{_qualifier.Qualify("DamlUnit", _currentNamespace)}.Instance";
-        indent.AppendLine($"var command = new {_qualifier.Qualify("ExerciseCommand", _currentNamespace)}(");
+        var argExpr = hasArg ? "argument.ToRecord()" : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
+        indent.AppendLine($"var command = new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId,");
-        indent.AppendLine($"new {_qualifier.Qualify("ChoiceName", _currentNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
         indent.AppendLine($"{argExpr});");
         indent.Dedent();
 
         indent.AppendLine();
-        indent.AppendLine($"var submission = {_qualifier.Qualify("CommandsSubmission", _currentNamespace)}.Single(command)");
+        indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithSubmitter(submitter)");
-        indent.AppendLine($".WithCommandId(new {_qualifier.Qualify("CommandId", _currentNamespace)}(Guid.NewGuid().ToString()));");
+        indent.AppendLine($".WithCommandId(new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"submission = submission.WithWorkflowId(new {_qualifier.Qualify("WorkflowId", _currentNamespace)}(workflowId));");
+        indent.AppendLine($"submission = submission.WithWorkflowId(new {context.Qualifier.Qualify(RuntimeTypeNames.WorkflowId, context.RootNamespace)}(workflowId));");
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();
@@ -511,60 +318,15 @@ public sealed partial class CSharpCodeGenerator
         indent.AppendLine("return outcome switch");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.One success => {resultName}.FromCreatedContracts(success.Result.CreatedContracts),");
-        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.DamlError damlError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
-        indent.AppendLine($"{_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{_qualifier.Qualify("TransactionResult", _currentNamespace)}>.InfraError infraError => new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.InfraError(infraError.StatusCode, infraError.Message),");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.One success => {resultName}.FromCreatedContracts(success.Result.CreatedContracts),");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.DamlError damlError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.InfraError infraError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.InfraError(infraError.StatusCode, infraError.Message),");
         indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
         indent.Dedent();
         indent.AppendLine("};");
 
         indent.Dedent();
         indent.AppendLine("}");
-    }
-
-    /// <summary>
-    /// Splits the analyzed controllers and observers into two ordered lists of
-    /// camelCased Party parameter names: one for controllers (which feed
-    /// <c>SubmitterInfo.actAs</c>) and one for observer-only parties (which
-    /// feed <c>SubmitterInfo.readAs</c>). Observer parties that are also
-    /// controllers are NOT duplicated in the readAs list — the deduplication
-    /// is by payload-field name, mirroring the Daml semantics.
-    /// </summary>
-    /// <returns>
-    /// <c>(controllerParams, readAsParams)</c>, both in declaration order.
-    /// When <paramref name="observers"/> is dynamic or empty, the second list
-    /// is empty.
-    /// </returns>
-    private static (List<string> controllerParams, List<string> readAsParams)
-        PartitionControllersAndObservers(DamlPartyAnalysis controllers, DamlPartyAnalysis observers)
-    {
-        var controllerParams = new List<string>();
-        var controllerFieldNames = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var p in controllers.Parties)
-        {
-            if (p is DamlPartyPayloadField pf && controllerFieldNames.Add(pf.FieldName))
-            {
-                controllerParams.Add(ToCamelCaseParam(pf.FieldName));
-            }
-        }
-
-        var readAsParams = new List<string>();
-        if (observers.Source == DamlPartySource.Static)
-        {
-            var seenObservers = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var p in observers.Parties)
-            {
-                if (p is DamlPartyPayloadField pf
-                    && !controllerFieldNames.Contains(pf.FieldName)
-                    && seenObservers.Add(pf.FieldName))
-                {
-                    readAsParams.Add(ToCamelCaseParam(pf.FieldName));
-                }
-            }
-        }
-
-        return (controllerParams, readAsParams);
     }
 
     private void WriteSingleChoiceResultStruct(
@@ -603,10 +365,10 @@ public sealed partial class CSharpCodeGenerator
 
     private string SlotPropertyType(ChoiceCreatedSlot slot) => slot.Cardinality switch
     {
-        CreatedCardinality.Single => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>",
-        CreatedCardinality.Optional => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>?",
-        CreatedCardinality.List => $"{_qualifier.Qualify("IReadOnlyList", _currentNamespace)}<{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>>",
-        _ => $"{_qualifier.Qualify("ContractId", _currentNamespace)}<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Single => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Optional => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>?",
+        CreatedCardinality.List => $"{context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>>",
+        _ => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>",
     };
 
     private void WriteFromCreatedContractsProjector(
@@ -639,7 +401,7 @@ public sealed partial class CSharpCodeGenerator
             indent.AppendLine("/// </summary>");
         }
 
-        indent.AppendLine($"public static {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}> FromCreatedContracts(IEnumerable<{_qualifier.Qualify("CreatedContract", _currentNamespace)}> created)");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}> FromCreatedContracts(IEnumerable<{context.Qualifier.Qualify(RuntimeTypeNames.CreatedContract, context.RootNamespace)}> created)");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -786,13 +548,13 @@ public sealed partial class CSharpCodeGenerator
                     indent.AppendLine($"if ({local}.Count == 0)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.None();");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.None();");
                     indent.Dedent();
                     indent.AppendLine("}");
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.Many({local}.Count, {local});");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -800,7 +562,7 @@ public sealed partial class CSharpCodeGenerator
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.Many({local}.Count, {local});");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -812,7 +574,7 @@ public sealed partial class CSharpCodeGenerator
 
         // Build the result.
         indent.AppendLine();
-        indent.AppendLine($"return new {_qualifier.Qualify("ExerciseOutcome", _currentNamespace)}<{resultName}>.One(new {resultName}(");
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.One(new {resultName}(");
         indent.Indent();
         for (var i = 0; i < slots.Count; i++)
         {
@@ -826,13 +588,13 @@ public sealed partial class CSharpCodeGenerator
             switch (slot.Cardinality)
             {
                 case CreatedCardinality.Single:
-                    indent.AppendLine($"{slot.FieldName}: new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>({local}[0]){separator}");
+                    indent.AppendLine($"{slot.FieldName}: new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>({local}[0]){separator}");
                     break;
                 case CreatedCardinality.Optional:
-                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>({local}[0]) : null{separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>({local}[0]) : null{separator}");
                     break;
                 case CreatedCardinality.List:
-                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new {_qualifier.Qualify("ContractId", _currentNamespace)}<{templateRef}>(c)){separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>(c)){separator}");
                     break;
             }
         }

@@ -11,6 +11,7 @@ because they are versioned in lockstep:
 - `Daml.Codegen.CSharp` — C# emitter library (NuGet package)
 - `Daml.Runtime` — runtime types referenced by generated code
 - `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
+- `Daml.Codegen.CSharp.MSBuild` — MSBuild integration
 - `Daml.Codegen.Testing.Conformance` — compiled conformance corpus types + embedded DAR
 
 > **Versioning and stability.** This project is pre-1.0: under SemVer 0.x, any
@@ -31,6 +32,37 @@ because they are versioned in lockstep:
 
 ### Fixed
 
+- Generated submission-extension XML docs no longer leak the internal tracking
+  reference `peacefulstudio/daml-codegen-csharp#68` into consumer output.
+- Choice-argument types that reuse the same simple name across different modules
+  no longer collide: the choice-arg-to-template map is now keyed by the
+  module-qualified (`Module:Name`) name, so each resolves to its own parent
+  template instead of one silently overwriting the other and emitting
+  unresolvable type references.
+- A choice-argument type mapped by two templates in the *same package* (the
+  module-qualified key collides) no longer overwrites silently: the
+  choice-arg-to-template map now warns and keeps the first-seen mapping (in both
+  `PackageEmitContext` and `DarCrossPackageResolver`) instead of last-wins, so the
+  clash is surfaced rather than mis-resolving cross-references.
+
+### Security
+
+## [0.1.8-preview.3] — 2026-06-13
+
+### Added
+
+- Add a `--version-suffix` codegen option that appends a SemVer prerelease suffix (e.g. `preview.2`) to generated package versions, producing versions like `0.1.6.1-preview.2`. Mirrors the emitter's own prerelease tag and affects only the generated package `<Version>`; the `Daml.Runtime` reference version is unaffected.
+- Generate a `README.md` for each package and emit `PackageTags` (plus `PackageProjectUrl`/`RepositoryUrl`/`RepositoryType` when `--repository-url` is supplied) in the package `<PropertyGroup>`, so published packages render on nuget.org without the missing-README warning. The README install hint adds `--prerelease` for prerelease packages.
+- Generated Splice/Daml.Finance NuGet packages now ship a package icon (`PackageIcon`), so they render with the project icon on nuget.org. (#323)
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
 ### Security
 
 ## [0.1.8-preview.2] — 2026-06-12
@@ -38,7 +70,7 @@ because they are versioned in lockstep:
 ### Added
 
 - Add CI-verified platform support across the full OS × architecture matrix: every shipped package builds and passes the complete test suite on Linux, Windows, and macOS, on both amd64 and arm64.
-  The JVM DAR-parsing helper is verified on the same matrix minus windows-arm64, where upstream publishes no protoc binary. A .Net native DAR parser could fill the gap, but is out of scope.
+  The JVM DAR-parsing helper is verified on the same matrix minus windows-arm64, where upstream publishes no protoc binary. A .Net native DAR parser could fill the gap, but is out of scope. 
 
 ### Changed
 
@@ -53,7 +85,7 @@ because they are versioned in lockstep:
 - Add `DamlValueExtensions.AsOptional(this DamlValue)` — normalizes a value into a `DamlOptional` (an existing optional passes through, a bare value wraps as Some), recovering Optional fields from ledger JSON where Some is flattened to the inner value.
 - `ILedgerClient` now implements `IAsyncDisposable`, with a default implementation that bridges to `Dispose()` — `await using var client = …` works against every implementation with no source change on the implementation side.
 - `Daml.Codegen.CSharp` now ships XML documentation and a NuGet package README, so IntelliSense and the NuGet.org gallery page document the emitter API.
-- XML documentation is completed across the shipped packages — `CS1591` (missing XML comment on a publicly visible member) is no longer suppressed for them.
+- XML documentation is completed across the shipped packages (the MSBuild integration package excepted) — `CS1591` (missing XML comment on a publicly visible member) is no longer suppressed for them.
 
 ### Changed — BREAKING
 
@@ -76,7 +108,7 @@ because they are versioned in lockstep:
 - **Generated enum serialization extensions are renamed `ToRecord`/`FromRecord` → `ToDamlEnum`/`FromDamlEnum`** so the method name matches its `DamlEnum` return/parameter type (an enum's `ToRecord()` never returned a `DamlRecord`). For a generated `enum Status`, replace `status.ToRecord()` with `status.ToDamlEnum()` and `StatusExtensions.FromRecord(value)` with `StatusExtensions.FromDamlEnum(value)`. Generated `ToValue`/`FromValue` round-tripping is updated automatically; only hand-written code that called the enum extensions directly needs migrating. Record/variant/template `ToRecord`/`FromRecord` are unchanged.
 - **Removed `CodeGenOptions.GenerateJsonSupport`, `CodeGenOptions.OutputDirectory`, `CodeGenOptions.Verbosity`, and the `--json` CLI flag.** All four were documented no-ops — setting them never changed emitter behavior or output. Delete any assignments and drop the flag; generated output is unchanged.
 - **Removed the dead interface member `IDarSource.ResolveAllDependencyReferences()`.** No code path ever called it; implementations simply delete their override.
-- **`DamlPackageReference.Name` and `DamlPackageReference.Version` are now init-only**, completing the `IDarSource` cleanup: package references are immutable inputs to the emitter, and dependency resolution is no longer part of the public surface.
+- **`DamlPackageReference.Name` and `DamlPackageReference.Version` are now init-only, and `DarArchive`'s two public resolve methods are removed**, completing the `IDarSource` cleanup: package references are immutable inputs to the emitter, and dependency resolution is no longer part of the public surface.
 - **The CI versioning cluster is now internal**: `JsonReleaseCounterStore`, `NuGetVersionResolver` (née `SpliceNuGetVersion`), `ReleaseCounterEntry`, `IntermediatePackageContentHash`, and `FourPartPackageVersion` no longer appear in the public API. They exist to compute the 4th version segment for CI-driven publishing and were never a consumer integration point.
 - **Model-side `DamlField` is renamed `DamlFieldDefinition`.** Only consumers of the codegen model API are affected; the runtime `DamlField` type referenced by emitted code is unchanged.
 - **The conformance corpus types moved from the bare root namespace `Richtypes` to `Daml.Codegen.Testing.Conformance.Richtypes`.** Replace `using Richtypes;` with `using Daml.Codegen.Testing.Conformance.Richtypes;`.
@@ -120,54 +152,64 @@ because they are versioned in lockstep:
 
 ### Changed — BREAKING
 
-- **`ILedgerClient`: `ExerciseAsync<TResult>` and void `ExerciseAsync` overloads are removed from the interface** and replaced by `TryExerciseAsync<TResult>` returning `ExerciseOutcome<TResult>` for structured error handling (callers `switch` on the outcome instead of catching exceptions). Throwing `ExerciseAsync` convenience overloads remain available at every call site via the new `LedgerClientExtensions` static class — existing callers compile unchanged. Implementations must now override `TryExerciseAsync<TResult>` instead of `ExerciseAsync<TResult>`.
+- **`ILedgerClient`: `ExerciseAsync<TResult>` and void `ExerciseAsync` overloads are removed from the interface** and replaced by `TryExerciseAsync<TResult>` returning `ExerciseOutcome<TResult>` for structured error handling (callers `switch` on the outcome instead of catching exceptions). Throwing `ExerciseAsync` convenience overloads remain available at every call site via the new `LedgerClientExtensions` static class — existing callers compile unchanged. Implementations must now override `TryExerciseAsync<TResult>` instead of `ExerciseAsync<TResult>` (#225).
+
+### Changed
+
+- **JVM helper now uses `daml-lf-archive-reader` 3.4.11 stable**, replacing the previous `3.3.0-snapshot` pre-release. DARs compiled against Daml SDK 3.4.x are now parsed against a stable release of the LF archive library.
+
+### Fixed
+
+- **`Daml.Codegen.CSharp.MSBuild`: `DamlPinLangVersionForKeyBearing` target no longer ignores a consumer-set `LangVersion` when the NuGet `.props` is imported after the project body.** The previous implementation used a `_DamlLangVersionWasUserSet` sentinel set in `.props`, which meant a consumer whose `.csproj` imported the props file _after_ their own `<PropertyGroup>` would have the sentinel evaluated before their `LangVersion` was visible — causing the target to overwrite it. The target now reads the fully-resolved `$(LangVersion)` at `BeforeTargets=CoreCompile` execution time (i.e. just before compilation), so NuGet import order is irrelevant. Keyword values (`preview`, `latest`, `latestMajor`) and numeric values already meeting the requirement are preserved unchanged.
 
 ## [0.1.6] — 2026-06-01
 
 ### Added
 
 - **`Daml.Runtime.Stdlib.Either<TL, TR>` runtime type, and codegen now maps `DA.Types.Either a b` onto it.** Previously a Daml field or choice type of `Either a b` emitted a bare `Either<TL, TR>` with no definition or `using`, so any DAR using `Either` (e.g. `canton-ping`) failed to compile (`CS0246`). `Either` is now a parametric stdlib type: `Either<TL, TR>` is an abstract record with `Left`/`Right` cases, round-tripping through `DamlVariant` via `ToValue`/`FromValue`. Generated code references it as `Daml.Runtime.Stdlib.Either<…>`.
-- **`ghcr.io/peacefulstudio/dpm-codegen-cs` OCI bundle contract is now codified in ADR 0005**. Anyone integrating with the artifact directly — not via `dpm` — gets a versioned contract for the bundle layout (top-level `component.yaml`, `bin/<exe>`, `bin/<jar>`), the per-layer OCI media type (`application/vnd.component.file`), the required `network.canton.dpm.file-{mode,modtime,name}` annotations (`file-name` is the relative path inside the bundle, not the basename), and the consumer `daml.yaml` shape (`components: ["oci://…"]`, no `sdk-version:` alongside, never the dead-code `override-components: <name>: image-tag:`). Stock `dpm ≥ 1.0.12` required on the consumer side; `dpm 1.0.16` is what our workflows pin. Public-package consumers must NOT `docker login ghcr.io` with `${{ secrets.GITHUB_TOKEN }}` — anonymous pull is the supported path.
-- **`dpm codegen-cs` is now distributable as a multi-arch OCI artifact at `ghcr.io/peacefulstudio/dpm-codegen-cs`**. A self-contained single-file C# emitter binary is built for `linux/amd64`, `linux/arm64`, `darwin/arm64`, and `windows/amd64`, each pushed as its own OCI artifact and composed into a multi-arch index under `ghcr.io/peacefulstudio/dpm-codegen-cs:<version>`. Stock `dpm` fetches the right RID lazily on first invocation using its `<os>/<arch>=<path>` asset-selection syntax — no host .NET runtime required on the consumer side; a host JDK is the only runtime precondition.
-- **4-part `M.m.p.r` NuGet versioning** per ADR 0002, exposed as the new `Daml.Codegen.CSharp.Versioning` namespace. Segments 1–3 of a generated package's NuGet version are the DAR-intrinsic `Major.Minor.Patch`; segment 4 (`r`) is a monotonic emitter counter that disambiguates content-identical re-emissions of the same DAR-intrinsic version under different emitter versions. New consumer-facing API: `SpliceNuGetVersion.Compute(packageName, intrinsicVersion, contentHash, counterStore)` returns the canonical 4-part `FourPartPackageVersion`. The counter is persisted in a JSON file (`JsonReleaseCounterStore.OpenOrCreate(path)`) keyed by `{packageName}@{M.m.p}`; first emission of a (package, intrinsic-version) pair returns `r=0`, identical re-emissions hold the revision steady, and any content change bumps it. `IntermediatePackageContentHash.Compute(IntermediatePackage)` returns the stable SHA-256 over the deterministic protobuf encoding for use as the content-hash input. The NuGet packing step consumes this API; consumers see the new 4-segment versions on the wire.
-- **Codegen now emits a buildable `.csproj` and packs a NuGet package per Daml package**. Generated projects carry the `M.m.p.r` 4-part version from ADR 0002 (Daml package version supplies segments 1–3; the 4th segment is the emitter counter, defaulting to `0` for the first emission), declare `<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>` (configurable via the new `--package-license <SPDX>` CLI flag / `CodeGenOptions.PackageLicenseExpression` for non-Apache DARs), and reference `Daml.Runtime` and `Daml.Ledger.Abstractions` so consumers can run `dotnet add package <Pkg>` + `dotnet build` against an unmodified output tree. A new `--emitter-counter <int>` CLI flag on `daml-codegen-csharp` (validated at the boundary to reject negatives) exposes the 4th-segment override; local-dev invocations leave the default in place.
-- `Daml.Codegen.CSharp.IntermediateDarReader.Read(IntermediateDar)` — proto-to-model adapter; the new public API surface for emitter consumers. Throws `InvalidDataException` fail-fast on malformed input (missing data-type shape, missing choice `argument_type` / `return_type`, unknown proto sort, `BUILTIN_TYPE_UNSPECIFIED`) and `NotSupportedException` on intentionally-deferred builtins; no silent fallback to `Unit` or empty record.
+- **`ghcr.io/peacefulstudio/dpm-codegen-cs` OCI bundle contract is now codified** (the contract document is kept in the project's internal ADR collection) ([#194](https://github.com/peacefulstudio/daml-codegen-csharp/pull/194), [#195](https://github.com/peacefulstudio/daml-codegen-csharp/pull/195), [#196](https://github.com/peacefulstudio/daml-codegen-csharp/pull/196), [#197](https://github.com/peacefulstudio/daml-codegen-csharp/pull/197), [#198](https://github.com/peacefulstudio/daml-codegen-csharp/pull/198), [#199](https://github.com/peacefulstudio/daml-codegen-csharp/pull/199), [#200](https://github.com/peacefulstudio/daml-codegen-csharp/pull/200), [#201](https://github.com/peacefulstudio/daml-codegen-csharp/pull/201)). Anyone integrating with the artifact directly — not via `dpm` — gets a versioned contract for the bundle layout (top-level `component.yaml`, `bin/<exe>`, `bin/<jar>`), the per-layer OCI media type (`application/vnd.component.file`), the required `network.canton.dpm.file-{mode,modtime,name}` annotations (`file-name` is the relative path inside the bundle, not the basename), and the consumer `daml.yaml` shape (`components: ["oci://…"]`, no `sdk-version:` alongside, never the dead-code `override-components: <name>: image-tag:`). Stock `dpm ≥ 1.0.12` required on the consumer side; `dpm 1.0.16` is what our workflows pin. Public-package consumers must NOT `docker login ghcr.io` with `${{ secrets.GITHUB_TOKEN }}` — anonymous pull is the supported path.
+- **`daml-codegen-csharp --release-counters <path>` resolves the 4th NuGet version segment from a `JsonReleaseCounterStore`** ([#137](https://github.com/peacefulstudio/daml-codegen-csharp/pull/137)). When the flag is supplied the CLI computes the content hash of the `IntermediateDar` proto, opens the store at `<path>`, resolves the revision via the release-counter versioning machinery (now internal to the emitter), and uses that as `CodeGenOptions.EmitterCounter` — replacing the explicit `--emitter-counter <int>` static override for CI-driven publishing. The `Canton.Splice.*` publish workflow now wires this flag end-to-end: the counter store is the source of truth for the 4th segment, and consumers see monotonically increasing `M.m.p.r` versions across re-emissions of the same DAR-intrinsic version when emitter output content changes. The store lives in a GitHub Actions repo variable, a placement decision kept in the project's internal ADR collection; local-dev invocations omit `--release-counters` and continue to default to `r=0`.
+- **`dpm codegen-cs` is now distributable as a multi-arch OCI artifact at `ghcr.io/peacefulstudio/dpm-codegen-cs`** ([#136](https://github.com/peacefulstudio/daml-codegen-csharp/pull/136)). The new `.github/workflows/build-oci-codegen-cs.yaml` builds a self-contained single-file C# emitter binary for `linux/amd64`, `linux/arm64`, `darwin/arm64`, and `windows/amd64`, bundles each with the JVM helper JAR + a small `dpm-codegen-cs` entrypoint script, pushes each per-RID directory as its own OCI artifact, and composes them into a multi-arch index under `ghcr.io/peacefulstudio/dpm-codegen-cs:<version>`. Per the component-distribution decision kept in the project's internal ADR collection, stock `dpm` fetches the right RID lazily on first invocation using its `<os>/<arch>=<path>` asset-selection syntax — no host .NET runtime required on the consumer side; a host JDK is the only runtime precondition. Triggers: `workflow_dispatch` (manual) and `workflow_call` (orchestration by a release pipeline). Depends on the credential canary from [#135](https://github.com/peacefulstudio/daml-codegen-csharp/pull/169).
+- **JVM helper `--schema-only` opt-out flag** ([#171](https://github.com/peacefulstudio/daml-codegen-csharp/pull/171), per an amendment kept in the project's internal ADR collection). The JVM helper's default decode is now full-decode + static party-expression analysis; pass `--schema-only` to opt into the previous schema-mode decode (`SignatureErasure` runs on `signatories` / `observers` / `controllers` / `choiceObservers` expression bodies). The opt-out is patch-version-insensitive — two patch-different versions of the same package produce identical `IntermediateDar` bytes — at the cost of disabling the typed-`actAs` codegen path on the proto pipeline. `scripts/codegen-pipeline.sh` exposes the same `--schema-only` flag to chain it through to the helper.
+- **4-part `M.m.p.r` NuGet versioning** (scheme kept in the project's internal ADR collection), exposed as the new `Daml.Codegen.CSharp.Versioning` namespace ([#140](https://github.com/peacefulstudio/daml-codegen-csharp/pull/140)). Segments 1–3 of a generated package's NuGet version are the DAR-intrinsic `Major.Minor.Patch`; segment 4 (`r`) is a monotonic emitter counter that disambiguates content-identical re-emissions of the same DAR-intrinsic version under different emitter versions. New consumer-facing API: `SpliceNuGetVersion.Compute(packageName, intrinsicVersion, contentHash, counterStore)` (now internal to the emitter, renamed `NuGetVersionResolver`) returns the canonical 4-part `FourPartPackageVersion`. The counter is persisted in a JSON file (`JsonReleaseCounterStore.OpenOrCreate(path)`) keyed by `{packageName}@{M.m.p}`; first emission of a (package, intrinsic-version) pair returns `r=0`, identical re-emissions hold the revision steady, and any content change bumps it. `IntermediatePackageContentHash.Compute(IntermediatePackage)` returns the stable SHA-256 over the deterministic protobuf encoding for use as the content-hash input. The NuGet packing step (issue [#148](https://github.com/peacefulstudio/daml-codegen-csharp/issues/148)) consumes this API; consumers see the new 4-segment versions on the wire.
+- **Codegen now emits a buildable `.csproj` and packs a NuGet package per Daml package** ([#175](https://github.com/peacefulstudio/daml-codegen-csharp/pull/175), closes #148). Generated projects carry versions per the 4-part `M.m.p.r` versioning scheme (Daml package version supplies segments 1–3; the 4th segment is the emitter counter, defaulting to `0` for the first emission), declare `<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>` (configurable via the new `--package-license <SPDX>` CLI flag / `CodeGenOptions.PackageLicenseExpression` for non-Apache DARs), and reference `Daml.Runtime` and `Daml.Ledger.Abstractions` so consumers can run `dotnet add package <Pkg>` + `dotnet build` against an unmodified output tree. A new `--emitter-counter <int>` flag on the emitter CLI (validated at the boundary to reject negatives) exposes the 4th-segment override for the Splice publish pipeline; local-dev invocations leave the default in place. `CodeGenOptions.EmitterCounter` is the integration point for the per-emitter mapping table now landed in #140 — full wire-up of the release-counter resolution from the CLI is tracked in #137.
+- `Daml.Codegen.CSharp.IntermediateDarReader.Read(IntermediateDar)` — proto-to-model adapter; the new public API surface for emitter consumers (#147). Throws `InvalidDataException` fail-fast on malformed input (missing data-type shape, missing choice `argument_type` / `return_type`, unknown proto sort, `BUILTIN_TYPE_UNSPECIFIED`) and `NotSupportedException` on intentionally-deferred builtins; no silent fallback to `Unit` or empty record.
 - `Daml.Codegen.CSharp.Model.DarModel` and `Daml.Codegen.CSharp.Model.IDarSource` — the emitter input contract. `CSharpCodeGenerator.Generate` now takes `IDarSource`, satisfied by `DarModel` (proto-direct).
-- `Daml.Codegen.CSharp.ICodegenLogger` — minimal logging contract that `CSharpCodeGenerator` now depends on. `ConsoleLogger` implements it; tests and host applications can supply alternative implementations without taking a console dependency.
-- `scripts/codegen-pipeline.sh` — orchestration shim that runs the codegen pipeline end-to-end. Stands in for the `dpm codegen-cs` OCI bundle entry point.
+- `Daml.Codegen.CSharp.ICodegenLogger` — minimal logging contract that `CSharpCodeGenerator` now depends on. `ConsoleLogger` implements it; tests and host applications can supply alternative implementations without taking a console dependency (#168).
+- `scripts/codegen-pipeline.sh` — orchestration shim that chains the JVM helper JAR + the C# CLI end-to-end; ships inside the `ghcr.io/peacefulstudio/dpm-codegen-cs` OCI artifact rather than this repository. Stands in for the `dpm codegen-cs` OCI bundle entry point until the MSBuild integration ships in a future release.
 
 ### Changed — BREAKING
 
 - **`Daml.Codegen.CSharp` is now a pure emitter library.** It consumes an `IntermediateDar` proto and emits `.cs`. The legacy `dotnet tool` CLI surface (`PackAsTool`, `daml-codegen-csharp` command) is removed from `Daml.Codegen.CSharp`. A new thin CLI project `Daml.Codegen.CSharp.Cli` produces the binary `daml-codegen-csharp`; it accepts `--intermediate <proto-path>`. The CLI publishes as a self-contained single-file native binary per RID — `dotnet publish src/Daml.Codegen.CSharp.Cli -c Release -r <rid> --self-contained true -p:PublishSingleFile=true`.
-- **The typed-`actAs` codegen path is now enabled by default**. Previously party analysis was `Dynamic` on every template and choice, so `CreateAsync` and `<Choice>Async` wrappers always required a `SubmitterInfo` parameter. Static party-expression analysis now runs over `signatories` / `observers` / `controllers` / `choiceObservers`, and generated `*SubmissionExtensions.cs` emits the `Signatories(payload)` and `Observers(payload)` helpers and derives `actAs` from the payload for templates whose signatories are payload-field projections — the dominant idiom across Splice's Amulet, Token Standard, and Synfini templates.
+- **Default JVM-helper decode mode is now full-decode + static party-expression analysis** ([#171](https://github.com/peacefulstudio/daml-codegen-csharp/pull/171)). Before this change the proto-direct pipeline produced `Dynamic` party analysis on every template and choice, so the typed-`actAs` codegen path (#68) was effectively disabled — `CreateAsync` and `<Choice>Async` wrappers always required a `SubmitterInfo` parameter. The new default invokes a Scala port of `PartyExpressionAnalyzer` against the fully-decoded `Ast.Expr` for `signatories` / `observers` / `controllers` / `choiceObservers` and emits a `Static(payload_fields…)` verdict into the `IntermediateDar` proto when every party resolves to a payload-field projection on the template parameter. Generated `*SubmissionExtensions.cs` consequently emits the `Signatories(payload)` and `Observers(payload)` helpers and derives `actAs` from the payload for templates whose signatories are payload-field projections — the dominant idiom across Splice's Amulet, Token Standard, and Synfini templates. The change is patch-version-sensitive by default; pass `--schema-only` (see Added) to opt back into patch-insensitive behavior.
 
 ### Changed
 
-- **`IntermediateDar` proto schema gained `Template.signatories`, `Template.observers`, `Choice.controllers`, `Choice.observers`, and a new `PartyAnalysis { Static | Dynamic }` message**. All four new fields are forward-compatible (absent on older proto bytes is read as `Dynamic`). Proto consumers other than `IntermediateDarReader` that interpret the wire format should add a case for `PartyAnalysis`.
-- **Generated code now emits the runtime `Party` type unqualified (bare `Party`) on packages whose namespaces don't shadow it**, matching every other runtime type's qualification policy. Previously `Party` was hard-coded as `global::Daml.Runtime.Data.Party` at every emission site, so it always carried the `global::` prefix even when nothing shadowed it — the lone runtime type that bypassed the collision-aware qualifier. It now routes through that qualifier like `ContractId`, `IDamlValue`, `Choice`, and the rest: bare on non-colliding packages, still `global::`-qualified when a generated namespace segment shadows it (e.g. a package deriving a namespace ending in `.Party`). Output for shadowing packages is unchanged; non-shadowing packages see `global::Daml.Runtime.Data.Party` become `Party` in field types, record/choice parameters, `IHasKey<>` keys, and value-decoder expressions.
-- **Generated code now emits the `Daml.Runtime.Stdlib.*` types (`Either`, `Tuple2`/`Tuple3`, `Set`, `NonEmpty`, `Map`, `RelTime`, `Unit`, `GenericStub`) as bare type names under a new `using Daml.Runtime.Stdlib;` import**, qualifying with `global::` only when a generated namespace segment shadows the name. Previously these stdlib types were written fully qualified (`Daml.Runtime.Stdlib.RelTime`, `Daml.Runtime.Stdlib.Tuple2<…>`, …) at every emission site — the lone remaining family that bypassed the collision-aware qualifier. They now route through it like every other imported type: bare on non-colliding packages (e.g. `splice-api-token-holding-v1`'s `Lock.ExpiresAfter` becomes `RelTime?` under `using Daml.Runtime.Stdlib;`), still `global::`-qualified when a generated namespace segment shadows the name — fixing the `CS0118` namespace-shadowing bug class for stdlib types and completing the central-qualifier work. The using requirement is also package-gated: a user package that defines its own `DA.Types:Tuple2` (or another stdlib-named type) is rendered under its own namespace and no longer emits an unused `using Daml.Runtime.Stdlib;`, so it is not surfaced as `CS8019` under consumer `<TreatWarningsAsErrors>`.
-- Generated files now emit only the `using` directives their body actually references, tracked per-file at codegen time — each namespace is required at its actual emit site (e.g. `System.Collections.Generic` only when a list/map field appears, `Daml.Runtime.Contracts` only when a template, interface, or contract-ID type is emitted, `System` only when `Version`, `DateTimeOffset`, etc. appear). The `#pragma warning disable CS8019` header that previously suppressed unused-using warnings in every file has been removed; no generated file emits an unused `using`. Consumers with `<TreatWarningsAsErrors>` no longer need a workaround, and IDEs get accurate import lists.
+- **`IntermediateDar` proto schema gained `Template.signatories`, `Template.observers`, `Choice.controllers`, `Choice.observers`, and a new `PartyAnalysis { Static | Dynamic }` message** ([#171](https://github.com/peacefulstudio/daml-codegen-csharp/pull/171)). All four new fields are forward-compatible (absent on older proto bytes is read as `Dynamic`). Proto consumers other than `IntermediateDarReader` that interpret the wire format should add a case for `PartyAnalysis`.
+- **Generated code now emits the runtime `Party` type unqualified (bare `Party`) on packages whose namespaces don't shadow it**, matching every other runtime type's qualification policy ([#212](https://github.com/peacefulstudio/daml-codegen-csharp/pull/212), [#213](https://github.com/peacefulstudio/daml-codegen-csharp/pull/213)). Previously `Party` was hard-coded as `global::Daml.Runtime.Data.Party` at every emission site, so it always carried the `global::` prefix even when nothing shadowed it — the lone runtime type that bypassed the collision-aware qualifier added in [#211](https://github.com/peacefulstudio/daml-codegen-csharp/issues/211). It now routes through that qualifier like `ContractId`, `IDamlValue`, `Choice`, and the rest: bare on non-colliding packages, still `global::`-qualified when a generated namespace segment shadows it (e.g. a package deriving a namespace ending in `.Party`). Output for shadowing packages is unchanged; non-shadowing packages see `global::Daml.Runtime.Data.Party` become `Party` in field types, record/choice parameters, `IHasKey<>` keys, and value-decoder expressions.
+- **Generated code now emits the `Daml.Runtime.Stdlib.*` types (`Either`, `Tuple2`/`Tuple3`, `Set`, `NonEmpty`, `Map`, `RelTime`, `Unit`, `GenericStub`) as bare type names under a new `using Daml.Runtime.Stdlib;` import**, qualifying with `global::` only when a generated namespace segment shadows the name ([#214](https://github.com/peacefulstudio/daml-codegen-csharp/pull/214)). Previously these stdlib types were written fully qualified (`Daml.Runtime.Stdlib.RelTime`, `Daml.Runtime.Stdlib.Tuple2<…>`, …) at every emission site — the lone remaining family that bypassed the collision-aware qualifier. They now route through it like every other imported type: bare on non-colliding packages (e.g. `splice-api-token-holding-v1`'s `Lock.ExpiresAfter` becomes `RelTime?` under `using Daml.Runtime.Stdlib;`), still `global::`-qualified when a generated namespace segment shadows the name — fixing the `CS0118` namespace-shadowing bug class for stdlib types and completing the central-qualifier work begun in [#211](https://github.com/peacefulstudio/daml-codegen-csharp/issues/211) / [#212](https://github.com/peacefulstudio/daml-codegen-csharp/pull/212) / [#213](https://github.com/peacefulstudio/daml-codegen-csharp/pull/213). The using requirement is also package-gated: a user package that defines its own `DA.Types:Tuple2` (or another stdlib-named type) is rendered under its own namespace and no longer emits an unused `using Daml.Runtime.Stdlib;`, so it is not surfaced as `CS8019` under consumer `<TreatWarningsAsErrors>`.
+- Generated files now emit only the `using` directives their body actually references, tracked per-file at codegen time — each namespace is required at its actual emit site (e.g. `System.Collections.Generic` only when a list/map field appears, `Daml.Runtime.Contracts` only when a template, interface, or contract-ID type is emitted, `System` only when `Version`, `DateTimeOffset`, etc. appear). The `#pragma warning disable CS8019` header that previously suppressed unused-using warnings in every file has been removed; no generated file emits an unused `using`. Consumers with `<TreatWarningsAsErrors>` no longer need a workaround, and IDEs get accurate import lists (#102).
 
 ### Fixed
 
-- **Generated code no longer fails to compile with `CS0118` when a Daml package or module name derives a C# namespace segment that collides with an imported runtime or BCL type name.** Previously a namespace ending in (e.g.) `Party` bound the bare `Party` identifier to the namespace rather than the runtime struct, failing the consumer build with `CS0118: 'Party' is a namespace but is used like a type` (`canton-party-replication-alpha` is the motivating real-world case). The emitter now `global::`-qualifies an imported simple type name only when a generated namespace would actually shadow it, so output for non-colliding packages (e.g. `splice-api-token-holding-v1`) is byte-identical — no churn. Coverage spans the runtime value/type family (`Party`, `ContractId`, `ITemplate`, `IHasKey`, `IDamlValue`, `Choice`, `SubmitterInfo`, `Identifier`, `ExerciseOutcome`, `TransactionResult`, `ILedgerClient`, the `Daml*` value types, …) and BCL types (`IReadOnlyList`, `IReadOnlyDictionary`, `HashSet`), across both type positions and expression/value positions (e.g. `new Identifier(...)`, `.As<DamlParty>()`, `DamlRecord.Create(...)`) as well as XML-doc crefs.
-- **The key-bearing template's XML-doc `<see cref>` for `IHasKey<>` is now well-formed under `<GenerateDocumentationFile>`**, closing a `CS1584`/`CS1658` doc-build warning. The generated `Key` property doc previously embedded the rendered key type inside the cref braces (`<see cref="...IHasKey{IReadOnlyList{string}}"/>`, or `IHasKey{global::Daml.Runtime.Data.Party}` in a `Party`-shadowing namespace) — a constructed type in cref braces, which Roslyn rejects as a syntactically incorrect cref. The cref now targets the open generic by its declared type-parameter name (`<see cref="global::Daml.Runtime.Contracts.IHasKey{TKey}"/>`) and the concrete key type is rendered as prose (`Gets the contract key of type <c>…</c>`).
-- **`DamlJsonSerializer.Serialize(DamlUnit.Instance)` no longer throws `ArgumentException`** and now returns `"{}"` per the Daml-LF JSON encoding for Unit. The serializer's `ValueToJsonNode` branch for `DamlUnit` wrapped a `JsonObject` in `JsonValue.Create(...)`, which only accepts primitive values and rejects any `JsonNode` — every attempt to serialize a `DamlUnit` (standalone or via the `DamlValueJsonConverter` path used by the top-level `Serialize(DamlValue)` entry point) threw at runtime.
-- **Generated files now emit `using Daml.Runtime.Contracts;` for every `ContractId<T>` reference**, not only top-level record fields. Two emit sites previously skipped the required-using pass and produced files that referenced `ContractId<T>` without importing its namespace — a variant constructor whose argument type contained a `ContractId` (e.g. `Splice/Api/Token/Metadata/V1/AnyValue.cs` from `splice-api-token-metadata-v1`), and any record field whose type wrapped a `ContractId` inside a parametric stdlib or user-defined generic type (e.g. `Set (ContractId T)`, `Tuple2 (ContractId T) Int`). Both shapes appeared in 7 of 22 Splice 0.6.5 DAR families and surfaced as `CS0246: The type or namespace name 'ContractId<>' could not be found` at consumer build time.
-- **`DamlJsonSerializer.Deserialize` now parses date and timestamp strings under `CultureInfo.InvariantCulture`**, closing a round-trip asymmetry with the serialize side, which already pinned `InvariantCulture` and emits ISO-8601 (`yyyy-MM-dd` for `DamlDate`, `"O"` for `DamlTimestamp`). Previously `InferStringValue` called `DateOnly.TryParse(s, out _)` and `DateTimeOffset.TryParse(s, out _)` without an explicit culture, falling back to `CurrentCulture`. Under cultures whose default calendar is non-Gregorian (`th-TH`, `fa-IR`, `ar-SA`, …) the ISO date string was reinterpreted in the host calendar — e.g. `"2026-05-26"` round-tripped to `1483-05-26` under `th-TH` — silently corrupting `DamlDate` values across the wire. `DamlTimestamp` parsing was unaffected in practice (the `"O"` shape parses universally) but is pinned for symmetry.
-- **`DamlJsonSerializer.Serialize` now handles `DamlGenMap`** instead of throwing `NotSupportedException`. `DamlGenMap` is the wire-level backing for Daml `GenMap k v` and underpins the `Daml.Runtime.Stdlib.Map<K, V>` and `Set<T>` stdlib wrappers, both of which appear pervasively in the Splice Amulet and Wallet DARs (e.g. `Map Party Int` beneficiary lists, `Set Party` membership). The serialized shape is a JSON array of two-element `[key, value]` arrays, matching the Daml-LF JSON encoding for `GenMap`.
-- **`DamlJsonSerializer.DeserializeRecord` and the top-level `DamlJsonSerializer.Deserialize` now both reconstruct `DamlGenMap`** from the same `[[key, value], ...]` wire shape the serializer emits, closing the round-trip asymmetry whereby `Deserialize(Serialize(genMap))` previously collapsed to a `DamlList` of two-element `DamlList`s. The `DamlValueJsonConverter` used by the top-level `Deserialize` / `Serialize` entry points now delegates to the same canonical mappers as `DeserializeRecord` / `Serialize(DamlRecord)`, removing a duplicated and divergent traversal that also disagreed on string→date inference, Variant null handling, and infinite-recursed on `Serialize(DamlValue)`. The heuristic is documented on the public `Deserialize` XML doc and is necessarily lossy for three untyped-JSON edge cases — a `List (List a)` whose inner lists all happen to be length 2 is reinterpreted as a `DamlGenMap`; an empty `[]` always resolves to an empty `DamlList` (never an empty `DamlGenMap`); and a pair with a `null` first element falls back to the list path and surfaces the original "Null array elements not supported" error rather than a misleading GenMap-key error. Callers needing exact round-trips for those shapes must deserialize against a type schema.
-- **`DamlJsonSerializer` now formats `Numeric`, `Date`, and `Timestamp` values under `CultureInfo.InvariantCulture`**, so wire-format output is identical regardless of the host's `CurrentCulture`. Previously `DamlNumeric` rendered with the current-culture decimal separator (e.g. `"123,456789"` under `fr-FR`), and `DamlDate` / `DamlTimestamp` could pick up calendar-specific formatting under cultures whose default calendar is not the Gregorian one. This is required for round-tripping through PQS and the JSON Ledger API, both of which expect invariant-formatted scalars.
-- **`IsArchiveChoice` filter now gates on the stdlib package id**, not just the choice name and module path. Previously a user-defined choice named `Archive` whose argument type referenced `DA.Internal.Template:Archive` would be falsely suppressed by the non-CID wrapper emitter, so the generated code was missing an `ArchiveAsync` extension on the template's contract id. The filter now mirrors the `IsParametricStdlibTypeRef` pattern: the argument type's `PackageId` must resolve through the current archive to a Daml stdlib package (`daml-prim` / `daml-stdlib` / `ghc-stdlib`); otherwise the choice flows through and a typed wrapper is emitted.
-- **Choice-argument types are now emitted fully qualified when referenced by sibling records or variant constructors**. Choice-arg types (e.g. `MergeDelegation_Merge`, `DsoRules_AddSv`) are nested inside their parent template class in the generated output; any reference from outside that template — a sibling record field, a variant constructor parameter, or a cross-package variant — was previously emitted as a bare or namespace-only name that the C# compiler could not resolve (CS0246 / CS0234). The codegen now qualifies such references as `TemplateName.ChoiceArgTypeName` (same-package) or `ForeignNamespace.TemplateName.ChoiceArgTypeName` (cross-package). No consumer action required beyond re-running the codegen; the fix resolves the Splice `MergeDelegationCall` and `DsoRules_ActionRequiringConfirmation` compilation failures.
-- **Interface and template-extension XML-doc `<see cref>` tags are now `global::`-qualified**, closing a `CS1574` doc-build warning under `<GenerateDocumentationFile>` for packages whose namespace is rooted at `Daml.*`. Five `<see cref="Daml.Runtime.*"/>` / `<see cref="Daml.Ledger.*"/>` strings were emitted bare into generated interface-extension and template-extension class docs; Roslyn resolves `Daml.Runtime.*` relative to the enclosing `Daml.*` namespace and fails with `CS1574: XML comment has cref attribute that could not be resolved` on a package such as `daml` (namespace `Daml.*`). All five crefs now carry `global::`.
-- **`FromRecord` for `TextMap`/`GenMap`-of-`List` fields no longer emits a non-compilable `Dictionary<K, List<V>>`** — the value projection lambda is now cast to `IReadOnlyList<V>` so `ToDictionary` infers `Dictionary<K, IReadOnlyList<V>>`, which does implement `IReadOnlyDictionary<K, IReadOnlyList<V>>`. Without the cast, C# generic invariance caused CS1503 in consumer builds whenever a generated record had a field of Daml type `TextMap (List a)` or `GenMap k (List v)` (surfaces in, for example, `WalletUserProxy_BatchTransferResult.SenderChangeMap`). The same cast is also emitted for top-level `List` fields and `Choice` result decoders, ensuring consistency across all deserialization paths.
+- **Generated code no longer fails to compile with `CS0118` when a Daml package or module name derives a C# namespace segment that collides with an imported runtime or BCL type name.** Previously a namespace ending in (e.g.) `Party` bound the bare `Party` identifier to the namespace rather than the runtime struct, failing the consumer build with `CS0118: 'Party' is a namespace but is used like a type` (`canton-party-replication-alpha` is the motivating real-world case). The emitter now `global::`-qualifies an imported simple type name only when a generated namespace would actually shadow it, so output for non-colliding packages (e.g. `splice-api-token-holding-v1`) is byte-identical — no churn. Coverage spans the runtime value/type family (`Party`, `ContractId`, `ITemplate`, `IHasKey`, `IDamlValue`, `Choice`, `SubmitterInfo`, `Identifier`, `ExerciseOutcome`, `TransactionResult`, `ILedgerClient`, the `Daml*` value types, …) and BCL types (`IReadOnlyList`, `IReadOnlyDictionary`, `HashSet`), across both type positions and expression/value positions (e.g. `new Identifier(...)`, `.As<DamlParty>()`, `DamlRecord.Create(...)`) as well as XML-doc crefs ([#211](https://github.com/peacefulstudio/daml-codegen-csharp/issues/211)).
+- **The key-bearing template's XML-doc `<see cref>` for `IHasKey<>` is now well-formed under `<GenerateDocumentationFile>`**, closing a `CS1584`/`CS1658` doc-build warning ([#211](https://github.com/peacefulstudio/daml-codegen-csharp/issues/211)). The generated `Key` property doc previously embedded the rendered key type inside the cref braces (`<see cref="...IHasKey{IReadOnlyList{string}}"/>`, or `IHasKey{global::Daml.Runtime.Data.Party}` in a `Party`-shadowing namespace) — a constructed type in cref braces, which Roslyn rejects as a syntactically incorrect cref. The cref now targets the open generic by its declared type-parameter name (`<see cref="global::Daml.Runtime.Contracts.IHasKey{TKey}"/>`) and the concrete key type is rendered as prose (`Gets the contract key of type <c>…</c>`).
+- **`DamlJsonSerializer.Serialize(DamlUnit.Instance)` no longer throws `ArgumentException`** and now returns `"{}"` per the Daml-LF JSON encoding for Unit. The serializer's `ValueToJsonNode` branch for `DamlUnit` wrapped a `JsonObject` in `JsonValue.Create(...)`, which only accepts primitive values and rejects any `JsonNode` — every attempt to serialize a `DamlUnit` (standalone or via the `DamlValueJsonConverter` path used by the top-level `Serialize(DamlValue)` entry point) threw at runtime. Closes [#159](https://github.com/peacefulstudio/daml-codegen-csharp/issues/159) ([#163](https://github.com/peacefulstudio/daml-codegen-csharp/pull/163)).
+- **Generated files now emit `using Daml.Runtime.Contracts;` for every `ContractId<T>` reference**, not only top-level record fields. Two emit sites previously skipped the required-using pass and produced files that referenced `ContractId<T>` without importing its namespace — a variant constructor whose argument type contained a `ContractId` (e.g. `Splice/Api/Token/Metadata/V1/AnyValue.cs` from `splice-api-token-metadata-v1`), and any record field whose type wrapped a `ContractId` inside a parametric stdlib or user-defined generic type (e.g. `Set (ContractId T)`, `Tuple2 (ContractId T) Int`). Both shapes appeared in 7 of 22 Splice 0.6.5 DAR families and surfaced as `CS0246: The type or namespace name 'ContractId<>' could not be found` at consumer build time. Closes [#202](https://github.com/peacefulstudio/daml-codegen-csharp/issues/202).
+- **`DamlJsonSerializer.Deserialize` now parses date and timestamp strings under `CultureInfo.InvariantCulture`**, closing a round-trip asymmetry with the serialize side, which already pinned `InvariantCulture` and emits ISO-8601 (`yyyy-MM-dd` for `DamlDate`, `"O"` for `DamlTimestamp`). Previously `InferStringValue` called `DateOnly.TryParse(s, out _)` and `DateTimeOffset.TryParse(s, out _)` without an explicit culture, falling back to `CurrentCulture`. Under cultures whose default calendar is non-Gregorian (`th-TH`, `fa-IR`, `ar-SA`, …) the ISO date string was reinterpreted in the host calendar — e.g. `"2026-05-26"` round-tripped to `1483-05-26` under `th-TH` — silently corrupting `DamlDate` values across the wire. `DamlTimestamp` parsing was unaffected in practice (the `"O"` shape parses universally) but is pinned for symmetry. Round-trip tests added in [#162](https://github.com/peacefulstudio/daml-codegen-csharp/pull/162).
+- **`DamlJsonSerializer.Serialize` now handles `DamlGenMap`** instead of throwing `NotSupportedException`. `DamlGenMap` is the wire-level backing for Daml `GenMap k v` and underpins the `Daml.Runtime.Stdlib.Map<K, V>` and `Set<T>` stdlib wrappers, both of which appear pervasively in the Splice Amulet and Wallet DARs (e.g. `Map Party Int` beneficiary lists, `Set Party` membership). The serialized shape is a JSON array of two-element `[key, value]` arrays, matching the Daml-LF JSON encoding for `GenMap`. Closes [#145](https://github.com/peacefulstudio/daml-codegen-csharp/issues/145).
+- **`DamlJsonSerializer.DeserializeRecord` and the top-level `DamlJsonSerializer.Deserialize` now both reconstruct `DamlGenMap`** from the same `[[key, value], ...]` wire shape the serializer emits, closing the round-trip asymmetry whereby `Deserialize(Serialize(genMap))` previously collapsed to a `DamlList` of two-element `DamlList`s. The `DamlValueJsonConverter` used by the top-level `Deserialize` / `Serialize` entry points now delegates to the same canonical mappers as `DeserializeRecord` / `Serialize(DamlRecord)`, removing a duplicated and divergent traversal that also disagreed on string→date inference, Variant null handling, and infinite-recursed on `Serialize(DamlValue)` ([#155](https://github.com/peacefulstudio/daml-codegen-csharp/issues/155), regression coverage added in [#157](https://github.com/peacefulstudio/daml-codegen-csharp/pull/157)). The heuristic is documented on the public `Deserialize` XML doc and is necessarily lossy for three untyped-JSON edge cases — a `List (List a)` whose inner lists all happen to be length 2 is reinterpreted as a `DamlGenMap`; an empty `[]` always resolves to an empty `DamlList` (never an empty `DamlGenMap`); and a pair with a `null` first element falls back to the list path and surfaces the original "Null array elements not supported" error rather than a misleading GenMap-key error. Callers needing exact round-trips for those shapes must deserialize against a type schema.
+- **`DamlJsonSerializer` now formats `Numeric`, `Date`, and `Timestamp` values under `CultureInfo.InvariantCulture`**, so wire-format output is identical regardless of the host's `CurrentCulture`. Previously `DamlNumeric` rendered with the current-culture decimal separator (e.g. `"123,456789"` under `fr-FR`), and `DamlDate` / `DamlTimestamp` could pick up calendar-specific formatting under cultures whose default calendar is not the Gregorian one. This is required for round-tripping through PQS and the JSON Ledger API, both of which expect invariant-formatted scalars. Closes [#145](https://github.com/peacefulstudio/daml-codegen-csharp/issues/145).
+- **`IsArchiveChoice` filter now gates on the stdlib package id**, not just the choice name and module path. Previously a user-defined choice named `Archive` whose argument type referenced `DA.Internal.Template:Archive` would be falsely suppressed by the non-CID wrapper emitter, so the generated code was missing an `ArchiveAsync` extension on the template's contract id. The filter now mirrors the `IsParametricStdlibTypeRef` pattern: the argument type's `PackageId` must resolve through the current archive to a Daml stdlib package (`daml-prim` / `daml-stdlib` / `ghc-stdlib`); otherwise the choice flows through and a typed wrapper is emitted. Closes [#101](https://github.com/peacefulstudio/daml-codegen-csharp/issues/101).
+- **Choice-argument types are now emitted fully qualified when referenced by sibling records or variant constructors** ([#111](https://github.com/peacefulstudio/daml-codegen-csharp/issues/111)). Choice-arg types (e.g. `MergeDelegation_Merge`, `DsoRules_AddSv`) are nested inside their parent template class in the generated output; any reference from outside that template — a sibling record field, a variant constructor parameter, or a cross-package variant — was previously emitted as a bare or namespace-only name that the C# compiler could not resolve (CS0246 / CS0234). The codegen now qualifies such references as `TemplateName.ChoiceArgTypeName` (same-package) or `ForeignNamespace.TemplateName.ChoiceArgTypeName` (cross-package). No consumer action required beyond re-running the codegen; the fix closes the Splice `MergeDelegationCall` and `DsoRules_ActionRequiringConfirmation` compilation failures reported in the issue.
+- **Interface and template-extension XML-doc `<see cref>` tags are now `global::`-qualified**, closing a `CS1574` doc-build warning under `<GenerateDocumentationFile>` for packages whose namespace is rooted at `Daml.*` ([#215](https://github.com/peacefulstudio/daml-codegen-csharp/pull/215)). Five `<see cref="Daml.Runtime.*"/>` / `<see cref="Daml.Ledger.*"/>` strings were emitted bare into generated interface-extension and template-extension class docs; Roslyn resolves `Daml.Runtime.*` relative to the enclosing `Daml.*` namespace and fails with `CS1574: XML comment has cref attribute that could not be resolved` on a package such as `daml` (namespace `Daml.*`). All five crefs now carry `global::`.
+- **`FromRecord` for `TextMap`/`GenMap`-of-`List` fields no longer emits a non-compilable `Dictionary<K, List<V>>`** — the value projection lambda is now cast to `IReadOnlyList<V>` so `ToDictionary` infers `Dictionary<K, IReadOnlyList<V>>`, which does implement `IReadOnlyDictionary<K, IReadOnlyList<V>>`. Without the cast, C# generic invariance caused CS1503 in consumer builds whenever a generated record had a field of Daml type `TextMap (List a)` or `GenMap k (List v)` (surfaces in, for example, `WalletUserProxy_BatchTransferResult.SenderChangeMap`). The same cast is also emitted for top-level `List` fields and `Choice` result decoders, ensuring consistency across all deserialization paths. Closes [#110](https://github.com/peacefulstudio/daml-codegen-csharp/issues/110).
 
 ## [0.1.5] — 2026-05-03
 
 ### Changed — BREAKING
 
-- **Contract-key `Key` property is now a `partial` declaration** instead of a stub that throws `NotImplementedException` at runtime. The codegen still detects keys and emits `: IHasKey<TKey>`, but the property body is now supplied by a hand-rolled `partial` in the consuming project until the full DALF key-expression analysis (mapping the template's `key` Daml expression back to template fields) lands. This shifts the failure mode from runtime (throwing on first `Key` access) to compile time (Roslyn `CS9248` on the consumer build until the implementing partial is supplied) — impossible to ship to production unnoticed. Consumers must add an implementing partial alongside the generated template, **inside whatever namespace the generated `Foo.cs` declares**. By default that namespace is derived from the Daml package name (e.g. `My.Daml.Package`); if you override it with `--namespace` (CLI) or `CodeGenOptions.RootNamespace` (library), match the override exactly. Open the generated `Foo.cs` to confirm the namespace before writing your partial:
+- **Contract-key `Key` property is now a `partial` declaration** instead of a stub that throws `NotImplementedException` at runtime ([#65](https://github.com/peacefulstudio/daml-codegen-csharp/pull/65)). The codegen still detects keys and emits `: IHasKey<TKey>`, but the property body is now supplied by a hand-rolled `partial` in the consuming project until the full DALF key-expression analysis (mapping the template's `key` Daml expression back to template fields) lands. This shifts the failure mode from runtime (throwing on first `Key` access) to compile time (Roslyn `CS9248` on the consumer build until the implementing partial is supplied) — impossible to ship to production unnoticed. Consumers must add an implementing partial alongside the generated template, **inside whatever namespace the generated `Foo.cs` declares**. By default that namespace is derived from the Daml package name (e.g. `My.Daml.Package`); if you override it with `--namespace` (CLI) or `CodeGenOptions.RootNamespace` (library), match the override exactly. Open the generated `Foo.cs` to confirm the namespace before writing your partial:
   ```csharp
   // In your project, alongside the generated Foo.cs.
   // Namespace MUST match whatever the generated file declares. Default is
@@ -180,7 +222,7 @@ because they are versioned in lockstep:
       public partial string Key => Owner.Id;  // or whatever your key expression is
   }
   ```
-  The implementing partial's type kind must match the generated type kind: if you configure the codegen with `UseRecordTypes=false`, the generated template is a `public sealed partial class` and the implementing partial must also be a `partial class` (not `partial record`). Requires C# 13 on the consumer side, which means **.NET 9 SDK or later on the build machine** even when the consumer's `<TargetFramework>` is `net8.0` — the C# compiler is shipped with the SDK, not the target runtime, so a build host with only the .NET 8 SDK installed cannot parse the generated partial-property syntax. The codegen-emitted `.csproj` pins `<LangVersion>13</LangVersion>` only for packages that actually contain a key-bearing template, so key-less DARs continue to build with whatever LangVersion the consumer's SDK defaults supply. Unblocks consumers to opt into typed key fetch / exercise wrappers (`Foo.FetchByKeyAsync`, `Foo.<Choice>ByKeyAsync` against `IPqsClient` / `ILedgerClient`) without inheriting a throwing default. Full ByKey wrapper emission is tracked separately.
+  The implementing partial's type kind must match the generated type kind: if you configure the codegen with `UseRecordTypes=false`, the generated template is a `public sealed partial class` and the implementing partial must also be a `partial class` (not `partial record`). Requires C# 13 on the consumer side, which means **.NET 9 SDK or later on the build machine** even when the consumer's `<TargetFramework>` is `net8.0` — the C# compiler is shipped with the SDK, not the target runtime, so a build host with only the .NET 8 SDK installed cannot parse the generated partial-property syntax. The codegen-emitted `.csproj` pins `<LangVersion>13</LangVersion>` only for packages that actually contain a key-bearing template, so key-less DARs continue to build with whatever LangVersion the consumer's SDK defaults supply. Lets consumers opt into typed key fetch / exercise wrappers (`Foo.FetchByKeyAsync`, `Foo.<Choice>ByKeyAsync` against `IPqsClient` / `ILedgerClient`) without inheriting a throwing default. Full ByKey wrapper emission is tracked in [#64](https://github.com/peacefulstudio/daml-codegen-csharp/issues/64).
 - **Unresolvable cross-package type references now throw at codegen time
   instead of warning and emitting unqualified names.** `ResolveTypeRefName`
   used to log a warning and return the bare sanitised name when the
@@ -195,7 +237,7 @@ because they are versioned in lockstep:
   exception instead. The fix is the same — bundle the missing foreign
   package — only the failure point moves earlier. The unmapped-stdlib
   fallback (`MapStdlibType` returns null for an unknown stdlib type)
-  still warns and returns unqualified pending full stdlib coverage.
+  still warns and returns unqualified pending #57. Companion to #99.
 
 ### Added
 
@@ -212,7 +254,8 @@ because they are versioned in lockstep:
   parameter (which implicitly converts from `string` / `Party`). Templates
   whose `observer` expression is statically resolvable also expose an
   `Observers(payload)` helper returning the derived observer party set from
-  the payload.
+  the payload. Closes
+  [#68](https://github.com/peacefulstudio/daml-codegen-csharp/issues/68).
 - **`Daml.Runtime.Data.SynchronizerId`** — `readonly record struct` mirroring
   `Party`'s shape (null/whitespace-guarded constructor, `Id` accessor with
   default-uninitialized throw, implicit `→ string` conversion, explicit
@@ -220,7 +263,7 @@ because they are versioned in lockstep:
   Stored as an opaque string per Canton's documented guidance — does not
   decompose into name / fingerprint / protocol-version components, so the
   wrapper is safe across the Canton 3.4 (`name::fingerprint`) → 3.5
-  (`name::fingerprint::protocol-version`) wire-format change.
+  (`name::fingerprint::protocol-version`) wire-format change. Closes #87.
 - **`Daml.Runtime.Stdlib` stubs for `DA.Types.Tuple2` / `Tuple3`,
   `DA.Set.Types.Set`, `DA.NonEmpty.Types.NonEmpty`, and
   `DA.Map.Types.Map` / `DA.Internal.Map.Map`.** Each stub is a generic
@@ -233,6 +276,7 @@ because they are versioned in lockstep:
   removes the `default! /* TODO */` decoder fallbacks for these types
   in `splice-amulet`, `splice-dso-governance`, `splice-wallet`,
   `splice-wallet-payments`, and `splice-util-featured-app-proxies`.
+  Issue #57 (B1).
 - **`Daml.Runtime.Contracts.ExercisedEvent`** — pure-data record describing a
   choice-exercise event observed in a transaction. Captures the subset of
   the Ledger API `ExercisedEvent` proto that the C# codegen needs to
@@ -241,8 +285,8 @@ because they are versioned in lockstep:
   `InterfaceId?`, `ChoiceName`, `Consuming`, `ActingParties`, and
   `WitnessParties`. Other wire fields (event/node identifiers, package
   name, descendant tracking, implemented-interface lists) are intentionally
-  omitted — they can be added later if a use case appears. Replaces an
-  earlier internal change.
+  omitted — they can be added later if a use case appears. Replaces
+  canton#53.
 - **`TransactionResult.ExercisedEvents`** — new
   `IReadOnlyList<ExercisedEvent>` init-only property, defaults to an empty
   list. Lets codegen-emitted choice wrappers walk
@@ -251,16 +295,18 @@ because they are versioned in lockstep:
   contract id (e.g. `choice GetTrailingTwap : Decimal`). Additive only —
   existing 4-arg construction continues to compile and the property
   defaults to empty until a ledger-client transport implementation
-  populates it.
+  populates it. Unblocks PR #66 (issue #63).
 - **`Daml.Runtime.IDamlType` marker interface** — common base for Daml-derived
   C# types. `Daml.Runtime.Contracts.ITemplate` and
   `Daml.Runtime.Contracts.IDamlInterface` both extend it. Lets generic helpers
   that don't dispatch on template-specific static metadata (`T.TemplateId`)
   constrain on the broader marker and accept either a concrete template or an
   interface marker. Additive only — existing `where T : ITemplate` constraints
-  continue to compile unchanged. Replaces an earlier internal change that
-  became stale-by-relocation when these types lifted to `Daml.Runtime`.
-  Unblocks the in-flight interface-markers work.
+  continue to compile unchanged. Replaces canton#54, which became
+  stale-by-relocation when these types lifted to `Daml.Runtime` in
+  [#73](https://github.com/peacefulstudio/daml-codegen-csharp/pull/73). Unblocks
+  the in-flight interface-markers work in
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67).
 - **Daml interface markers, first-class** — `ContractId<T>`'s constraint
   is relaxed from `where T : ITemplate` to `where T : IDamlType` (see above)
   so codegen-emitted interface markers (e.g. `IHolding` from the Splice
@@ -275,12 +321,14 @@ because they are versioned in lockstep:
   compile. `ExerciseCommand.ForInterface<TInterface>(cid, choice, arg)`
   builds an interface-typed exercise command — the wire-level `template_id`
   slot carries the interface id per Canton's `commands.proto` semantics.
+  ([#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
 - **Codegen-emitted interface choice exercisers** — for every Daml interface
   with one or more choices, the generated `IFoo.cs` file now also contains a
   sibling static `IFooExtensions` class with one `<Choice>Async`-style helper
   per choice. Callers can `cid.TransferAsync(arg)` on a `ContractId<IHolding>`
   without naming the concrete implementing template. Built via the new
-  `ExerciseCommand.ForInterface<I>` runtime helper.
+  `ExerciseCommand.ForInterface<I>` runtime helper. (#62,
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
 - **Typed `<Choice>Result` records and `FromCreatedContracts` projectors** for
   every Daml choice whose return type carries one or more `ContractId T`
   references. Choice creates a single template → single field; `Optional` →
@@ -290,7 +338,8 @@ because they are versioned in lockstep:
   slot has the expected count, `.None` when a single-cardinality slot's
   template is missing, and `.Many` when a single- or optional-cardinality
   slot has more than one. Template matching is by `(ModuleName, EntityName)`
-  only, so package-id drift from upgrades doesn't break projection.
+  only, so package-id drift from upgrades doesn't break projection. Issue
+  #60.
 - **`<Choice>Async(...)` extension methods on `ContractId<TemplateName>`** —
   one per create-bearing choice on each template, in a per-template static
   `<TemplateName>Extensions` class. The static-analyzer drives the parameter
@@ -334,22 +383,24 @@ because they are versioned in lockstep:
 - **`PackageContext.GetInternedExpr(int)`** — resolves an interned-expression
   index against the package's `InternedExprs` table. Used by the static
   analyzer to dereference nodes in LF 2.dev+ packages.
-- **Typed exerciser wrappers for non-contract-id choice returns**. For
+- **Typed exerciser wrappers for non-contract-id choice returns** (closes
+  [#63](https://github.com/peacefulstudio/daml-codegen-csharp/issues/63)). For
   every choice whose declared return type carries no `ContractId T` slot at the
   top level (`Decimal`, `()`, records *via type-ref*, lists/optionals/tuples
   of primitives, etc.), codegen now emits a
   `<Choice>Async(this ContractId<TemplateName>, ILedgerClient, <args>, Party actAs, ...)`
   extension method on a `<TemplateName>NonContractExtensions` static class. The
   method calls `ILedgerClient.TrySubmitAndWaitForTransactionAsync`, walks the
-  resulting `tx.ExercisedEvents` for
+  resulting `tx.ExercisedEvents` (added in
+  [#80](https://github.com/peacefulstudio/daml-codegen-csharp/pull/80)) for
   the matching choice, runs the already-emitted
   `Choice<Choice>.ResultDecoder` over its `DamlValue` exercise result, and
   returns `Task<ExerciseOutcome<TReturn>>`. `DamlError` and `InfraError`
   outcomes pass through unchanged. Returns that expose at least one
   `ContractId T` slot at the top level — bare `ContractId T`,
   `Optional (ContractId T)`, `[ContractId T]`, and tuples with `ContractId`
-  components — continue to flow through the `<TemplateName>Extensions` class
-  and the slot-based projector. Records (referenced by name) whose fields
+  components — continue to flow through #77's `<TemplateName>Extensions` class
+  and #60's slot-based projector. Records (referenced by name) whose fields
   happen to contain `ContractId`s also stay on the new wrapper path because
   the slot extractor intentionally does not unfold record types.
 - **`Daml.Runtime.Stdlib.Unit`** — single-inhabitant marker (`Unit.Value`) that
@@ -373,7 +424,7 @@ because they are versioned in lockstep:
   Canonical home for the type: `Daml.Runtime` already owns `Party`, so command
   submitters belong here too. Foundation for the upcoming `SubmitterInfo`
   overloads on `Daml.Ledger.Abstractions.ILedgerClient` and the named-signatory
-  codegen surface.
+  codegen surface (issue #68).
 - **`CommandsSubmission.WithSubmitter(SubmitterInfo)`** helper — sets both
   `ActAs` and `ReadAs` from a typed submitter in one call. The preferred
   projection point for code-generated and library callers; mirrors the wire
@@ -387,8 +438,8 @@ because they are versioned in lockstep:
   implementations preserve source compatibility with existing implementers:
   single-party submissions delegate to the legacy `string actAs` overload,
   multi-party submissions throw `NotSupportedException` until the implementation
-  overrides the SubmitterInfo overload (replaces an earlier internal change;
-  foundation for named-signatories codegen).
+  overrides the SubmitterInfo overload (replaces canton#61, foundation for
+  named-signatories codegen, issue #68).
 
 ### Changed — generated code shape
 
@@ -410,7 +461,7 @@ because they are versioned in lockstep:
   ExercisedEvent}` and the broader project trend toward typed party values
   (`Party` instead of bare `string`). Consumers comparing or pattern-matching
   on these collections need to migrate `string` accesses to `Party.Id` (or
-  use the `Party` value directly via `Equals`). **Implementor
+  use the `Party` value directly via `Equals`). Closes #86. **Implementor
   obligation**: a ledger-client transport implementation must construct
   `WitnessParties` as `Party` in its stream-projection code (rather than
   from proto `string` directly) before consuming the new `Daml.Runtime`
@@ -418,7 +469,7 @@ because they are versioned in lockstep:
 - **`ContractStreamEvent<T>.Assigned.{Source, Target}`** and
   **`Unassigned.{Source, Target}`** change from `string` to
   `Daml.Runtime.Data.SynchronizerId`. Same migration shape as the
-  `WitnessParties` change above. Same implementor obligation:
+  `WitnessParties` change above. Closes #87. Same implementor obligation:
   a ledger-client transport implementation must construct `Source` /
   `Target` as `SynchronizerId` in its reassignment-event projection
   (rather than from proto `string`) before consuming the new
@@ -429,18 +480,18 @@ because they are versioned in lockstep:
 - **`WriteChoiceMethod` now skips emission for choices with a fallback
   `<Choice>Arg` argument type.** Previously emitted code referenced
   `arg.ToRecord()` against a stub record with no `ToRecord()` method,
-  breaking consumer compilation in those edge cases.
+  breaking consumer compilation in those edge cases. Fixes #78.
 - **Cross-package choice argument types now resolve to their fully-qualified
-  C# name instead of being silently dropped to `DamlUnit`.** Previously a choice
+  C# name instead of being silently dropped to `DamlUnit`.** Pre-#99 a choice
   whose argument was a `DamlTypeRef` pointing into a neighbouring package
   (e.g. a Splice DAR's choice taking a record imported from another splice
   package) ran through `GetChoiceArgumentInfo`'s "Other external references —
   fallback to DamlUnit as safe default" branch — the wrapper compiled, but
   the encoded payload was an empty unit and the user's record was lost on
-  the wire. The defensive filters added by the non-CID exerciser and the
-  interface choice extension skipped emission entirely for those choices, so
-  callers got a missing wrapper instead of a wrong one — better, but still
-  wrong. `GetChoiceArgumentInfo` is now instance-level and routes
+  the wire. The defensive filters added in #66 (non-CID exerciser) and #67
+  (interface choice extension) skipped emission entirely for those choices,
+  so callers got a missing wrapper instead of a wrong one — better, but
+  still wrong. `GetChoiceArgumentInfo` is now instance-level and routes
   non-Archive `DamlTypeRef` arguments through the same `ResolveTypeRefName`
   pipeline already used for record fields and return types. Wrappers across
   all five emit sites (`WriteSingleChoiceAsyncExerciser`,
@@ -450,7 +501,7 @@ because they are versioned in lockstep:
   `argument.ToRecord()` for cross-package shapes, and the defensive filters
   are gone. Consumers must run codegen on every package referenced by a
   choice argument so the resolved C# name is available at compile time —
-  the standard multi-DAR codegen flow already does this. The
+  the standard multi-DAR codegen flow already does this. Fixes #99. The
   companion behaviour change — `ResolveTypeRefName` now throws on
   unresolvable cross-package refs instead of warning and silently
   emitting unqualified names — is captured under `Changed — BREAKING`
@@ -471,7 +522,7 @@ because they are versioned in lockstep:
   type still names `DamlUnit` in the type-args, so consumers who pattern-
   match against `Daml.Runtime.Stdlib.Unit` for those positions will see a
   compile-time type mismatch at the call site. Very rare in practice;
-  documented in `MapNonContractReturnType`'s doc-comment.
+  documented in `MapNonContractReturnType`'s doc-comment. Fixes #100.
 - **Generated `.cs` files no longer trip CS8019 in consumers with
   `<TreatWarningsAsErrors>`.** `WriteUsings` emits a fixed BCL set
   unconditionally so generated code compiles against consumers with
@@ -479,9 +530,24 @@ because they are versioned in lockstep:
   using, and Roslyn doesn't suppress CS8019 ("unnecessary using directive")
   on `<auto-generated>` sources, so warnings-as-errors builds failed on the
   generator's own output. The file header now declares
-  `#pragma warning disable CS8019` to mute the warning at source.
+  `#pragma warning disable CS8019` to mute the warning at source. Fixes #97.
   Per-file conditional using emission (so the pragma can eventually be
-  dropped) is tracked separately — non-urgent.
+  dropped) is tracked in #102 — non-urgent.
+- **MSBuild `<LangVersion>` bump now self-clears when keys are removed.**
+  Previously the codegen wrote a `.daml-needs-csharp13` sentinel only when a
+  key-bearing template was present, but never deleted it on a regen that
+  produced no key-bearing types — so a project that initially generated keys,
+  then refactored them away, kept inheriting `<LangVersion>13</LangVersion>`
+  forever. The marker is now renamed `.daml-langversion` and is **always**
+  emitted: empty content means no bump, a numeric value (e.g. `13`) means the
+  generated code requires that LangVersion. The MSBuild target reads the
+  content via `<ReadLinesFromFile>` and only bumps `<LangVersion>` when the
+  value is non-empty. Fixes #92. Consumers who track the old
+  `.daml-needs-csharp13` file directly (none expected — it was an internal
+  contract between codegen and `Daml.Codegen.CSharp.MSBuild`) should switch to
+  `.daml-langversion`. The old file can be deleted from generated output dirs
+  on first re-gen with the new codegen; both files are conventionally
+  gitignored.
 
 ## [0.1.4] — 2026-05-01
 
@@ -503,6 +569,7 @@ because they are versioned in lockstep:
   on the interface (`SubmitAsync`, `ExerciseAsync`, etc.) keep their
   existing names. Existing callers of the dropped methods migrate to
   `TryCreateAsync` / `TrySubmitAndWaitForTransactionAsync`.
+  ([#74](https://github.com/peacefulstudio/daml-codegen-csharp/pull/74))
 - **`Daml.Runtime.Streams.ContractStreamEvent<T>`** — transport-agnostic discriminated
   record for typed contract subscription streams. Variants:
   `Created`, `Archived`, `Exercised`, `Assigned`, `Unassigned`, `Checkpoint`,
@@ -533,12 +600,12 @@ because they are versioned in lockstep:
 - **`Daml.Runtime.Stdlib` namespace** with hand-coded stubs for Daml stdlib
   types that are not generated per package. Currently covers
   `DA.Time.Types.RelTime`. Future stdlib types (`Set`, `Map`, `Tuple2`, ...)
-  are tracked separately.
+  are tracked in [#57](https://github.com/peacefulstudio/daml-codegen-csharp/issues/57).
 - **`Daml.Runtime.Stdlib.GenericStub.NotImplemented<T>(string)`** — runtime stub
   used by generated `ToRecord`/`FromRecord` methods on records with
   type-parameter fields. Generated code compiles; calling the stub at runtime
   throws `NotImplementedException` with a pointer to the workaround. Tracked
-  separately for proper static-abstract dispatch.
+  for proper static-abstract dispatch in #57.
 - **Interface-placeholder record emission**. Daml-LF emits a same-named empty
   record for every `interface I where ...` declaration; the codegen now detects
   this case (record name matches an interface name in the same module) and
@@ -556,7 +623,12 @@ because they are versioned in lockstep:
   round-trips correctly.
 - **Variant `FromRecord` stub**. Variants are emitted with a `FromRecord` that
   throws `NotImplementedException` so parent records that hold a variant field
-  still compile. Full variant codec support tracked separately.
+  still compile. Full variant codec support tracked in #57.
+- **`publish-splice.yaml` workflow** (workflow_dispatch only). Downloads a
+  `hyperledger-labs/splice` release tarball, generates and packages each Splice
+  DAR family in dependency order, pushes to GitHub Packages, and uploads
+  per-family logs as artifacts. Inputs are validated against an explicit regex
+  before flowing into `curl` URLs or MSBuild properties.
 
 ### Changed
 
@@ -571,11 +643,13 @@ because they are versioned in lockstep:
   `SubmitterInfo`'s implicit conversion from `string` / `Party`.
   `SubmitterInfo` is sourced from `Daml.Runtime.Commands` — the generated
   files do not import any transport package. See
-  .
+  [#68](https://github.com/peacefulstudio/daml-codegen-csharp/issues/68).
 - **BREAKING:** `ContractId<T>`'s generic constraint relaxed from
   `where T : ITemplate` to `where T : IDamlType`. Source-compatible for all
   template-typed callers (`ITemplate : IDamlType`); enables the new
   interface-marker callers. Same change applied to `DamlContractId.ToTyped<T>`.
+  (#62,
+  [#67](https://github.com/peacefulstudio/daml-codegen-csharp/pull/67))
 - **`ContractId<T>` typeparam doc** clarifies that `T` may be an interface or
   interface placeholder (in addition to a template), and points at the
   throwing-stub pattern.
@@ -613,11 +687,21 @@ because they are versioned in lockstep:
   template. The codegen's interface-placeholder emission (see Added) makes
   these contract ids compile-safe.
 
+### Security
+
+- **Workflow-input validation** in `publish-splice.yaml`: `splice_version`
+  must match `^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$` and
+  `package_version_suffix` (if non-empty) must match
+  `^[A-Za-z0-9.+-]+$` before being interpolated into a release tarball URL or
+  passed as an MSBuild `-p:VersionSuffix=...` property. `workflow_dispatch` is
+  already gated by repo write access; this hardens the residual injection
+  surface.
+
 ## [0.1.2] — 2026-04-24
 
 ### Changed — BREAKING
 
-- **Package renamed**: `Daml.Codegen.CSharp.Runtime` → `Daml.Runtime`.
+- **Package renamed**: `Daml.Codegen.CSharp.Runtime` → `Daml.Runtime` (#43).
   Consumers must update their `PackageReference` and `using` directives.
   Type names are unchanged.
 - **Pre-release version scheme** now uses dot separators
@@ -629,10 +713,10 @@ because they are versioned in lockstep:
 
 ### Added
 
-- **First-class `Party` value type**. Daml `Party` now maps to a
+- **First-class `Party` value type** (#40). Daml `Party` now maps to a
   dedicated `Party` struct instead of `string`, giving type-safety at the
   boundary between generated code and application code.
-- **`FromDamlValue<T>` helper** on `Daml.Runtime` — converts a
+- **`FromDamlValue<T>` helper** on `Daml.Runtime` (#44) — converts a
   `DamlValue` into strongly-typed .NET values (generated records, primitives,
   `Party`, `ContractId<T>`, and `DamlValue` subtypes) in one call, removing
   the need for manual `FromRecord` wiring in application code.
@@ -640,7 +724,7 @@ because they are versioned in lockstep:
 ### Fixed
 
 - **`Party` JSON serialization** is now a plain JSON string (`"Alice::1220…"`),
-  matching the Ledger JSON API and PQS wire format. Previously
+  matching the Ledger JSON API and PQS wire format (#45, #46). Previously
   `Party` was serialized as a JSON object, which broke PQS-based consumers.
 
 ## [0.1.0] — initial alpha (internal, never published to NuGet.org)
@@ -652,12 +736,20 @@ Initial release of the three-package suite:
   contract keys, interfaces, generic types, and package upgrades
 - Runtime library covering all Daml primitives with JSON serialization
 - CLI distributed as a `dotnet tool`
+- MSBuild integration for build-time code generation
 
 Historical pre-release dev builds (`0.1.0-*`, `0.1.1-*`) were published to
 the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.3...HEAD
+[0.1.8-preview.3]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...v0.1.8-preview.3
 [0.1.8-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...v0.1.8-preview.2
 [0.1.8-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.8-preview.1
+[0.1.7]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.2...v0.1.4
+[0.1.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.0-alpha.3...v0.1.2
+[0.1.0]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.0-alpha.3

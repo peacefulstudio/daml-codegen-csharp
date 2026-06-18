@@ -171,7 +171,7 @@ public class IntermediateDarReaderTests
         variant.Constructors[0].Name.Should().Be("Success");
         variant.Constructors[0].ArgumentType.Should().BeOfType<DamlPrimitiveType>()
             .Which.Primitive.Should().Be(DamlPrimitive.Unit,
-                "the proto path preserves wire-level fidelity — the Unit-vs-noarg collapse happens in the emitter, not the reader");
+                "the proto path preserves wire-level fidelity — the Unit-vs-noarg collapse happens in the emitter, not the reader (review #2)");
         variant.Constructors[1].Name.Should().Be("Failure");
         variant.Constructors[1].ArgumentType.Should().NotBeNull();
     }
@@ -203,7 +203,7 @@ public class IntermediateDarReaderTests
 
         var outcomeFile = files.Should().Contain(f => f.RelativePath.EndsWith("Outcome.cs", StringComparison.Ordinal)).Which;
         outcomeFile.Content.Should().Contain("public sealed record Success() :",
-            "unit-typed variant constructors collapse to no-arg records in the emitter, not the reader");
+            "unit-typed variant constructors collapse to no-arg records in the emitter, not the reader (review #2)");
         outcomeFile.Content.Should().NotContain("Success(Unit Value)");
     }
 
