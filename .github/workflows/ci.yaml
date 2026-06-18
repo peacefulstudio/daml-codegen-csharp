@@ -12,10 +12,11 @@ permissions:
 
 jobs:
   csharp-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@v2
+    uses: peacefulstudio/github-actions/.github/workflows/csharp-ci.yaml@v2.3.0
     with:
       dotnet-version: '10.0.x'
       artifact-prefix: csharp
+      matrix-mode: full
       build-matrix: >-
         [{"name":"ubuntu-amd64","runner":"ubuntu-latest","coverage":true},
          {"name":"ubuntu-arm64","runner":"ubuntu-24.04-arm","coverage":false},
@@ -65,7 +66,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
     permissions:
       contents: write
-    uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@v2
+    uses: peacefulstudio/github-actions/.github/workflows/update-badges.yaml@v2.3.0
     with:
       coverage-data: >-
         [{"slug":"csharp","label":"coverage (C#)","percent":"${{ needs.csharp-ci.outputs.coverage }}"},
@@ -73,10 +74,11 @@ jobs:
       matrix-data: ${{ needs.assemble-badge-data.outputs.matrix-data }}
 
   jvm-helper-ci:
-    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@v2
+    uses: peacefulstudio/github-actions/.github/workflows/scala-ci.yaml@v2.3.0
     with:
       working-directory: jvm-helper
       artifact-prefix: scala
+      matrix-mode: full
       # No windows-arm64 shard: Maven Central publishes no windows-aarch_64 protoc
       # binary at any version, so sbt-protoc cannot resolve a compiler there.
       build-matrix: >-
