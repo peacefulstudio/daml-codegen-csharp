@@ -68,11 +68,6 @@ package. (The `Daml.Codegen.CSharp` emitter library is separately published
 as a NuGet library for programmatic use.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
-**Dpm mode**:
-The `Daml.Codegen.CSharp.MSBuild` adapter that runs codegen via `dpm codegen-cs` (the OCI
-bundle: JVM helper + emitter). Needs `dpm` + a JDK at build time. The default `DamlCodegenMode`.
-_Avoid_: "dpm plugin", "online mode"
-
 **`PackageEmitContext`**:
 The immutable per-package value the C# emitter threads through its emit methods: the root
 namespace, the `TypeReferenceQualifier`, the per-package data-type lookup, and the local
@@ -127,11 +122,6 @@ choice-argument metadata. The created-slot extraction (return type → list of `
 slots) is pulled out as the pure `ChoiceCreatedSlots.Extract` helper and unit-tested directly.
 Distinct from `SubmissionExtensionsEmitter`: creating a contract is not exercising a choice.
 _Avoid_: "choice helper", "the exercise writer", "the async wrapper generator", "choice-arg owner"
-
-**`DamlCodegenMode`**:
-The MSBuild seam (a property) that selects which `$(DamlCodegenTool)` adapter runs — `Dpm` or
-`Standalone`.
-_Avoid_: "codegen backend", "toolchain flag"
 
 ## Example dialogue
 
