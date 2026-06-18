@@ -24,6 +24,55 @@ jobs:
          {"name":"macos-arm64","runner":"macos-latest","coverage":false},
          {"name":"macos-amd64","runner":"macos-15-intel","coverage":false}]
 
+  integration-tests:
+    name: integration-tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: ubuntu-amd64, runner: ubuntu-latest}
+          - {name: ubuntu-arm64, runner: ubuntu-24.04-arm}
+          - {name: windows-amd64, runner: windows-latest}
+          - {name: windows-arm64, runner: windows-11-arm}
+          - {name: macos-arm64, runner: macos-latest}
+          - {name: macos-amd64, runner: macos-15-intel}
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: |
+          set -euo pipefail
+          dotnet restore
+
+      - name: Pack runtime libraries into local feed
+        run: |
+          set -euo pipefail
+          dotnet pack src/Daml.Runtime/Daml.Runtime.csproj \
+            --configuration Release --output output/nuget
+          dotnet pack src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj \
+            --configuration Release --output output/nuget
+
+      - name: Run integration tests
+        run: |
+          set -euo pipefail
+          dotnet test \
+            --project tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj \
+            --configuration Release \
+            -- --filter-class 'Daml.Codegen.CSharp.Tests.NuGetPackIntegrationTests'
+
   badges:
     needs: [csharp-ci, jvm-helper-ci, assemble-badge-data]
     if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
