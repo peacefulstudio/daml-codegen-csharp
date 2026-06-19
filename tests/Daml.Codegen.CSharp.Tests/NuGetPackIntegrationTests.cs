@@ -67,7 +67,14 @@ public class NuGetPackIntegrationTests
                 {
                     Directory.CreateDirectory(dir);
                 }
-                await File.WriteAllTextAsync(fullPath, file.Content, TestContext.Current.CancellationToken);
+                if (file.BinaryContent is not null)
+                {
+                    await File.WriteAllBytesAsync(fullPath, file.BinaryContent, TestContext.Current.CancellationToken);
+                }
+                else
+                {
+                    await File.WriteAllTextAsync(fullPath, file.Content, TestContext.Current.CancellationToken);
+                }
             }
 
             var csprojFiles = Directory.GetFiles(workspace, "*.csproj", SearchOption.TopDirectoryOnly);

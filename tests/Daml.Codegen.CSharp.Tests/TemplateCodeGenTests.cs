@@ -42,6 +42,93 @@ public class TemplateCodeGenTests
         };
     }
 
+    [Fact]
+    public void Generate_should_emit_a_README_when_project_file_generation_is_enabled()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "SimpleTemplate",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = []
+                }
+            ],
+            DataTypes = [],
+            Interfaces = []
+        };
+        var generator = CreateGenerator(new CodeGenOptions
+        {
+            GenerateProjectFile = true
+        });
+
+        var files = generator.Generate(CreateTestDar(module));
+
+        files.Should().ContainSingle(f => f.RelativePath == "README.md",
+            "the csproj declares <PackageReadmeFile>README.md</PackageReadmeFile>, so dropping the README would fail dotnet pack with NU5039");
+    }
+
+    [Fact]
+    public void Generate_should_emit_an_icon_when_project_file_generation_is_enabled()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "SimpleTemplate",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = []
+                }
+            ],
+            DataTypes = [],
+            Interfaces = []
+        };
+        var generator = CreateGenerator(new CodeGenOptions
+        {
+            GenerateProjectFile = true
+        });
+
+        var files = generator.Generate(CreateTestDar(module));
+
+        files.Should().ContainSingle(f => f.RelativePath == "icon.png",
+            "the csproj declares <PackageIcon>icon.png</PackageIcon>, so dropping the icon would fail dotnet pack with NU5046")
+            .Which.BinaryContent.Should().NotBeNullOrEmpty("the packed icon must carry its PNG bytes");
+    }
+
+    [Fact]
+    public void Generate_should_not_emit_an_icon_when_project_file_generation_is_disabled()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "SimpleTemplate",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = []
+                }
+            ],
+            DataTypes = [],
+            Interfaces = []
+        };
+        var generator = CreateGenerator(new CodeGenOptions
+        {
+            GenerateProjectFile = false
+        });
+
+        var files = generator.Generate(CreateTestDar(module));
+
+        files.Should().NotContain(f => f.RelativePath == "icon.png");
+    }
+
     #region Template Basic Structure Tests
 
     [Fact]

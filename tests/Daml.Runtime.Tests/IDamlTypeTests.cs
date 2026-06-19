@@ -57,7 +57,7 @@ public class IDamlTypeTests
     public void IDamlType_constrained_helper_compiles_for_concrete_template()
     {
         // Demonstrates that a generic helper widened to `where T : IDamlType` is callable
-        // with a concrete ITemplate. This is the migration story for interface markers.
+        // with a concrete ITemplate. This is the migration story for the interface markers.
         var id = IdentityOf<SampleTemplate>();
 
         id.Should().Be<SampleTemplate>();

@@ -75,12 +75,12 @@ public class ExerciseOutcomeTests
         var metadata = new Dictionary<string, string> { ["category"] = "InvalidGivenCurrentSystemStateOther" };
         var outcome = new ExerciseOutcome<ContractId<FooBar>>.DamlError(
             DamlErrorCategory.InvalidGivenCurrentSystemStateOther,
-            "SAMPLE_SWAP_ALREADY_EXECUTED",
+            "ACME_SWAP_ALREADY_EXECUTED",
             "swap already executed",
             metadata);
 
         outcome.Category.Should().Be(DamlErrorCategory.InvalidGivenCurrentSystemStateOther);
-        outcome.ErrorId.Should().Be("SAMPLE_SWAP_ALREADY_EXECUTED");
+        outcome.ErrorId.Should().Be("ACME_SWAP_ALREADY_EXECUTED");
         outcome.Message.Should().Be("swap already executed");
         outcome.Metadata.Should().Equal(metadata);
     }
@@ -163,7 +163,7 @@ public class ExerciseOutcomeTests
 
     private sealed record FooBar(string Owner) : ITemplate
     {
-        public static RuntimeIdentifier TemplateId { get; } = new("test-pkg", "Sample.Foo", "FooBar");
+        public static RuntimeIdentifier TemplateId { get; } = new("test-pkg", "Acme.Foo", "FooBar");
         public static string PackageId => "test-pkg";
         public static string PackageName => "test-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
