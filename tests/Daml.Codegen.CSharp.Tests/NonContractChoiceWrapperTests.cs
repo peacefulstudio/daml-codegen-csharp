@@ -3,13 +3,14 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Codegen-shape tests for the non-CID choice wrappers.
+/// Codegen-shape tests for the non-CID choice wrappers introduced by issue #63.
 /// Each fact arranges a single template with one choice of a particular return-
 /// type shape (Decimal, record, list, Unit), runs the generator, and asserts on
 /// the emitted source. The assertions are deliberately narrow — they pin the
@@ -42,7 +43,7 @@ public class NonContractChoiceWrapperTests
         DependencyReferences = [],
     };
 
-    private static DarModel CreateDar(DamlModule module) =>
+    private static DarArchive CreateDar(DamlModule module) =>
         new()
         {
             MainPackage = new DamlPackage
@@ -433,8 +434,8 @@ public class NonContractChoiceWrapperTests
     [Fact]
     public void Generate_should_not_emit_async_wrapper_for_bare_contract_id_returning_choice()
     {
-        // A bare `ContractId T` return goes through the existing slot-based projector;
-        // no entry should appear in the non-contract extensions class.
+        // A bare `ContractId T` return goes through the existing slot-based projector
+        // (issue #60); no entry should appear in the non-contract extensions class.
         var module = new DamlModule
         {
             Name = "Test.Factory",
@@ -480,15 +481,15 @@ public class NonContractChoiceWrapperTests
         var factory = files.First(f => f.RelativePath.EndsWith("Factory.cs", StringComparison.Ordinal));
 
         // The non-CID extensions class isn't emitted because the only choice
-        // (Mint) returns a bare ContractId T and is routed through the
+        // (Mint) returns a bare ContractId T and is routed through #77's
         // FactoryExtensions / FromCreatedContracts path instead.
         factory.Content.Should().NotContain("FactoryNonContractExtensions");
-        // Mint still gets a <Choice>Async method in the
+        // Mint still gets a <Choice>Async method via #77's emission, in the
         // FactoryExtensions class. That path projects via FromCreatedContracts,
         // not the ExercisedEvents projector — so verify by structural hint.
         factory.Content.Should().Contain("public static class FactoryExtensions");
         factory.Content.Should().Contain("MintResult.FromCreatedContracts");
-        // The non-CID projector helper must not appear.
+        // The non-CID projector helper specific to #63 must not appear.
         factory.Content.Should().NotContain("ProjectMintResult");
     }
 
@@ -496,7 +497,7 @@ public class NonContractChoiceWrapperTests
     public void Generate_should_not_emit_async_wrapper_for_optional_contract_id_return()
     {
         // Regression: returns containing a CID slot via Optional/List/Tuple
-        // (here: `Optional (ContractId Coin)`) must flow only through the
+        // (here: `Optional (ContractId Coin)`) must flow only through #60's
         // slot-based projector emitted into <Tpl>Extensions. The previous
         // filter (`!IsBareContractIdReturn`) emitted them into both
         // <Tpl>Extensions AND <Tpl>NonContractExtensions, producing an
@@ -650,7 +651,7 @@ public class NonContractChoiceWrapperTests
             Interfaces = [],
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = new DamlPackage
             {
@@ -734,7 +735,7 @@ public class NonContractChoiceWrapperTests
             Interfaces = [],
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = new DamlPackage
             {
@@ -815,7 +816,7 @@ public class NonContractChoiceWrapperTests
             ],
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = new DamlPackage
             {
@@ -910,7 +911,7 @@ public class NonContractChoiceWrapperTests
             DependencyReferences = [],
         };
 
-        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
         var files = CreateGenerator().Generate(dar);
         var trader = files.First(f => f.RelativePath.EndsWith("Trader.cs", StringComparison.Ordinal));
 
@@ -981,7 +982,7 @@ public class NonContractChoiceWrapperTests
             DependencyReferences = [],
         };
 
-        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
         var files = CreateGenerator().Generate(dar);
         var iface = files.First(f => f.RelativePath.EndsWith("ITransferable.cs", StringComparison.Ordinal));
 
@@ -1104,7 +1105,7 @@ public class NonContractChoiceWrapperTests
             DependencyReferences = [],
         };
 
-        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [foreignPackage] };
+        var dar = new DarArchive { MainPackage = mainPackage, Dependencies = [foreignPackage] };
         var files = CreateGenerator().Generate(dar);
         var trader = files.First(f => f.RelativePath.EndsWith("Trader.cs", StringComparison.Ordinal));
 
@@ -1250,12 +1251,12 @@ public class NonContractChoiceWrapperTests
     [Fact]
     public void Generate_csproj_should_not_reference_Canton_Ledger_Grpc_Client()
     {
-        // The codegen-emitted wrappers reference `ILedgerClient`,
-        // `TransactionResult`, and `ExerciseOutcome<>` from the
-        // transport-agnostic `Daml.Ledger.Abstractions` package, not from a
-        // transport-specific gRPC client. The csproj generator must not pull
+        // After the lift (#73/#74) the codegen-emitted wrappers reference
+        // `ILedgerClient`, `TransactionResult`, and `ExerciseOutcome<>` from
+        // the transport-agnostic `Daml.Ledger.Abstractions` package, not from
+        // `Canton.Ledger.Grpc.Client`. The csproj generator must not pull
         // pure-projector consumers into a gRPC dep just to compile the
-        // non-CID exerciser wrappers.
+        // non-CID exerciser wrappers from #63.
         var options = new CodeGenOptions
         {
             TargetFramework = "net10.0",
@@ -1274,7 +1275,7 @@ public class NonContractChoiceWrapperTests
 
         var file = generator.GenerateProjectFile(package);
 
-        file.Content.Should().NotContain("Canton.Ledger.");
+        file.Content.Should().NotContain("Canton.Ledger.Grpc.Client");
         file.Content.Should().Contain("<PackageReference Include=\"Daml.Ledger.Abstractions\"");
     }
 }

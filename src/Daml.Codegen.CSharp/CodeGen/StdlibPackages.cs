@@ -38,6 +38,7 @@ internal static class StdlibPackages
     /// </summary>
     public static string? MapStdlibType(string module, string typeName) => (module, typeName) switch
     {
+        ("DA.Date.Types", "DayOfWeek") => "DayOfWeek",
         ("DA.Time.Types", "RelTime") => "RelTime",
         ("DA.Types", "Tuple2") => "Tuple2",
         ("DA.Types", "Tuple3") => "Tuple3",

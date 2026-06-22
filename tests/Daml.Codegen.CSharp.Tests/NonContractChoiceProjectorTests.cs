@@ -4,6 +4,7 @@
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
 using FluentAssertions;
@@ -17,7 +18,7 @@ using Identifier = Daml.Runtime.Data.Identifier;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Behavior tests for the non-CID choice projector. Generates
+/// Behavior tests for the non-CID choice projector emitted by PR #66. Generates
 /// the wrapper for a small Int-returning choice, compiles it through Roslyn into
 /// an in-memory assembly, then reflectively invokes the emitted
 /// <c>Project&lt;Choice&gt;Result</c> helper against hand-built
@@ -93,7 +94,7 @@ public class NonContractChoiceProjectorTests
             UsePrimaryConstructors = true,
         };
         var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
-        var files = generator.Generate(new DarModel { MainPackage = package, Dependencies = [] });
+        var files = generator.Generate(new DarArchive { MainPackage = package, Dependencies = [] });
 
         return EmitAssembly(files);
     }

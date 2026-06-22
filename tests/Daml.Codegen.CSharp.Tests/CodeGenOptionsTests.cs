@@ -3,6 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -91,7 +92,7 @@ public class CodeGenOptionsTests
         };
     }
 
-    private static DarModel CreateTestDar(DamlModule mainModule, List<DamlPackage>? dependencies = null)
+    private static DarArchive CreateTestDar(DamlModule mainModule, List<DamlPackage>? dependencies = null)
     {
         var mainPackage = new DamlPackage
         {
@@ -103,7 +104,7 @@ public class CodeGenOptionsTests
             DependencyReferences = []
         };
 
-        return new DarModel
+        return new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = dependencies ?? []

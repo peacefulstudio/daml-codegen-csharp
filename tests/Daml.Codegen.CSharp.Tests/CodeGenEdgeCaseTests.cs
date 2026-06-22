@@ -3,6 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -27,7 +28,7 @@ public class CodeGenEdgeCaseTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarModel CreateTestDar(DamlModule module)
+    private static DarArchive CreateTestDar(DamlModule module)
     {
         var package = new DamlPackage
         {
@@ -39,7 +40,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-        return new DarModel
+        return new DarArchive
         {
             MainPackage = package,
             Dependencies = []
@@ -57,7 +58,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-    private static DarModel CreateMultiPackageDar(DamlPackage main, params DamlPackage[] dependencies) =>
+    private static DarArchive CreateMultiPackageDar(DamlPackage main, params DamlPackage[] dependencies) =>
         new()
         {
             MainPackage = main,
@@ -807,7 +808,7 @@ public class CodeGenEdgeCaseTests
             DependencyReferences = []
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = package,
             Dependencies = []
@@ -1027,7 +1028,7 @@ public class CodeGenEdgeCaseTests
             Modules = [modA, modB],
             DependencyReferences = []
         };
-        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var dar = new DarArchive { MainPackage = package, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -1132,7 +1133,7 @@ public class CodeGenEdgeCaseTests
         code.Should().Contain("public static class IHoldingExtensions");
 
         // Record-argument choice: async signature returning ExerciseOutcome<TransactionResult>
-        // (mirrors the concrete-template <Choice>Async shape). Interface choices
+        // (mirrors the concrete-template <Choice>Async shape from #77). Interface choices
         // surface the raw ExerciseOutcome<TransactionResult> because the implementing
         // template — and therefore any typed <Choice>Result projection — is unknown at
         // the call site.
@@ -1320,8 +1321,8 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         csproj.Should().NotBeNull();
-        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0\" />");
-        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0\" />");
+        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0.0\" />");
+        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0.0\" />");
     }
 
     [Fact]
@@ -1976,7 +1977,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", recordModule, enumModule, holderModule);
-        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2040,7 +2041,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", recordModule, enumModule, holderModule);
-        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2087,7 +2088,7 @@ public class CodeGenEdgeCaseTests
             Interfaces = []
         };
         var pkg = CreateTestPackage("test-package-id", "test-package", enumModule, holderModule);
-        var dar = new DarModel { MainPackage = pkg, Dependencies = [] };
+        var dar = new DarArchive { MainPackage = pkg, Dependencies = [] };
         var generator = CreateGenerator();
 
         // Act
@@ -2193,6 +2194,7 @@ public class CodeGenEdgeCaseTests
         // Assert — no throwing path survives.
         shape.Should().NotBeNull();
         shape!.Content.Should().NotContain("NotImplementedException");
+        shape.Content.Should().NotContain("issues/57");
 
         // The record-payload case carries the record under the variant tag.
         shape.Content.Should().Contain("public sealed record Rect(Rectangle Value) : Shape");
@@ -2251,7 +2253,7 @@ public class CodeGenEdgeCaseTests
 
     #endregion
 
-    #region TextMap-of-List and GenMap-of-List ReadOnly Emission
+    #region TextMap-of-List and GenMap-of-List ReadOnly Emission (#110)
 
     [Fact]
     public void Generate_should_emit_IReadOnlyList_cast_in_FromRecord_for_TextMap_of_List_field()

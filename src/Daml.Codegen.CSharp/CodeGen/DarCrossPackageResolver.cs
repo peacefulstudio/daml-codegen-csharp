@@ -64,7 +64,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
             {
                 return context.Qualifier.Qualify(mapped, context.RootNamespace);
             }
-            _logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile");
+            _logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile (see issue #57)");
             return sanitized;
         }
 
@@ -88,7 +88,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
     /// refs that point at a type nested inside a foreign template. Module-qualified so a
     /// simple name reused across modules cannot collide. When two templates in the
     /// package map the same module-qualified choice-argument type, warns and keeps the
-    /// first-seen mapping.
+    /// first-seen mapping. See issues #111 and #368.
     /// </summary>
     private IReadOnlyDictionary<string, string> BuildForeignChoiceArgToTemplate(DamlPackage pkg)
     {
@@ -111,7 +111,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
                             && existingTemplate != template.Name)
                         {
                             _logger.Warning(
-                                $"Choice-argument type {key} in package {pkg.Name} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
+                                $"Choice-argument type {key} in package {pkg.Name} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate (see issue #368).");
                             continue;
                         }
                         result[key] = template.Name;

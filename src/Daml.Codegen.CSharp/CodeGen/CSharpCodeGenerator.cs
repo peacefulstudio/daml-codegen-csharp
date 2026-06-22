@@ -614,6 +614,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         if (argDataType.Definition is DamlRecordDefinition record)
         {
             var choiceTypeName = SanitizeIdentifier(choice.Name);
+            indent.CurrentTypeName = choiceTypeName;
 
             if (options.GenerateXmlDocs)
             {
@@ -768,33 +769,28 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         var csharpKeyType = mapper.MapType(keyType);
         var crefKeyType = ToCrefTypeArgument(csharpKeyType);
 
-        // Full DALF key-expression analysis (mapping the template's `key` Daml
-        // expression back to template fields, including tuple/record builders) is
-        // not yet implemented. Until that lands, two
-        // options exist for the codegen-emitted Key accessor:
-        //   (1) emit a body that throws NotImplementedException — silent at compile,
-        //       loud at runtime;
-        //   (2) emit a partial property declaration that REQUIRES the consumer to
-        //       supply an implementing partial — loud at compile (CS9248
-        //       "Partial property must have an implementation part") and impossible
-        //       to ship to production unnoticed.
-        // We pick (2). Trade-off: consumers must use C# 13+ (partial-property
-        // syntax) and add a hand-rolled partial declaration alongside the generated
-        // template, satisfying the IHasKey<TKey> contract.
+        // Translating the template's `key` Daml expression to a C# projection is
+        // tracked in peacefulstudio/daml-codegen-csharp#64; the intermediate model
+        // carries only the key type, not the expression. Until #64 (or an upstream
+        // Daml-LF projection) lands, the accessor throws. ADR 0013 records why this
+        // reverts the partial-property contract from #65 (the CS9248 compile gate
+        // blocked the automated DAR publish pipeline, which has no human to supply
+        // an implementing partial).
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Gets the contract key of type <c>{crefKeyType}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{{TKey}}\"/>.");
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <remarks>");
-            indent.AppendLine("/// The body is supplied by a hand-rolled <c>partial</c> declaration in the");
-            indent.AppendLine("/// consuming project until the full DALF key-expression analysis lands.");
-            indent.AppendLine("/// Failure to supply the implementing partial is a compile-time error");
-            indent.AppendLine("/// (Roslyn <c>CS9248</c>) — that is intentional and indicates the consuming");
-            indent.AppendLine("/// project must opt in. Requires C# 13 or later on the consumer side.");
+            indent.AppendLine("/// Throws <see cref=\"global::System.NotImplementedException\"/>: the codegen does not");
+            indent.AppendLine("/// yet translate the template's <c>key</c> expression into a C# projection");
+            indent.AppendLine("/// (see <see href=\"https://github.com/peacefulstudio/daml-codegen-csharp/issues/64\">daml-codegen-csharp#64</see>).");
+            indent.AppendLine("/// The key type is fully generated and serializable — construct a key value");
+            indent.AppendLine("/// explicitly for key-based ledger operations rather than reading it here.");
             indent.AppendLine("/// </remarks>");
         }
-        indent.AppendLine($"public partial {csharpKeyType} Key {{ get; }}");
+        indent.AppendLine($"public {csharpKeyType} Key => throw new global::System.NotImplementedException(");
+        indent.AppendLine($"    \"Contract-key projection is not generated yet (daml-codegen-csharp#64); construct the {csharpKeyType} key value explicitly for key-based ledger operations.\");");
         indent.AppendLine();
     }
 
@@ -810,7 +806,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             first = false;
 
             var csharpType = mapper.MapType(field.Type);
-            var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
             StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
             indent.Append($"{csharpType} {fieldName}");
         }
@@ -821,7 +817,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         foreach (var field in fields)
         {
             var csharpType = mapper.MapType(field.Type);
-            var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
             StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
 
             if (options.GenerateXmlDocs)
@@ -855,7 +851,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         for (int i = 0; i < fields.Count; i++)
         {
             var field = fields[i];
-            var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
             var conversion = mapper.ToValue(field.Type, fieldName);
             var comma = i < fields.Count - 1 ? "," : "";
             StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
@@ -892,7 +888,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             for (int i = 0; i < fields.Count; i++)
             {
                 var field = fields[i];
-                var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+                var fieldName = MemberName(field.Name, indent.CurrentTypeName);
                 var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")");
                 var comma = i < fields.Count - 1 ? "," : "";
 
@@ -914,7 +910,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
             foreach (var field in fields)
             {
-                var fieldName = ToPascalCase(SanitizeIdentifier(field.Name));
+                var fieldName = MemberName(field.Name, indent.CurrentTypeName);
                 var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")");
                 indent.AppendLine($"{fieldName} = {conversion},");
             }
@@ -971,6 +967,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         }
 
         var className = SanitizeIdentifier(dataType.Name);
+        indent.CurrentTypeName = className;
         var typeParams = GetTypeParametersDeclaration(dataType.TypeParams);
         var fullClassName = $"{className}{typeParams}";
 
@@ -1119,7 +1116,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         indent.Indent();
         foreach (var ctor in variant.Constructors)
         {
-            var ctorName = SanitizeIdentifier(ctor.Name);
+            var ctorName = VariantConstructorName(ctor.Name, className);
             if (HasVariantPayload(ctor))
             {
                 indent.AppendLine($"\"{ctor.Name}\" => new {ctorName}({mapper.FromValue(ctor.ArgumentType!, "variant.Value")}),");
@@ -1138,7 +1135,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         // Generate derived types for each constructor
         foreach (var ctor in variant.Constructors)
         {
-            var ctorName = SanitizeIdentifier(ctor.Name);
+            var ctorName = VariantConstructorName(ctor.Name, className);
             var hasArg = HasVariantPayload(ctor);
             var argType = hasArg ? mapper.MapType(ctor.ArgumentType!) : null;
 
@@ -1283,4 +1280,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         name.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(name[0])) ? "an" : "a";
 
     private static string ToPascalCase(string name) => Identifiers.ToPascalCase(name);
+
+    private static string MemberName(string damlFieldName, string enclosingTypeName) =>
+        Identifiers.MemberName(damlFieldName, enclosingTypeName);
+
+    private static string VariantConstructorName(string ctorName, string enclosingTypeName) =>
+        Identifiers.Disambiguate(SanitizeIdentifier(ctorName), enclosingTypeName);
 }

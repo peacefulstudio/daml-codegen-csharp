@@ -10,8 +10,8 @@ using Xunit;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// CLI integration tests for the <c>--release-counters &lt;path&gt;</c> wire-up.
-/// The Splice publish workflow points the CLI at a JSON store
+/// CLI integration tests for the <c>--release-counters &lt;path&gt;</c> wire-up
+/// from issue #137. The Splice publish workflow points the CLI at a JSON store
 /// of <see cref="Daml.Codegen.CSharp.Versioning.JsonReleaseCounterStore"/> entries
 /// and the CLI computes the 4th NuGet version segment from the store rather than
 /// from the static <c>--emitter-counter</c> override.

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -488,7 +489,7 @@ public class DamlModelTests
 
     #endregion
 
-    #region DarModel Tests
+    #region DarArchive Tests
 
     [Fact]
     public void IDarSource_does_not_force_implementations_to_carry_dependency_reference_resolution()
@@ -533,7 +534,7 @@ public class DamlModelTests
         };
 
         // Act
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = [dep1, dep2]
@@ -562,7 +563,7 @@ public class DamlModelTests
         };
 
         // Act
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = []

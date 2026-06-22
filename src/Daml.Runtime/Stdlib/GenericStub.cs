@@ -16,7 +16,8 @@ namespace Daml.Runtime.Stdlib;
 /// <para>
 /// Call sites: see the <c>DamlTypeVar</c> arms of <c>GetToValueConversion</c> and
 /// <c>GetFromValueConversion</c> in <c>CSharpCodeGenerator</c>. Proper
-/// static-abstract dispatch for generic records is not yet implemented.
+/// static-abstract dispatch for generic records is tracked in
+/// <see href="https://github.com/peacefulstudio/daml-codegen-csharp/issues/57">#57</see>.
 /// </para>
 /// </summary>
 public static class GenericStub
@@ -36,5 +37,6 @@ public static class GenericStub
     public static T NotImplemented<T>(string context) =>
         throw new NotImplementedException(
             $"Generic type-parameter serialization for '{context}' is not yet supported by daml-codegen-csharp. "
-            + "Workaround: instantiate the type with concrete arguments and write the conversion by hand.");
+            + "Workaround: instantiate the type with concrete arguments and write the conversion by hand. "
+            + "Tracking issue: https://github.com/peacefulstudio/daml-codegen-csharp/issues/57");
 }

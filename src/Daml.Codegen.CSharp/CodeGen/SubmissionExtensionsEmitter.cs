@@ -8,7 +8,7 @@ using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
-/// Codegen for the typed-submitter surface. Each template gets a
+/// Codegen for the typed-submitter surface — issue #68. Each template gets a
 /// <c>&lt;TemplateName&gt;SubmissionExtensions</c> static class with:
 ///
 /// <list type="bullet">

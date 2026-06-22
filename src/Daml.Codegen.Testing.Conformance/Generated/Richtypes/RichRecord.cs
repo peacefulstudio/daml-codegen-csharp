@@ -239,6 +239,7 @@ public static class RichRecordExtensions
 /// the static analyzer could not resolve). When the template's
 /// <c>observer</c> clause is statically resolvable, an
 /// <c>Observers(payload)</c> documentation helper is also emitted.
+/// Closes peacefulstudio/daml-codegen-csharp#68.
 /// </summary>
 public static class RichRecordSubmissionExtensions
 {

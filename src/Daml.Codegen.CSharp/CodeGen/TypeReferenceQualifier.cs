@@ -17,6 +17,13 @@ public sealed class TypeReferenceQualifier
 {
     private const string GlobalPrefix = "global::";
 
+    // ImplicitUsings imports System into every generated file, so a stdlib type
+    // sharing a BCL simple name (DayOfWeek vs System.DayOfWeek) is an ambiguous
+    // reference (CS0104) regardless of generated-namespace shadowing. These names
+    // are always emitted global::-qualified.
+    private static readonly IReadOnlySet<string> NamesCollidingWithImplicitBclImports =
+        new HashSet<string>(StringComparer.Ordinal) { RuntimeTypeNames.DayOfWeek };
+
     private static readonly IReadOnlyDictionary<string, string> ImportedSimpleNames =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -63,6 +70,7 @@ public sealed class TypeReferenceQualifier
             [RuntimeTypeNames.CreatedEvent] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ExerciseOutcome] = RuntimeNamespaces.Outcomes,
             [RuntimeTypeNames.RelTime] = RuntimeNamespaces.Stdlib,
+            [RuntimeTypeNames.DayOfWeek] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.Tuple2] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.Tuple3] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.Either] = RuntimeNamespaces.Stdlib,
@@ -108,8 +116,13 @@ public sealed class TypeReferenceQualifier
     {
         if (simpleName.StartsWith(GlobalPrefix, StringComparison.Ordinal)
             || simpleName.Contains('.')
-            || !ImportedSimpleNames.TryGetValue(simpleName, out var owningNamespace)
-            || !IsShadowed(simpleName, currentNamespace))
+            || !ImportedSimpleNames.TryGetValue(simpleName, out var owningNamespace))
+        {
+            return simpleName;
+        }
+
+        if (!NamesCollidingWithImplicitBclImports.Contains(simpleName)
+            && !IsShadowed(simpleName, currentNamespace))
         {
             return simpleName;
         }

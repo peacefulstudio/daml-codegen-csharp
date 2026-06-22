@@ -3,6 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -76,7 +77,7 @@ public class DependencyTests
 
     #endregion
 
-    #region DarModel GetPackageById Tests
+    #region DarArchive GetPackageById Tests
 
     [Fact]
     public void DarArchive_GetPackageById_should_find_main_package()
@@ -92,7 +93,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = []
@@ -129,7 +130,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = [depPackage]
@@ -156,7 +157,7 @@ public class DependencyTests
             DependencyReferences = []
         };
 
-        var dar = new DarModel
+        var dar = new DarArchive
         {
             MainPackage = mainPackage,
             Dependencies = []

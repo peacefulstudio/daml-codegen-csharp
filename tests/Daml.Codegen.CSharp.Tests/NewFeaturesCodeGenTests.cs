@@ -3,6 +3,7 @@
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.DarParser;
 using FluentAssertions;
 using Xunit;
 
@@ -27,7 +28,7 @@ public class NewFeaturesCodeGenTests
         return new CSharpCodeGenerator(options, logger);
     }
 
-    private static DarModel CreateTestDar(
+    private static DarArchive CreateTestDar(
         DamlModule module,
         string packageName = "test-package",
         string? upgradedPackageId = null)
@@ -43,7 +44,7 @@ public class NewFeaturesCodeGenTests
             UpgradedPackageId = upgradedPackageId
         };
 
-        return new DarModel
+        return new DarArchive
         {
             MainPackage = package,
             Dependencies = []
@@ -100,18 +101,13 @@ public class NewFeaturesCodeGenTests
         var code = assetFile!.Content;
 
         code.Should().Contain("IHasKey<string>");
-        // Codegen emits the Key property as a body-less `partial` declaration so
-        // consuming projects fill in the body until DALF key-expression analysis
-        // lands. The literal `{ get; }` shape (no setter,
-        // no body) is load-bearing — consumers' hand-rolled implementing partial
-        // mates against this exact signature. See WriteKeyProperty in
-        // CSharpCodeGenerator.
-        code.Should().Contain("public partial string Key { get; }");
-        // The whole point of the PR: no throwing body. A regression that emits
-        // both a partial and a throwing fallback (or removes `partial` and
-        // restores the old throw) must fail this assertion.
-        code.Should().NotContain("NotImplementedException");
-        code.Should().NotContain("throw new ");
+        // ADR 0013: the Key accessor is a non-partial throwing stub until the DALF
+        // key-expression analysis lands (daml-codegen-csharp#64). The template still
+        // declares `: IHasKey<string>`, but the body throws rather than deferring to a
+        // consumer-supplied partial (which broke the automated publish pipeline).
+        code.Should().Contain("public string Key =>");
+        code.Should().Contain("NotImplementedException");
+        code.Should().NotContain("public partial string Key { get; }");
     }
 
     [Fact]
@@ -163,8 +159,9 @@ public class NewFeaturesCodeGenTests
 
         // Party maps to Party, so key should be Party
         code.Should().Contain("IHasKey<Party>");
-        code.Should().Contain("public partial Party Key { get; }");
-        code.Should().NotContain("NotImplementedException");
+        code.Should().Contain("public Party Key =>");
+        code.Should().Contain("NotImplementedException");
+        code.Should().NotContain("public partial Party Key { get; }");
     }
 
     [Fact]
@@ -224,8 +221,9 @@ public class NewFeaturesCodeGenTests
         var code = templateFile!.Content;
 
         code.Should().Contain("IHasKey<AssetKey>");
-        code.Should().Contain("public partial AssetKey Key { get; }");
-        code.Should().NotContain("NotImplementedException");
+        code.Should().Contain("public AssetKey Key =>");
+        code.Should().Contain("NotImplementedException");
+        code.Should().NotContain("public partial AssetKey Key { get; }");
     }
 
     [Fact]
@@ -275,7 +273,7 @@ public class NewFeaturesCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        code.Should().Contain("public partial IReadOnlyList<string> Key { get; }",
+        code.Should().Contain("public IReadOnlyList<string> Key =>",
             "the property signature uses real C# generic syntax");
         code.Should().Contain(
             "of type <c>IReadOnlyList{string}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
@@ -396,6 +394,8 @@ public class NewFeaturesCodeGenTests
         code.Should().Contain(
             "/// Gets the contract key of type <c>string</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
             "the cref targets the open generic by its declared type-parameter name TKey while the concrete key type appears in prose, because a keyword/constructed type inside cref braces is CS1584/CS1658");
+        code.Should().Contain("daml-codegen-csharp#64",
+            "the deferred-work pointer is the only in-source signal explaining the body-less property");
     }
 
     #endregion
