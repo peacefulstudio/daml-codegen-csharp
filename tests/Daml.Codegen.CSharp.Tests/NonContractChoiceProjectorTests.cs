@@ -17,7 +17,7 @@ using Identifier = Daml.Runtime.Data.Identifier;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Behavior tests for the non-CID choice projector. Generates
+/// Behavior tests for the non-CID choice projector emitted by PR #66. Generates
 /// the wrapper for a small Int-returning choice, compiles it through Roslyn into
 /// an in-memory assembly, then reflectively invokes the emitted
 /// <c>Project&lt;Choice&gt;Result</c> helper against hand-built

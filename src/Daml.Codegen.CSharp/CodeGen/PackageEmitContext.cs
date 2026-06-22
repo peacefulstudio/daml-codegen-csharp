@@ -137,7 +137,7 @@ public sealed class PackageEmitContext
                             && existingTemplate != template.Name)
                         {
                             logger?.Warning(
-                                $"Choice-argument type {key} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
+                                $"Choice-argument type {key} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate (see issue #368).");
                             continue;
                         }
                         localChoiceArgToTemplate[key] = template.Name;

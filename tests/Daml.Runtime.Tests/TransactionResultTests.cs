@@ -211,6 +211,44 @@ public class TransactionResultTests
         exercised.TemplateId.Should().NotBe(interfaceId);
     }
 
+    [Fact]
+    public void CreatedContract_InterfaceIds_defaults_to_empty_when_not_set()
+    {
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}");
+
+        contract.InterfaceIds.Should().NotBeNull();
+        contract.InterfaceIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CreatedContract_InterfaceIds_round_trips_a_single_interface_id()
+    {
+        var holding = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.HoldingV1", "Holding");
+
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}")
+        {
+            InterfaceIds = [holding],
+        };
+
+        contract.InterfaceIds.Should().ContainSingle().Which.Should().Be(holding);
+    }
+
+    [Fact]
+    public void CreatedContract_InterfaceIds_round_trips_multiple_interface_ids()
+    {
+        var holding = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.HoldingV1", "Holding");
+        var factory = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.AllocationFactoryV1", "AllocationFactory");
+
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}")
+        {
+            InterfaceIds = [holding, factory],
+        };
+
+        contract.InterfaceIds.Should().HaveCount(2);
+        contract.InterfaceIds[0].Should().Be(holding);
+        contract.InterfaceIds[1].Should().Be(factory);
+    }
+
     private static TransactionResult MakeTransaction(params (string ContractId, RuntimeIdentifier TemplateId)[] created)
     {
         var contracts = new List<CreatedContract>();

@@ -1132,7 +1132,7 @@ public class CodeGenEdgeCaseTests
         code.Should().Contain("public static class IHoldingExtensions");
 
         // Record-argument choice: async signature returning ExerciseOutcome<TransactionResult>
-        // (mirrors the concrete-template <Choice>Async shape). Interface choices
+        // (mirrors the concrete-template <Choice>Async shape from #77). Interface choices
         // surface the raw ExerciseOutcome<TransactionResult> because the implementing
         // template — and therefore any typed <Choice>Result projection — is unknown at
         // the call site.
@@ -1320,8 +1320,8 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         csproj.Should().NotBeNull();
-        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0\" />");
-        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0\" />");
+        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0.0\" />");
+        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0.0\" />");
     }
 
     [Fact]
@@ -2251,7 +2251,7 @@ public class CodeGenEdgeCaseTests
 
     #endregion
 
-    #region TextMap-of-List and GenMap-of-List ReadOnly Emission
+    #region TextMap-of-List and GenMap-of-List ReadOnly Emission (#110)
 
     [Fact]
     public void Generate_should_emit_IReadOnlyList_cast_in_FromRecord_for_TextMap_of_List_field()

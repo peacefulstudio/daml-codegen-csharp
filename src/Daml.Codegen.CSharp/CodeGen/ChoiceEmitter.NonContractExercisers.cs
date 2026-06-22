@@ -97,7 +97,7 @@ public sealed partial class ChoiceEmitter
         var className = SanitizeIdentifier(template.Name);
 
         // Mirror the gate applied to <Choice>Async emission for CID-returning
-        // choices: skip choices whose argument type went through the
+        // choices (#77/#78): skip choices whose argument type went through the
         // codegen fallback path. The fallback emits a field-less <Choice>Arg
         // stub with no ToRecord(), so `argument.ToRecord()` would not compile
         // in consumer output.

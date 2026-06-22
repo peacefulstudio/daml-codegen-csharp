@@ -5,7 +5,7 @@ namespace Daml.Codegen.CSharp.Model;
 
 /// <summary>
 /// In-memory representation of an <c>IntermediateDar</c> graph: a main
-/// package and its dependencies. Mirrors the proto contract
+/// package and its dependencies. Mirrors the proto contract from #146
 /// (<c>proto/intermediate_dar.proto</c>); produced by
 /// <c>IntermediateDarReader</c> and consumed by the emitter.
 /// </summary>

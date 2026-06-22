@@ -10,7 +10,7 @@ namespace Daml.Runtime.Tests;
 
 /// <summary>
 /// Tests for the <see cref="IDamlValue"/> split into <see cref="IDamlRecord"/> and
-/// <see cref="IDamlVariant"/>. <see cref="IDamlValue"/> becomes a bare
+/// <see cref="IDamlVariant"/> (issue #271). <see cref="IDamlValue"/> becomes a bare
 /// marker; record-shaped and variant-shaped values carry their own conversion member.
 /// </summary>
 public class DamlValueInterfaceSplitTests

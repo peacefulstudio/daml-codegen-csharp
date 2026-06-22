@@ -9,8 +9,8 @@ using Xunit;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Codegen-shape tests for the typed CreateAsync / &lt;Choice&gt;Async surface, with one
-/// parameter per signatory / controller. The static analyzer in the
+/// Codegen-shape tests for issue #68 (typed CreateAsync / &lt;Choice&gt;Async with one
+/// parameter per signatory / controller). The static analyzer in the
 /// <c>DarReader</c> namespace walks the Daml-LF expression tree; in unit
 /// tests we pre-build the analysis directly on the model classes (bypassing
 /// the proto layer) and assert on the emitted source.
@@ -493,9 +493,9 @@ public class NamedSubmitterTests
     public void Generate_brings_in_Daml_Ledger_Abstractions_using_for_named_submitter_extensions()
     {
         // Generated templates reference ILedgerClient — that interface lifted to
-        // Daml.Ledger.Abstractions, so the using is brought in
-        // unconditionally so consumers don't need to add it. No transport-
-        // specific gRPC client using is emitted.
+        // Daml.Ledger.Abstractions in #74, so the using is brought in
+        // unconditionally so consumers don't need to add it. The transport-
+        // specific Canton.Ledger.Grpc.Client using is no longer emitted.
         var module = MakeAgreementModule(DamlPartyAnalysis.Static(
             [new DamlPartyPayloadField("platform")]));
 
@@ -503,7 +503,7 @@ public class NamedSubmitterTests
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
         content.Should().Contain("using Daml.Ledger.Abstractions;");
-        content.Should().NotContain("using Canton.Ledger.");
+        content.Should().NotContain("using Canton.Ledger.Grpc.Client;");
     }
 
     #endregion

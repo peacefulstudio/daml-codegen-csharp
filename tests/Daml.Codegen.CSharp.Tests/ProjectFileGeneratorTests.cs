@@ -244,6 +244,50 @@ public class ProjectFileGeneratorTests
     }
 
     [Fact]
+    public void GenerateProjectFile_should_apply_emitter_counter_and_suffix_to_sibling_references()
+    {
+        var options = new CodeGenOptions
+        {
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            RuntimePackageVersion = "1.2.3",
+            EmitterCounter = 5,
+            VersionSuffix = "preview.2",
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(0, 1, 6),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "dep-id-1",
+                Name = "my-dependency",
+                Version = new Version(3, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            }
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences);
+
+        file.Content.Should().Contain(
+            "<PackageReference Include=\"My.Dependency\" Version=\"3.0.0.5-preview.2\" />",
+            "a co-produced sibling carries the same emitter counter and prerelease suffix as the main package, so a stable-floor reference would exclude the actually-produced prerelease (NU1102)");
+        file.Content.Should().Contain(
+            "<PackageReference Include=\"Daml.Runtime\" Version=\"1.2.3\" />",
+            "the runtime reference is not a co-produced sibling and keeps its supplied version unchanged");
+    }
+
+    [Fact]
     public void GenerateProjectFile_should_include_runtime_package_reference()
     {
         // Arrange
@@ -334,7 +378,7 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0.0\" />");
     }
 
     [Fact]
@@ -366,7 +410,7 @@ public class ProjectFileGeneratorTests
 
         var file = generator.GenerateProjectFile(package, externalReferences);
 
-        file.Content.Should().Contain("<PackageReference Include=\"No.Package.Metadata\" Version=\"0.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"No.Package.Metadata\" Version=\"0.0.0.0\" />");
         file.Content.Should().NotContain("Include=\".No.Package.Metadata");
     }
 
@@ -661,8 +705,8 @@ public class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0\" />");
-        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0.0\" />");
     }
 
     [Fact]
@@ -677,7 +721,8 @@ public class ProjectFileGeneratorTests
         //
         // The decision is anchored to the EMITTED file set rather than the
         // package's templates, so a key-bearing template added via
-        // `IncludeDependencies` still pins LangVersion correctly.
+        // `IncludeDependencies` still pins LangVersion correctly — see
+        // daml-codegen-csharp#65 round-5 review.
         var options = CreateOptions();
         var generator = new ProjectFileGenerator(options);
         var package = new DamlPackage

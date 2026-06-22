@@ -50,14 +50,14 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_template_with_fallback_argument_choice_compiles()
     {
-        // Regression: WriteChoiceMethod previously emitted
+        // Regression for #78: WriteChoiceMethod previously emitted
         //   `ArgumentEncoder = arg => arg.ToRecord()`
         // for any non-Unit, non-external choice argument type. When the type
         // hits the codegen fallback path (here: a non-Unit DamlPrimitiveType),
         // WriteChoiceArgumentType emits a stub `<Choice>Arg` record with no
         // ToRecord() method — so the static `Choice<T,A,R>` field site no
         // longer compiles in consumer output. The B3 gate already extended to
-        // <Choice>Async emission; this test pins the same gate on
+        // <Choice>Async emission in #77; this test pins the same gate on
         // WriteChoiceMethod.
         var module = new DamlModule
         {
@@ -177,59 +177,116 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Emitted_template_with_key_fails_to_compile_without_implementing_partial()
+    public void Emitted_record_with_field_that_pascalcases_to_the_type_name_compiles()
     {
-        // Contract: a template with a key emits `public partial T Key { get; }`
-        // — a body-less defining partial property. By design, the consumer MUST supply
-        // an implementing partial declaration. If they don't, Roslyn reports CS9248
-        // "Partial property '...Key' must have an implementation part." This test pins
-        // that contract: a regression that emits a body (e.g. a throwing fallback or an
-        // auto-property setter) would let the emitted source compile standalone, hiding
-        // the deferred-work gap from consumers who would only discover it at runtime.
-        var files = GenerateKeyBearingTemplate();
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Period",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlFieldDefinition("period", new DamlPrimitiveType(DamlPrimitive.Text)),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var periodSource = files.Single(f => f.RelativePath.EndsWith("Period.cs", StringComparison.Ordinal)).Content;
+        periodSource.Should().NotMatchRegex(
+            @"\b(string|required)\s+Period\b\s*\{",
+            "a property whose name equals the enclosing type Period would be CS0542; the field must be disambiguated");
+
+        periodSource.Should().Contain("Period_",
+            "the colliding member must be disambiguated to Period_");
+        periodSource.Should().Contain("record.GetRequiredField(\"period\")",
+            "deserialization must read the original Daml wire field name \"period\", unchanged by the C# member rename");
+        periodSource.Should().Contain("Create(\"period\", ",
+            "serialization must emit the original Daml wire field name \"period\", unchanged by the C# member rename");
 
         var diagnostics = CompileEmittedFiles(files);
-
-        diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .Should().Contain(d => d.Id == "CS9248",
-                "the body-less partial Key declaration must surface at compile time so consumers can't ship without supplying an implementing partial");
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record whose field PascalCases to its own type name must still compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
     [Fact]
-    public void Emitted_template_with_key_compiles_when_consumer_supplies_implementing_partial()
+    public void Emitted_variant_with_constructor_that_matches_the_type_name_compiles()
     {
-        // The other half of the contract: when the consumer DOES supply an
-        // implementing partial declaration in the same compilation, the emitted code
-        // compiles cleanly. Locks in the "extension point" half of the partial-property
-        // shape — a regression that rejected valid implementing partials would block
-        // every consumer of key-bearing templates.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Wrapper",
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Wrapper", new DamlPrimitiveType(DamlPrimitive.Int64)),
+                        new DamlVariantConstructor("Empty", null),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant whose constructor name equals its own type name would be CS0542 unless disambiguated, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_template_with_key_compiles_standalone_with_throwing_key_stub()
+    {
+        // ADR 0013: the #65 body-less `partial Key` (CS9248 until a consumer supplied
+        // an implementing partial) blocked the automated DAR publish pipeline, which
+        // has no human to write that partial. The accessor is now a non-partial
+        // throwing stub, so a key-bearing package compiles standalone with no consumer
+        // contribution. A regression that re-introduced the partial declaration would
+        // surface here as CS9248.
         var files = GenerateKeyBearingTemplate();
 
-        // Synthesise the implementing partial that a consuming project would write
-        // by hand alongside the generated AssetWithKey.cs.
-        // Namespace must match the codegen-emitted partial — the codegen uses the
-        // package name (`Test.Package`), not the module name. Mismatched namespaces
-        // are silently treated as different types, so neither partial finds its
-        // counterpart and Roslyn emits CS9248 + CS9249 simultaneously.
-        var consumerPartial = GeneratedFile.Text(
-            "AssetWithKey.Consumer.cs",
-            """
-                // Copyright (c) 2026 Peaceful Studio OÜ
-                // SPDX-License-Identifier: Apache-2.0
-                using Daml.Runtime.Data;
-                namespace Test.Package;
-                public sealed partial record AssetWithKey
-                {
-                    public partial string Key => Owner.Id;
-                }
-                """);
-
-        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
         errors.Should().BeEmpty(
-            "emitted code with a consumer-supplied implementing partial should compile, but got: {0}",
+            "a key-bearing template must compile standalone now that Key is a throwing stub (ADR 0013), but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
@@ -411,6 +468,81 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
+    public void Emitted_record_with_stdlib_DayOfWeek_enum_field_compiles()
+    {
+        var stdlibModule = new DamlModule
+        {
+            Name = "DA.Date.Types",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "DayOfWeek",
+                    Definition = new DamlEnumDefinition(
+                        ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]),
+                }
+            ],
+            Interfaces = [],
+        };
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-stdlib-id",
+            Name = "daml-stdlib",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [stdlibModule],
+            DependencyReferences = [],
+        };
+
+        var mainModule = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Schedule",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlFieldDefinition("day", new DamlTypeRef("daml-stdlib-id", "DA.Date.Types", "DayOfWeek")),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [mainModule],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = mainPackage, Dependencies = [stdlibPackage] };
+
+        var options = new CodeGenOptions
+        {
+            EnableNullableReferenceTypes = true,
+            UseFileScopedNamespaces = true,
+            UseRecordTypes = true,
+            UsePrimaryConstructors = true,
+            IncludeDependencies = true,
+        };
+        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var files = generator.Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record field whose type is the stdlib DayOfWeek enum must round-trip via the runtime-provided Daml.Runtime.Stdlib.DayOfWeekExtensions, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_non_contract_wrapper_with_nested_unit_return_compiles()
     {
         var module = new DamlModule
@@ -560,14 +692,18 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Generate_should_emit_langversion_marker_with_value_13_when_output_contains_partial_property()
+    public void Generate_should_emit_empty_langversion_marker_for_key_bearing_output()
     {
+        // ADR 0013: with the Key accessor reverted from a `partial` to a plain
+        // throwing stub, key-bearing output no longer contains the C# 13
+        // partial-property syntax, so the LangVersion marker stays empty just like
+        // keyless output — the build no longer raises the SDK floor for keys.
         var files = GenerateKeyBearingTemplate();
 
         var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion",
             "build-integration tooling reads this state file to bump LangVersion").Subject;
-        marker.Content.Trim().Should().Be("13",
-            "key-bearing output requires C# 13 partial-property syntax");
+        marker.Content.Should().BeEmpty(
+            "key-bearing output no longer requires C# 13 after the partial-property revert (ADR 0013)");
     }
 
     [Fact]
@@ -614,37 +750,18 @@ public class EmittedCodeCompilesTests
     }
 
     [Fact]
-    public void Emitted_class_template_with_key_compiles_when_consumer_supplies_implementing_partial_class()
+    public void Emitted_class_template_with_key_compiles_standalone_with_throwing_key_stub()
     {
-        // CHANGELOG documents `UseRecordTypes=false` as a supported configuration:
-        // the generator emits a `partial class` (instead of `partial record`) and
-        // the consumer's implementing partial must match the type kind. This test
-        // pins that combination end-to-end through Roslyn so a class-mode
-        // regression doesn't slip through CI while only the record case is
-        // covered above.
+        // Class-mode (`UseRecordTypes=false`) counterpart of the record-mode standalone
+        // test: a key-bearing `partial class` template must also compile with no
+        // consumer contribution now that Key is a throwing stub (ADR 0013).
         var files = GenerateKeyBearingTemplate(useRecordTypes: false);
 
-        // Implementing partial declared as `partial class` to match the
-        // generator's class-mode output. `Owner` is a regular property on the
-        // generated class body (not a primary-constructor parameter).
-        var consumerPartial = GeneratedFile.Text(
-            "AssetWithKey.Consumer.cs",
-            """
-                // Copyright (c) 2026 Peaceful Studio OÜ
-                // SPDX-License-Identifier: Apache-2.0
-                using Daml.Runtime.Data;
-                namespace Test.Package;
-                public sealed partial class AssetWithKey
-                {
-                    public partial string Key => Owner.Id;
-                }
-                """);
-
-        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
         errors.Should().BeEmpty(
-            "emitted class-mode code with a consumer-supplied `partial class` implementing partial should compile, but got: {0}",
+            "a class-mode key-bearing template must compile standalone now that Key is a throwing stub (ADR 0013), but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
@@ -993,6 +1110,76 @@ public class EmittedCodeCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a sibling record referencing a same-package nested choice-arg type must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_choice_argument_record_with_field_that_pascalcases_to_the_choice_name_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Holding",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Quantity",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", "Test.Module", "Quantity"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Holding",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Quantity",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("quantity", new DamlPrimitiveType(DamlPrimitive.Numeric))]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var nestedSource = files
+            .Single(f => f.RelativePath.EndsWith("Holding.Quantity.cs", StringComparison.Ordinal))
+            .Content;
+        nestedSource.Should().Contain("Quantity_",
+            "the choice-arg-record field colliding with the nested choice type name must be disambiguated to Quantity_");
+        nestedSource.Should().Contain("record.GetRequiredField(\"quantity\")",
+            "the Daml wire field name \"quantity\" must be unchanged by the C# member rename");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a nested choice-arg record whose field PascalCases to the choice (and thus the nested record) name would be CS0542 unless disambiguated, but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
@@ -1511,22 +1698,10 @@ public class EmittedCodeCompilesTests
             f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
             "the test only guards the shadowing bug if the derived namespace actually ends in .Party");
 
-        // The key-bearing template emits a body-less `public partial ... Key { get; }`;
-        // the consumer must supply the implementing partial. Declaring it in the
-        // shadowing namespace also exercises the key type's global:: qualification.
-        var consumerPartial = GeneratedFile.Text(
-            "Holding.Consumer.cs",
-            """
-                // Copyright (c) 2026 Peaceful Studio OÜ
-                // SPDX-License-Identifier: Apache-2.0
-                namespace Canton.Party;
-                public sealed partial record Holding
-                {
-                    public partial global::Daml.Runtime.Data.Party Key => Issuer;
-                }
-                """);
-
-        var diagnostics = CompileEmittedFiles([.. files, consumerPartial]);
+        // The key-bearing template emits a throwing `public ... Key =>` stub (ADR 0013)
+        // whose key type must be global::-qualified so it doesn't resolve against the
+        // shadowing `Canton.Party` namespace. The generated files compile standalone.
+        var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .Party must global::-qualify the runtime Party type, but got: {0}",

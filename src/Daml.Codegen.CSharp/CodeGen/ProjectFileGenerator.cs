@@ -218,7 +218,7 @@ public sealed class ProjectFileGenerator
         foreach (var dep in externalReferences.OrderBy(p => p.Name, StringComparer.Ordinal))
         {
             var depPackageName = SanitizePackageName(dep.Name);
-            sb.AppendLine($"    <PackageReference Include=\"{depPackageName}\" Version=\"{dep.Version}\" />");
+            sb.AppendLine($"    <PackageReference Include=\"{depPackageName}\" Version=\"{FormatPackageVersion(dep.Version)}\" />");
         }
 
         sb.AppendLine("  </ItemGroup>");

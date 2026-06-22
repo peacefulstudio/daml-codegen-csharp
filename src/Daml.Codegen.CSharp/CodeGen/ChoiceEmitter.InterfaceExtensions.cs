@@ -105,7 +105,7 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
-        // Method signature mirrors the concrete-template <Choice>Async shape,
+        // Method signature mirrors the concrete-template <Choice>Async shape from #77,
         // but skips the typed <Choice>Result projection: interface choices do not know
         // the implementing template at the call site, so the most useful return shape
         // is the raw ExerciseOutcome<TransactionResult> the ledger client surfaces.

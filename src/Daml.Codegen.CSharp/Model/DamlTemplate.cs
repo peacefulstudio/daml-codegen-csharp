@@ -170,7 +170,8 @@ public sealed class DamlInterface
     /// <summary>
     /// Gets the choices exposed by this interface. (The Daml-LF
     /// <c>InterfaceMethod</c> list — distinct from interface choices —
-    /// is not yet plumbed through the C# emitter.)
+    /// is not yet plumbed through the C# emitter; see PR #168 deferred
+    /// divergences.)
     /// </summary>
     public required IReadOnlyList<DamlChoice> Choices { get; init; }
 
