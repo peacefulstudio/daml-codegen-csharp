@@ -1,0 +1,186 @@
+name: NuGet Pack Integration (branch-local codegen-cs)
+
+# Test B — the always-on gate (every PR, full OS matrix).
+#
+# Generates the C# bindings with THIS branch's codegen: the branch-local JVM
+# helper decodes the DAR, the branch-local `Daml.Codegen.CSharp.Cli` emitter (the
+# exact binary the dpm-codegen-cs OCI bundle ships) writes the .csproj, then
+# `dotnet pack` produces the .nupkg and the test asserts on it. No GHCR pull and
+# no version pin, so a codegen change in the PR is exercised by its own test
+# (unlike pulling a pre-published OCI tag, which would test last release's CLI).
+#
+# The heavier "Test A" (real OCI bundle, self-contained per-RID) lives in
+# nuget-pack-integration-bundle.yaml and runs at key moments. Both share the
+# generator-agnostic xUnit harness, swapping only CODEGEN_CS_CMD.
+#
+# OS matrix (set-matrix): internal repo → ubuntu + windows; public twin → +macos.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/Daml.Codegen.CSharp.Tests/NuGetPackIntegrationTests.cs'
+      - 'tests/Daml.Codegen.CSharp.Tests/Snapshots/**'
+      - 'src/Daml.Codegen.CSharp/**'
+      - 'src/Daml.Codegen.CSharp.Cli/**'
+      - 'src/Daml.Runtime/**'
+      - 'src/Daml.Ledger.Abstractions/**'
+      - 'jvm-helper/**'
+      - 'scripts/bundle-entrypoint/**'
+      - '.github/workflows/nuget-pack-integration.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/Daml.Codegen.CSharp.Tests/NuGetPackIntegrationTests.cs'
+      - 'tests/Daml.Codegen.CSharp.Tests/Snapshots/**'
+      - 'src/Daml.Codegen.CSharp/**'
+      - 'src/Daml.Codegen.CSharp.Cli/**'
+      - 'src/Daml.Runtime/**'
+      - 'src/Daml.Ledger.Abstractions/**'
+      - 'jvm-helper/**'
+      - 'scripts/bundle-entrypoint/**'
+      - '.github/workflows/nuget-pack-integration.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_NOLOGO: '1'
+  JAVA_VERSION: '17'
+
+jobs:
+  set-matrix:
+    name: Resolve OS matrix
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          set -euo pipefail
+          UBUNTU='{"os":"ubuntu-latest","rid":"linux-x64","exe":"Daml.Codegen.CSharp.Cli","entrypoint":"dpm-codegen-cs"}'
+          WINDOWS='{"os":"windows-latest","rid":"win-x64","exe":"Daml.Codegen.CSharp.Cli.exe","entrypoint":"dpm-codegen-cs.cmd"}'
+          MACOS='{"os":"macos-latest","rid":"osx-arm64","exe":"Daml.Codegen.CSharp.Cli","entrypoint":"dpm-codegen-cs"}'
+          # Internal repo runs ubuntu + windows; the public twin additionally runs
+          # macos. Single source of truth so both repos can carry this same file.
+          if [[ "${GITHUB_REPOSITORY}" == *-internal ]]; then
+            echo "include=[${UBUNTU},${WINDOWS}]" >> "$GITHUB_OUTPUT"
+          else
+            echo "include=[${UBUNTU},${WINDOWS},${MACOS}]" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-jvm-helper:
+    name: Build JVM helper JAR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup JDK
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@3afe9cf056c5d139bfc46579af1192d77a2f0821 # v1.4.0
+
+      - name: Cache sbt
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.coursier/cache
+          key: sbt-${{ runner.os }}-${{ hashFiles('jvm-helper/build.sbt', 'jvm-helper/project/**') }}
+
+      # Portable JVM jar — built once on ubuntu and shared to every OS leg.
+      - name: Assemble JAR
+        working-directory: jvm-helper
+        run: sbt 'clean; assembly'
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jvm-helper-jar
+          path: jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  test-b:
+    name: branch-local codegen-cs → pack (${{ matrix.os }})
+    needs: [set-matrix, build-jvm-helper]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.set-matrix.outputs.include) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup JDK
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Download JVM helper JAR
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jvm-helper-jar
+          path: jvm-helper-artifact
+
+      # Branch-local bundle: a framework-dependent emitter publish + the shared jar,
+      # behind the same `dpm-codegen-cs` entrypoint the OCI bundle uses. Lighter than
+      # Test A's self-contained per-RID build, fast enough for every push.
+      - name: Assemble branch-local bundle
+        shell: bash
+        env:
+          ENTRYPOINT: ${{ matrix.entrypoint }}
+          EXE: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          dotnet publish src/Daml.Codegen.CSharp.Cli -c Release -o bundle/bin
+          cp jvm-helper-artifact/daml-codegen-jvm-helper.jar "bundle/bin/daml-codegen-jvm-helper.jar"
+          cp "scripts/bundle-entrypoint/${ENTRYPOINT}" "bundle/${ENTRYPOINT}"
+          if [ "${RUNNER_OS}" != "Windows" ]; then
+            chmod +x "bundle/${ENTRYPOINT}" "bundle/bin/${EXE}"
+          fi
+          ls -l bundle bundle/bin
+
+      # The generated package references Daml.Runtime + Daml.Ledger.Abstractions at
+      # the repo's lockstep version; the test's local feed (output/nuget/) must carry
+      # them so `dotnet pack` can restore. PackageOutputPath → <repo>/output/nuget.
+      - name: Build local runtime NuGet packs (local feed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet pack src/Daml.Runtime/Daml.Runtime.csproj -c Release
+          dotnet pack src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj -c Release
+          ls -l output/nuget/
+
+      - name: Run codegen-cs → pack integration test
+        shell: bash
+        env:
+          CODEGEN_CS_CMD: ${{ github.workspace }}/bundle/${{ matrix.entrypoint }}
+        run: |
+          set -euo pipefail
+          dotnet test --project tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj \
+            -c Release \
+            --filter-method "*generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture"
