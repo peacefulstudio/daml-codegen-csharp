@@ -18,6 +18,10 @@ jobs:
         run: |
           set -euo pipefail
           ./.github/scripts/no-ai-workflows-audit.sh .
+      - name: Internal-ref check
+        run: |
+          set -euo pipefail
+          ./.github/scripts/internal-ref-check.sh .
 
   build-and-test:
     runs-on: ubuntu-latest
