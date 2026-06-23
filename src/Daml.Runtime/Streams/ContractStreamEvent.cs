@@ -14,9 +14,8 @@ namespace Daml.Runtime.Streams;
 /// these without dragging the consumer into a specific transport dependency.
 /// </summary>
 /// <typeparam name="T">
-/// The Daml template (matched by <c>TemplateId</c>) the stream is filtered
-/// to. When Daml interface markers are integrated, this constraint will
-/// broaden to <c>IDamlType</c> so interface IDs can be matched too.
+/// The Daml marker the stream is filtered to: a template (matched by
+/// <c>TemplateId</c>) or a Daml interface marker (matched by interface id).
 /// </typeparam>
 /// <remarks>
 /// <list type="bullet">
@@ -40,7 +39,7 @@ namespace Daml.Runtime.Streams;
 /// </list>
 /// </remarks>
 public abstract record ContractStreamEvent<T>
-    where T : ITemplate
+    where T : IDamlType
 {
     /// <summary>Sealed; new variants live alongside the existing ones.</summary>
     private protected ContractStreamEvent() { }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -354,6 +355,25 @@ public class LedgerClientExtensionsTests
         client.Disposed.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Read_paths_accept_an_interface_marker_as_type_argument()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<ContractId<SampleInterface>>.None());
+
+        var exercised = await client.TryExerciseForCreatedAsync<SampleInterface>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+        var subscription = client.SubscribeAsync<SampleInterface>(
+            new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+        var events = new List<ContractStreamEvent<SampleInterface>>();
+        await foreach (var evt in subscription)
+        {
+            events.Add(evt);
+        }
+
+        exercised.Should().BeOfType<ExerciseOutcome<ContractId<SampleInterface>>.None>();
+        events.Should().BeEmpty();
+    }
+
     /// <summary>
     /// Minimal <see cref="ILedgerClient"/> stub that returns a pre-configured
     /// <see cref="ExerciseOutcome{T}"/> from the <see cref="SubmitterInfo"/>
@@ -398,14 +418,14 @@ public class LedgerClientExtensionsTests
             SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
-            where TTemplate : ITemplate
+            where TTemplate : IDamlType
             => Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(new ExerciseOutcome<ContractId<TTemplate>>.None());
 
         public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
             SubmitterInfo submitter,
             long? fromOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate
+            where T : IDamlType
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
         public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
@@ -440,4 +460,14 @@ internal sealed record SampleTemplate : ITemplate
 
     public DamlRecord ToRecord() => DamlRecord.Create();
     public static SampleTemplate FromRecord(DamlRecord record) => new();
+}
+
+internal sealed record SampleInterface : IDamlInterface
+{
+    public static Identifier InterfaceId => new("iface-pkg", "Module", "ISample");
+    public static string PackageId => "iface-pkg";
+    public static string PackageName => "iface-name";
+    public static Version PackageVersion => new(1, 0, 0);
+
+    public DamlRecord ToRecord() => DamlRecord.Create();
 }

@@ -7,7 +7,7 @@
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
     <!-- Grpc.Tools >= 2.69.0 ships a linux_arm64 protoc that segfaults (grpc/grpc#38538;
          fix attempt grpc/grpc#41994 shipped in 2.81.x without resolving it); 2.68.1 is the
-         last release whose linux_arm64 protoc works. Bump only when #38538 is closed. -->
+         last release whose linux_arm64 protoc works. Bump only when grpc/grpc#38538 is closed. -->
     <PackageVersion Include="Grpc.Tools" Version="2.68.1" />
     <!-- CLI tooling -->
     <PackageVersion Include="System.CommandLine" Version="2.0.9" />

@@ -55,6 +55,7 @@ internal static class RuntimeTypeNames
     public const string Set = nameof(Daml.Runtime.Stdlib.Set<object>);
     public const string NonEmpty = nameof(Daml.Runtime.Stdlib.NonEmpty<object>);
     public const string RelTime = nameof(Daml.Runtime.Stdlib.RelTime);
+    public const string DayOfWeek = nameof(Daml.Runtime.Stdlib.DayOfWeek);
     public const string Unit = nameof(Daml.Runtime.Stdlib.Unit);
     public const string GenericStub = nameof(Daml.Runtime.Stdlib.GenericStub);
 

@@ -483,7 +483,7 @@ public class NonContractChoiceWrapperTests
         // (Mint) returns a bare ContractId T and is routed through the
         // FactoryExtensions / FromCreatedContracts path instead.
         factory.Content.Should().NotContain("FactoryNonContractExtensions");
-        // Mint still gets a <Choice>Async method in the
+        // Mint still gets a <Choice>Async method, in the
         // FactoryExtensions class. That path projects via FromCreatedContracts,
         // not the ExercisedEvents projector — so verify by structural hint.
         factory.Content.Should().Contain("public static class FactoryExtensions");
@@ -1248,14 +1248,8 @@ public class NonContractChoiceWrapperTests
     }
 
     [Fact]
-    public void Generate_csproj_should_not_reference_Canton_Ledger_Grpc_Client()
+    public void Generate_csproj_should_not_reference_grpc_transport_client()
     {
-        // The codegen-emitted wrappers reference `ILedgerClient`,
-        // `TransactionResult`, and `ExerciseOutcome<>` from the
-        // transport-agnostic `Daml.Ledger.Abstractions` package, not from a
-        // transport-specific gRPC client. The csproj generator must not pull
-        // pure-projector consumers into a gRPC dep just to compile the
-        // non-CID exerciser wrappers.
         var options = new CodeGenOptions
         {
             TargetFramework = "net10.0",
@@ -1274,7 +1268,7 @@ public class NonContractChoiceWrapperTests
 
         var file = generator.GenerateProjectFile(package);
 
-        file.Content.Should().NotContain("Canton.Ledger.");
+        file.Content.Should().NotContain(".Grpc.Client");
         file.Content.Should().Contain("<PackageReference Include=\"Daml.Ledger.Abstractions\"");
     }
 }

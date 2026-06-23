@@ -97,6 +97,24 @@ internal static partial class Identifiers
         return result;
     }
 
+    /// <summary>
+    /// Derives the C# member identifier for a Daml field, PascalCasing and
+    /// sanitising the Daml name and disambiguating with a trailing <c>_</c> when
+    /// the result would equal <paramref name="enclosingTypeName"/> (illegal in
+    /// C#: CS0542 member names cannot be the same as their enclosing type). The
+    /// Daml wire name is unaffected — only the emitted C# identifier changes.
+    /// </summary>
+    internal static string MemberName(string damlFieldName, string enclosingTypeName) =>
+        Disambiguate(ToPascalCase(Sanitize(damlFieldName)), enclosingTypeName);
+
+    /// <summary>
+    /// Appends a trailing <c>_</c> when <paramref name="identifier"/> equals
+    /// <paramref name="enclosingTypeName"/>, which is illegal in C# (CS0542: member
+    /// names cannot be the same as their enclosing type).
+    /// </summary>
+    internal static string Disambiguate(string identifier, string enclosingTypeName) =>
+        identifier == enclosingTypeName ? identifier + "_" : identifier;
+
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex IdentifierRegex();
 

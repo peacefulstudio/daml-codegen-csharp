@@ -40,4 +40,14 @@ public sealed record TransactionResult(
 public sealed record CreatedContract(
     string ContractId,
     Identifier TemplateId,
-    string Payload);
+    string Payload)
+{
+    /// <summary>
+    /// Interface ids the participant computed for this created event
+    /// (Canton gRPC <c>CreatedEvent.interface_views[].interface_id</c>).
+    /// Defaults to an empty list — populated by ledger-client transport
+    /// implementations for interface-only consumption, where a contract is
+    /// known only as an interface and must be dispatched at runtime.
+    /// </summary>
+    public IReadOnlyList<Identifier> InterfaceIds { get; init; } = Array.Empty<Identifier>();
+}

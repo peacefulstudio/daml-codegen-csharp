@@ -79,7 +79,7 @@ public class DependencyTests
     #region DarModel GetPackageById Tests
 
     [Fact]
-    public void DarArchive_GetPackageById_should_find_main_package()
+    public void DarModel_GetPackageById_should_find_main_package()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -106,7 +106,7 @@ public class DependencyTests
     }
 
     [Fact]
-    public void DarArchive_GetPackageById_should_find_dependency_package()
+    public void DarModel_GetPackageById_should_find_dependency_package()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -143,7 +143,7 @@ public class DependencyTests
     }
 
     [Fact]
-    public void DarArchive_GetPackageById_should_return_null_for_unknown_id()
+    public void DarModel_GetPackageById_should_return_null_for_unknown_id()
     {
         // Arrange
         var mainPackage = new DamlPackage

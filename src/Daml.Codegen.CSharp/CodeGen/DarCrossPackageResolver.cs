@@ -64,7 +64,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
             {
                 return context.Qualifier.Qualify(mapped, context.RootNamespace);
             }
-            _logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile");
+            _logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile (no stdlib mapping for this type yet)");
             return sanitized;
         }
 

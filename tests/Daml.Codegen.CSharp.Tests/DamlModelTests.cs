@@ -499,7 +499,7 @@ public class DamlModelTests
     }
 
     [Fact]
-    public void DarArchive_AllPackages_should_include_main_and_dependencies()
+    public void DarModel_AllPackages_should_include_main_and_dependencies()
     {
         // Arrange
         var mainPackage = new DamlPackage
@@ -548,7 +548,7 @@ public class DamlModelTests
     }
 
     [Fact]
-    public void DarArchive_AllPackages_should_work_with_no_dependencies()
+    public void DarModel_AllPackages_should_work_with_no_dependencies()
     {
         // Arrange
         var mainPackage = new DamlPackage

@@ -1320,8 +1320,8 @@ public class CodeGenEdgeCaseTests
 
         // Assert
         csproj.Should().NotBeNull();
-        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0\" />");
-        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0\" />");
+        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0.0\" />");
+        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0.0\" />");
     }
 
     [Fact]

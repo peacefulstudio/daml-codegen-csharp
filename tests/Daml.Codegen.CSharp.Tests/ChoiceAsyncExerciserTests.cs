@@ -9,7 +9,7 @@ using Xunit;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Tests for the codegen-emitted <c>&lt;Choice&gt;Async(...)</c> extension methods.
+/// Tests for the codegen-emitted <c>&lt;Choice&gt;Async(...)</c> extension methods —
 /// Each choice with a typed
 /// <c>&lt;Choice&gt;Result</c> gets a static extension on
 /// <c>ContractId&lt;TemplateName&gt;</c> that calls
