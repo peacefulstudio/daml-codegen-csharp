@@ -546,8 +546,8 @@ jobs:
             echo 'New GHCR packages default to **private**. After the first push of this artifact, an org admin must flip ghcr.io/peacefulstudio/dpm-codegen-cs to public via the GHCR package settings, otherwise unauthenticated dpm pulls will 404. This step is one-time per package.'
           } >> "${GITHUB_STEP_SUMMARY}"
 
-  dpm-component-smoke:
-    name: Smoke test (stock dpm pull)
+  dpm-component-integration:
+    name: Integration test (stock dpm pull)
     needs: [validate-inputs, compose-index]
     if: needs.validate-inputs.outputs.push == 'true'
     runs-on: ubuntu-latest
@@ -557,14 +557,18 @@ jobs:
 
     env:
       VERSION_INPUT: ${{ needs.validate-inputs.outputs.version }}
-      FIXTURE_DAR: tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-api-token-holding-v1/splice-api-token-holding-v1.dar
 
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Setup JDK
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -587,29 +591,56 @@ jobs:
           echo "${HOME}/.dpm/bin" >> "${GITHUB_PATH}"
           "${HOME}/.dpm/bin/dpm" --version
 
-      - name: Pull freshly-pushed canary via dpm and exercise codegen-cs
+      - name: Build local runtime NuGet packs (local feed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet pack src/Daml.Runtime/Daml.Runtime.csproj -c Release
+          dotnet pack src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj -c Release
+          ls -l output/nuget/
+          ls output/nuget/Daml.Runtime.*.nupkg >/dev/null 2>&1 \
+            || { echo "::error::no Daml.Runtime pack under output/nuget/ — the fixture would silently skip"; exit 1; }
+          ls output/nuget/Daml.Ledger.Abstractions.*.nupkg >/dev/null 2>&1 \
+            || { echo "::error::no Daml.Ledger.Abstractions pack under output/nuget/ — the fixture would silently skip"; exit 1; }
+
+      - name: Seed candidate pin and dpm wrapper
+        shell: bash
         env:
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE: ${{ env.IMAGE }}
         run: |
           set -euo pipefail
-          WORK="${RUNNER_TEMP}/dpm-smoke"
-          OUT="${WORK}/out"
-          rm -rf "${WORK}"
-          mkdir -p "${WORK}" "${OUT}"
-          cp "${GITHUB_WORKSPACE}/${FIXTURE_DAR}" "${WORK}/fixture.dar"
-          cat > "${WORK}/daml.yaml" <<EOF
+          PIN_DIR="${RUNNER_TEMP}/dpm-pin"
+          WRAPPER="${RUNNER_TEMP}/dpm-codegen-cs-wrapper.sh"
+          rm -rf "${PIN_DIR}"
+          mkdir -p "${PIN_DIR}"
+          cat > "${PIN_DIR}/daml.yaml" <<EOF
           components:
             - "oci://${REGISTRY}/${IMAGE}:${VERSION_INPUT}"
           EOF
-          cd "${WORK}"
-          DPM_AUTO_INSTALL=true dpm codegen-cs --dar ./fixture.dar --out "${OUT}"
-          first_cs="$(find "${OUT}" -type f -name '*.cs' -print -quit)"
-          if [ -z "${first_cs}" ]; then
-            echo "::error::dpm codegen-cs produced no .cs files in ${OUT}"
-            exit 1
-          fi
-          echo "dpm codegen-cs OK — first generated file: ${first_cs}"
+          cat > "${WRAPPER}" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cd "${PIN_DIR}"
+          exec dpm "\$@"
+          EOF
+          chmod +x "${WRAPPER}"
+          echo "CODEGEN_CS_CMD=${WRAPPER}" >> "${GITHUB_ENV}"
+
+      - name: Run published candidate codegen-cs → pack integration test (Test C)
+        shell: bash
+        env:
+          CODEGEN_CS_BASE_ARGS: codegen-cs
+          DPM_AUTO_INSTALL: 'true'
+        run: |
+          set -euo pipefail
+          test -n "${CODEGEN_CS_CMD:-}" \
+            || { echo "::error::CODEGEN_CS_CMD is unset — the candidate fixture would silently skip instead of testing the published artifact"; exit 1; }
+          test -x "${CODEGEN_CS_CMD}" \
+            || { echo "::error::CODEGEN_CS_CMD=${CODEGEN_CS_CMD} is not an executable wrapper"; exit 1; }
+          dotnet test --project tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj \
+            -c Release \
+            --filter-method "*generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture"
 
   attach-to-draft-release:
     name: Attach OCI bundles to draft release
