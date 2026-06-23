@@ -211,6 +211,99 @@ public class TransactionResultTests
         exercised.TemplateId.Should().NotBe(interfaceId);
     }
 
+    [Fact]
+    public void CreatedContract_InterfaceIds_defaults_to_empty_when_not_set()
+    {
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}");
+
+        contract.InterfaceIds.Should().NotBeNull();
+        contract.InterfaceIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CreatedContract_InterfaceIds_round_trips_a_single_interface_id()
+    {
+        var holding = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.HoldingV1", "Holding");
+
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}")
+        {
+            InterfaceIds = [holding],
+        };
+
+        contract.InterfaceIds.Should().ContainSingle().Which.Should().Be(holding);
+    }
+
+    [Fact]
+    public void CreatedContract_InterfaceIds_round_trips_multiple_interface_ids()
+    {
+        var holding = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.HoldingV1", "Holding");
+        var factory = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.AllocationFactoryV1", "AllocationFactory");
+
+        var contract = new CreatedContract("00alice", FooBar.TemplateId, "{}")
+        {
+            InterfaceIds = [holding, factory],
+        };
+
+        contract.InterfaceIds.Should().HaveCount(2);
+        contract.InterfaceIds[0].Should().Be(holding);
+        contract.InterfaceIds[1].Should().Be(factory);
+    }
+
+    [Fact]
+    public void Single_matches_created_contract_via_interface_view()
+    {
+        var result = MakeTransactionWithInterfaces(
+            ("00holding", new RuntimeIdentifier("impl-pkg", "Acme.Impl", "Concrete"), [IThing.InterfaceId]));
+
+        var id = result.Single<IThing>();
+
+        id.Value.Should().Be("00holding");
+    }
+
+    [Fact]
+    public void Interface_match_ignores_package_id_and_template_id()
+    {
+        var differentPackageInterfaceId = new RuntimeIdentifier(
+            "iface-pkg-v2", IThing.InterfaceId.ModuleName, IThing.InterfaceId.EntityName);
+        var result = MakeTransactionWithInterfaces(
+            ("00upgraded", FooBar.TemplateId, [differentPackageInterfaceId]));
+
+        result.Single<IThing>().Value.Should().Be("00upgraded");
+    }
+
+    [Fact]
+    public void Interface_match_excludes_contracts_without_the_interface_view()
+    {
+        var result = MakeTransactionWithInterfaces(
+            ("00other", FooBar.TemplateId, [new RuntimeIdentifier("p", "Other.Iface", "IOther")]),
+            ("00thing", FooBar.TemplateId, [IThing.InterfaceId]));
+
+        var ids = result.All<IThing>();
+
+        ids.Should().ContainSingle().Which.Value.Should().Be("00thing");
+    }
+
+    [Fact]
+    public void Template_match_ignores_interface_views()
+    {
+        var result = MakeTransactionWithInterfaces(
+            ("00thing", new RuntimeIdentifier("impl-pkg", "Acme.Impl", "Concrete"), [IThing.InterfaceId]));
+
+        result.TrySingle<FooBar>().Should().BeNull();
+    }
+
+    [Fact]
+    public void TrySingle_throws_when_two_contracts_match_by_interface_view()
+    {
+        var result = MakeTransactionWithInterfaces(
+            ("00first", new RuntimeIdentifier("impl-pkg", "Acme.Impl", "Concrete"), [IThing.InterfaceId]),
+            ("00second", FooBar.TemplateId, [IThing.InterfaceId]));
+
+        Action act = () => result.TrySingle<IThing>();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
     private static TransactionResult MakeTransaction(params (string ContractId, RuntimeIdentifier TemplateId)[] created)
     {
         var contracts = new List<CreatedContract>();
@@ -225,11 +318,37 @@ public class TransactionResultTests
             ArchivedContractIds: []);
     }
 
+    private static TransactionResult MakeTransactionWithInterfaces(
+        params (string ContractId, RuntimeIdentifier TemplateId, RuntimeIdentifier[] InterfaceIds)[] created)
+    {
+        var contracts = new List<CreatedContract>();
+        foreach (var (cid, tid, interfaceIds) in created)
+        {
+            contracts.Add(new CreatedContract(cid, tid, "{}") { InterfaceIds = interfaceIds });
+        }
+        return new TransactionResult(
+            UpdateId: "u1",
+            CompletionOffset: 1L,
+            CreatedContracts: contracts,
+            ArchivedContractIds: []);
+    }
+
     private sealed record FooBar(string Owner) : ITemplate
     {
         public static RuntimeIdentifier TemplateId { get; } = new("test-pkg", "Acme.Foo", "FooBar");
         public static string PackageId => "test-pkg";
         public static string PackageName => "test-package";
+        public static Version PackageVersion { get; } = new(0, 1, 0);
+
+        public DamlRecord ToRecord() => DamlRecord.Create(
+            DamlField.Create("owner", new DamlParty(Owner)));
+    }
+
+    private sealed record IThing(string Owner) : IDamlInterface
+    {
+        public static RuntimeIdentifier InterfaceId { get; } = new("iface-pkg", "Acme.Iface", "IThing");
+        public static string PackageId => "iface-pkg";
+        public static string PackageName => "iface-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
 
         public DamlRecord ToRecord() => DamlRecord.Create(

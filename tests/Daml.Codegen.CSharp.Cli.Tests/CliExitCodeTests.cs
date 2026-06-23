@@ -14,7 +14,7 @@ public class CliExitCodeTests
     {
         var exit = await Program.Main(["--unknown-flag"]);
         exit.Should().NotBe(0,
-            "System.CommandLine should surface a parse error and the action must not paper over it (review #6)");
+            "System.CommandLine should surface a parse error and the action must not paper over it");
     }
 
     [Fact]

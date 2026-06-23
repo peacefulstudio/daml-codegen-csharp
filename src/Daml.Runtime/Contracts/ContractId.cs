@@ -130,22 +130,40 @@ public static class ContractIdInterfaceCoercion
 }
 
 /// <summary>
-/// Resolves the static type identifier carried by a closed
-/// <see cref="ContractId{T}"/>: <see cref="ITemplate.TemplateId"/> for templates,
-/// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
+/// Discriminates whether a Daml type was resolved as a concrete template or as an
+/// interface marker, selecting which identifier kind the match carries.
 /// </summary>
+internal enum DamlTypeMatch
+{
+    Template,
+    Interface,
+}
+
+internal readonly record struct ResolvedDamlType(Identifier Identifier, DamlTypeMatch Match);
+
 internal static class ContractIdMetadata
 {
-    public static Identifier Resolve<T>() where T : IDamlType
+    public static Identifier Resolve<T>() where T : IDamlType => ResolveMatch<T>().Identifier;
+
+    /// <summary>
+    /// Resolves the static type identifier carried by a closed
+    /// <see cref="ContractId{T}"/>: <see cref="ITemplate.TemplateId"/> for templates,
+    /// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
+    /// </summary>
+    public static ResolvedDamlType ResolveMatch<T>() where T : IDamlType
     {
         if (typeof(ITemplate).IsAssignableFrom(typeof(T)))
         {
-            return ResolveStaticIdentifier(typeof(T), nameof(ITemplate.TemplateId));
+            return new ResolvedDamlType(
+                ResolveStaticIdentifier(typeof(T), nameof(ITemplate.TemplateId)),
+                DamlTypeMatch.Template);
         }
 
         if (typeof(IDamlInterface).IsAssignableFrom(typeof(T)))
         {
-            return ResolveStaticIdentifier(typeof(T), nameof(IDamlInterface.InterfaceId));
+            return new ResolvedDamlType(
+                ResolveStaticIdentifier(typeof(T), nameof(IDamlInterface.InterfaceId)),
+                DamlTypeMatch.Interface);
         }
 
         throw new InvalidOperationException(

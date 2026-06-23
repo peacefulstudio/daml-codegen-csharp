@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -145,12 +146,16 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// Exercises a choice using a <see cref="SubmitterInfo"/> and projects the
     /// resulting transaction's created contracts to
     /// <see cref="ExerciseOutcome{T}"/> over <see cref="ContractId{T}"/>, expecting
-    /// exactly one created contract of type <typeparamref name="TTemplate"/>. This is
+    /// exactly one created contract matching <typeparamref name="TTemplate"/>. This is
     /// the primary authorization-carrying overload: the <paramref name="submitter"/>
     /// carries the act-as parties and any optional read-as parties through to the
     /// implementation.
     /// </summary>
-    /// <typeparam name="TTemplate">The template type expected to be created by the choice.</typeparam>
+    /// <typeparam name="TTemplate">
+    /// The Daml type expected to be created by the choice — a template marker
+    /// (matched by <c>TemplateId</c>) or an interface marker (matched when the
+    /// created contract's <c>InterfaceIds</c> contains its interface identifier).
+    /// </typeparam>
     /// <param name="command">The exercise command.</param>
     /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
     /// <param name="workflowId">Optional workflow identifier.</param>
@@ -160,7 +165,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
         SubmitterInfo submitter,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
-        where TTemplate : ITemplate;
+        where TTemplate : IDamlType;
 
     /// <summary>
     /// Convenience wrapper that exercises a choice on behalf of a single
@@ -180,25 +185,27 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
         Party actAs,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
-        where TTemplate : ITemplate
+        where TTemplate : IDamlType
     {
         SubmitterInfo submitter = actAs;
         return TryExerciseForCreatedAsync<TTemplate>(command, submitter, workflowId, cancellationToken);
     }
 
     /// <summary>
-    /// Subscribes to the ledger update stream for a single template using a
-    /// <see cref="SubmitterInfo"/>, projected to strongly-typed
-    /// <see cref="ContractStreamEvent{T}"/> values. The combined
+    /// Subscribes to the ledger update stream for a single Daml type (template or
+    /// interface marker) using a <see cref="SubmitterInfo"/>, projected to
+    /// strongly-typed <see cref="ContractStreamEvent{T}"/> values. The combined
     /// <c>ActAs ∪ ReadAs</c> set scopes visibility for the subscription.
-    /// Implementations filter by <typeparamref name="T"/>'s <c>TemplateId</c>;
-    /// events for unrelated templates are dropped at the source. This is the
-    /// primary authorization-carrying overload.
+    /// Implementations filter by <typeparamref name="T"/>'s identifier — by
+    /// <c>TemplateId</c> for templates, by <c>InterfaceIds</c> for interface
+    /// markers (see <typeparamref name="T"/>); events for unrelated contracts are
+    /// dropped at the source. This is the primary authorization-carrying overload.
     /// </summary>
     /// <typeparam name="T">
-    /// The Daml template to filter by. The constraint may be broadened to
-    /// <c>IDamlType</c> in a future release so that interface markers are
-    /// accepted as well.
+    /// A Daml template or interface marker (<c>IDamlType</c>). Template markers
+    /// match by <c>TemplateId</c>; interface markers match when a created
+    /// contract's <c>InterfaceIds</c> contains <typeparamref name="T"/>'s
+    /// interface identifier (module + entity, package-id-agnostic).
     /// </typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="fromOffset">
@@ -226,7 +233,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
         SubmitterInfo submitter,
         long? fromOffset = null,
         CancellationToken cancellationToken = default)
-        where T : ITemplate;
+        where T : IDamlType;
 
     /// <summary>
     /// Convenience wrapper that subscribes to the ledger update stream scoped to a
@@ -234,7 +241,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>
     /// primitive via the implicit <c>Party</c> to <see cref="SubmitterInfo"/> conversion.
     /// </summary>
-    /// <typeparam name="T">The Daml template to filter by.</typeparam>
+    /// <typeparam name="T">A Daml template or interface marker; see the primary overload for matching semantics.</typeparam>
     /// <param name="actAs">
     /// The party whose visibility scopes the subscription. For multi-party
     /// visibility, use the
@@ -250,7 +257,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
         Party actAs,
         long? fromOffset = null,
         CancellationToken cancellationToken = default)
-        where T : ITemplate
+        where T : IDamlType
     {
         SubmitterInfo submitter = actAs;
         return SubscribeAsync<T>(submitter, fromOffset, cancellationToken);

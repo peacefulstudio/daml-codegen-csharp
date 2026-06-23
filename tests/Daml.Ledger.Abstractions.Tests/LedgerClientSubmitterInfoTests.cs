@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -287,7 +288,7 @@ public class LedgerClientSubmitterInfoTests
             SubmitterInfo submitter,
             string? workflowId = null,
             CancellationToken cancellationToken = default)
-            where TTemplate : ITemplate
+            where TTemplate : IDamlType
         {
             LastExerciseForCreatedSubmitter = submitter;
             return Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(
@@ -298,7 +299,7 @@ public class LedgerClientSubmitterInfoTests
             SubmitterInfo submitter,
             long? fromOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate
+            where T : IDamlType
         {
             LastSubscribeSubmitter = submitter;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);

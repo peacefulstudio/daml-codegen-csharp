@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Ledger.Abstractions;
+using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
@@ -75,7 +76,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         SubmitterInfo submitter,
         string? workflowId = null,
         CancellationToken cancellationToken = default)
-        where TTemplate : ITemplate =>
+        where TTemplate : IDamlType =>
         throw new NotSupportedException();
 
     public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default) =>
@@ -85,7 +86,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         SubmitterInfo submitter,
         long? fromOffset = null,
         CancellationToken cancellationToken = default)
-        where T : ITemplate =>
+        where T : IDamlType =>
         throw new NotSupportedException();
 
     public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
