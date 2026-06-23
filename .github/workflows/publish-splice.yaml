@@ -39,7 +39,8 @@ jobs:
     uses: ./.github/workflows/_publish-dar-packages.yaml
     permissions:
       contents: write
-      packages: write
+      id-token: write
+      packages: read
     with:
       source_label: Splice
       download_url: https://github.com/digital-asset/decentralized-canton-sync/releases/download/v${{ inputs.splice_version }}/${{ inputs.splice_version }}_splice-node.tar.gz
@@ -54,3 +55,4 @@ jobs:
       dry_run: ${{ inputs.dry_run }}
     secrets:
       COUNTERS_TOKEN: ${{ secrets.RELEASE_COUNTERS_TOKEN }}
+      NUGET_USER: ${{ secrets.NUGET_USER }}
