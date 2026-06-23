@@ -8,13 +8,13 @@ usage() {
   cat <<EOF
 Usage: $0
 
-Push every produced nupkg to GitHub Packages. Refuses to run against an empty
+Push every produced nupkg to nuget.org. Refuses to run against an empty
 publish, and fails the job if any push fails so the counter persist step does
 not run.
 
 Reads (env):
   NUPKG_DIR             Directory of produced .nupkg files.
-  GH_TOKEN              Token used as the NuGet push api-key.
+  NUGET_API_KEY         Short-lived nuget.org key used as the NuGet push api-key.
   COUNTER_VARIABLE_NAME Repo variable name (named in the failure hint).
 EOF
   exit "${1:-1}"
@@ -32,8 +32,8 @@ push_failed=0
 for pkg in "${PKGS[@]}"; do
   echo "Pushing $pkg"
   if ! dotnet nuget push "$pkg" \
-    --source "https://nuget.pkg.github.com/peacefulstudio/index.json" \
-    --api-key "$GH_TOKEN" \
+    --source "https://api.nuget.org/v3/index.json" \
+    --api-key "$NUGET_API_KEY" \
     --skip-duplicate; then
     echo "::error::push failed for $pkg"
     push_failed=1
