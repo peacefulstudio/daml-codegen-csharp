@@ -33,6 +33,81 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.1.8-preview.5] — 2026-06-24
+
+### Changed
+
+- Generated code and runtime messages no longer embed internal issue-tracker
+  references; limitation notes (contract-key projection, generic-type
+  serialization) now read as generic, consumer-facing prose.
+
+### Fixed
+
+- Generated serialization no longer emits a non-compiling `.ToRecord()` for
+  variant payloads or for fields the type mapper cannot name. Variant payloads
+  (including recursive variants such as `DA.Logic.Types.Formula` and variant
+  payloads nested in lists) now serialize via `ToVariant()`/`FromVariant()`, and
+  function-typed / otherwise-unmappable fields (e.g. `DA.Action.State.Type.State`,
+  `DA.Monoid.Types.Endo`) emit the `GenericStub.NotImplemented` stub instead of a
+  missing-method call. Compiling an `--include-dependencies` tree containing these
+  Daml stdlib types as one assembly no longer fails with CS1061.
+
+## [0.1.8-preview.4] — 2026-06-21
+
+### Added
+
+- `Daml.Runtime.Contracts.CreatedContract` gains an init-only
+  `IReadOnlyList<Identifier> InterfaceIds { get; init; } = Array.Empty<Identifier>()`
+  member carrying the interface ids the participant computed for a created event
+  (Canton gRPC `CreatedEvent.interface_views[].interface_id`). Non-breaking: it is
+  not a positional parameter, so existing 3-arg construction keeps working and the
+  field defaults to an empty (non-null) list. Enables interface-only consumption,
+  where a contract is known only as an interface and must be matched/dispatched at
+  runtime.
+- **Read-path helpers now accept Daml interface markers, not just templates, and
+  match created contracts by interface view.** The generic constraint on
+  `TransactionResultExtensions.Single<T>`/`TrySingle<T>`/`All<T>`,
+  `ILedgerClient.TryExerciseForCreatedAsync<TTemplate>` and both `SubscribeAsync<T>`
+  overloads, and `ContractStreamEvent<T>` is relaxed from `ITemplate` to
+  `IDamlType`. When `T` is a template the match is unchanged (created contract's
+  `TemplateId`); when `T` is an interface marker (`IDamlInterface`), a created
+  contract matches when its `InterfaceIds` contains `T`'s interface identifier
+  (module + entity, package-id-agnostic). Constraint relaxation is
+  source-compatible. `TryCreateAsync<TTemplate>` and `SubscribeActiveAsync<T>`
+  intentionally stay `ITemplate`-constrained — create paths remain template-only.
+
+### Changed
+
+- **The contract-key `Key` accessor on generated keyed templates now emits a
+  non-`partial` property that throws `NotImplementedException`**, reverting the
+  body-less `partial` declaration introduced in `0.1.5`. Key-bearing packages now
+  compile and publish standalone: the `partial` required a hand-rolled implementing
+  partial, which the automated DAR publish pipeline has no author for, so every
+  keyed package failed to build with `CS9248`. The key *type* is still generated
+  and serializable for caller-constructed key-based operations, and
+  `: IHasKey<TKey>` is unchanged — only the body reverts. Generated key-bearing
+  packages consequently no longer pin `<LangVersion>13</LangVersion>`.
+
+### Fixed
+
+- Generated C# no longer fails to compile with `CS0542` when a Daml record field
+  PascalCases to the same name as its enclosing type (e.g. Daml Finance `Period`
+  with field `period`). The colliding C# member is now disambiguated with a
+  trailing underscore while the Daml record field name used for (de)serialization
+  stays unchanged.
+- Generated `.csproj` files now reference co-produced sibling packages using the
+  full package version, including the emitter counter and any `--version-suffix`
+  prerelease tag. Previously sibling `<PackageReference>` versions dropped the
+  suffix, so a prerelease set (e.g. `3.0.0-preview.3`) emitted `>= 3.0.0`
+  references that NuGet could not resolve (`NU1102`).
+- Generated C# no longer fails to compile when a record or template references the
+  Daml stdlib enum `DA.Date.Types:DayOfWeek`. The enum now resolves to a
+  runtime-provided `Daml.Runtime.Stdlib.DayOfWeek` (with serialization extensions),
+  matching how other `daml-stdlib` types are handled. Because the runtime enum
+  shares its simple name with `System.DayOfWeek`, which `ImplicitUsings` imports
+  into every generated file, the reference is emitted fully `global::`-qualified to
+  avoid an ambiguous reference (`CS0104`).
+
 ## [0.1.8-preview.3] — 2026-06-18
 
 ### Added
