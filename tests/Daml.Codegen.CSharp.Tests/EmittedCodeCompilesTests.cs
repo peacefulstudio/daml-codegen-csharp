@@ -2874,14 +2874,6 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_record_with_unmappable_object_field_compiles()
     {
-        // Regression (#397): ToValue's `_` arm unconditionally emitted
-        // `<value>.ToRecord()` for any field the type mapper falls back to
-        // `object` for. `object` has no ToRecord(), so the emitted body was CS1061.
-        // The fallback-producing shape is a higher-kinded application (`f a` where
-        // the base is a type var), which no other MapType arm names. (Arrow types
-        // like DA.Monoid.Types.Endo's `appEndo : a -> a` do not reach here: the
-        // DarParser path maps BUILTIN_TYPE_ARROW to Unit, and the proto path throws
-        // — per AGENTS.md §Gotchas.) `f a` is the parser-independent reproduction.
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -2932,12 +2924,6 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_recursive_variant_with_direct_nested_variant_payload_compiles()
     {
-        // Regression (#397): a recursive VARIANT like DA.Logic.Types.Formula<a>
-        // has constructors (Negation/Conjunction/Disjunction) whose payloads are
-        // themselves Formula<a> — a DamlTypeApp over the variant's own TypeRef.
-        // ToValue's `_` arm wrongly emitted `Value.ToRecord()` for that payload
-        // (Formula is IDamlVariant, exposing ToVariant() not ToRecord()), so the
-        // ToVariant() body was CS1061.
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -2991,10 +2977,6 @@ public class EmittedCodeCompilesTests
     [Fact]
     public void Emitted_variant_with_list_of_nested_variant_payload_compiles()
     {
-        // Regression (#397): Formula<a>'s Conjunction/Disjunction carry
-        // [Formula a] — a List of nested-variant payloads. The list element
-        // serializer inside the `.Select(x => ...)` previously emitted
-        // `x.ToRecord()`; it must emit `x.ToVariant()`.
         var module = new DamlModule
         {
             Name = "Test.Module",
