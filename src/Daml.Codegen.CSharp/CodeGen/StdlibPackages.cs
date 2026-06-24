@@ -155,6 +155,17 @@ internal static class StdlibPackages
             case DamlTypeVar:
                 indent.Require(RuntimeNamespaces.Stdlib);
                 break;
+            case DamlTypeApp { Base: DamlTypeVar or DamlTypeApp } app:
+                indent.Require(RuntimeNamespaces.Stdlib);
+                foreach (var argument in app.Arguments)
+                {
+                    if (argument is DamlTypeVar)
+                    {
+                        continue;
+                    }
+                    RequireForFieldType(resolver, indent, argument);
+                }
+                break;
             case DamlTypeApp app:
                 foreach (var argument in app.Arguments)
                 {
