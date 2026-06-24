@@ -39,8 +39,10 @@ public sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageReso
                 : resolver.Resolve(typeRef, context),
         DamlTypeRef typeRef => resolver.Resolve(typeRef, context),
         DamlTypeVar typeVar => $"T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}",
-        _ => "object"
+        _ => FallbackTypeName
     };
+
+    private const string FallbackTypeName = "object";
 
     /// <summary>Produces the expression that serializes <paramref name="fieldName"/> of <paramref name="type"/> to a Daml value.</summary>
     public string ToValue(DamlType type, string fieldName) => type switch
@@ -73,11 +75,19 @@ public sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageReso
             $"{fieldName}.ToDamlEnum()",
         DamlTypeRef typeRef when IsCrossPackageEnumTypeRef(typeRef) =>
             QualifiedEnumExtensionsCall(typeRef, "ToDamlEnum", fieldName),
+        DamlTypeApp { Base: DamlTypeRef typeRef } when IsVariantTypeRef(typeRef) =>
+            $"{fieldName}.ToVariant()",
         DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
             $"{fieldName}.ToVariant()",
-        DamlTypeVar => $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}>(\"{fieldName}\")",
+        DamlTypeVar => FallbackToValueStub(fieldName),
+        _ when MapsToFallbackObject(type) => FallbackToValueStub(fieldName),
         _ => $"{fieldName}.ToRecord()"
     };
+
+    private string FallbackToValueStub(string fieldName) =>
+        $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}>(\"{fieldName}\")";
+
+    private bool MapsToFallbackObject(DamlType type) => MapType(type) == FallbackTypeName;
 
     /// <summary>Produces the expression that deserializes <paramref name="valueName"/> back into <paramref name="type"/>.</summary>
     public string FromValue(DamlType type, string valueName) => type switch
@@ -103,8 +113,10 @@ public sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageReso
         DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
             $"{resolver.Resolve(typeRef, context)}.FromVariant({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}>())",
         DamlTypeRef typeRef => $"{resolver.Resolve(typeRef, context)}.FromRecord({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}>())",
+        DamlTypeApp { Base: DamlTypeRef typeRef } app when IsVariantTypeRef(typeRef) =>
+            $"{resolver.Resolve(typeRef, context)}<{string.Join(", ", app.Arguments.Select(MapType))}>.FromVariant({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}>())",
         DamlTypeVar typeVar => $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<T{ToPascalCase(SanitizeIdentifier(typeVar.Name))}>(\"{typeVar.Name}\")",
-        _ => $"default! /* TODO: Implement deserialization for {type} */"
+        _ => $"default({MapType(type)})! /* TODO: Implement deserialization for {type} */"
     };
 
     // CS8524 disabled (not CS8509): the no-default switch covers every named

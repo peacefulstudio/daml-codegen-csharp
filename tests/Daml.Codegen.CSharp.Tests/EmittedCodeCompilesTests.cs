@@ -2871,6 +2871,178 @@ public class EmittedCodeCompilesTests
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
+    [Fact]
+    public void Emitted_record_with_unmappable_object_field_compiles()
+    {
+        // Regression (#397): ToValue's `_` arm unconditionally emitted
+        // `<value>.ToRecord()` for any field the type mapper falls back to
+        // `object` for. `object` has no ToRecord(), so the emitted body was CS1061.
+        // The fallback-producing shape is a higher-kinded application (`f a` where
+        // the base is a type var), which no other MapType arm names. (Arrow types
+        // like DA.Monoid.Types.Endo's `appEndo : a -> a` do not reach here: the
+        // DarParser path maps BUILTIN_TYPE_ARROW to Unit, and the proto path throws
+        // — per AGENTS.md §Gotchas.) `f a` is the parser-independent reproduction.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Endo",
+                    TypeParams = ["a"],
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlFieldDefinition("appEndo", new DamlTypeApp(
+                            new DamlTypeVar("f"),
+                            [new DamlTypeVar("a")])),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var endoSource = files.Single(f => f.RelativePath.EndsWith("Endo.cs", StringComparison.Ordinal)).Content;
+        endoSource.Should().NotContain("AppEndo.ToRecord()",
+            "an object-typed (unmappable) field must not emit `.ToRecord()` — object has no such method");
+        endoSource.Should().Contain("NotImplemented<DamlValue>(\"AppEndo\")",
+            "an object-typed (unmappable) field must serialize via the GenericStub.NotImplemented stub");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a record with an unmappable object-typed field must compile (no .ToRecord() on object), but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_recursive_variant_with_direct_nested_variant_payload_compiles()
+    {
+        // Regression (#397): a recursive VARIANT like DA.Logic.Types.Formula<a>
+        // has constructors (Negation/Conjunction/Disjunction) whose payloads are
+        // themselves Formula<a> — a DamlTypeApp over the variant's own TypeRef.
+        // ToValue's `_` arm wrongly emitted `Value.ToRecord()` for that payload
+        // (Formula is IDamlVariant, exposing ToVariant() not ToRecord()), so the
+        // ToVariant() body was CS1061.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Formula",
+                    TypeParams = ["a"],
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Proposition", new DamlTypeVar("a")),
+                        new DamlVariantConstructor("Negation", new DamlTypeApp(
+                            new DamlTypeRef("", "Test.Module", "Formula"),
+                            [new DamlTypeVar("a")])),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var formulaSource = files.Single(f => f.RelativePath.EndsWith("Formula.cs", StringComparison.Ordinal)).Content;
+        formulaSource.Should().Contain("Value.ToVariant()",
+            "a direct nested-variant payload must serialize via ToVariant(), not ToRecord()");
+        formulaSource.Should().Contain(".FromVariant(",
+            "a direct nested-variant payload must deserialize via FromVariant(), not FromRecord()");
+        formulaSource.Should().NotContain(".FromRecord(",
+            "a nested-variant payload has no FromRecord() — deserialization must use FromVariant()");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a recursive variant whose payload is the same variant must round-trip via ToVariant/FromVariant, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_variant_with_list_of_nested_variant_payload_compiles()
+    {
+        // Regression (#397): Formula<a>'s Conjunction/Disjunction carry
+        // [Formula a] — a List of nested-variant payloads. The list element
+        // serializer inside the `.Select(x => ...)` previously emitted
+        // `x.ToRecord()`; it must emit `x.ToVariant()`.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Formula",
+                    TypeParams = ["a"],
+                    Definition = new DamlVariantDefinition(
+                    [
+                        new DamlVariantConstructor("Proposition", new DamlTypeVar("a")),
+                        new DamlVariantConstructor("Conjunction", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.List),
+                            [new DamlTypeApp(
+                                new DamlTypeRef("", "Test.Module", "Formula"),
+                                [new DamlTypeVar("a")])])),
+                    ]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var formulaSource = files.Single(f => f.RelativePath.EndsWith("Formula.cs", StringComparison.Ordinal)).Content;
+        formulaSource.Should().Contain("x.ToVariant()",
+            "the list element serializer must convert nested-variant payloads via ToVariant(), not ToRecord()");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a variant carrying a list of nested-variant payloads must round-trip via ToVariant/FromVariant, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
     private static IReadOnlyList<Diagnostic> CompileEmittedFilesWithDocDiagnostics(IReadOnlyList<GeneratedFile> files) =>
         CompileEmittedFiles(files, DocumentationMode.Diagnose);
 
