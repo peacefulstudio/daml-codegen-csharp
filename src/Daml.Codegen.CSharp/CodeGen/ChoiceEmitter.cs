@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
@@ -183,4 +183,7 @@ public sealed partial class ChoiceEmitter(
     private static bool IsPlaceholderPackageName(string packageName) => StdlibPackages.IsPlaceholderPackageName(packageName);
 
     private static string SanitizeIdentifier(string name) => Identifiers.Sanitize(name);
+
+    private static string MemberName(string damlFieldName, string enclosingTypeName) =>
+        Identifiers.MemberName(damlFieldName, enclosingTypeName);
 }

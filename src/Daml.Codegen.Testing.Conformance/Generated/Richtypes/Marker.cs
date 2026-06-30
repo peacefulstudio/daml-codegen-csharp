@@ -20,19 +20,22 @@ namespace Daml.Codegen.Testing.Conformance.Richtypes;
 /// <summary>
 /// Generated from Daml template RichTypes:Marker
 /// </summary>
-public sealed partial record Marker(Party Owner) : ITemplate
+public sealed partial record Marker([property: DamlFieldAttribute("owner")] Party Owner) : ITemplate
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("9fbb9c81a2f951e871e72723d952fa879c49a90514647b9b496c52251b63cf8f", "RichTypes", "Marker");
+    public static Identifier TemplateId { get; } = new("29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb", "RichTypes", "Marker");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "9fbb9c81a2f951e871e72723d952fa879c49a90514647b9b496c52251b63cf8f";
+    public static string PackageId => "29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";
 
     /// <summary>Gets the package version.</summary>
     public static Version PackageVersion { get; } = new(0, 0, 1);
+
+    /// <summary>Gets the compile-time Daml type descriptor.</summary>
+    public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

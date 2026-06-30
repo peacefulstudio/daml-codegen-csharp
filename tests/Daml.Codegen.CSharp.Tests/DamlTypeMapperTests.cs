@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -307,6 +307,57 @@ public class DamlTypeMapperTests
                     "ParametricStdlibTypes entry ({0}, {1}) must have a MapStdlibType result or codegen throws at emit time",
                     module, name);
         }
+    }
+
+    private static readonly IReadOnlyList<(string Module, string Type)> StdlibMappingKeys =
+        StdlibPackages.ParametricStdlibTypes
+            .Select(p => (Module: p.Module, Type: p.Name))
+            .Concat(new[]
+            {
+                (Module: "DA.Date.Types", Type: "DayOfWeek"),
+                (Module: "DA.Time.Types", Type: "RelTime"),
+            })
+            .ToList();
+
+    public static IEnumerable<object[]> EveryStdlibMappingReturn() =>
+        StdlibMappingKeys
+            .Select(key => StdlibPackages.MapStdlibType(key.Module, key.Type))
+            .Distinct()
+            .Select(returned => new object[] { returned! });
+
+    private static string StripGenericArity(string typeName)
+    {
+        var backtick = typeName.IndexOf('`');
+        return backtick < 0 ? typeName : typeName[..backtick];
+    }
+
+    [Fact]
+    public void every_stdlib_mapping_return_theory_has_cases()
+    {
+        EveryStdlibMappingReturn().Should().NotBeEmpty(
+            "a wholesale null regression in MapStdlibType would otherwise empty the theory and pass silently");
+
+        StdlibPackages.MapStdlibType("DA.Date.Types", "DayOfWeek").Should().NotBeNull(
+            "StdlibMappingKeys entry (DA.Date.Types, DayOfWeek) must have a MapStdlibType result");
+        StdlibPackages.MapStdlibType("DA.Time.Types", "RelTime").Should().NotBeNull(
+            "StdlibMappingKeys entry (DA.Time.Types, RelTime) must have a MapStdlibType result");
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryStdlibMappingReturn))]
+    public void every_stdlib_mapping_return_resolves_to_a_public_runtime_type(string? returnedTypeName)
+    {
+        returnedTypeName.Should().NotBeNull(
+            "a key in StdlibMappingKeys returned null from MapStdlibType, so the switch and the guarded key set have drifted apart");
+
+        var publicStdlibTypeNames = typeof(Daml.Runtime.Stdlib.Unit).Assembly.GetExportedTypes()
+            .Where(t => t.Namespace == Daml.Runtime.RuntimeNamespaces.Stdlib)
+            .Select(t => StripGenericArity(t.Name))
+            .ToHashSet();
+
+        publicStdlibTypeNames.Should().Contain(returnedTypeName,
+            "MapStdlibType returns {0} as a C# reference into {1}; a renamed runtime record must fail loudly here instead of drifting into broken generated code",
+            returnedTypeName, Daml.Runtime.RuntimeNamespaces.Stdlib);
     }
 
     [Fact]

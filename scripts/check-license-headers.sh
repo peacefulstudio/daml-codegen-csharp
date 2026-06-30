@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Peaceful Studio OÜ
+# Copyright 2026 Peaceful Studio OÜ
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
@@ -31,7 +31,7 @@ if [ "${1:-}" = "--fix" ]; then
   action=()
 fi
 
-exec addlicense "${action[@]}" -s -l apache -c "Peaceful Studio OÜ" \
+exec addlicense "${action[@]}" -s=only -l apache -c "Peaceful Studio OÜ" \
   -ignore '**/bin/**' \
   -ignore '**/obj/**' \
   -ignore '**/target/**' \

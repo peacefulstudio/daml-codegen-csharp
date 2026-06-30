@@ -19,19 +19,29 @@ namespace Splice.Api.Token.Holding.V1;
 /// </summary>
 public sealed record Holding : ITemplate
 {
+    /// <summary>Always throws — the <c>Splice.Api.Token.HoldingV1:Holding</c> interface placeholder carries no template identity.</summary>
     public static Identifier TemplateId =>
         throw new InvalidOperationException("'Holding' is the C# placeholder for the Daml interface 'Splice.Api.Token.HoldingV1:Holding' and carries no template metadata. Coerce ContractId<Holding> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.");
 
+    /// <summary>Always throws — the <c>Splice.Api.Token.HoldingV1:Holding</c> interface placeholder carries no package identity.</summary>
     public static string PackageId =>
         throw new InvalidOperationException("'Holding' is the C# placeholder for the Daml interface 'Splice.Api.Token.HoldingV1:Holding' and carries no template metadata. Coerce ContractId<Holding> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.");
 
+    /// <summary>Always throws — the <c>Splice.Api.Token.HoldingV1:Holding</c> interface placeholder carries no package identity.</summary>
     public static string PackageName =>
         throw new InvalidOperationException("'Holding' is the C# placeholder for the Daml interface 'Splice.Api.Token.HoldingV1:Holding' and carries no template metadata. Coerce ContractId<Holding> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.");
 
+    /// <summary>Always throws — the <c>Splice.Api.Token.HoldingV1:Holding</c> interface placeholder carries no package identity.</summary>
     public static Version PackageVersion =>
         throw new InvalidOperationException("'Holding' is the C# placeholder for the Daml interface 'Splice.Api.Token.HoldingV1:Holding' and carries no template metadata. Coerce ContractId<Holding> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.");
 
+    /// <summary>Always throws — the <c>Splice.Api.Token.HoldingV1:Holding</c> interface placeholder carries no Daml type identity.</summary>
+    public static DamlTypeDescriptor DamlTypeId =>
+        throw new InvalidOperationException("'Holding' is the C# placeholder for the Daml interface 'Splice.Api.Token.HoldingV1:Holding' and carries no template metadata. Coerce ContractId<Holding> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.");
+
+    /// <summary>Converts this placeholder to an empty DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create();
 
+    /// <summary>Creates an empty placeholder instance from a DamlRecord.</summary>
     public static Holding FromRecord(DamlRecord record) => new Holding();
 }

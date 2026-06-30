@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 namespace Daml.Codegen.CSharp.Model;
@@ -29,9 +29,11 @@ public sealed class DamlTemplate
     public DamlType? Key { get; init; }
 
     /// <summary>
-    /// Gets the interfaces this template implements.
+    /// Gets the interfaces this template implements, as structured type
+    /// references that preserve the genuine module-name / type-name segment
+    /// boundary (rather than a pre-joined <c>module.name</c> string).
     /// </summary>
-    public IReadOnlyList<string> Implements { get; init; } = [];
+    public IReadOnlyList<DamlTypeRef> Implements { get; init; } = [];
 
     /// <summary>
     /// Gets the static signatory analysis for this template — the parsed shape

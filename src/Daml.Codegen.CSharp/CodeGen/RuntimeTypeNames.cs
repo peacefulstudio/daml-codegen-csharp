@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 namespace Daml.Codegen.CSharp.CodeGen;
@@ -8,6 +8,7 @@ internal static class RuntimeTypeNames
     public const string Party = nameof(Daml.Runtime.Data.Party);
     public const string DamlRecord = nameof(Daml.Runtime.Data.DamlRecord);
     public const string DamlField = nameof(Daml.Runtime.Data.DamlField);
+    public const string DamlFieldAttribute = nameof(Daml.Runtime.Data.DamlFieldAttribute);
     public const string DamlValue = nameof(Daml.Runtime.Data.DamlValue);
     public const string IDamlValue = nameof(Daml.Runtime.Data.IDamlValue);
     public const string IDamlRecord = nameof(Daml.Runtime.Data.IDamlRecord);
@@ -38,6 +39,8 @@ internal static class RuntimeTypeNames
     public const string IDamlInterface = nameof(Daml.Runtime.Contracts.IDamlInterface);
     public const string IHasView = nameof(Daml.Runtime.Contracts.IHasView<object>);
     public const string CreatedEvent = nameof(Daml.Runtime.Contracts.CreatedEvent);
+    public const string DamlTypeDescriptor = nameof(Daml.Runtime.Contracts.DamlTypeDescriptor);
+    public const string DamlTypeKind = nameof(Daml.Runtime.Contracts.DamlTypeKind);
 
     public const string SubmitterInfo = nameof(Daml.Runtime.Commands.SubmitterInfo);
     public const string ExerciseCommand = nameof(Daml.Runtime.Commands.ExerciseCommand);
@@ -59,10 +62,11 @@ internal static class RuntimeTypeNames
     public const string Unit = nameof(Daml.Runtime.Stdlib.Unit);
     public const string GenericStub = nameof(Daml.Runtime.Stdlib.GenericStub);
 
-    // The next three stay string literals rather than nameof(...) because each
+    // The next four stay string literals rather than nameof(...) because each
     // constrains a type parameter on ITemplate, whose static-abstract members
     // make it unusable as a nameof type argument (CS8920), and no concrete
     // implementation is visible to the codegen project.
+    public const string Contract = "Contract";
     public const string IContract = "IContract";
     public const string Choice = "Choice";
     public const string IExercises = "IExercises";

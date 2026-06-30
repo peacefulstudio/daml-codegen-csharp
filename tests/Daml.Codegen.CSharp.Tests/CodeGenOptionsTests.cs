@@ -1,10 +1,12 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using Daml.Codegen.CSharp.Tests.TestHelpers;
+using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -59,12 +61,6 @@ public class CodeGenOptionsTests
 
     #region CSharpCodeGenerator Integration Tests
 
-    private static CSharpCodeGenerator CreateGenerator(CodeGenOptions options)
-    {
-        var logger = new ConsoleLogger(0); // Silent
-        return new CSharpCodeGenerator(options, logger);
-    }
-
     private static DamlModule CreateSimpleModule(string moduleName = "Test.Module", string templateName = "SimpleTemplate")
     {
         return new DamlModule
@@ -91,24 +87,8 @@ public class CodeGenOptionsTests
         };
     }
 
-    private static DarModel CreateTestDar(DamlModule mainModule, List<DamlPackage>? dependencies = null)
-    {
-        var mainPackage = new DamlPackage
-        {
-            PackageId = "main-package-id",
-            Name = "main-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [mainModule],
-            DependencyReferences = []
-        };
-
-        return new DarModel
-        {
-            MainPackage = mainPackage,
-            Dependencies = dependencies ?? []
-        };
-    }
+    private static DamlModelBuilder MainPackageDar() =>
+        new DamlModelBuilder().WithPackageId("main-package-id").WithPackageName("main-package");
 
     #endregion
 
@@ -124,7 +104,7 @@ public class CodeGenOptionsTests
             TargetFramework = "net10.0"
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule());
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -145,7 +125,7 @@ public class CodeGenOptionsTests
             GenerateProjectFile = false
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule());
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -179,7 +159,7 @@ public class CodeGenOptionsTests
             IncludeDependencies = true
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule(), [depPackage]);
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -212,7 +192,7 @@ public class CodeGenOptionsTests
             IncludeDependencies = false
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule(), [depPackage]);
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -256,7 +236,7 @@ public class CodeGenOptionsTests
             IncludeDependencies = true
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule(), [dep1Package, dep2Package]);
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(dep1Package, dep2Package).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -297,7 +277,7 @@ public class CodeGenOptionsTests
             TargetFramework = "net10.0"
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule(), [depPackage]);
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
         // Act
         var files = generator.Generate(dar);
@@ -322,7 +302,7 @@ public class CodeGenOptionsTests
             RuntimePackageVersion = "1.2.3"
         };
         var generator = CreateGenerator(options);
-        var dar = CreateTestDar(CreateSimpleModule());
+        var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
         // Act
         var files = generator.Generate(dar);

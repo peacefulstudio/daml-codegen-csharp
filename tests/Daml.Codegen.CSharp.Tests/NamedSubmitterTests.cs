@@ -1,10 +1,11 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -24,19 +25,6 @@ namespace Daml.Codegen.CSharp.Tests;
 /// </summary>
 public class NamedSubmitterTests
 {
-    private static CSharpCodeGenerator CreateGenerator()
-    {
-        var options = new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
-        };
-        var logger = new ConsoleLogger(0);
-        return new CSharpCodeGenerator(options, logger);
-    }
-
     private static readonly DamlPackage StdlibStub = new()
     {
         PackageId = "daml-prim-pkg-id",
@@ -483,6 +471,117 @@ public class NamedSubmitterTests
         content.Should().Contain("public static class AssetSubmissionExtensions");
         content.Should().Contain("public static Task<ExerciseOutcome<ContractId<Asset>>> CreateAsync(");
         content.Should().NotContain("ArchiveAsync(");
+    }
+
+    #endregion
+
+    #region <Choice>Async — Contract&lt;T&gt; sibling overload
+
+    [Fact]
+    public void ChoiceAsync_with_static_controllers_emits_contract_sibling_overload()
+    {
+        var module = MakeAgreementWithObservers(
+            signatories: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            templateObservers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("holder")]),
+            choiceControllers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            choiceObservers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]));
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
+
+        content.Should().Contain("this ContractId<Agreement> contractId,");
+        content.Should().Contain("this Agreement.Contract contract,");
+        content.Should().Contain("return contract.Id.RenewAsync(");
+        content.Should().Contain("ArgumentNullException.ThrowIfNull(client);");
+        content.Should().Contain("contract.Data.Platform,");
+        content.Should().Contain("contract.Data.Holder,");
+        content.Should().Contain("contract.Data.Issuer,");
+        var idxController = content.IndexOf("contract.Data.Platform,", StringComparison.Ordinal);
+        var idxObserver = content.IndexOf("contract.Data.Holder,", StringComparison.Ordinal);
+        idxController.Should().BeLessThan(idxObserver);
+    }
+
+    [Fact]
+    public void ChoiceAsync_with_dynamic_controllers_does_not_emit_contract_sibling_overload()
+    {
+        var module = MakeAgreementWithObservers(
+            signatories: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            templateObservers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("holder")]),
+            choiceControllers: DamlPartyAnalysis.Dynamic,
+            choiceObservers: DamlPartyAnalysis.Dynamic);
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
+
+        content.Should().Contain("this ContractId<Agreement> contractId,");
+        content.Should().NotContain("this Agreement.Contract contract,");
+    }
+
+    [Fact]
+    public void ChoiceAsync_contract_sibling_passes_choice_argument_through()
+    {
+        var module = new DamlModule
+        {
+            Name = "Acme.Agreements",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Offer",
+                    Fields =
+                    [
+                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
+                    ],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Accept",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("test-pkg", "Acme.Agreements", "AcceptArgs"),
+                            ReturnType = new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.ContractId),
+                                [new DamlTypeRef("test-pkg", "Acme.Agreements", "Agreement")]),
+                            Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("counterparty")]),
+                        }
+                    ],
+                    Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("counterparty")]),
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Offer",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "AcceptArgs",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("memo", new DamlPrimitiveType(DamlPrimitive.Text))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Agreement",
+                    Definition = new DamlRecordDefinition([]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var content = files.First(f => f.RelativePath.EndsWith("Offer.cs", StringComparison.Ordinal)).Content;
+
+        content.Should().Contain("this Offer.Contract contract,");
+        content.Should().Contain("Offer.Accept argument,");
+        content.Should().Contain("ArgumentNullException.ThrowIfNull(argument);");
+        var idxArg = content.IndexOf("return contract.Id.AcceptAsync(", StringComparison.Ordinal);
+        idxArg.Should().BeGreaterThan(0);
+        var delegateBody = content[idxArg..];
+        delegateBody.Should().Contain("argument,");
+        delegateBody.Should().Contain("contract.Data.Counterparty,");
     }
 
     #endregion

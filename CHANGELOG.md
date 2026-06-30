@@ -33,6 +33,41 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.2.0-preview.1] — 2026-06-30
+
+### Added
+
+- Generated record properties now carry `[DamlField]` attributes recording the
+  original Daml field name alongside the C# property, so consumers and tooling can
+  recover the on-ledger field naming without re-deriving it from the type.
+
+### Changed
+
+- **Breaking:** `ILedgerClient.SubmitAsync` is renamed to `SubmitAndWaitAsync`,
+  making the submit-and-wait semantics explicit at the call site. The behavior is
+  unchanged; update call sites to the new name.
+- **Breaking:** `IDamlType` is no longer an empty marker interface — it now
+  declares a static-abstract `DamlTypeId` (`static abstract DamlTypeDescriptor
+  DamlTypeId { get; }`), and `ITemplate` (which extends `IDamlType`) inherits the
+  requirement. Type-identifier resolution no longer goes through runtime
+  reflection. Two consequences for consumers:
+  - Hand-written types implementing `IDamlType` or `ITemplate` must now provide
+    `DamlTypeId`; all generated types supply it automatically.
+  - Because these interfaces now carry a static-abstract member, they can no
+    longer be passed as generic type *arguments* — code such as `Foo<IDamlType>`
+    or `Foo<ITemplate>` no longer compiles (CS8920). Pass a concrete generated
+    type, or route through a constrained type parameter (`where T : IDamlType`).
+- `SubscribeActiveAsync<T>` (active-contract-set subscription) now accepts any
+  `IDamlType`, widening the previous constraint so a broader set of generated
+  types can be subscribed directly.
+
+### Fixed
+
+- The generated `Contract<T>` `<Choice>Async` exercise overload is now reachable
+  when a contract is reconstructed from a created event via `FromCreatedEvent`;
+  previously the nested-contract overload it resolved to was hidden, so the
+  asynchronous exercise call could not be made on contracts obtained that way.
+
 ## [0.1.8-preview.5] — 2026-06-24
 
 ### Changed

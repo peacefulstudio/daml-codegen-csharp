@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
@@ -15,12 +15,9 @@ public sealed partial class ChoiceEmitter
 
         if (options.GenerateXmlDocs)
         {
-            indent.AppendLine("/// <summary>");
-            indent.AppendLine($"/// Interface method {method.Name}.");
-            indent.AppendLine("/// </summary>");
+            indent.AppendLine($"// Interface method {method.Name}.");
         }
 
-        // Generate method signature
         if (argTypeName == "DamlUnit")
         {
             indent.AppendLine($"// Choice {method.Name}() -> {returnType}");

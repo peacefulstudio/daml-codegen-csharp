@@ -48,7 +48,8 @@ rm -rf "$EXPECTED_DIR"
 mv "$STAGING_DIR" "$EXPECTED_DIR"
 trap - EXIT
 
-dotnet test "$PROJECT_ROOT" --filter "FullyQualifiedName~DriftDetectionTests&DisplayName~$SNAPSHOT_NAME"
+dotnet test --project "$PROJECT_ROOT/tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj" \
+  -c Release -- --filter-class "*DriftDetectionTests"
 
 git -C "$PROJECT_ROOT" add "$EXPECTED_DIR"
 

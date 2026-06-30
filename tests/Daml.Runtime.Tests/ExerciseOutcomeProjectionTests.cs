@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Runtime.Tests;
@@ -26,6 +26,7 @@ public class ExerciseOutcomeProjectionTests
         public static string PackageId => "pkg-1";
         public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Agreement FromRecord(DamlRecord record) => new();
     }
@@ -37,6 +38,7 @@ public class ExerciseOutcomeProjectionTests
         public static string PackageId => "pkg-1";
         public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static SwapRecord FromRecord(DamlRecord record) => new();
     }
@@ -48,6 +50,7 @@ public class ExerciseOutcomeProjectionTests
         public static string PackageId => "pkg-1";
         public static string PackageName => "peaceful-acme-agreements";
         public static Version PackageVersion => new(0, 0, 1);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static AgreementRecord FromRecord(DamlRecord record) => new();
     }
@@ -247,6 +250,7 @@ public class ExerciseOutcomeProjectionTests
         public static string PackageId => "pkg-1";
         public static string PackageName => "peaceful-acme-splitters";
         public static Version PackageVersion => new(0, 0, 1);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Half FromRecord(DamlRecord record) => new();
     }

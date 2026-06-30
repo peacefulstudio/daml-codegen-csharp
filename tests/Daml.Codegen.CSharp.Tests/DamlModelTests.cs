@@ -1,8 +1,8 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -282,7 +282,11 @@ public class DamlModelTests
             Fields = fields,
             Choices = choices,
             Key = new DamlPrimitiveType(DamlPrimitive.Party),
-            Implements = ["Interface1", "Interface2"]
+            Implements =
+            [
+                new DamlTypeRef("pkg1", "Module1", "Interface1"),
+                new DamlTypeRef("pkg2", "Module2", "Interface2"),
+            ]
         };
 
         // Assert

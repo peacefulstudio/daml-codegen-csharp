@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
@@ -17,6 +17,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
     private readonly ICodegenLogger _logger;
     private readonly HashSet<string> _discoveredExternalPackageIds = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
+    private readonly Dictionary<string, IReadOnlySet<string>> _foreignInterfaceCache = [];
 
     /// <summary>Creates a resolver scoped to a single <see cref="IDarSource"/>.</summary>
     public DarCrossPackageResolver(IDarSource dar, ICodegenLogger logger)
@@ -43,6 +44,10 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
 
         if (context.IsLocalRef(typeRef))
         {
+            if (context.InterfacePlaceholderQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}"))
+            {
+                return Identifiers.InterfaceMarkerName(typeRef.Name);
+            }
             if (context.LocalChoiceArgToTemplate.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var parentTemplate))
             {
                 return $"{Identifiers.Sanitize(parentTemplate)}.{sanitized}";
@@ -70,6 +75,10 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
 
         _discoveredExternalPackageIds.Add(typeRef.PackageId);
         var foreignNs = Identifiers.DeriveNamespace(foreignPkg.Name);
+        if (ForeignInterfaceQualifiedNames(foreignPkg).Contains($"{typeRef.Module}:{typeRef.Name}"))
+        {
+            return $"{foreignNs}.{Identifiers.InterfaceMarkerName(typeRef.Name)}";
+        }
         if (!_foreignChoiceArgCache.TryGetValue(typeRef.PackageId, out var foreignChoiceArgMap))
         {
             foreignChoiceArgMap = BuildForeignChoiceArgToTemplate(foreignPkg);
@@ -80,6 +89,18 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
             return $"{foreignNs}.{Identifiers.Sanitize(foreignParentTemplate)}.{sanitized}";
         }
         return $"{foreignNs}.{sanitized}";
+    }
+
+    private IReadOnlySet<string> ForeignInterfaceQualifiedNames(DamlPackage pkg)
+    {
+        if (!_foreignInterfaceCache.TryGetValue(pkg.PackageId, out var qualifiedNames))
+        {
+            qualifiedNames = pkg.Modules
+                .SelectMany(module => module.Interfaces.Select(iface => $"{module.Name}:{iface.Name}"))
+                .ToHashSet();
+            _foreignInterfaceCache[pkg.PackageId] = qualifiedNames;
+        }
+        return qualifiedNames;
     }
 
     /// <summary>

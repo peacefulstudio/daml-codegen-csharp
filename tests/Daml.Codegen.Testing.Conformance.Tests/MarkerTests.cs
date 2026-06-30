@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Daml.Codegen.Testing.Conformance.Richtypes;
 using Xunit;
 
@@ -11,7 +11,7 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 
 public class MarkerTests
 {
-    private const string PackageHash = "9fbb9c81a2f951e871e72723d952fa879c49a90514647b9b496c52251b63cf8f";
+    private const string PackageHash = "29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb";
 
     [Fact]
     public void to_record_then_from_record_round_trips_the_owner()

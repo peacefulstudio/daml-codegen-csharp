@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
@@ -66,30 +66,49 @@ public sealed class PartyAnalysis
     /// <see cref="DamlPartySource.Dynamic"/>.
     /// </exception>
     public (List<string> controllerParams, List<string> readAsParams)
-        PartitionControllersAndObservers(DamlPartyAnalysis controllers, DamlPartyAnalysis observers)
+        PartitionControllersAndObservers(DamlPartyAnalysis controllers, DamlPartyAnalysis observers) =>
+        PartitionPayloadFields(controllers, observers, ToCamelCaseParam);
+
+    /// <summary>
+    /// Splits analyzed controllers and observers into two ordered lists of the
+    /// underlying Daml payload-field names — the same partition as
+    /// <see cref="PartitionControllersAndObservers"/>, but returning the raw
+    /// field names (not camelCased parameter names) so emitters can derive
+    /// payload-property accessors (e.g. <c>contract.Data.Counterparty</c>) from
+    /// them. Controllers feed <c>SubmitterInfo.actAs</c>; observer-only parties
+    /// feed <c>SubmitterInfo.readAs</c>, deduplicated by field name against the
+    /// controllers.
+    /// </summary>
+    /// <returns><c>(controllerFieldNames, readAsFieldNames)</c>, both in declaration order.</returns>
+    public (List<string> controllerFieldNames, List<string> readAsFieldNames)
+        PartitionControllerAndObserverFieldNames(DamlPartyAnalysis controllers, DamlPartyAnalysis observers) =>
+        PartitionPayloadFields(controllers, observers, fieldName => fieldName);
+
+    private (List<T> controllers, List<T> readAs) PartitionPayloadFields<T>(
+        DamlPartyAnalysis controllers, DamlPartyAnalysis observers, Func<string, T> transform)
     {
-        var controllerParams = new List<string>();
+        var controllerResults = new List<T>();
         var controllerFieldNames = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pf in PayloadFieldsOf(controllers))
         {
             if (controllerFieldNames.Add(pf.FieldName))
             {
-                controllerParams.Add(ToCamelCaseParam(pf.FieldName));
+                controllerResults.Add(transform(pf.FieldName));
             }
         }
 
-        var readAsParams = new List<string>();
+        var readAsResults = new List<T>();
         var seenObservers = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pf in PayloadFieldsOf(observers))
         {
             if (!controllerFieldNames.Contains(pf.FieldName) && seenObservers.Add(pf.FieldName))
             {
-                readAsParams.Add(ToCamelCaseParam(pf.FieldName));
+                readAsResults.Add(transform(pf.FieldName));
             }
         }
 
-        return (controllerParams, readAsParams);
+        return (controllerResults, readAsResults);
     }
 
     private static IEnumerable<DamlPartyPayloadField> PayloadFieldsOf(DamlPartyAnalysis analysis)

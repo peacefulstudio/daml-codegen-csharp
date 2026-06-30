@@ -1,10 +1,12 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using Daml.Codegen.CSharp.Tests.TestHelpers;
+using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -19,41 +21,15 @@ namespace Daml.Codegen.CSharp.Tests;
 /// </summary>
 public class ChoiceAsyncExerciserTests
 {
-    private static CSharpCodeGenerator CreateGenerator()
+    private static readonly DamlPackage DamlPrim = new()
     {
-        var options = new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true
-        };
-        var logger = new ConsoleLogger(0);
-        return new CSharpCodeGenerator(options, logger);
-    }
-
-    private static DarModel CreateTestDar(DamlModule module)
-    {
-        var package = new DamlPackage
-        {
-            PackageId = "test-package-id",
-            Name = "test-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [module],
-            DependencyReferences = []
-        };
-        var damlPrim = new DamlPackage
-        {
-            PackageId = "daml-prim",
-            Name = "daml-prim",
-            Version = new Version(0, 0, 0),
-            LfVersion = "2.1",
-            Modules = [],
-            DependencyReferences = []
-        };
-        return new DarModel { MainPackage = package, Dependencies = [damlPrim] };
-    }
+        PackageId = "daml-prim",
+        Name = "daml-prim",
+        Version = new Version(0, 0, 0),
+        LfVersion = "2.1",
+        Modules = [],
+        DependencyReferences = []
+    };
 
     private static DamlType TupleType(params DamlType[] componentTypes) =>
         new DamlTypeApp(
@@ -123,7 +99,7 @@ public class ChoiceAsyncExerciserTests
 
     private static string GenerateAndReadTemplate(DamlModule module, string templateName)
     {
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(DamlPrim).Build();
         var generator = CreateGenerator();
         var files = generator.Generate(dar);
         var file = files.FirstOrDefault(f => f.RelativePath.EndsWith($"{templateName}.cs", StringComparison.Ordinal));

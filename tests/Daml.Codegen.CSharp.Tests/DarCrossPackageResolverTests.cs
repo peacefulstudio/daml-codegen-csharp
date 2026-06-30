@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 using Xunit;
 
@@ -61,6 +61,15 @@ public class DarCrossPackageResolverTests
     private static DamlDataType Record(string name) =>
         new() { Name = name, Definition = new DamlRecordDefinition([]) };
 
+    private static DamlModule InterfaceModule(string moduleName, string interfaceName) =>
+        new()
+        {
+            Name = moduleName,
+            DataTypes = [Record(interfaceName)],
+            Templates = [],
+            Interfaces = [new DamlInterface { Name = interfaceName, Choices = [], ViewType = null }]
+        };
+
     private static PackageEmitContext ContextFor(DamlPackage main) =>
         PackageEmitContext.ForPackage(main, new CodeGenOptions());
 
@@ -73,6 +82,31 @@ public class DarCrossPackageResolverTests
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Widget"), ContextFor(main));
 
         result.Should().Be("Widget");
+    }
+
+    [Fact]
+    public void resolve_returns_the_interface_marker_for_a_local_interface_ref()
+    {
+        var main = Package("main-id", "my-pkg", InterfaceModule("M", "Holding"));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), Substitute.For<ICodegenLogger>());
+
+        var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Holding"), ContextFor(main));
+
+        result.Should().Be("IHolding");
+    }
+
+    [Fact]
+    public void resolve_returns_the_qualified_interface_marker_for_a_cross_package_interface_ref()
+    {
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var foreign = Package("foreign-id", "foreign-pkg", InterfaceModule("Splice.Holding", "Holding"));
+        var resolver = new DarCrossPackageResolver(
+            new FakeDarSource(main, foreign), Substitute.For<ICodegenLogger>());
+
+        var result = resolver.Resolve(new DamlTypeRef("foreign-id", "Splice.Holding", "Holding"), ContextFor(main));
+
+        result.Should().Be("Foreign.Pkg.IHolding");
+        resolver.DiscoveredExternalPackageIds.Should().Contain("foreign-id");
     }
 
     [Fact]
@@ -368,6 +402,34 @@ public class DarCrossPackageResolverTests
         enumerationsAfterFirst.Should().BeGreaterThan(0, "the first resolve builds the foreign-choice-arg map by walking the package's modules");
         countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
             "the memo must serve the second resolve without rebuilding the map — so the foreign package's modules are not walked again");
+    }
+
+    [Fact]
+    public void the_foreign_interface_memo_builds_the_set_once_across_repeated_resolves()
+    {
+        var countingModules = new CountingModules([InterfaceModule("Splice.Holding", "Holding")]);
+        var other = new DamlPackage
+        {
+            PackageId = "other-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = countingModules,
+            DependencyReferences = []
+        };
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), Substitute.For<ICodegenLogger>());
+        var context = ContextFor(main);
+
+        var first = resolver.Resolve(new DamlTypeRef("other-id", "Splice.Holding", "Holding"), context);
+        var enumerationsAfterFirst = countingModules.EnumerationCount;
+        var second = resolver.Resolve(new DamlTypeRef("other-id", "Splice.Holding", "Holding"), context);
+
+        first.Should().Be("Other.Pkg.IHolding");
+        second.Should().Be(first);
+        enumerationsAfterFirst.Should().BeGreaterThan(0, "the first resolve builds the foreign-interface set by walking the package's modules");
+        countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
+            "the memo must serve the second resolve without rebuilding the set — so the foreign package's modules are not walked again");
     }
 
     [Fact]

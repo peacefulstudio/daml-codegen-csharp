@@ -1,8 +1,8 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Daml.Codegen.Testing.Conformance.Richtypes;
 using Xunit;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
@@ -8,7 +8,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Streams;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Ledger.Abstractions.Tests;
@@ -395,7 +395,7 @@ public class LedgerClientExtensionsTests
             CancellationToken cancellationToken = default)
             => Task.FromResult((ExerciseOutcome<TResult>)_outcome);
 
-        public Task<string> SubmitAsync(
+        public Task<string> SubmitAndWaitAsync(
             CommandsSubmission submission,
             CancellationToken cancellationToken = default)
             => Task.FromResult("update-id");
@@ -431,7 +431,7 @@ public class LedgerClientExtensionsTests
         public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             CancellationToken cancellationToken = default)
-            where T : ITemplate
+            where T : IDamlType
             => EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
 
         public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default)
@@ -457,6 +457,7 @@ internal sealed record SampleTemplate : ITemplate
     public static string PackageId => "pkg";
     public static string PackageName => "pkg-name";
     public static Version PackageVersion => new(1, 0, 0);
+    public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
     public DamlRecord ToRecord() => DamlRecord.Create();
     public static SampleTemplate FromRecord(DamlRecord record) => new();
@@ -468,6 +469,7 @@ internal sealed record SampleInterface : IDamlInterface
     public static string PackageId => "iface-pkg";
     public static string PackageName => "iface-name";
     public static Version PackageVersion => new(1, 0, 0);
+    public static DamlTypeDescriptor DamlTypeId { get; } = new(InterfaceId, DamlTypeKind.Interface, PackageName);
 
     public DamlRecord ToRecord() => DamlRecord.Create();
 }
