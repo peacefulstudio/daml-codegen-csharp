@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.Model;
@@ -145,6 +145,13 @@ public sealed partial class ChoiceEmitter
             var effectiveReadAs = party.UnionStaticParties(templateObservers, choiceObservers);
             WriteSingleChoiceAsyncExerciser(
                 indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
+
+            if (controllers.Source == DamlPartySource.Static && controllers.Parties.Count > 0)
+            {
+                indent.AppendLine();
+                WriteSingleContractChoiceAsyncExerciser(
+                    indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
+            }
             first = false;
         }
 
@@ -324,6 +331,103 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
         indent.Dedent();
         indent.AppendLine("};");
+
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    /// <summary>
+    /// Emits the sibling <c>&lt;Choice&gt;Async</c> overload that receives the
+    /// generated nested <c>TemplateName.Contract</c> — the type
+    /// <c>TemplateName.Contract.FromCreatedEvent</c> returns — instead of a bare
+    /// <c>ContractId&lt;TemplateName&gt;</c>. Targeting the nested record (rather
+    /// than the runtime <c>Contract&lt;T&gt;</c> base) keeps the overload reachable
+    /// from a <c>FromCreatedEvent</c> result without an intermediate allocation.
+    /// Because the receiver carries the payload, the wrapper reads every
+    /// controller / observer party off <c>contract.Data</c> and delegates to the
+    /// <c>ContractId&lt;T&gt;</c> overload — the caller passes zero parties. Emitted
+    /// only when controllers are statically resolvable to payload fields; the
+    /// dynamic case has no payload-derivable submitter, so no <c>Contract</c>
+    /// overload is generated and callers stay on the named-parameter
+    /// <c>ContractId&lt;T&gt;</c> path.
+    /// </summary>
+    private void WriteSingleContractChoiceAsyncExerciser(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        DamlPartyAnalysis controllers,
+        DamlPartyAnalysis observers)
+    {
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var resultName = $"{choiceName}Result";
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
+
+        var (controllerFieldNames, readAsFieldNames) =
+            party.PartitionControllerAndObserverFieldNames(controllers, observers);
+        var partyArguments = controllerFieldNames
+            .Concat(readAsFieldNames)
+            .Select(fieldName => $"contract.Data.{MemberName(fieldName, templateClassName)}")
+            .ToList();
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Exercises the {choice.Name} choice on a fetched <see cref=\"{templateClassName}\"/> contract,");
+            indent.AppendLine("/// reading every controller and observer party off the contract payload so the");
+            indent.AppendLine("/// caller passes no parties. Delegates to the");
+            indent.AppendLine($"/// <c>ContractId&lt;{templateClassName}&gt;</c> overload.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contract\">The fetched contract on which to exercise the choice.</param>");
+            indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+            indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
+        }
+
+        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.Indent();
+        indent.AppendLine($"this {templateClassName}.Contract contract,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
+        if (hasArg)
+        {
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"{argParamType} argument,");
+        }
+        indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine("CancellationToken cancellationToken = default)");
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contract);");
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
+        if (hasArg)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
+
+        indent.AppendLine();
+        indent.AppendLine($"return contract.Id.{choiceName}Async(");
+        indent.Indent();
+        indent.AppendLine("client,");
+        if (hasArg)
+        {
+            indent.AppendLine("argument,");
+        }
+        foreach (var partyArgument in partyArguments)
+        {
+            indent.AppendLine($"{partyArgument},");
+        }
+        indent.AppendLine("workflowId,");
+        indent.AppendLine("cancellationToken);");
+        indent.Dedent();
 
         indent.Dedent();
         indent.AppendLine("}");

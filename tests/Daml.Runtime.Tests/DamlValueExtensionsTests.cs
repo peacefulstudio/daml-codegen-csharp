@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Runtime.Tests;
@@ -215,6 +215,7 @@ public class DamlValueExtensionsTests
         public static string PackageId => "pkg";
         public static string PackageName => "test-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() =>
             new(null, [new DamlField(nameof(Owner), new DamlParty(Owner))]);

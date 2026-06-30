@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 using RuntimeIdentifier = Daml.Runtime.Data.Identifier;
 
@@ -339,6 +339,7 @@ public class TransactionResultTests
         public static string PackageId => "test-pkg";
         public static string PackageName => "test-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", new DamlParty(Owner)));
@@ -350,6 +351,7 @@ public class TransactionResultTests
         public static string PackageId => "iface-pkg";
         public static string PackageName => "iface-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(InterfaceId, DamlTypeKind.Interface, PackageName);
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", new DamlParty(Owner)));

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
@@ -6,7 +6,7 @@ using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit;

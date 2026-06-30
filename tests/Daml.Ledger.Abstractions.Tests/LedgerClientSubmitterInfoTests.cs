@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
@@ -8,7 +8,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Streams;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Ledger.Abstractions.Tests;
@@ -261,7 +261,7 @@ public class LedgerClientSubmitterInfoTests
             return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
 
-        public Task<string> SubmitAsync(
+        public Task<string> SubmitAndWaitAsync(
             CommandsSubmission submission,
             CancellationToken cancellationToken = default)
             => Task.FromResult("update-id");
@@ -308,7 +308,7 @@ public class LedgerClientSubmitterInfoTests
         public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             CancellationToken cancellationToken = default)
-            where T : ITemplate
+            where T : IDamlType
         {
             LastSubscribeActiveSubmitter = submitter;
             return EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
@@ -343,6 +343,7 @@ public class LedgerClientSubmitterInfoTests
         public static string PackageId => "pkg";
         public static string PackageName => "fake";
         public static Version PackageVersion { get; } = new(1, 0, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() => new(TemplateId, []);
     }

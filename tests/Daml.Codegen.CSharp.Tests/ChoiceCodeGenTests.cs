@@ -1,29 +1,18 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using Daml.Codegen.CSharp.Tests.TestHelpers;
+using AwesomeAssertions;
 using System.IO;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 public class ChoiceCodeGenTests
 {
-    private static CSharpCodeGenerator CreateGenerator()
-    {
-        var options = new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true
-        };
-        var logger = new ConsoleLogger(0); // Silent
-        return new CSharpCodeGenerator(options, logger);
-    }
-
     private static readonly DamlPackage StdlibStub = new()
     {
         PackageId = "daml-prim-pkg-id",
@@ -33,25 +22,6 @@ public class ChoiceCodeGenTests
         Modules = [],
         DependencyReferences = [],
     };
-
-    private static DarModel CreateTestDar(DamlModule module)
-    {
-        var package = new DamlPackage
-        {
-            PackageId = "test-package-id",
-            Name = "test-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = [module],
-            DependencyReferences = []
-        };
-
-        return new DarModel
-        {
-            MainPackage = package,
-            Dependencies = [StdlibStub]
-        };
-    }
 
     [Fact]
     public void Generate_should_reference_existing_type_for_local_data_type_argument()
@@ -113,7 +83,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act
@@ -138,7 +108,7 @@ public class ChoiceCodeGenTests
     public void GenerateNestedChoiceArgumentType_emits_indented_signature_without_stray_spaces()
     {
         var module = NestedTransferArgumentModule();
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         var files = generator.Generate(dar);
@@ -146,7 +116,7 @@ public class ChoiceCodeGenTests
 
         nestedFile.Should().NotBeNull("the choice argument record is emitted as a nested type in a partial template file");
         nestedFile!.Content.Should().Contain(
-            "\n    public sealed record Transfer(Party NewOwner, decimal Amount) : IDamlRecord",
+            "\n    public sealed record Transfer([property: DamlFieldAttribute(\"newOwner\")] Party NewOwner, [property: DamlFieldAttribute(\"amount\")] decimal Amount) : IDamlRecord",
             "the nested record signature must be indented one level and the parameter list must close without trailing whitespace");
     }
 
@@ -232,7 +202,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act
@@ -284,7 +254,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act
@@ -348,7 +318,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act
@@ -413,7 +383,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act
@@ -498,7 +468,7 @@ public class ChoiceCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
         var generator = CreateGenerator();
 
         // Act

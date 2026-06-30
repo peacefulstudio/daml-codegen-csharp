@@ -33,9 +33,10 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
     /// <summary>Gets the package version.</summary>
     static Version IDamlInterface.PackageVersion => new(1, 0, 0);
 
-    /// <summary>
-    /// Interface method Archive.
-    /// </summary>
+    /// <summary>Gets the compile-time Daml type descriptor.</summary>
+    static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier("718a0f77e505a8de22f188bd4c87fe74101274e9d4cb1bfac7d09aec7158d35b", "Splice.Api.Token.HoldingV1", "Holding"), DamlTypeKind.Interface, "splice-api-token-holding-v1");
+
+    // Interface method Archive.
     // Choice Archive() -> DamlUnit
 }
 

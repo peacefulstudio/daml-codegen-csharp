@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Data;
@@ -67,12 +67,11 @@ public record ContractId<T> : ContractId where T : IDamlType
     /// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
     /// </summary>
     /// <remarks>
-    /// Resolved via reflection because instance-method generic constraints cannot
-    /// be specialised by sub-interface in C#. Errors from the underlying static
-    /// getter (e.g. an interface placeholder that throws on <c>TemplateId</c>
-    /// access) propagate to the caller — that is the intended failure mode.
+    /// Resolved at compile time via <see cref="IDamlType.DamlTypeId"/>. Errors from the
+    /// underlying static getter (e.g. an interface placeholder that throws on
+    /// <c>DamlTypeId</c> access) propagate to the caller — that is the intended failure mode.
     /// </remarks>
-    public DamlContractId ToDamlValue() => new(Value, ContractIdMetadata.Resolve<T>());
+    public DamlContractId ToDamlValue() => new(Value, T.DamlTypeId.Identifier);
 }
 
 /// <summary>
@@ -126,112 +125,5 @@ public static class ContractIdInterfaceCoercion
     {
         ArgumentNullException.ThrowIfNull(id);
         return new ContractId<TInterface>(id.Value);
-    }
-}
-
-/// <summary>
-/// Discriminates whether a Daml type was resolved as a concrete template or as an
-/// interface marker, selecting which identifier kind the match carries.
-/// </summary>
-internal enum DamlTypeMatch
-{
-    Template,
-    Interface,
-}
-
-internal readonly record struct ResolvedDamlType(Identifier Identifier, DamlTypeMatch Match);
-
-internal static class ContractIdMetadata
-{
-    public static Identifier Resolve<T>() where T : IDamlType => ResolveMatch<T>().Identifier;
-
-    /// <summary>
-    /// Resolves the static type identifier carried by a closed
-    /// <see cref="ContractId{T}"/>: <see cref="ITemplate.TemplateId"/> for templates,
-    /// <see cref="IDamlInterface.InterfaceId"/> for interface markers.
-    /// </summary>
-    public static ResolvedDamlType ResolveMatch<T>() where T : IDamlType
-    {
-        if (typeof(ITemplate).IsAssignableFrom(typeof(T)))
-        {
-            return new ResolvedDamlType(
-                ResolveStaticIdentifier(typeof(T), nameof(ITemplate.TemplateId)),
-                DamlTypeMatch.Template);
-        }
-
-        if (typeof(IDamlInterface).IsAssignableFrom(typeof(T)))
-        {
-            return new ResolvedDamlType(
-                ResolveStaticIdentifier(typeof(T), nameof(IDamlInterface.InterfaceId)),
-                DamlTypeMatch.Interface);
-        }
-
-        throw new InvalidOperationException(
-            $"Type '{typeof(T).FullName}' implements IDamlType but exposes neither "
-            + "ITemplate.TemplateId nor IDamlInterface.InterfaceId statically.");
-    }
-
-    private const System.Reflection.BindingFlags StaticIdentifierBindingFlags =
-        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-        | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy;
-
-    private static Identifier ResolveStaticIdentifier(Type type, string propertyName) =>
-        ResolveDirectlyDeclaredIdentifier(type, propertyName)
-            ?? ResolveExplicitInterfaceIdentifier(type, propertyName)
-            ?? throw new InvalidOperationException(
-                $"Type '{type.FullName}' exposes no static Identifier {propertyName} property.");
-
-    private static Identifier? ResolveDirectlyDeclaredIdentifier(Type type, string propertyName)
-    {
-        var prop = type.GetProperty(propertyName, StaticIdentifierBindingFlags);
-        return prop is not null && IsConcreteIdentifierGetter(prop)
-            ? (Identifier)InvokeStaticGetter(prop)!
-            : null;
-    }
-
-    private static Identifier? ResolveExplicitInterfaceIdentifier(Type type, string propertyName)
-    {
-        foreach (var candidateType in EnumerateTypeAndInterfaces(type))
-        {
-            foreach (var prop in candidateType.GetProperties(StaticIdentifierBindingFlags))
-            {
-                if (IsConcreteIdentifierGetter(prop) && TrailingSegment(prop.Name) == propertyName)
-                {
-                    return (Identifier)InvokeStaticGetter(prop)!;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static bool IsConcreteIdentifierGetter(System.Reflection.PropertyInfo prop) =>
-        prop.PropertyType == typeof(Identifier) && prop.GetMethod is { IsAbstract: false };
-
-    private static string TrailingSegment(string memberName)
-    {
-        var lastDot = memberName.LastIndexOf('.');
-        return lastDot >= 0 ? memberName[(lastDot + 1)..] : memberName;
-    }
-
-    private static IEnumerable<Type> EnumerateTypeAndInterfaces(Type type)
-    {
-        yield return type;
-        foreach (var iface in type.GetInterfaces())
-        {
-            yield return iface;
-        }
-    }
-
-    private static object? InvokeStaticGetter(System.Reflection.PropertyInfo prop)
-    {
-        try
-        {
-            return prop.GetValue(null);
-        }
-        catch (System.Reflection.TargetInvocationException tie) when (tie.InnerException is not null)
-        {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(tie.InnerException).Throw();
-            throw;
-        }
     }
 }

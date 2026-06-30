@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Daml.Codegen.Testing.Conformance.Richtypes;
 using Xunit;
 
@@ -51,6 +51,8 @@ public class RichRecordChoiceTests
             Tags: new List<string>(),
             Attributes: new Dictionary<string, string>(),
             Marker: new ContractId<Marker>("m"),
+            HoldingCid: new ContractId<IHolding>("00h"),
+            HoldingCids: new List<ContractId<IHolding>>(),
             Profile: new Profile("n", 0),
             Outcome: new Outcome.Pending(),
             Fee: 0m);

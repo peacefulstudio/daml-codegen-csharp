@@ -16,7 +16,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record Lock
 /// </summary>
-public sealed record Lock(IReadOnlyList<Party> Holders, DateTimeOffset? ExpiresAt, RelTime? ExpiresAfter, string? Context) : IDamlRecord
+public sealed record Lock([property: DamlFieldAttribute("holders")] IReadOnlyList<Party> Holders, [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt, [property: DamlFieldAttribute("expiresAfter")] RelTime? ExpiresAfter, [property: DamlFieldAttribute("context")] string? Context) : IDamlRecord
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

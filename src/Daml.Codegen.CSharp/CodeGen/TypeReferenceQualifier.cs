@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using LedgerNamespaces = Daml.Ledger.Abstractions.LedgerNamespaces;
@@ -30,6 +30,7 @@ public sealed class TypeReferenceQualifier
             [RuntimeTypeNames.Party] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlRecord] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlField] = RuntimeNamespaces.Data,
+            [RuntimeTypeNames.DamlFieldAttribute] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlValue] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.IDamlValue] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.IDamlRecord] = RuntimeNamespaces.Data,
@@ -51,6 +52,7 @@ public sealed class TypeReferenceQualifier
             [RuntimeTypeNames.Identifier] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlContractId] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ContractId] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.Contract] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ITemplate] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IHasKey] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IUpgradeable] = RuntimeNamespaces.Contracts,
@@ -68,6 +70,8 @@ public sealed class TypeReferenceQualifier
             [RuntimeTypeNames.IDamlInterface] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IHasView] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.CreatedEvent] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.DamlTypeDescriptor] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.DamlTypeKind] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ExerciseOutcome] = RuntimeNamespaces.Outcomes,
             [RuntimeTypeNames.RelTime] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.DayOfWeek] = RuntimeNamespaces.Stdlib,

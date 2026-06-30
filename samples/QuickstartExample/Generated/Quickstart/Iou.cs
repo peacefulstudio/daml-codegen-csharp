@@ -35,6 +35,9 @@ public sealed partial record Iou(Party Issuer, Party Owner, string Currency, dec
     /// <summary>Gets the package version.</summary>
     public static Version PackageVersion { get; } = new(0, 0, 1);
 
+    /// <summary>Gets the compile-time Daml type descriptor.</summary>
+    public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
+
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
         DamlField.Create("issuer", Issuer.ToDamlValue()),

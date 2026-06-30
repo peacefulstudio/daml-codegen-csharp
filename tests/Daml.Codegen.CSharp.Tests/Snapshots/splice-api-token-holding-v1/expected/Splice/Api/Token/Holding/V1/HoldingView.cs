@@ -12,7 +12,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record HoldingView
 /// </summary>
-public sealed record HoldingView(Party Owner, InstrumentId InstrumentId, decimal Amount, Lock? @lock, Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record HoldingView([property: DamlFieldAttribute("owner")] Party Owner, [property: DamlFieldAttribute("instrumentId")] InstrumentId InstrumentId, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("lock")] Lock? @lock, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

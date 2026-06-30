@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -103,6 +103,26 @@ public class PartyAnalysisTests
 
         controllers.Should().Equal("platform");
         readAs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void partition_field_names_preserves_the_raw_daml_field_names()
+    {
+        var (controllers, readAs) = _party.PartitionControllerAndObserverFieldNames(
+            Static("Platform", "initiator"), Static("regulator"));
+
+        controllers.Should().Equal("Platform", "initiator");
+        readAs.Should().Equal("regulator");
+    }
+
+    [Fact]
+    public void partition_field_names_dedups_an_observer_that_is_also_a_controller()
+    {
+        var (controllers, readAs) = _party.PartitionControllerAndObserverFieldNames(
+            Static("platform", "counterparty"), Static("platform", "regulator"));
+
+        controllers.Should().Equal("platform", "counterparty");
+        readAs.Should().Equal("regulator");
     }
 
     [Fact]

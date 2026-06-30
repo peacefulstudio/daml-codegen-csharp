@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Peaceful Studio OÜ
+# Copyright 2026 Peaceful Studio OÜ
 # SPDX-License-Identifier: Apache-2.0
 
 # End-to-end codegen orchestration: runs the JVM helper to produce an

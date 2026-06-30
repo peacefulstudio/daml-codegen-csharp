@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime;
@@ -76,12 +76,13 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Submits multiple commands as a single atomic transaction.
+    /// Submits one or more commands as a single atomic transaction and waits for
+    /// completion, returning the update ID of the resulting transaction.
     /// </summary>
-    /// <param name="submission">The commands submission containing multiple commands.</param>
+    /// <param name="submission">The commands submission.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The update ID of the resulting transaction.</returns>
-    Task<string> SubmitAsync(
+    Task<string> SubmitAndWaitAsync(
         CommandsSubmission submission,
         CancellationToken cancellationToken = default);
 
@@ -264,17 +265,21 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Subscribes to the active-contract-set snapshot for a single template
-    /// at the current ledger end using a <see cref="SubmitterInfo"/>, projected
-    /// to strongly-typed <see cref="ContractStreamEvent{T}.Created"/> values. The
-    /// combined <c>ActAs ∪ ReadAs</c> set scopes visibility for the snapshot.
-    /// Implementations filter by <typeparamref name="T"/>'s <c>TemplateId</c>.
+    /// Subscribes to the active-contract-set snapshot for a single Daml type
+    /// (template or interface marker) at the current ledger end using a
+    /// <see cref="SubmitterInfo"/>, projected to strongly-typed
+    /// <see cref="ContractStreamEvent{T}.Created"/> values. The combined
+    /// <c>ActAs ∪ ReadAs</c> set scopes visibility for the snapshot.
+    /// Implementations filter by <typeparamref name="T"/>'s identifier — by
+    /// <c>TemplateId</c> for templates, by <c>InterfaceIds</c> for interface
+    /// markers (see <typeparamref name="T"/>).
     /// This is the primary authorization-carrying overload.
     /// </summary>
     /// <typeparam name="T">
-    /// The Daml template to filter by. The constraint may be broadened to
-    /// <c>IDamlType</c> in a future release — see
-    /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>.
+    /// A Daml template or interface marker (<c>IDamlType</c>). Template markers
+    /// match by <c>TemplateId</c>; interface markers match when a created
+    /// contract's <c>InterfaceIds</c> contains <typeparamref name="T"/>'s
+    /// interface identifier (module + entity, package-id-agnostic).
     /// </typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="cancellationToken">
@@ -301,7 +306,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
-        where T : ITemplate;
+        where T : IDamlType;
 
     /// <summary>
     /// Convenience wrapper that subscribes to the active-contract-set snapshot
@@ -310,7 +315,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// <see cref="SubscribeActiveAsync{T}(SubmitterInfo, CancellationToken)"/>
     /// primitive via the implicit <c>Party</c> to <see cref="SubmitterInfo"/> conversion.
     /// </summary>
-    /// <typeparam name="T">The Daml template to filter by.</typeparam>
+    /// <typeparam name="T">A Daml template or interface marker; see the primary overload for matching semantics.</typeparam>
     /// <param name="actAs">
     /// The party whose visibility scopes the snapshot. For multi-party
     /// visibility, use the
@@ -321,7 +326,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
         Party actAs,
         CancellationToken cancellationToken = default)
-        where T : ITemplate
+        where T : IDamlType
     {
         SubmitterInfo submitter = actAs;
         return SubscribeActiveAsync<T>(submitter, cancellationToken);

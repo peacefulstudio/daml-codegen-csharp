@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace Daml.Runtime.Tests;
@@ -18,6 +18,7 @@ public class CommandTypesTests
         public static string PackageId => "test-package";
         public static string PackageName => "test-package-name";
         public static Version PackageVersion => new(1, 0, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", Owner.ToDamlValue()),
@@ -34,6 +35,8 @@ public class CommandTypesTests
         static string IDamlInterface.PackageId => "test-package";
         static string IDamlInterface.PackageName => "test-package-name";
         static Version IDamlInterface.PackageVersion => new(1, 0, 0);
+        static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId =>
+            new(new Identifier("test-package", "Test.Module", "TestInterfaceMarker"), DamlTypeKind.Interface, "test-package-name");
     }
 
     [Fact]

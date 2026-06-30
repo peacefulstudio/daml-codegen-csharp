@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Daml.Codegen.Testing.Conformance.Richtypes;
 using Xunit;
 
@@ -24,6 +24,12 @@ public class RichRecordRoundTripTests
         Tags: new List<string> { "a", "b" },
         Attributes: new Dictionary<string, string> { ["k1"] = "v1", ["k2"] = "v2" },
         Marker: new ContractId<Marker>("marker-cid"),
+        HoldingCid: new ContractId<IHolding>("00aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"),
+        HoldingCids: new List<ContractId<IHolding>>
+        {
+            new ContractId<IHolding>("0011112222333344445555666677778888999900001111222233334444555566aa"),
+            new ContractId<IHolding>("00ffffeeeeddddccccbbbbaaaa99998888777766665555444433332222111100bb"),
+        },
         Profile: new Profile("ace", 7),
         Outcome: new Outcome.Win(new Outcome_Win(Prize: 12.34m, Tier: "gold")),
         Fee: 1.5m);
@@ -121,6 +127,8 @@ public class RichRecordRoundTripTests
             Tags: new List<string>(),
             Attributes: new Dictionary<string, string>(),
             Marker: new ContractId<Marker>("m"),
+            HoldingCid: new ContractId<IHolding>("00h"),
+            HoldingCids: new List<ContractId<IHolding>>(),
             Profile: new Profile("n", 0),
             Outcome: new Outcome.Pending(),
             Fee: 1.5m).ToRecord();
@@ -128,5 +136,28 @@ public class RichRecordRoundTripTests
         var json = DamlJsonSerializer.Serialize(record.GetRequiredField("fee").As<DamlNumeric>());
 
         json.Should().Be("\"1.5\"");
+    }
+
+    [Fact]
+    public void interface_typed_contract_id_fields_round_trip_without_throwing()
+    {
+        var scalarCid = "00aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+        var listCids = new[]
+        {
+            "0011112222333344445555666677778888999900001111222233334444555566aa",
+            "00ffffeeeeddddccccbbbbaaaa99998888777766665555444433332222111100bb",
+        };
+        var original = Sample(note: "hello") with
+        {
+            HoldingCid = new ContractId<IHolding>(scalarCid),
+            HoldingCids = listCids.Select(cid => new ContractId<IHolding>(cid)).ToList(),
+        };
+
+        var act = () => RichRecord.FromRecord(original.ToRecord());
+
+        act.Should().NotThrow();
+        var restored = act();
+        restored.HoldingCid.Value.Should().Be(scalarCid);
+        restored.HoldingCids.Select(cid => cid.Value).Should().Equal(listCids);
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Data;
@@ -78,15 +78,31 @@ public static class TransactionResultExtensions
 
     private static List<string> MatchingContractIds<T>(TransactionResult result) where T : IDamlType
     {
-        var (expected, match) = ContractIdMetadata.ResolveMatch<T>();
+        var descriptor = T.DamlTypeId;
+        var expected = descriptor.Identifier;
         var matches = new List<string>(result.CreatedContracts.Count);
-        foreach (var created in result.CreatedContracts)
+        if (descriptor.Kind == DamlTypeKind.Interface)
         {
-            if (match == DamlTypeMatch.Interface
-                ? created.InterfaceIds.Any(id => IsModuleEntityMatch(id, expected))
-                : IsModuleEntityMatch(created.TemplateId, expected))
+            foreach (var created in result.CreatedContracts)
             {
-                matches.Add(created.ContractId);
+                foreach (var interfaceId in created.InterfaceIds)
+                {
+                    if (IsModuleEntityMatch(interfaceId, expected))
+                    {
+                        matches.Add(created.ContractId);
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            foreach (var created in result.CreatedContracts)
+            {
+                if (IsModuleEntityMatch(created.TemplateId, expected))
+                {
+                    matches.Add(created.ContractId);
+                }
             }
         }
         return matches;

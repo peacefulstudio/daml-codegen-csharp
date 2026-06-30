@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Ledger.Abstractions;
@@ -66,7 +66,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
-    public Task<string> SubmitAsync(
+    public Task<string> SubmitAndWaitAsync(
         CommandsSubmission submission,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
@@ -92,7 +92,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
     public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
-        where T : ITemplate =>
+        where T : IDamlType =>
         throw new NotSupportedException();
 
     public void Dispose()

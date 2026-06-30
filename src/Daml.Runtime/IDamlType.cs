@@ -1,5 +1,7 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
+
+using Daml.Runtime.Contracts;
 
 namespace Daml.Runtime;
 
@@ -7,15 +9,20 @@ namespace Daml.Runtime;
 /// Common marker for Daml-derived C# types. Both
 /// <see cref="Daml.Runtime.Contracts.ITemplate"/> and
 /// <see cref="Daml.Runtime.Contracts.IDamlInterface"/> extend it. Generic helpers
-/// that do not dispatch on template-specific static metadata can constrain on
-/// this broader marker and accept either a concrete template type or an interface
-/// marker.
+/// constrained on this broader marker accept either a concrete template type or an
+/// interface marker and dispatch on the static <see cref="DamlTypeId"/> descriptor.
 /// </summary>
 /// <remarks>
-/// This marker has no members. Helpers that <em>do</em> dispatch on
-/// template-specific static members (e.g. <c>T.TemplateId</c>) continue to
-/// constrain on <see cref="Daml.Runtime.Contracts.ITemplate"/>.
+/// The static-abstract <see cref="DamlTypeId"/> member lets helpers resolve a type's
+/// identifier and kind at compile time — no reflection. Generated templates emit it as a
+/// public static member; generated interfaces emit it as an explicit interface
+/// implementation.
 /// </remarks>
 public interface IDamlType
 {
+    /// <summary>
+    /// Gets the compile-time descriptor for this Daml type: its identifier
+    /// (template id or interface id), its <see cref="DamlTypeKind"/>, and its package name.
+    /// </summary>
+    static abstract DamlTypeDescriptor DamlTypeId { get; }
 }

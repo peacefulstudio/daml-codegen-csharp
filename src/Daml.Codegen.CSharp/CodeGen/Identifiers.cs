@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text;
@@ -106,6 +106,15 @@ internal static partial class Identifiers
     /// </summary>
     internal static string MemberName(string damlFieldName, string enclosingTypeName) =>
         Disambiguate(ToPascalCase(Sanitize(damlFieldName)), enclosingTypeName);
+
+    /// <summary>
+    /// Builds the C# marker-interface name for a Daml interface: the sanitised
+    /// interface name prefixed with <c>I</c> (e.g. Daml <c>Holding</c> →
+    /// <c>IHolding</c>). Shared by the interface emitter and the type resolver so a
+    /// reference to an interface names the same marker on the field-type path as on
+    /// the choice-exercise path.
+    /// </summary>
+    internal static string InterfaceMarkerName(string interfaceName) => "I" + Sanitize(interfaceName);
 
     /// <summary>
     /// Appends a trailing <c>_</c> when <paramref name="identifier"/> equals

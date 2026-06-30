@@ -1,48 +1,17 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
 
 public class ContractIdentifiersTests
 {
-    private static CSharpCodeGenerator CreateGenerator(CodeGenOptions? options = null)
-    {
-        options ??= new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
-            GenerateContractIdentifiers = true
-        };
-        var logger = new ConsoleLogger(0); // Silent
-        return new CSharpCodeGenerator(options, logger);
-    }
-
-    private static DarModel CreateTestDar(DamlModule[] modules, string packageName = "test-package")
-    {
-        var package = new DamlPackage
-        {
-            PackageId = "test-package-id",
-            Name = packageName,
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules = modules,
-            DependencyReferences = []
-        };
-
-        return new DarModel
-        {
-            MainPackage = package,
-            Dependencies = []
-        };
-    }
-
     #region Basic Generation Tests
 
     [Fact]

@@ -1,5 +1,5 @@
 @echo off
-rem Copyright (c) 2026 Peaceful Studio OÜ.
+rem Copyright 2026 Peaceful Studio OÜ
 rem SPDX-License-Identifier: Apache-2.0
 setlocal enableextensions enabledelayedexpansion
 

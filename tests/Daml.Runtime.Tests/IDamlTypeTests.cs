@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 using RuntimeIdentifier = Daml.Runtime.Data.Identifier;
 
@@ -38,7 +38,7 @@ public class IDamlTypeTests
         // because ITemplate : IDamlType.
         ITemplate template = new SampleTemplate("alice");
 
-        template.Should().BeAssignableTo<IDamlType>();
+        typeof(IDamlType).IsAssignableFrom(template.GetType()).Should().BeTrue();
     }
 
     [Fact]
@@ -63,6 +63,28 @@ public class IDamlTypeTests
         id.Should().Be<SampleTemplate>();
     }
 
+    [Fact]
+    public void DamlTypeId_for_template_marker_carries_template_identifier_kind_and_package_name()
+    {
+        var descriptor = SampleTemplate.DamlTypeId;
+
+        descriptor.Identifier.Should().Be(new RuntimeIdentifier("test-pkg", "Sample.Module", "SampleTemplate"));
+        descriptor.Kind.Should().Be(DamlTypeKind.Template);
+        descriptor.PackageName.Should().Be("test-package");
+    }
+
+    [Fact]
+    public void DamlTypeId_for_interface_marker_carries_interface_identifier_kind_and_package_name()
+    {
+        var descriptor = DescriptorOf<ISampleInterface>();
+
+        descriptor.Identifier.Should().Be(new RuntimeIdentifier("test-pkg", "Sample.Module", "ISampleInterface"));
+        descriptor.Kind.Should().Be(DamlTypeKind.Interface);
+        descriptor.PackageName.Should().Be("test-package");
+    }
+
+    private static DamlTypeDescriptor DescriptorOf<T>() where T : IDamlType => T.DamlTypeId;
+
     /// <summary>Static helper standing in for a future <c>IDamlType</c>-constrained helper.</summary>
     private static Type IdentityOf<T>() where T : IDamlType => typeof(T);
 
@@ -78,8 +100,19 @@ public class IDamlTypeTests
         public static string PackageId => "test-pkg";
         public static string PackageName => "test-package";
         public static Version PackageVersion { get; } = new(0, 1, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", new DamlParty(Owner)));
+    }
+
+    private interface ISampleInterface : IDamlInterface
+    {
+        static RuntimeIdentifier IDamlInterface.InterfaceId => new("test-pkg", "Sample.Module", "ISampleInterface");
+        static string IDamlInterface.PackageId => "test-pkg";
+        static string IDamlInterface.PackageName => "test-package";
+        static Version IDamlInterface.PackageVersion => new(0, 1, 0);
+        static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId =>
+            new(new RuntimeIdentifier("test-pkg", "Sample.Module", "ISampleInterface"), DamlTypeKind.Interface, "test-package");
     }
 }

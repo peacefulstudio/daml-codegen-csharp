@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Peaceful Studio OÜ
+// Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text.RegularExpressions;
@@ -180,7 +180,7 @@ public static partial class IntermediateDarReader
             Fields = fields,
             Choices = template.Choices.Select(ConvertChoice).ToList(),
             Key = template.KeyType is not null ? ConvertType(template.KeyType) : null,
-            Implements = template.Implements.Select(FormatTypeConName).ToList(),
+            Implements = template.Implements.Select(ConvertTypeConRef).ToList(),
             Signatories = ConvertPartyAnalysis(template.Signatories),
             Observers = ConvertPartyAnalysis(template.Observers),
         };
@@ -290,9 +290,6 @@ public static partial class IntermediateDarReader
             RequirePackageCoordinateOrSamePackageMarker(tcn.PackageId, "type-constructor package id"),
             JoinValidatedSegments(tcn.ModuleNameSegments, "type-constructor module segment"),
             JoinValidatedSegments(tcn.NameSegments, "type-constructor name segment"));
-
-    private static string FormatTypeConName(PbTypeConName tcn) =>
-        $"{string.Join(".", tcn.ModuleNameSegments)}.{string.Join(".", tcn.NameSegments)}";
 
     private static DamlPrimitive ConvertBuiltin(PbBuiltin builtin) => builtin switch
     {

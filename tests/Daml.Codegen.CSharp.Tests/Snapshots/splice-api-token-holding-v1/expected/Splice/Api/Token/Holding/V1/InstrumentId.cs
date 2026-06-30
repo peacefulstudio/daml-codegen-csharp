@@ -12,7 +12,7 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record InstrumentId
 /// </summary>
-public sealed record InstrumentId(Party Admin, string Id) : IDamlRecord
+public sealed record InstrumentId([property: DamlFieldAttribute("admin")] Party Admin, [property: DamlFieldAttribute("id")] string Id) : IDamlRecord
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
