@@ -110,11 +110,11 @@ public class ReleaseCounterStoreTests : IDisposable
     }
 
     [Fact]
-    public void OpenOrCreate_throws_InvalidDataException_naming_the_path_when_file_mixes_legacy_and_new_shapes()
+    public void OpenOrCreate_throws_InvalidDataException_naming_the_path_when_codegen_generations_has_stray_sibling_keys()
     {
         File.WriteAllText(
             _storePath,
-            "{ \"Splice.Amulet@0.1.17\": { \"content_hash\": \"abc\", \"revision\": 2 }, \"1.4.0\": 0 }");
+            "{ \"codegen_generations\": { \"1.4.0\": 0 }, \"Splice.Amulet@0.1.17\": { \"content_hash\": \"abc\", \"revision\": 2 } }");
 
         var action = () => JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
@@ -152,12 +152,15 @@ public class ReleaseCounterStoreTests : IDisposable
         store.ResolveGeneration("1.4.0").Should().Be(3);
 
         using var document = JsonDocument.Parse(File.ReadAllText(_storePath));
-        var properties = document.RootElement.EnumerateObject().ToList();
+        var topLevel = document.RootElement.EnumerateObject().ToList();
+        topLevel.Should().ContainSingle();
+        topLevel[0].Name.Should().Be("codegen_generations");
 
-        properties.Should().ContainSingle(
+        var generations = topLevel[0].Value.EnumerateObject().ToList();
+        generations.Should().ContainSingle(
             "migrated legacy per-package entries must not be carried forward into the new store shape");
-        properties[0].Name.Should().Be("1.4.0");
-        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
+        generations[0].Name.Should().Be("1.4.0");
+        generations[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
     }
 
     [Fact]
@@ -171,18 +174,21 @@ public class ReleaseCounterStoreTests : IDisposable
     }
 
     [Fact]
-    public void Persist_writes_codegenVersion_key_with_flat_ordinal_value()
+    public void Persist_writes_codegenVersion_key_nested_under_codegen_generations()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
         var generation = store.ResolveGeneration("1.4.0");
 
         using var document = JsonDocument.Parse(File.ReadAllText(_storePath));
-        var properties = document.RootElement.EnumerateObject().ToList();
+        var topLevel = document.RootElement.EnumerateObject().ToList();
+        topLevel.Should().ContainSingle();
+        topLevel[0].Name.Should().Be("codegen_generations");
 
-        properties.Should().ContainSingle();
-        properties[0].Name.Should().Be("1.4.0");
-        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
-        properties[0].Value.GetInt32().Should().Be(generation);
+        var generations = topLevel[0].Value.EnumerateObject().ToList();
+        generations.Should().ContainSingle();
+        generations[0].Name.Should().Be("1.4.0");
+        generations[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
+        generations[0].Value.GetInt32().Should().Be(generation);
     }
 
     [Fact]

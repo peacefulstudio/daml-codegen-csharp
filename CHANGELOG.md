@@ -42,11 +42,15 @@ because they are versioned in lockstep:
   replaces `ResolveRevision`: it mints one shared "codegen-generation" ordinal
   per source, identical across every package (main and every dependency)
   emitted while a codegen version is current, and advances that ordinal only
-  when the codegen tool's own version (`EmitterVersion.Current`) changes.
-  `IntermediatePackageContentHash` is now audit/logging-only and no longer
-  drives the version number. Existing per-package store files migrate
-  automatically: the highest recorded revision across their entries becomes
-  the floor that the first newly-minted ordinal must exceed.
+  when the codegen tool's own version changes. That version is supplied via
+  the new `--codegen-version` CLI flag (CI feeds it from `CODEGEN_CS_VERSION`),
+  falling back to the emitter's own clean assembly SemVer (`EmitterVersion.Current`)
+  when omitted. `IntermediatePackageContentHash` is now audit/logging-only and
+  no longer drives the version number. The store persists as
+  `{ "codegen_generations": { "<codegenVersion>": <ordinal> } }`; existing
+  per-package store files migrate automatically on load — the highest
+  recorded revision across their entries becomes the floor that the first
+  newly-minted ordinal must exceed.
 
 ### Security
 

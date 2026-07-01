@@ -125,6 +125,19 @@ internal static class Program
             Description = "Path to a JSON release-counter store, shared across all packages produced from one source (e.g. Splice or Daml.Finance). Requires --intermediate. When set, the CLI resolves this codegen build's shared generation ordinal from the store — the same ordinal for every package emitted while this codegen version is current, advancing only when the codegen tool version changes — and uses it as the 4th NuGet version segment, overriding --emitter-counter. The store is created on first use and atomically updated on each run."
         };
 
+        var codegenVersionOption = new Option<string?>("--codegen-version")
+        {
+            Description = "The codegen tool's own version, used with --release-counters to key the shared generation ordinal. Defaults to this build's own assembly version (metadata-stripped) when omitted."
+        };
+        codegenVersionOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(codegenVersionOption);
+            if (value is not null && string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("--codegen-version must be a non-empty string when specified.");
+            }
+        });
+
         var versionSuffixOption = new Option<string?>("--version-suffix")
         {
             Description = "SemVer prerelease suffix appended to generated package versions, e.g. 'preview.2'. Mirrors the emitter prerelease tag. No leading dash."
@@ -178,6 +191,7 @@ internal static class Program
         rootCommand.Options.Add(contractIdentifiersOption);
         rootCommand.Options.Add(emitterCounterOption);
         rootCommand.Options.Add(releaseCountersOption);
+        rootCommand.Options.Add(codegenVersionOption);
         rootCommand.Options.Add(packageLicenseOption);
         rootCommand.Options.Add(versionSuffixOption);
         rootCommand.Options.Add(repositoryUrlOption);
@@ -198,6 +212,7 @@ internal static class Program
                     parseResult.GetValue(contractIdentifiersOption),
                     parseResult.GetValue(emitterCounterOption),
                     parseResult.GetValue(releaseCountersOption),
+                    parseResult.GetValue(codegenVersionOption),
                     parseResult.GetValue(packageLicenseOption)!,
                     parseResult.GetValue(versionSuffixOption),
                     parseResult.GetValue(repositoryUrlOption)),
@@ -265,7 +280,7 @@ internal static class Program
         logger.Debug($"  Dependencies: {dar.Dependencies.Count}");
 
         var effectiveCounter = args.ReleaseCountersFile is not null
-            ? ResolveReleaseCounter(args.ReleaseCountersFile, proto, dar.MainPackage.Name, dar.MainPackage.Version, logger)
+            ? ResolveReleaseCounter(args.ReleaseCountersFile, proto, dar.MainPackage.Name, dar.MainPackage.Version, args.CodegenVersion, logger)
             : args.EmitterCounter;
 
         var generator = new CSharpCodeGenerator(BuildOptions(args, effectiveCounter), logger);
@@ -278,14 +293,16 @@ internal static class Program
         IntermediateDar proto,
         string packageName,
         Version packageVersion,
+        string? codegenVersion,
         ConsoleLogger logger)
     {
         var hash = IntermediatePackageContentHash.Compute(proto.Main);
         var store = JsonReleaseCounterStore.OpenOrCreate(storeFile.FullName);
-        var version = NuGetVersionResolver.Compute(packageVersion, EmitterVersion.Current, store);
+        var effectiveCodegenVersion = codegenVersion ?? EmitterVersion.Current;
+        var version = NuGetVersionResolver.Compute(packageVersion, effectiveCodegenVersion, store);
 
         var truncated = hash[..Math.Min(12, hash.Length)];
-        logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… codegen_version={EmitterVersion.Current} version={version}");
+        logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… codegen_version={effectiveCodegenVersion} version={version}");
 
         return version.Revision;
     }
@@ -348,6 +365,7 @@ internal sealed record CodegenArgs(
     bool GenerateContractIdentifiers,
     int EmitterCounter,
     FileInfo? ReleaseCountersFile,
+    string? CodegenVersion,
     string PackageLicenseExpression,
     string? VersionSuffix,
     string? RepositoryUrl);

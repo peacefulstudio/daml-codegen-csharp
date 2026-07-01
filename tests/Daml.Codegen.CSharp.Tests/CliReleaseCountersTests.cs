@@ -58,14 +58,14 @@ public class CliReleaseCountersTests : IDisposable
             .InformationalVersion.Split('+')[0];
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
-        var properties = document.RootElement.EnumerateObject().ToList();
-        properties.Should().ContainSingle(
+        var generations = document.RootElement.GetProperty("codegen_generations").EnumerateObject().ToList();
+        generations.Should().ContainSingle(
             "a fresh run against one fixture proto must persist exactly one codegen-version entry");
-        properties[0].Name.Should().Be(expectedCodegenVersion,
+        generations[0].Name.Should().Be(expectedCodegenVersion,
             "the store is keyed by the codegen tool's own version, shared across every package it emits");
-        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number,
+        generations[0].Value.ValueKind.Should().Be(JsonValueKind.Number,
             "the persisted value is the flat generation ordinal, not the retired content_hash/revision object shape");
-        properties[0].Value.GetInt32().Should().Be(0,
+        generations[0].Value.GetInt32().Should().Be(0,
             "a first-ever codegen version against an empty store mints generation 0");
     }
 
@@ -96,9 +96,33 @@ public class CliReleaseCountersTests : IDisposable
         secondExit.Should().Be(0);
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
-        document.RootElement.EnumerateObject().Single().Value
+        document.RootElement.GetProperty("codegen_generations").EnumerateObject().Single().Value
             .GetInt32().Should().Be(0,
                 "re-emissions under the same codegen version must hold the generation steady");
+    }
+
+    [Fact]
+    public async Task codegen_version_flag_overrides_the_assembly_version_as_the_store_key()
+    {
+        var intermediate = Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName, "intermediate.binpb");
+        var counters = Path.Combine(_workspace, "release-counters.json");
+
+        var exit = await Program.Main(
+        [
+            "--intermediate", intermediate,
+            "-o", _workspace,
+            "--release-counters", counters,
+            "--codegen-version", "9.9.9-ci-override",
+            "--generate-project"
+        ]);
+
+        exit.Should().Be(0);
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
+        var generations = document.RootElement.GetProperty("codegen_generations").EnumerateObject().ToList();
+        generations.Should().ContainSingle();
+        generations[0].Name.Should().Be("9.9.9-ci-override",
+            "--codegen-version, when supplied, takes priority over the assembly's own informational version");
     }
 
     [Fact]
