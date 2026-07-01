@@ -215,7 +215,7 @@ Options:
   --runtime-version <runtime-version>    Version of Daml.Runtime package to reference
   --contract-identifiers                 Generate a ContractIdentifiers helper class for PQS queries
   --emitter-counter <emitter-counter>    4th segment of the generated NuGet version (Major.Minor.Patch.Revision). Defaults to 0; set a monotonic counter to distinguish republished builds of the same source. [default: 0]
-  --release-counters <release-counters>  Path to a JSON release-counter store. Requires --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store, overriding --emitter-counter. The store is created on first use and atomically updated on each run.
+  --release-counters <release-counters>  Path to a JSON release-counter store, shared across all packages produced from one source (e.g. Splice or Daml.Finance). Requires --intermediate. When set, the CLI resolves this codegen build's shared generation ordinal from the store — the same ordinal for every package emitted while this codegen version is current, advancing only when the codegen tool version changes — and uses it as the 4th NuGet version segment, overriding --emitter-counter. The store is created on first use and atomically updated on each run.
   --package-license <package-license>    SPDX license expression emitted in the generated .csproj's <PackageLicenseExpression>. Defaults to Apache-2.0. [default: Apache-2.0]
   -?, -h, --help                         Show help and usage information
   --version                              Show version information

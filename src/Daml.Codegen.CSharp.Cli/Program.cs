@@ -122,7 +122,7 @@ internal static class Program
 
         var releaseCountersOption = new Option<FileInfo?>("--release-counters")
         {
-            Description = "Path to a JSON release-counter store. Requires --intermediate (the content hash that keys the store is computed from the IntermediateDar proto bytes). When set, the 4th NuGet version segment is resolved from this store, overriding --emitter-counter. The store is created on first use and atomically updated on each run."
+            Description = "Path to a JSON release-counter store, shared across all packages produced from one source (e.g. Splice or Daml.Finance). Requires --intermediate. When set, the CLI resolves this codegen build's shared generation ordinal from the store — the same ordinal for every package emitted while this codegen version is current, advancing only when the codegen tool version changes — and uses it as the 4th NuGet version segment, overriding --emitter-counter. The store is created on first use and atomically updated on each run."
         };
 
         var versionSuffixOption = new Option<string?>("--version-suffix")
@@ -282,10 +282,10 @@ internal static class Program
     {
         var hash = IntermediatePackageContentHash.Compute(proto.Main);
         var store = JsonReleaseCounterStore.OpenOrCreate(storeFile.FullName);
-        var version = NuGetVersionResolver.Compute(packageName, packageVersion, hash, store);
+        var version = NuGetVersionResolver.Compute(packageVersion, EmitterVersion.Current, store);
 
         var truncated = hash[..Math.Min(12, hash.Length)];
-        logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… version={version}");
+        logger.Info($"  Release counter: {packageName}@{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} content_hash={truncated}… codegen_version={EmitterVersion.Current} version={version}");
 
         return version.Revision;
     }

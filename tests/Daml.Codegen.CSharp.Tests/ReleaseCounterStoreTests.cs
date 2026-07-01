@@ -26,59 +26,43 @@ public class ReleaseCounterStoreTests : IDisposable
     }
 
     [Fact]
-    public void ResolveRevision_returns_zero_and_persists_entry_for_unknown_pair()
+    public void ResolveGeneration_holds_generation_steady_across_repeated_calls_for_the_same_codegen_version()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
-        var revision = store.ResolveRevision(
-            packageName: "Splice.Amulet",
-            intrinsicVersion: new Version(0, 1, 17),
-            contentHash: "abc123");
-
-        revision.Should().Be(0);
-
-        var reopened = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        reopened.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "abc123")
-            .Should().Be(0);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
     }
 
     [Fact]
-    public void ResolveRevision_holds_revision_steady_when_content_hash_matches()
-    {
-        var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-a").Should().Be(0);
-
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-a").Should().Be(0);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-a").Should().Be(0);
-    }
-
-    [Fact]
-    public void ResolveRevision_persists_bumps_across_OpenOrCreate_reopens()
+    public void ResolveGeneration_persists_bumps_across_OpenOrCreate_reopens()
     {
         JsonReleaseCounterStore.OpenOrCreate(_storePath)
-            .ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-a")
+            .ResolveGeneration("1.4.0")
             .Should().Be(0);
+
         JsonReleaseCounterStore.OpenOrCreate(_storePath)
-            .ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-b")
+            .ResolveGeneration("1.4.1")
             .Should().Be(1);
 
         JsonReleaseCounterStore.OpenOrCreate(_storePath)
-            .ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-b")
+            .ResolveGeneration("1.4.1")
             .Should().Be(1);
     }
 
     [Fact]
-    public void ResolveRevision_tracks_each_packageName_and_intrinsic_version_independently()
+    public void ResolveGeneration_tracks_each_codegen_version_independently()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "amulet-hash").Should().Be(0);
-        store.ResolveRevision("Splice.Util", new Version(0, 1, 5), "util-hash").Should().Be(0);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 18), "amulet-next").Should().Be(0);
 
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "amulet-rebuilt").Should().Be(1);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
+        store.ResolveGeneration("1.4.1").Should().Be(1);
+        store.ResolveGeneration("1.4.2").Should().Be(2);
 
-        store.ResolveRevision("Splice.Util", new Version(0, 1, 5), "util-hash").Should().Be(0);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 18), "amulet-next").Should().Be(0);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
+        store.ResolveGeneration("1.4.1").Should().Be(1);
+        store.ResolveGeneration("1.4.2").Should().Be(2);
     }
 
     [Fact]
@@ -126,36 +110,89 @@ public class ReleaseCounterStoreTests : IDisposable
     }
 
     [Fact]
+    public void OpenOrCreate_throws_InvalidDataException_naming_the_path_when_file_mixes_legacy_and_new_shapes()
+    {
+        File.WriteAllText(
+            _storePath,
+            "{ \"Splice.Amulet@0.1.17\": { \"content_hash\": \"abc\", \"revision\": 2 }, \"1.4.0\": 0 }");
+
+        var action = () => JsonReleaseCounterStore.OpenOrCreate(_storePath);
+
+        action.Should().Throw<InvalidDataException>()
+            .Which.Message.Should().Contain(_storePath);
+    }
+
+    [Fact]
+    public void ResolveGeneration_migrates_legacy_store_floor_to_exceed_the_highest_recorded_revision()
+    {
+        File.WriteAllText(
+            _storePath,
+            """
+            {
+                "Splice.Amulet@0.1.17": { "content_hash": "amulet-hash", "revision": 2 },
+                "Splice.Util@0.1.5": { "content_hash": "util-hash", "revision": 1 },
+                "Splice.Wallet@0.1.2": { "content_hash": "wallet-hash", "revision": 0 }
+            }
+            """);
+
+        var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
+
+        store.ResolveGeneration("1.4.0").Should().Be(3);
+        store.ResolveGeneration("1.4.0").Should().Be(3);
+    }
+
+    [Fact]
+    public void ResolveGeneration_does_not_carry_forward_legacy_per_package_entries()
+    {
+        File.WriteAllText(
+            _storePath,
+            "{ \"Splice.Amulet@0.1.17\": { \"content_hash\": \"amulet-hash\", \"revision\": 2 } }");
+
+        var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
+        store.ResolveGeneration("1.4.0").Should().Be(3);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(_storePath));
+        var properties = document.RootElement.EnumerateObject().ToList();
+
+        properties.Should().ContainSingle(
+            "migrated legacy per-package entries must not be carried forward into the new store shape");
+        properties[0].Name.Should().Be("1.4.0");
+        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
+    }
+
+    [Fact]
     public void Persist_does_not_leave_a_dot_tmp_sibling_after_a_successful_write()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "deadbeef").Should().Be(0);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
 
         File.Exists(_storePath).Should().BeTrue();
         File.Exists(_storePath + ".tmp").Should().BeFalse();
     }
 
     [Fact]
-    public void Persist_writes_packageName_at_intrinsicVersion_key_with_snake_case_entry_fields()
+    public void Persist_writes_codegenVersion_key_with_flat_ordinal_value()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "deadbeef").Should().Be(0);
+        var generation = store.ResolveGeneration("1.4.0");
 
         using var document = JsonDocument.Parse(File.ReadAllText(_storePath));
-        var entry = document.RootElement.GetProperty("Splice.Amulet@0.1.17");
+        var properties = document.RootElement.EnumerateObject().ToList();
 
-        entry.GetProperty("content_hash").GetString().Should().Be("deadbeef");
-        entry.GetProperty("revision").GetInt32().Should().Be(0);
+        properties.Should().ContainSingle();
+        properties[0].Name.Should().Be("1.4.0");
+        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number);
+        properties[0].Value.GetInt32().Should().Be(generation);
     }
 
     [Fact]
-    public void ResolveRevision_bumps_monotonically_each_time_the_content_hash_changes()
+    public void ResolveGeneration_bumps_monotonically_for_each_new_codegen_version()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-a").Should().Be(0);
 
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-b").Should().Be(1);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-c").Should().Be(2);
-        store.ResolveRevision("Splice.Amulet", new Version(0, 1, 17), "hash-c").Should().Be(2);
+        store.ResolveGeneration("1.4.0").Should().Be(0);
+        store.ResolveGeneration("1.4.1").Should().Be(1);
+        store.ResolveGeneration("1.4.2").Should().Be(2);
+        store.ResolveGeneration("1.4.2").Should().Be(2);
     }
 }

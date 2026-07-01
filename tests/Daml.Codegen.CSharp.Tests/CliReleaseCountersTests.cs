@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using System.Text.Json;
 using System.Xml.Linq;
 using Daml.Codegen.CSharp.Cli;
@@ -50,24 +51,26 @@ public class CliReleaseCountersTests : IDisposable
 
         exit.Should().Be(0);
         File.Exists(counters).Should().BeTrue(
-            "the CLI must persist the resolved revision back to the store path");
+            "the CLI must persist the resolved generation ordinal back to the store path");
+
+        var expectedCodegenVersion = typeof(Program).Assembly
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Split('+')[0];
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
         var properties = document.RootElement.EnumerateObject().ToList();
         properties.Should().ContainSingle(
-            "a fresh run against one fixture proto must persist exactly one (name@M.m.p) entry");
-        properties[0].Name.Should().MatchRegex(
-            @"^.+@\d+\.\d+\.\d+$",
-            "JsonReleaseCounterStore keys are `<packageName>@<Major.Minor.Patch>` per its ComposeKey contract");
-        var entry = properties[0].Value;
-        entry.GetProperty("content_hash").GetString().Should().NotBeNullOrEmpty(
-            "the content hash field must round-trip through the snake_case JSON shape");
-        entry.GetProperty("revision").GetInt32().Should().Be(0,
-            "a first emission of (package, intrinsic-version) resolves to r=0 per JsonReleaseCounterStore.ResolveRevision");
+            "a fresh run against one fixture proto must persist exactly one codegen-version entry");
+        properties[0].Name.Should().Be(expectedCodegenVersion,
+            "the store is keyed by the codegen tool's own version, shared across every package it emits");
+        properties[0].Value.ValueKind.Should().Be(JsonValueKind.Number,
+            "the persisted value is the flat generation ordinal, not the retired content_hash/revision object shape");
+        properties[0].Value.GetInt32().Should().Be(0,
+            "a first-ever codegen version against an empty store mints generation 0");
     }
 
     [Fact]
-    public async Task release_counters_flag_holds_revision_steady_on_re_emission_of_the_same_intermediate()
+    public async Task release_counters_flag_holds_generation_steady_on_re_emission_of_the_same_intermediate()
     {
         var intermediate = Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName, "intermediate.binpb");
         var counters = Path.Combine(_workspace, "release-counters.json");
@@ -94,8 +97,8 @@ public class CliReleaseCountersTests : IDisposable
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(counters, TestContext.Current.CancellationToken));
         document.RootElement.EnumerateObject().Single().Value
-            .GetProperty("revision").GetInt32().Should().Be(0,
-                "content-identical re-emissions must hold the revision steady per the M.m.p.r versioning scheme");
+            .GetInt32().Should().Be(0,
+                "re-emissions under the same codegen version must hold the generation steady");
     }
 
     [Fact]
