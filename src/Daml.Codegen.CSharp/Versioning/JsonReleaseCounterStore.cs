@@ -1,33 +1,36 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Daml.Codegen.CSharp.Versioning;
 
 /// <summary>
-/// File-backed store of emitter-counter values keyed by
-/// <c>{packageName}@{Major.Minor.Patch}</c>. The 4th NuGet version segment
-/// is derived from this store: <c>0</c> for any first emission of a
-/// (package, intrinsic) pair, incremented only when the same pair is
-/// re-emitted with a different content hash.
+/// File-backed store of a single per-source "codegen-generation" ordinal:
+/// the monotonic 4th NuGet version segment shared by every package emitted
+/// while a given codegen-tool version is current. Keyed by the codegen-tool
+/// version string (<see cref="EmitterVersion.Current"/>), not by package —
+/// every package produced during one run of the same codegen version
+/// resolves to the identical ordinal by construction.
 /// </summary>
 /// <remarks>
 /// <para><b>Single-writer precondition.</b> Instances are not thread-safe and
 /// the on-disk file uses no cross-process locking. Callers must serialize
 /// access to a given store path — both across threads in one process and
 /// across processes. The release pipeline that owns the store path satisfies
-/// this naturally: it runs as a single job, sequentially per package. If concurrent writers were ever allowed against the same path,
-/// the last-writer-wins truncating write would silently drop a revision
-/// bump and two distinct content hashes could end up sharing the same
-/// 4th-segment value.</para>
-/// <para><b>Atomic on-disk update.</b> Each <see cref="ResolveRevision"/>
-/// write goes via a sibling <c>.tmp</c> file and an atomic
-/// <see cref="File.Move(string, string, bool)"/>, so a crash mid-write
-/// leaves the previous valid file intact rather than truncating it to
-/// empty.</para>
+/// this naturally: it runs as a single job, sequentially per package.</para>
+/// <para><b>Atomic on-disk update.</b> Each minted ordinal is written via a
+/// sibling <c>.tmp</c> file and an atomic <see cref="File.Move(string, string, bool)"/>,
+/// so a crash mid-write leaves the previous valid file intact rather than
+/// truncating it to empty.</para>
+/// <para><b>Shape.</b> Persisted as <c>{ "codegen_generations": { "&lt;codegenVersion&gt;": &lt;ordinal:int&gt; } }</c>.</para>
+/// <para><b>Legacy migration.</b> A store file lacking a top-level
+/// <c>codegen_generations</c> property is assumed to be in the retired
+/// per-package shape (<c>{ "&lt;packageName&gt;@&lt;M.m.p&gt;": { "content_hash": ..., "revision": &lt;int&gt; } }</c>).
+/// When detected, its entries are not carried forward; instead the highest
+/// <c>revision</c> found across them becomes the floor that the first
+/// newly-minted ordinal must exceed, so a freshly-introduced codegen version
+/// can never collide with an already-published per-package revision.</para>
 /// </remarks>
 internal sealed class JsonReleaseCounterStore
 {
@@ -35,31 +38,38 @@ internal sealed class JsonReleaseCounterStore
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private readonly string _path;
-    private readonly Dictionary<string, ReleaseCounterEntry> _entries;
+    private sealed record StoreDocument(SortedDictionary<string, int> CodegenGenerations);
 
-    private JsonReleaseCounterStore(string path, Dictionary<string, ReleaseCounterEntry> entries)
+    private readonly string _path;
+    private readonly SortedDictionary<string, int> _ordinalsByCodegenVersion;
+    private readonly int _migrationFloor;
+
+    private JsonReleaseCounterStore(string path, SortedDictionary<string, int> ordinalsByCodegenVersion, int migrationFloor)
     {
         _path = path;
-        _entries = entries;
+        _ordinalsByCodegenVersion = ordinalsByCodegenVersion;
+        _migrationFloor = migrationFloor;
     }
 
     /// <summary>
     /// Opens an existing JSON store at <paramref name="path"/>, or returns an
     /// empty in-memory store that will be persisted on the first
-    /// <see cref="ResolveRevision"/> call if the file does not yet exist.
+    /// <see cref="ResolveGeneration"/> call if the file does not yet exist.
+    /// Detects the file's shape by the presence of a top-level
+    /// <c>codegen_generations</c> property, and migrates a legacy per-package
+    /// file's highest revision into the new store's floor (see remarks on
+    /// <see cref="JsonReleaseCounterStore"/>).
     /// </summary>
     /// <exception cref="InvalidDataException">
-    /// Thrown when the file exists but does not parse as the expected JSON
-    /// shape (truncated, hand-edited, merge-conflict markers). The exception
-    /// names the offending path and JSON position so the failure is
-    /// diagnosable mid-CI-run. Recovery is a human decision (silently
-    /// rebuilding from empty would re-zero every recorded revision and break
-    /// monotonicity), so this never falls back to an empty store on parse
-    /// failure.
+    /// Thrown when the file exists but does not parse as valid JSON or
+    /// contains a structurally invalid entry (truncated, hand-edited,
+    /// merge-conflict markers). The exception names the offending path so the
+    /// failure is diagnosable mid-CI-run. Recovery is a human decision
+    /// (silently rebuilding from empty would re-zero the generation counter
+    /// and break monotonicity), so this never falls back to an empty store on
+    /// parse failure.
     /// </exception>
     public static JsonReleaseCounterStore OpenOrCreate(string path)
     {
@@ -67,19 +77,19 @@ internal sealed class JsonReleaseCounterStore
 
         if (!File.Exists(path))
         {
-            return new JsonReleaseCounterStore(path, new Dictionary<string, ReleaseCounterEntry>(StringComparer.Ordinal));
+            return new JsonReleaseCounterStore(path, new SortedDictionary<string, int>(StringComparer.Ordinal), -1);
         }
 
         var json = File.ReadAllText(path);
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new JsonReleaseCounterStore(path, new Dictionary<string, ReleaseCounterEntry>(StringComparer.Ordinal));
+            return new JsonReleaseCounterStore(path, new SortedDictionary<string, int>(StringComparer.Ordinal), -1);
         }
 
-        Dictionary<string, ReleaseCounterEntry?>? loaded;
+        Dictionary<string, JsonElement>? loaded;
         try
         {
-            loaded = JsonSerializer.Deserialize<Dictionary<string, ReleaseCounterEntry?>>(json, SerializerOptions);
+            loaded = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, SerializerOptions);
         }
         catch (JsonException inner)
         {
@@ -88,75 +98,100 @@ internal sealed class JsonReleaseCounterStore
                 inner);
         }
 
-        var validated = new Dictionary<string, ReleaseCounterEntry>(StringComparer.Ordinal);
-        if (loaded is null) return new JsonReleaseCounterStore(path, validated);
-
-        foreach (var (key, entry) in loaded)
+        if (loaded is null || loaded.Count == 0)
         {
-            if (entry is null)
+            return new JsonReleaseCounterStore(path, new SortedDictionary<string, int>(StringComparer.Ordinal), -1);
+        }
+
+        if (loaded.TryGetValue("codegen_generations", out var generationsElement))
+        {
+            if (generationsElement.ValueKind != JsonValueKind.Object)
             {
                 throw new InvalidDataException(
-                    $"Release-counter store at '{path}' has a null entry for key '{key}'. Repair the file or delete it to start from an empty counter table.");
+                    $"Release-counter store at '{path}' has a non-object 'codegen_generations' value. Repair the file or delete it to start from an empty counter table.");
             }
 
-            if (string.IsNullOrEmpty(entry.ContentHash))
+            if (loaded.Count != 1)
+            {
+                throw new InvalidDataException(
+                    $"Release-counter store at '{path}' mixes a top-level 'codegen_generations' property with other " +
+                    "unexpected top-level keys. Repair the file or delete it to start from an empty counter table.");
+            }
+
+            var ordinals = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            foreach (var property in generationsElement.EnumerateObject())
+            {
+                ordinals[property.Name] = property.Value.GetInt32();
+            }
+            return new JsonReleaseCounterStore(path, ordinals, -1);
+        }
+
+        var legacyFloor = -1;
+        foreach (var (key, entry) in loaded)
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidDataException(
+                    $"Release-counter store at '{path}' has a null or invalid entry for key '{key}'. Repair the file or delete it to start from an empty counter table.");
+            }
+
+            if (!entry.TryGetProperty("content_hash", out var contentHashProperty)
+                || contentHashProperty.ValueKind != JsonValueKind.String
+                || string.IsNullOrEmpty(contentHashProperty.GetString()))
             {
                 throw new InvalidDataException(
                     $"Release-counter store at '{path}' has a missing or empty content_hash for key '{key}'. Repair the file or delete it to start from an empty counter table.");
             }
 
-            if (entry.Revision < 0)
+            if (!entry.TryGetProperty("revision", out var revisionProperty) || revisionProperty.ValueKind != JsonValueKind.Number)
             {
                 throw new InvalidDataException(
-                    $"Release-counter store at '{path}' has a negative revision ({entry.Revision}) for key '{key}'. Repair the file or delete it to start from an empty counter table.");
+                    $"Release-counter store at '{path}' has a missing or non-numeric revision for key '{key}'. Repair the file or delete it to start from an empty counter table.");
             }
 
-            validated[key] = entry;
+            var revision = revisionProperty.GetInt32();
+            if (revision < 0)
+            {
+                throw new InvalidDataException(
+                    $"Release-counter store at '{path}' has a negative revision ({revision}) for key '{key}'. Repair the file or delete it to start from an empty counter table.");
+            }
+
+            legacyFloor = Math.Max(legacyFloor, revision);
         }
 
-        return new JsonReleaseCounterStore(path, validated);
+        return new JsonReleaseCounterStore(path, new SortedDictionary<string, int>(StringComparer.Ordinal), legacyFloor);
     }
 
     /// <summary>
-    /// Resolves and persists the 4th-segment revision for a given
-    /// (<paramref name="packageName"/>, <paramref name="intrinsicVersion"/>,
-    /// <paramref name="contentHash"/>) tuple. Semantics:
+    /// Resolves and persists the shared per-source generation ordinal for
+    /// <paramref name="codegenVersion"/>. Semantics:
     /// <list type="bullet">
-    /// <item>Unknown key → write hash@0, return <c>0</c>.</item>
-    /// <item>Known key + identical hash → return the recorded revision unchanged.</item>
-    /// <item>Known key + differing hash → bump revision, write new hash@(r+1), return new revision.</item>
+    /// <item>Already-seen <paramref name="codegenVersion"/> → return the
+    /// stored ordinal unchanged, with no write. Idempotent across every
+    /// package resolved in the same run.</item>
+    /// <item>Never-seen <paramref name="codegenVersion"/> → mint
+    /// <c>(highest ordinal currently known to the store, including any
+    /// migrated legacy floor) + 1</c>, persist it, and return it.</item>
     /// </list>
     /// </summary>
-    public int ResolveRevision(string packageName, Version intrinsicVersion, string contentHash)
+    public int ResolveGeneration(string codegenVersion)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageName);
-        ArgumentNullException.ThrowIfNull(intrinsicVersion);
-        ArgumentException.ThrowIfNullOrWhiteSpace(contentHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(codegenVersion);
 
-        var key = ComposeKey(packageName, intrinsicVersion);
-
-        if (_entries.TryGetValue(key, out var existing))
+        if (_ordinalsByCodegenVersion.TryGetValue(codegenVersion, out var existing))
         {
-            if (string.Equals(existing.ContentHash, contentHash, StringComparison.Ordinal))
-            {
-                return existing.Revision;
-            }
-
-            var bumped = existing.Revision + 1;
-            _entries[key] = new ReleaseCounterEntry(contentHash, bumped);
-            Persist();
-            return bumped;
+            return existing;
         }
 
-        _entries[key] = new ReleaseCounterEntry(contentHash, 0);
-        Persist();
-        return 0;
-    }
+        var highestKnown = _ordinalsByCodegenVersion.Count == 0
+            ? _migrationFloor
+            : Math.Max(_migrationFloor, _ordinalsByCodegenVersion.Values.Max());
 
-    private static string ComposeKey(string packageName, Version intrinsic) =>
-        string.Create(
-            CultureInfo.InvariantCulture,
-            $"{packageName}@{intrinsic.Major}.{intrinsic.Minor}.{Math.Max(0, intrinsic.Build)}");
+        var minted = highestKnown + 1;
+        _ordinalsByCodegenVersion[codegenVersion] = minted;
+        Persist();
+        return minted;
+    }
 
     private void Persist()
     {
@@ -166,8 +201,7 @@ internal sealed class JsonReleaseCounterStore
             Directory.CreateDirectory(directory);
         }
 
-        var ordered = new SortedDictionary<string, ReleaseCounterEntry>(_entries, StringComparer.Ordinal);
-        var json = JsonSerializer.Serialize(ordered, SerializerOptions);
+        var json = JsonSerializer.Serialize(new StoreDocument(_ordinalsByCodegenVersion), SerializerOptions);
         var temporaryPath = _path + ".tmp";
         File.WriteAllText(temporaryPath, json);
         File.Move(temporaryPath, _path, overwrite: true);

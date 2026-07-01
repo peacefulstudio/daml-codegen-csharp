@@ -1,10 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.CSharp.Versioning;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -254,33 +254,12 @@ public sealed class ProjectFileGenerator
     /// The NuGet version of <c>Daml.Runtime</c> that is lockstep-versioned with
     /// this emitter build, used as the default <c>PackageReference</c> version
     /// when <see cref="CodeGenOptions.RuntimePackageVersion"/> is not supplied.
-    /// Read from the emitter assembly's informational version (which carries
-    /// any prerelease suffix), with the source-revision <c>+</c> metadata
-    /// stripped because NuGet version ranges do not accept it. Resolved lazily
-    /// so a missing version attribute surfaces its descriptive
-    /// <see cref="InvalidOperationException"/> only when the default is
-    /// actually needed, instead of failing every caller — including those that
-    /// supplied <see cref="CodeGenOptions.RuntimePackageVersion"/> — with a
-    /// <see cref="TypeInitializationException"/> that buries the message.
+    /// Delegates to <see cref="EmitterVersion.Current"/>, which reads
+    /// the emitter assembly's informational version (carrying any prerelease
+    /// suffix) with the source-revision <c>+</c> metadata stripped, because
+    /// NuGet version ranges do not accept it.
     /// </summary>
-    internal static string EmitterLockstepVersion => LazyEmitterLockstepVersion.Value;
-
-    private static readonly Lazy<string> LazyEmitterLockstepVersion = new(ResolveEmitterLockstepVersion);
-
-    private static string ResolveEmitterLockstepVersion()
-    {
-        var informational = typeof(ProjectFileGenerator).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (string.IsNullOrWhiteSpace(informational))
-        {
-            throw new InvalidOperationException(
-                "The Daml.Codegen.CSharp assembly carries no AssemblyInformationalVersionAttribute, " +
-                "so the default Daml.Runtime package reference version cannot be derived. " +
-                "Supply CodeGenOptions.RuntimePackageVersion explicitly or restore the assembly version metadata.");
-        }
-        var metadataSeparator = informational.IndexOf('+', StringComparison.Ordinal);
-        return metadataSeparator >= 0 ? informational[..metadataSeparator] : informational;
-    }
+    internal static string EmitterLockstepVersion => EmitterVersion.Current;
 
     private static bool RequiresCSharp13(DamlPackage package, IReadOnlyList<GeneratedFile>? emittedFiles)
     {

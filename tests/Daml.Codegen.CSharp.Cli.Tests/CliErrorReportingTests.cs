@@ -66,6 +66,7 @@ public class CliErrorReportingTests : IDisposable
             GenerateContractIdentifiers: true,
             EmitterCounter: 0,
             ReleaseCountersFile: null,
+            CodegenVersion: null,
             PackageLicenseExpression: "Apache-2.0",
             VersionSuffix: null,
             RepositoryUrl: null);

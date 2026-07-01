@@ -14,7 +14,9 @@ dependencies pack first can resolve against the local feed. Emits a build
 summary and exports the local-feed / nupkg directories to \$GITHUB_ENV.
 
 Reads (env):
-  CODEGEN_CS_VERSION  codegen-cs version (a prerelease suffix is forwarded).
+  CODEGEN_CS_VERSION  codegen-cs version (a prerelease suffix is forwarded; the full
+                      value also keys the shared release-counter generation ordinal
+                      via --codegen-version).
   RUNTIME_VERSION     Daml.Runtime version stamped into generated csprojs.
   PACKAGE_LICENSE     SPDX license stamped into generated packages.
   COUNTERS_PATH       Release-counter store passed to codegen-cs.
@@ -86,6 +88,7 @@ EOF
     --out "$out" \
     -- \
     --release-counters "$COUNTERS_PATH" \
+    --codegen-version "$CODEGEN_CS_VERSION" \
     --generate-project \
     --runtime-version "$RUNTIME_VERSION" \
     --package-license "$PACKAGE_LICENSE" \

@@ -31,6 +31,27 @@ because they are versioned in lockstep:
 
 ### Fixed
 
+- The generated NuGet package's 4th version segment (`Major.Minor.Patch.Revision`)
+  no longer collides across codegen-tool upgrades. Previously
+  `JsonReleaseCounterStore.ResolveRevision` keyed the segment per package
+  (`{packageName}@{Major.Minor.Patch}`) off a SHA-256 hash of the DAR proto
+  bytes alone, so a codegen upgrade that changed emitted C# (e.g. new
+  `IDamlType` members) with unchanged DAR content left the revision unchanged,
+  causing the newly emitted package to collide at the same NuGet version as an
+  already-published stale one. `JsonReleaseCounterStore.ResolveGeneration(codegenVersion)`
+  replaces `ResolveRevision`: it mints one shared "codegen-generation" ordinal
+  per source, identical across every package (main and every dependency)
+  emitted while a codegen version is current, and advances that ordinal only
+  when the codegen tool's own version changes. That version is supplied via
+  the new `--codegen-version` CLI flag (CI feeds it from `CODEGEN_CS_VERSION`),
+  falling back to the emitter's own clean assembly SemVer (`EmitterVersion.Current`)
+  when omitted. `IntermediatePackageContentHash` is now audit/logging-only and
+  no longer drives the version number. The store persists as
+  `{ "codegen_generations": { "<codegenVersion>": <ordinal> } }`; existing
+  per-package store files migrate automatically on load — the highest
+  recorded revision across their entries becomes the floor that the first
+  newly-minted ordinal must exceed.
+
 ### Security
 
 ## [0.2.0-preview.1] — 2026-06-30

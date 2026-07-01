@@ -9,10 +9,11 @@ namespace Daml.Codegen.CSharp.Versioning;
 
 /// <summary>
 /// Computes a stable hex SHA-256 over the deterministic protobuf encoding of an
-/// <see cref="IntermediatePackage"/>. This is the content-stability signal fed into
-/// <see cref="JsonReleaseCounterStore.ResolveRevision"/>: two emissions whose
-/// <c>IntermediatePackage</c> serializes byte-for-byte the same will resolve to the
-/// same 4th-segment revision; any difference bumps the revision.
+/// <see cref="IntermediatePackage"/>. This hash is audit/logging-only: it no
+/// longer drives the 4th NuGet version segment, which is instead the shared
+/// per-source generation ordinal resolved by
+/// <see cref="JsonReleaseCounterStore.ResolveGeneration"/> from the codegen
+/// tool's own version.
 /// </summary>
 internal static class IntermediatePackageContentHash
 {
