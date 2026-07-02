@@ -47,6 +47,9 @@ public class ChoiceResultStructTests
             new DamlPrimitiveType(DamlPrimitive.ContractId),
             [new DamlTypeRef("", "Test.Module", templateName)]);
 
+    private static DamlType ContractIdOf(DamlTypeRef typeRef) =>
+        new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.ContractId), [typeRef]);
+
     private static DamlType OptionalOf(DamlType inner) =>
         new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [inner]);
 
@@ -324,5 +327,121 @@ public class ChoiceResultStructTests
         // Distribution loop pulls from the shared bucket into each slot in order.
         code.Should().Contain("matches0.Add(templateMatches0[templateMatchIndex0]);");
         code.Should().Contain("matches1.Add(templateMatches0[templateMatchIndex0]);");
+    }
+
+    [Fact]
+    public void Generate_should_not_share_a_bucket_between_a_template_and_an_interface_with_the_same_generated_name()
+    {
+        // A template named `IFactory` and an interface named `Factory` both resolve to
+        // the C# name "IFactory" — the template because that's its own name, the
+        // interface because generated markers are prefixed with "I" (see
+        // Identifiers.InterfaceMarkerName). Grouping created-contract slots by that
+        // generated name alone would merge the two slots into one bucket and match both
+        // against whichever slot's Interface came first — reintroducing CS0117 for the
+        // template slot or matching the interface slot on the wrong branch. Slots must
+        // stay in distinct buckets keyed on (name, interface-or-not).
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "IFactory",
+                    Fields = [],
+                    Choices = [],
+                },
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "IssueBoth",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = TupleType(ContractIdOf("IFactory"), ContractIdOf("Factory")),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType { Name = "IFactory", Definition = new DamlRecordDefinition([]) },
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                // Interface marker `Factory` also surfaces as a serializable placeholder
+                // record of the same name — this is what flags the type as an interface.
+                new DamlDataType { Name = "Factory", Definition = new DamlRecordDefinition([]) },
+            ],
+            Interfaces = [new DamlInterface { Name = "Factory", Choices = [], ViewType = null }],
+        };
+
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(DamlPrim).Build();
+        var files = CreateGenerator().Generate(dar);
+        var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
+
+        // Two distinct buckets, not one shared bucket.
+        code.Should().Contain("var templateMatches0 = new List<string>();");
+        code.Should().Contain("var templateMatches1 = new List<string>();");
+
+        // One branch matches the template by TemplateId, the other matches the
+        // interface by InterfaceIds — neither slot silently inherits the other's branch.
+        // `Factory` is a local interface ref, so RecordEmitter's throwing placeholder
+        // stub (not a fully-emitted marker) backs it — the interface branch must match
+        // via string literals, not a generated InterfaceId symbol.
+        code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, \"Test.Module\", StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, \"Factory\", StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(item.TemplateId.ModuleName, global::Test.Package.IFactory.TemplateId.ModuleName, StringComparison.Ordinal)");
+        code.Should().NotContain("InterfaceId.ModuleName");
+        code.Should().NotContain("InterfaceId.EntityName");
+    }
+
+    [Fact]
+    public void Generate_should_match_a_foreign_interface_typed_slot_via_its_generated_InterfaceId_symbol()
+    {
+        // Unlike a local interface (matched via string literals, see the test above —
+        // RecordEmitter's placeholder stub for local interfaces has no InterfaceId
+        // member), a foreign interface's marker is a fully-emitted symbol carrying a
+        // public InterfaceId. The projector must match on that symbol, not literals.
+        const string ForeignPackageId = "foreign-pkg-id";
+        var foreignModule = new DamlModule
+        {
+            Name = "Foreign.Module",
+            Templates = [],
+            DataTypes = [new DamlDataType { Name = "Holdable", Definition = new DamlRecordDefinition([]) }],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = ForeignPackageId,
+            Name = "foreign-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+        var foreignRef = new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Holdable");
+        var module = ModuleWith(Template("Vault", ContractIdOf(foreignRef), choiceName: "Acquire"));
+
+        var dar = new DamlModelBuilder()
+            .WithModule(module)
+            .WithDependency(DamlPrim)
+            .WithDependency(foreignPackage)
+            .Build();
+        var files = CreateGenerator().Generate(dar);
+        var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
+
+        code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, Foreign.Package.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, Foreign.Package.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
+        code.Should().NotContain("\"Foreign.Module\"");
+        code.Should().NotContain("\"Holdable\"");
     }
 }

@@ -36,6 +36,9 @@ namespace Daml.Runtime.Streams;
 ///   <item><see cref="StreamError"/> — the transport stream failed mid-flight.
 ///   Surfaced as a value rather than thrown so the consuming
 ///   <c>await foreach</c> loop can decide whether to retry, log, or stop.</item>
+///   <item><see cref="Unclassified"/> — an event the transport delivered but
+///   this layer could not map to any other variant; surfaced as a value so
+///   consumers can implement a no-silent-drop policy for themselves.</item>
 /// </list>
 /// </remarks>
 public abstract record ContractStreamEvent<T>
@@ -52,11 +55,13 @@ public abstract record ContractStreamEvent<T>
     /// <param name="Offset">The ledger offset at which the contract was
     /// created. Strictly increasing per synchronizer; suitable for use as
     /// the resume offset on a subsequent subscription (exclusive).</param>
+    /// <param name="SynchronizerId">The synchronizer the contract was created on.</param>
     /// <param name="WitnessParties">Parties that witnessed the create event.</param>
     public sealed record Created(
         ContractId<T> ContractId,
         DamlRecord Payload,
         long Offset,
+        SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
@@ -64,10 +69,12 @@ public abstract record ContractStreamEvent<T>
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID.</param>
     /// <param name="Offset">The ledger offset at which the contract was archived.</param>
+    /// <param name="SynchronizerId">The synchronizer the contract was archived on.</param>
     /// <param name="WitnessParties">Parties that witnessed the archive event.</param>
     public sealed record Archived(
         ContractId<T> ContractId,
         long Offset,
+        SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
@@ -81,6 +88,7 @@ public abstract record ContractStreamEvent<T>
     /// <param name="ExerciseResult">The result returned by the choice.</param>
     /// <param name="Consuming">Whether the exercise consumed (archived) the contract.</param>
     /// <param name="Offset">The ledger offset of the exercise.</param>
+    /// <param name="SynchronizerId">The synchronizer the exercise occurred on.</param>
     /// <param name="WitnessParties">Parties that witnessed the exercise event.</param>
     public sealed record Exercised(
         ContractId<T> ContractId,
@@ -89,6 +97,7 @@ public abstract record ContractStreamEvent<T>
         DamlValue ExerciseResult,
         bool Consuming,
         long Offset,
+        SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
@@ -158,4 +167,18 @@ public abstract record ContractStreamEvent<T>
     public sealed record StreamError(
         int StatusCode,
         string Message) : ContractStreamEvent<T>;
+
+    /// <summary>
+    /// An event the transport delivered but this layer could not map to any
+    /// of the other variants. Surfaced rather than silently dropped so
+    /// consumers can honour a no-silent-drop invariant — this is the
+    /// transport-agnostic <c>Daml.Runtime</c> layer, so no raw wire bytes
+    /// are available to attach here.
+    /// </summary>
+    /// <param name="Offset">The ledger offset at which the unrecognized event occurred.</param>
+    /// <param name="Kind">A short description of the unrecognized event, for
+    /// logging/diagnostics.</param>
+    public sealed record Unclassified(
+        long Offset,
+        string Kind) : ContractStreamEvent<T>;
 }

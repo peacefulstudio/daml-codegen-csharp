@@ -13,8 +13,6 @@ public class VersioningApiSurfaceTests
     public static TheoryData<Type> VersioningClusterTypes() =>
         [
             typeof(JsonReleaseCounterStore),
-            typeof(ReleaseCounterEntry),
-            typeof(IntermediatePackageContentHash),
             typeof(NuGetVersionResolver),
             typeof(FourPartPackageVersion),
         ];

@@ -234,14 +234,14 @@ public sealed class ProjectFileGenerator
         if (darVersion.Build < 0)
         {
             throw new InvalidOperationException(
-                $"Daml package version must be 3-part (Major.Minor.Patch) to produce a 4-part M.m.p.r NuGet version, " +
+                $"Daml package version must be 3-part (Major.Minor.Patch) to produce a 4-part M.m.p.g NuGet version, " +
                 $"but got '{darVersion}'. The IntermediateDarReader guarantees a 3-part version; " +
                 $"a 2-part version here indicates a regression in the upstream parser.");
         }
         if (_options.EmitterCounter < 0)
         {
             throw new InvalidOperationException(
-                $"CodeGenOptions.EmitterCounter is the monotonic 4th segment of the M.m.p.r versioning scheme; " +
+                $"CodeGenOptions.EmitterCounter is the monotonic 4th segment of the M.m.p.g versioning scheme; " +
                 $"negative values are not valid NuGet versions, got {_options.EmitterCounter}.");
         }
         return FourPartPackageVersion.FromIntrinsic(darVersion, _options.EmitterCounter, _options.VersionSuffix).ToString();

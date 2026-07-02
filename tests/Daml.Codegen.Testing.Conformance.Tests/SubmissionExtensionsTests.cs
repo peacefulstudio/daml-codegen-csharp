@@ -56,6 +56,7 @@ public class SubmissionExtensionsTests
             HoldingCids: new List<ContractId<IHolding>>(),
             Profile: new Profile("n", 0),
             Outcome: new Outcome.Pending(),
+            Suit: Suit.Diamonds,
             Fee: 0m);
 
         var outcome = await client.CreateAsync(payload, new Party("alice"), TestContext.Current.CancellationToken);

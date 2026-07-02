@@ -42,7 +42,7 @@ public sealed class InterfaceEmitter(
             indent.AppendLine("/// </summary>");
         }
 
-        var interfaceName = Identifiers.InterfaceMarkerName(iface.Name);
+        var interfaceName = Identifiers.InterfaceMarkerName(iface.Name, context.LocalTemplateClassNames);
         indent.CurrentTypeName = interfaceName;
 
         var viewType = iface.ViewType is not null ? mapper.MapType(iface.ViewType) : null;
@@ -80,7 +80,14 @@ public sealed class InterfaceEmitter(
         {
             indent.AppendLine("/// <summary>Gets the interface identifier.</summary>");
         }
-        indent.AppendLine($"static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.InterfaceId => new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
+        indent.AppendLine($"static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.InterfaceId => InterfaceId;");
+        indent.AppendLine();
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>Gets the interface identifier.</summary>");
+        }
+        indent.AppendLine($"public static new {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} InterfaceId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)

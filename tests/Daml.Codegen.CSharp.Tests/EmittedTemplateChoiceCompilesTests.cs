@@ -143,6 +143,141 @@ public class EmittedTemplateChoiceCompilesTests
     }
 
     [Fact]
+    public void Emitted_choice_returning_an_interface_contract_id_compiles()
+    {
+        // Regression: a choice returning `ContractId I` for a Daml interface `I` made the
+        // <Choice>Result projector emit `IFactory.TemplateId.ModuleName` — but generated
+        // interface markers expose no public TemplateId (it is an explicit IDamlType
+        // member), so the projector failed with CS0117. The projector must match an
+        // interface slot against the created contract's InterfaceIds instead.
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "IssueHoldable",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Holdable"),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                // Interface marker `Holdable` also surfaces as a serializable placeholder
+                // record of the same name — this is what flags the type as an interface.
+                new DamlDataType
+                {
+                    Name = "Holdable",
+                    Definition = new DamlRecordDefinition([]),
+                },
+            ],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a choice returning an interface-typed ContractId must match created contracts by InterfaceIds, not TemplateId, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
+    public void Emitted_choice_returning_a_local_placeholder_interface_contract_id_compiles_and_uses_literals()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "IssueHoldable",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Holdable"),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Holdable",
+                    Definition = new DamlRecordDefinition([]),
+                },
+            ],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a choice returning a local placeholder-interface-typed ContractId (backed by RecordEmitter's throwing ITemplate stub, with no InterfaceId member) must still compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+
+        var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
+        code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, \"Test.Module\", StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, \"Holdable\", StringComparison.Ordinal)");
+        code.Should().NotContain(
+            "IHoldable.InterfaceId",
+            "the local placeholder record backing `Holdable` exposes no InterfaceId member — the projector must not reference one");
+    }
+
+    [Fact]
     public void Emitted_create_bearing_choice_with_static_controllers_compiles_both_contractid_and_contract_overloads()
     {
         var fields = new[]

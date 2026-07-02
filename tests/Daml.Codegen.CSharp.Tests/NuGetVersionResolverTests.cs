@@ -26,14 +26,13 @@ public class NuGetVersionResolverTests : IDisposable
     }
 
     [Fact]
-    public void Compute_returns_FourPartPackageVersion_with_Revision_zero_on_first_emission()
+    public void compute_stamps_generation_ordinal_from_store()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
         var version = NuGetVersionResolver.Compute(
-            packageName: "Splice.Amulet",
             intrinsicVersion: new Version(0, 1, 17),
-            contentHash: "deadbeef",
+            codegenVersion: "0.2.0-preview.3",
             counterStore: store);
 
         version.Should().Be(new FourPartPackageVersion(0, 1, 17, 0));
@@ -41,13 +40,25 @@ public class NuGetVersionResolverTests : IDisposable
     }
 
     [Fact]
-    public void Compute_bumps_Revision_when_contentHash_changes_under_same_intrinsicVersion()
+    public void compute_yields_same_ordinal_for_different_packages_under_one_codegen_version()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
-        NuGetVersionResolver.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-a", store)
+        var amulet = NuGetVersionResolver.Compute(new Version(0, 1, 17), "0.2.0-preview.3", store);
+        var holding = NuGetVersionResolver.Compute(new Version(3, 4, 5), "0.2.0-preview.3", store);
+
+        amulet.Should().Be(new FourPartPackageVersion(0, 1, 17, 0));
+        holding.Should().Be(new FourPartPackageVersion(3, 4, 5, 0));
+    }
+
+    [Fact]
+    public void compute_increments_ordinal_when_codegen_version_changes()
+    {
+        var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
+
+        NuGetVersionResolver.Compute(new Version(0, 1, 17), "0.2.0-preview.3", store)
             .Should().Be(new FourPartPackageVersion(0, 1, 17, 0));
-        NuGetVersionResolver.Compute("Splice.Amulet", new Version(0, 1, 17), "hash-b", store)
+        NuGetVersionResolver.Compute(new Version(0, 1, 17), "0.2.0-preview.4", store)
             .Should().Be(new FourPartPackageVersion(0, 1, 17, 1));
     }
 }

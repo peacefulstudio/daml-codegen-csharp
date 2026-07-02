@@ -519,14 +519,21 @@ public sealed partial class ChoiceEmitter
         // on the floor: the second slot's branch was unreachable, so its bucket
         // stayed empty and the projector returned `.None` for any caller using the
         // duplicate-template feature this PR otherwise advertises.
-        var templateGroups = new List<(string TemplateRef, List<int> SlotIndexes)>();
+        var templateGroups = new List<(string TemplateRef, InterfaceMatcher? Interface, List<int> SlotIndexes)>();
         for (var i = 0; i < slots.Count; i++)
         {
             var templateRef = Q(slots[i].CSharpTemplateType);
+            var slotInterface = slots[i].Interface;
             var groupIndex = -1;
             for (var g = 0; g < templateGroups.Count; g++)
             {
-                if (string.Equals(templateGroups[g].TemplateRef, templateRef, StringComparison.Ordinal))
+                // Key on TemplateRef *and* the interface matcher, not TemplateRef alone —
+                // a template and an interface marker can share the same generated C# name
+                // (e.g. template `IFactory` vs the marker generated for interface `Factory`),
+                // and merging their slots would pick whichever slot's Interface came first,
+                // matching the other slot on the wrong branch.
+                if (string.Equals(templateGroups[g].TemplateRef, templateRef, StringComparison.Ordinal)
+                    && templateGroups[g].Interface == slotInterface)
                 {
                     groupIndex = g;
                     break;
@@ -535,7 +542,7 @@ public sealed partial class ChoiceEmitter
 
             if (groupIndex < 0)
             {
-                templateGroups.Add((templateRef, new List<int> { i }));
+                templateGroups.Add((templateRef, slots[i].Interface, new List<int> { i }));
             }
             else
             {
@@ -555,11 +562,34 @@ public sealed partial class ChoiceEmitter
         for (var g = 0; g < templateGroups.Count; g++)
         {
             var prefix = g == 0 ? "if" : "else if";
-            var templateRef = templateGroups[g].TemplateRef;
-            indent.AppendLine($"{prefix} (string.Equals(item.TemplateId.ModuleName, {templateRef}.TemplateId.ModuleName, StringComparison.Ordinal)");
-            indent.Indent();
-            indent.AppendLine($"&& string.Equals(item.TemplateId.EntityName, {templateRef}.TemplateId.EntityName, StringComparison.Ordinal))");
-            indent.Dedent();
+            var group = templateGroups[g];
+            if (group.Interface is not null)
+            {
+                // Interface-marker slots carry no public TemplateId; a created contract
+                // surfaces the interfaces it implements via InterfaceIds. Match on the
+                // interface's (module, entity), sourced from InterfaceMatcher.IsPlaceholder.
+                indent.Require("System.Linq");
+                indent.AppendLine($"{prefix} (item.InterfaceIds.Any(interfaceId =>");
+                indent.Indent();
+                if (group.Interface.IsPlaceholder)
+                {
+                    indent.AppendLine($"string.Equals(interfaceId.ModuleName, \"{group.Interface.ModuleName}\", StringComparison.Ordinal)");
+                    indent.AppendLine($"&& string.Equals(interfaceId.EntityName, \"{group.Interface.EntityName}\", StringComparison.Ordinal)))");
+                }
+                else
+                {
+                    indent.AppendLine($"string.Equals(interfaceId.ModuleName, {group.TemplateRef}.InterfaceId.ModuleName, StringComparison.Ordinal)");
+                    indent.AppendLine($"&& string.Equals(interfaceId.EntityName, {group.TemplateRef}.InterfaceId.EntityName, StringComparison.Ordinal)))");
+                }
+                indent.Dedent();
+            }
+            else
+            {
+                indent.AppendLine($"{prefix} (string.Equals(item.TemplateId.ModuleName, {group.TemplateRef}.TemplateId.ModuleName, StringComparison.Ordinal)");
+                indent.Indent();
+                indent.AppendLine($"&& string.Equals(item.TemplateId.EntityName, {group.TemplateRef}.TemplateId.EntityName, StringComparison.Ordinal))");
+                indent.Dedent();
+            }
             indent.AppendLine("{");
             indent.Indent();
             indent.AppendLine($"templateMatches{g}.Add(item.ContractId);");

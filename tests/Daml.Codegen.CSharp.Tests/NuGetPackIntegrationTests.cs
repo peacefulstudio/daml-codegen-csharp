@@ -132,7 +132,7 @@ public class NuGetPackIntegrationTests
             nuspecVersion.Should().MatchRegex(@"^\d+\.\d+\.\d+(\.\d+)?$",
                 "the .nuspec must carry an M.m.p[.r] version (4th segment is normalized away by NuGet when r=0)");
             nuspecVersion.Split('.').Length.Should().BeGreaterThanOrEqualTo(3,
-                "the M.m.p.r versioning scheme requires at least the 3-part DAR-intrinsic version in the manifest");
+                "the M.m.p.g versioning scheme requires at least the 3-part DAR-intrinsic version in the manifest");
 
             var nuspecLicense = ReadNuspecLicense(nupkg!);
             nuspecLicense.Should().Be("Apache-2.0",

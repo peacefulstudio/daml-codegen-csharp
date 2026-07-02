@@ -22,7 +22,10 @@ namespace Splice.Api.Token.Holding.V1;
 public interface IHolding : IDamlInterface, IHasView<HoldingView>
 {
     /// <summary>Gets the interface identifier.</summary>
-    static Identifier IDamlInterface.InterfaceId => new("718a0f77e505a8de22f188bd4c87fe74101274e9d4cb1bfac7d09aec7158d35b", "Splice.Api.Token.HoldingV1", "Holding");
+    static Identifier IDamlInterface.InterfaceId => InterfaceId;
+
+    /// <summary>Gets the interface identifier.</summary>
+    public static new Identifier InterfaceId { get; } = new("718a0f77e505a8de22f188bd4c87fe74101274e9d4cb1bfac7d09aec7158d35b", "Splice.Api.Token.HoldingV1", "Holding");
 
     /// <summary>Gets the package ID.</summary>
     static string IDamlInterface.PackageId => "718a0f77e505a8de22f188bd4c87fe74101274e9d4cb1bfac7d09aec7158d35b";

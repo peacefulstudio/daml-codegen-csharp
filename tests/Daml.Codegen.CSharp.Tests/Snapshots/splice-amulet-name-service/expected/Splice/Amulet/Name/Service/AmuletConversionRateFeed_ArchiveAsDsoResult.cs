@@ -15,6 +15,7 @@ namespace Splice.Amulet.Name.Service;
 /// </summary>
 public enum AmuletConversionRateFeed_ArchiveAsDsoResult
 {
+    /// <summary>AmuletConversionRateFeed_ArchiveAsDsoResult enum constructor.</summary>
     AmuletConversionRateFeed_ArchiveAsDsoResult,
 }
 

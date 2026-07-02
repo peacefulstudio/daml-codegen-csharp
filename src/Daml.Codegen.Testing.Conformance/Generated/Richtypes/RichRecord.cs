@@ -22,13 +22,13 @@ namespace Daml.Codegen.Testing.Conformance.Richtypes;
 /// <summary>
 /// Generated from Daml template RichTypes:RichRecord
 /// </summary>
-public sealed partial record RichRecord([property: DamlFieldAttribute("owner")] Party Owner, [property: DamlFieldAttribute("count")] long Count, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("label")] string Label, [property: DamlFieldAttribute("active")] bool Active, [property: DamlFieldAttribute("asOf")] DateOnly AsOf, [property: DamlFieldAttribute("observedAt")] DateTimeOffset ObservedAt, [property: DamlFieldAttribute("note")] string? Note, [property: DamlFieldAttribute("tags")] IReadOnlyList<string> Tags, [property: DamlFieldAttribute("attributes")] IReadOnlyDictionary<string, string> Attributes, [property: DamlFieldAttribute("marker")] ContractId<Marker> Marker, [property: DamlFieldAttribute("holdingCid")] ContractId<IHolding> HoldingCid, [property: DamlFieldAttribute("holdingCids")] IReadOnlyList<ContractId<IHolding>> HoldingCids, [property: DamlFieldAttribute("profile")] Profile Profile, [property: DamlFieldAttribute("outcome")] Outcome Outcome, [property: DamlFieldAttribute("fee")] decimal Fee) : ITemplate
+public sealed partial record RichRecord([property: DamlFieldAttribute("owner")] Party Owner, [property: DamlFieldAttribute("count")] long Count, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("label")] string Label, [property: DamlFieldAttribute("active")] bool Active, [property: DamlFieldAttribute("asOf")] DateOnly AsOf, [property: DamlFieldAttribute("observedAt")] DateTimeOffset ObservedAt, [property: DamlFieldAttribute("note")] string? Note, [property: DamlFieldAttribute("tags")] IReadOnlyList<string> Tags, [property: DamlFieldAttribute("attributes")] IReadOnlyDictionary<string, string> Attributes, [property: DamlFieldAttribute("marker")] ContractId<Marker> Marker, [property: DamlFieldAttribute("holdingCid")] ContractId<IHolding> HoldingCid, [property: DamlFieldAttribute("holdingCids")] IReadOnlyList<ContractId<IHolding>> HoldingCids, [property: DamlFieldAttribute("profile")] Profile Profile, [property: DamlFieldAttribute("outcome")] Outcome Outcome, [property: DamlFieldAttribute("suit")] Suit Suit, [property: DamlFieldAttribute("fee")] decimal Fee) : ITemplate
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb", "RichTypes", "RichRecord");
+    public static Identifier TemplateId { get; } = new("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "RichRecord");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb";
+    public static string PackageId => "22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";
@@ -56,6 +56,7 @@ public sealed partial record RichRecord([property: DamlFieldAttribute("owner")] 
         DamlField.Create("holdingCids", new DamlList(HoldingCids.Select(x => (DamlValue)x.ToDamlValue()).ToList())),
         DamlField.Create("profile", Profile.ToRecord()),
         DamlField.Create("outcome", Outcome.ToVariant()),
+        DamlField.Create("suit", Suit.ToDamlEnum()),
         DamlField.Create("fee", new DamlNumeric(Fee))
     );
 
@@ -76,6 +77,7 @@ public sealed partial record RichRecord([property: DamlFieldAttribute("owner")] 
         HoldingCids: (IReadOnlyList<ContractId<IHolding>>)record.GetRequiredField("holdingCids").As<DamlList>().Values.Select(x => new ContractId<IHolding>(x.As<DamlContractId>().Value)).ToList(),
         Profile: Profile.FromRecord(record.GetRequiredField("profile").As<DamlRecord>()),
         Outcome: Outcome.FromVariant(record.GetRequiredField("outcome").As<DamlVariant>()),
+        Suit: SuitExtensions.FromDamlEnum(record.GetRequiredField("suit").As<DamlEnum>()),
         Fee: record.GetRequiredField("fee").As<DamlNumeric>().Value
     );
 

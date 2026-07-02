@@ -34,6 +34,22 @@ public sealed record ArchivedEvent(
     IReadOnlyList<Party> WitnessParties);
 
 /// <summary>
+/// Represents a Daml exception caught by a <c>try</c>/<c>catch</c> block during
+/// choice interpretation. Transport-neutral and wire-format-agnostic — the
+/// Canton ledger client owns translating the gRPC exception representation
+/// into this shape.
+/// </summary>
+/// <param name="ErrorId">The identifier of the caught exception (e.g. its
+/// qualified Daml type name or the ledger's error code).</param>
+/// <param name="Message">The human-readable message carried by the exception.</param>
+/// <param name="Metadata">Additional key-value context associated with the
+/// exception, as provided by the ledger.</param>
+public sealed record CaughtException(
+    string ErrorId,
+    string Message,
+    IReadOnlyDictionary<string, string> Metadata);
+
+/// <summary>
 /// Represents a choice-exercise event observed in a transaction. Carries the
 /// wire-level <see cref="ExerciseResult"/> so codegen-emitted choice wrappers
 /// can deserialize the choice's typed return value (e.g. project a
@@ -62,4 +78,13 @@ public sealed record ExercisedEvent(
     DamlValue ExerciseResult,
     bool Consuming,
     IReadOnlyList<Party> ActingParties,
-    IReadOnlyList<Party> WitnessParties);
+    IReadOnlyList<Party> WitnessParties)
+{
+    /// <summary>
+    /// Daml exceptions caught by a <c>try</c>/<c>catch</c> block during this
+    /// choice's interpretation. Defaults to an empty list — populated by
+    /// ledger-client transport implementations from the gRPC exception
+    /// status on the exercise node.
+    /// </summary>
+    public IReadOnlyList<CaughtException> CaughtExceptions { get; init; } = Array.Empty<CaughtException>();
+}

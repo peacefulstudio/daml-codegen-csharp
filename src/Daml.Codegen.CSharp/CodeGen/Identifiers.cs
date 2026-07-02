@@ -110,11 +110,26 @@ internal static partial class Identifiers
     /// <summary>
     /// Builds the C# marker-interface name for a Daml interface: the sanitised
     /// interface name prefixed with <c>I</c> (e.g. Daml <c>Holding</c> →
-    /// <c>IHolding</c>). Shared by the interface emitter and the type resolver so a
-    /// reference to an interface names the same marker on the field-type path as on
-    /// the choice-exercise path.
+    /// <c>IHolding</c>), appending a trailing <c>_</c> until the result is absent
+    /// from <paramref name="reservedTypeNames"/> — a package's namespace is flat
+    /// across all its modules, so a Daml template anywhere in the package can legally
+    /// be named after an interface marker (e.g. template <c>IFactory</c> alongside
+    /// interface <c>Factory</c>), which would otherwise emit two public <c>IFactory</c>
+    /// declarations in the same namespace (CS0101). Shared by the interface emitter
+    /// and the type resolver so a reference to an interface names the same marker on
+    /// the field-type path as on the choice-exercise path — callers must pass the
+    /// same reserved-name set (the declaring package's local template class names)
+    /// for every reference to a given interface.
     /// </summary>
-    internal static string InterfaceMarkerName(string interfaceName) => "I" + Sanitize(interfaceName);
+    internal static string InterfaceMarkerName(string interfaceName, IReadOnlySet<string> reservedTypeNames)
+    {
+        var marker = "I" + Sanitize(interfaceName);
+        while (reservedTypeNames.Contains(marker))
+        {
+            marker += "_";
+        }
+        return marker;
+    }
 
     /// <summary>
     /// Appends a trailing <c>_</c> when <paramref name="identifier"/> equals

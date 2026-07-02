@@ -13,12 +13,20 @@ namespace Daml.Runtime.Commands;
 /// <param name="CommandId">Unique command identifier for deduplication.</param>
 /// <param name="ActAs">Parties to act as when submitting.</param>
 /// <param name="ReadAs">Parties whose contracts are visible.</param>
+/// <param name="SynchronizerId">Optional synchronizer to pin the submission to.</param>
+/// <param name="DisclosedContracts">
+/// Optional contracts explicitly disclosed alongside this submission, for parties
+/// that don't natively see them. <see langword="null"/> preserves today's behaviour
+/// (no explicit disclosure).
+/// </param>
 public sealed record CommandsSubmission(
     IReadOnlyList<ICommand> Commands,
     WorkflowId? WorkflowId = null,
     CommandId? CommandId = null,
     IReadOnlyList<Party>? ActAs = null,
-    IReadOnlyList<Party>? ReadAs = null)
+    IReadOnlyList<Party>? ReadAs = null,
+    SynchronizerId? SynchronizerId = null,
+    IReadOnlyList<DisclosedContract>? DisclosedContracts = null)
 {
     /// <summary>
     /// Creates a submission with a single command.
@@ -45,6 +53,12 @@ public sealed record CommandsSubmission(
         this with { CommandId = commandId };
 
     /// <summary>
+    /// Adds a synchronizer ID to this submission.
+    /// </summary>
+    public CommandsSubmission WithSynchronizerId(SynchronizerId synchronizerId) =>
+        this with { SynchronizerId = synchronizerId };
+
+    /// <summary>
     /// Sets the parties to act as.
     /// </summary>
     public CommandsSubmission WithActAs(params Party[] parties) =>
@@ -55,6 +69,14 @@ public sealed record CommandsSubmission(
     /// </summary>
     public CommandsSubmission WithReadAs(params Party[] parties) =>
         this with { ReadAs = parties };
+
+    /// <summary>
+    /// Sets the contracts to explicitly disclose alongside this submission.
+    /// Passing no contracts, <see langword="null"/>, or an empty array clears
+    /// the field back to <see langword="null"/>.
+    /// </summary>
+    public CommandsSubmission WithDisclosedContracts(params DisclosedContract[]? disclosedContracts) =>
+        this with { DisclosedContracts = disclosedContracts is { Length: > 0 } ? disclosedContracts : null };
 
     /// <summary>
     /// Applies a <see cref="SubmitterInfo"/> — sets both <see cref="ActAs"/> and

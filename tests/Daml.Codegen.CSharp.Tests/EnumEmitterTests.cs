@@ -94,6 +94,16 @@ public class EnumEmitterTests
     }
 
     [Fact]
+    public void emits_xml_docs_for_every_enum_constructor_when_enabled()
+    {
+        var output = EmitEnum("Color", ["Red", "Green", "Blue"], generateXmlDocs: true);
+
+        output.Should().Contain("/// <summary>Red enum constructor.</summary>");
+        output.Should().Contain("/// <summary>Green enum constructor.</summary>");
+        output.Should().Contain("/// <summary>Blue enum constructor.</summary>");
+    }
+
+    [Fact]
     public void omits_the_type_xml_docs_when_disabled()
     {
         var output = EmitEnum("Color", ["Red", "Green", "Blue"], generateXmlDocs: false);
@@ -102,6 +112,7 @@ public class EnumEmitterTests
         output.Should().NotContain("/// Extension methods for Color serialization.");
         output.Should().NotContain("Converts to a DamlEnum value");
         output.Should().NotContain("Creates an instance from a DamlEnum value");
+        output.Should().NotContain("enum constructor.</summary>");
         output.Should().Contain("public enum Color");
     }
 }
