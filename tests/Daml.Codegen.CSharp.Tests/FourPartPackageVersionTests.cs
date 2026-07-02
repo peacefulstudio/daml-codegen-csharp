@@ -17,12 +17,12 @@ public class FourPartPackageVersionTests
         version.Major.Should().Be(1);
         version.Minor.Should().Be(2);
         version.Patch.Should().Be(3);
-        version.Revision.Should().Be(4);
+        version.Generation.Should().Be(4);
         version.ToString().Should().Be("1.2.3.4");
     }
 
     [Fact]
-    public void TryParse_defaults_Revision_to_zero_when_only_three_segments_supplied()
+    public void TryParse_defaults_Generation_to_zero_when_only_three_segments_supplied()
     {
         FourPartPackageVersion.TryParse("0.1.17", out var version).Should().BeTrue();
 
@@ -33,7 +33,7 @@ public class FourPartPackageVersionTests
     [Fact]
     public void ToString_appends_prerelease_suffix_when_present()
     {
-        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), revision: 1, prereleaseSuffix: "preview.2");
+        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), generation: 1, prereleaseSuffix: "preview.2");
 
         version.ToString().Should().Be("0.1.6.1-preview.2");
     }
@@ -41,7 +41,7 @@ public class FourPartPackageVersionTests
     [Fact]
     public void ToString_omits_suffix_when_absent()
     {
-        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), revision: 0);
+        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), generation: 0);
 
         version.ToString().Should().Be("0.1.6.0");
     }
@@ -51,22 +51,22 @@ public class FourPartPackageVersionTests
     {
         FourPartPackageVersion.TryParse("0.1.6.1-preview.1", out var version).Should().BeTrue();
 
-        version.Should().Be(FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), revision: 1, prereleaseSuffix: "preview.1"));
+        version.Should().Be(FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), generation: 1, prereleaseSuffix: "preview.1"));
         version.ToString().Should().Be("0.1.6.1-preview.1");
     }
 
     [Fact]
-    public void TryParse_accepts_three_part_core_with_prerelease_suffix_and_defaults_revision_to_zero()
+    public void TryParse_accepts_three_part_core_with_prerelease_suffix_and_defaults_generation_to_zero()
     {
         FourPartPackageVersion.TryParse("0.1.6-preview.1", out var version).Should().BeTrue();
 
-        version.Should().Be(FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), revision: 0, prereleaseSuffix: "preview.1"));
+        version.Should().Be(FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), generation: 0, prereleaseSuffix: "preview.1"));
     }
 
     [Fact]
-    public void FromIntrinsic_lifts_three_part_Version_with_given_revision()
+    public void FromIntrinsic_lifts_three_part_Version_with_given_generation()
     {
-        var lifted = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 17), revision: 3);
+        var lifted = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 17), generation: 3);
 
         lifted.Should().Be(new FourPartPackageVersion(0, 1, 17, 3));
     }
@@ -74,18 +74,18 @@ public class FourPartPackageVersionTests
     [Fact]
     public void FromIntrinsic_normalises_unset_Build_segment_to_zero()
     {
-        var lifted = FourPartPackageVersion.FromIntrinsic(new Version(1, 2), revision: 0);
+        var lifted = FourPartPackageVersion.FromIntrinsic(new Version(1, 2), generation: 0);
 
         lifted.Should().Be(new FourPartPackageVersion(1, 2, 0, 0));
     }
 
     [Fact]
-    public void FromIntrinsic_throws_ArgumentOutOfRangeException_when_revision_is_negative()
+    public void FromIntrinsic_throws_ArgumentOutOfRangeException_when_generation_is_negative()
     {
-        var act = () => FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 17), revision: -1);
+        var act = () => FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 17), generation: -1);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
-            .Which.ParamName.Should().Be("revision");
+            .Which.ParamName.Should().Be("generation");
     }
 
     [Theory]
@@ -114,7 +114,7 @@ public class FourPartPackageVersionTests
     [InlineData("   ")]
     public void FromIntrinsic_collapses_blank_prerelease_suffix_to_no_suffix_in_ToString(string blankSuffix)
     {
-        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), revision: 1, prereleaseSuffix: blankSuffix);
+        var version = FourPartPackageVersion.FromIntrinsic(new Version(0, 1, 6), generation: 1, prereleaseSuffix: blankSuffix);
 
         version.ToString().Should().Be("0.1.6.1");
     }

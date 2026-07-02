@@ -12,13 +12,13 @@ public class ChoiceCreatedSlotsTests
 {
     private const string LocalPackageId = "pkg-id";
 
-    private sealed class StubResolver(string resolvedName = "Resolved") : ICrossPackageResolver
+    private sealed class StubResolver(string resolvedName = "Resolved", Func<string, DamlPackage?>? lookupPackage = null) : ICrossPackageResolver
     {
         public string Resolve(DamlTypeRef typeRef, PackageEmitContext context) => resolvedName;
 
         public IReadOnlySet<string> DiscoveredExternalPackageIds => new HashSet<string>();
 
-        public DamlPackage? LookupPackage(string packageId) => null;
+        public DamlPackage? LookupPackage(string packageId) => lookupPackage?.Invoke(packageId);
     }
 
     private static DamlPackage Package() =>
@@ -65,6 +65,74 @@ public class ChoiceCreatedSlotsTests
         slots.Should().ContainSingle();
         slots[0].FieldName.Should().Be("Agreement");
         slots[0].Cardinality.Should().Be(CreatedCardinality.Single);
+    }
+
+    [Fact]
+    public void template_typed_contract_id_has_no_interface_matcher()
+    {
+        var slots = Extract(ContractIdOf(Ref("Agreement")));
+
+        slots[0].Interface.Should().BeNull();
+    }
+
+    [Fact]
+    public void interface_typed_contract_id_yields_an_interface_matcher_with_the_interface_module_and_entity()
+    {
+        var module = new DamlModule
+        {
+            Name = "Main",
+            Templates = [],
+            DataTypes = [new DamlDataType { Name = "Holdable", Definition = new DamlRecordDefinition([]) }],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+        var package = new DamlPackage
+        {
+            PackageId = LocalPackageId,
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var resolver = new StubResolver();
+        var mapper = new DamlTypeMapper(context, resolver);
+
+        var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, ContractIdOf(Ref("Holdable")));
+
+        slots.Should().ContainSingle();
+        slots[0].Interface.Should().Be(new InterfaceMatcher("Main", "Holdable", IsPlaceholder: true));
+    }
+
+    [Fact]
+    public void interface_typed_contract_id_from_a_foreign_package_yields_an_interface_matcher()
+    {
+        const string ForeignPackageId = "foreign-pkg-id";
+        var foreignModule = new DamlModule
+        {
+            Name = "Foreign.Module",
+            Templates = [],
+            DataTypes = [new DamlDataType { Name = "Holdable", Definition = new DamlRecordDefinition([]) }],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+        var foreignPackage = new DamlPackage
+        {
+            PackageId = ForeignPackageId,
+            Name = "foreign-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [foreignModule],
+            DependencyReferences = [],
+        };
+        var resolver = new StubResolver(lookupPackage: id => id == ForeignPackageId ? foreignPackage : null);
+        var context = Context();
+        var mapper = new DamlTypeMapper(context, resolver);
+        var foreignRef = new DamlTypeRef(ForeignPackageId, "Foreign.Module", "Holdable");
+
+        var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, ContractIdOf(foreignRef));
+
+        slots.Should().ContainSingle();
+        slots[0].Interface.Should().Be(new InterfaceMatcher("Foreign.Module", "Holdable", IsPlaceholder: false));
     }
 
     [Fact]

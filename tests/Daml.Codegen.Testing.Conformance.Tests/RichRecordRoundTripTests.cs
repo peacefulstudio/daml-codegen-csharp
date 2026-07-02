@@ -32,6 +32,7 @@ public class RichRecordRoundTripTests
         },
         Profile: new Profile("ace", 7),
         Outcome: new Outcome.Win(new Outcome_Win(Prize: 12.34m, Tier: "gold")),
+        Suit: Suit.Hearts,
         Fee: 1.5m);
 
     [Fact]
@@ -113,6 +114,14 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
+    public void to_record_wires_the_suit_enum()
+    {
+        var record = Sample(note: "hello").ToRecord();
+
+        record.GetRequiredField("suit").As<DamlEnum>().Constructor.Should().Be("Hearts");
+    }
+
+    [Fact]
     public void non_default_scale_fee_serializes_unpadded()
     {
         var record = new RichRecord(
@@ -131,6 +140,7 @@ public class RichRecordRoundTripTests
             HoldingCids: new List<ContractId<IHolding>>(),
             Profile: new Profile("n", 0),
             Outcome: new Outcome.Pending(),
+            Suit: Suit.Clubs,
             Fee: 1.5m).ToRecord();
 
         var json = DamlJsonSerializer.Serialize(record.GetRequiredField("fee").As<DamlNumeric>());

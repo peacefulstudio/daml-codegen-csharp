@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Daml.Codegen.CSharp.Cli.Tests;
 
+[Collection("ConsoleRedirection")]
 public class CliExitCodeTests
 {
     [Fact]

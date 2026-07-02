@@ -27,6 +27,14 @@ public sealed class PackageEmitContext
     public IReadOnlyDictionary<string, DamlDataType> DataTypes { get; }
 
     /// <summary>
+    /// Sanitised C# class names of every template declared anywhere in the package.
+    /// The package's C# namespace is flat across all its modules, so this set is the
+    /// reserved-name input <see cref="Identifiers.InterfaceMarkerName"/> disambiguates
+    /// interface marker names against.
+    /// </summary>
+    public IReadOnlySet<string> LocalTemplateClassNames { get; }
+
+    /// <summary>
     /// Module-qualified (<c>Module:Name</c>) names of enums declared in the package.
     /// Required because Daml allows the same simple name in multiple modules.
     /// </summary>
@@ -63,6 +71,7 @@ public sealed class PackageEmitContext
         string rootNamespace,
         TypeReferenceQualifier qualifier,
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        IReadOnlySet<string> localTemplateClassNames,
         IReadOnlySet<string> localEnumQualifiedNames,
         IReadOnlySet<string> localVariantQualifiedNames,
         IReadOnlySet<string> interfacePlaceholderQualifiedNames,
@@ -72,6 +81,7 @@ public sealed class PackageEmitContext
         RootNamespace = rootNamespace;
         Qualifier = qualifier;
         DataTypes = dataTypes;
+        LocalTemplateClassNames = localTemplateClassNames;
         LocalEnumQualifiedNames = localEnumQualifiedNames;
         LocalVariantQualifiedNames = localVariantQualifiedNames;
         InterfacePlaceholderQualifiedNames = interfacePlaceholderQualifiedNames;
@@ -96,6 +106,8 @@ public sealed class PackageEmitContext
 
         var rootNamespace = options.RootNamespace ?? Identifiers.DeriveNamespace(package.Name);
         var qualifier = new TypeReferenceQualifier([rootNamespace]);
+
+        var localTemplateClassNames = TemplateClassNames(package);
 
         var dataTypes = new Dictionary<string, DamlDataType>();
         var localEnumQualifiedNames = new HashSet<string>();
@@ -151,9 +163,23 @@ public sealed class PackageEmitContext
             rootNamespace,
             qualifier,
             dataTypes,
+            localTemplateClassNames,
             localEnumQualifiedNames,
             localVariantQualifiedNames,
             interfacePlaceholderQualifiedNames,
             localChoiceArgToTemplate);
     }
+
+    /// <summary>
+    /// Computes the sanitised C# class name of every template declared anywhere in
+    /// <paramref name="package"/> — the single source of the reserved-name set
+    /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates against, shared by
+    /// <see cref="ForPackage"/> (for the emitting package) and the cross-package
+    /// resolver (for foreign packages) so both sides derive the same marker name.
+    /// </summary>
+    internal static IReadOnlySet<string> TemplateClassNames(DamlPackage package) =>
+        package.Modules
+            .SelectMany(module => module.Templates)
+            .Select(template => Identifiers.Sanitize(template.Name))
+            .ToHashSet();
 }

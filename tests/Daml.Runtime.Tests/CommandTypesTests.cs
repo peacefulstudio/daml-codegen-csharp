@@ -280,6 +280,8 @@ public class CommandTypesTests
 
         submission.WorkflowId.Should().BeNull();
         submission.CommandId.Should().BeNull();
+        submission.SynchronizerId.Should().BeNull();
+        submission.DisclosedContracts.Should().BeNull();
     }
 
     [Fact]
@@ -316,6 +318,20 @@ public class CommandTypesTests
     }
 
     [Fact]
+    public void CommandsSubmission_WithSynchronizerId_should_set_synchronizer_id()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        var result = submission.WithSynchronizerId(new SynchronizerId("global_sync::abc"));
+
+        result.SynchronizerId.Should().Be(new SynchronizerId("global_sync::abc"));
+        result.Commands.Should().BeEquivalentTo(submission.Commands);
+    }
+
+    [Fact]
     public void CommandsSubmission_WithActAs_should_set_parties()
     {
         // Arrange
@@ -348,25 +364,129 @@ public class CommandTypesTests
     }
 
     [Fact]
+    public void CommandsSubmission_WithDisclosedContracts_should_set_disclosed_contracts()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+
+        // Act
+        var result = submission.WithDisclosedContracts(disclosedContract);
+
+        // Assert
+        result.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+        result.Commands.Should().BeEquivalentTo(submission.Commands);
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithDisclosedContracts_with_no_args_should_leave_disclosed_contracts_null()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        var result = submission.WithDisclosedContracts();
+
+        result.DisclosedContracts.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithDisclosedContracts_with_null_array_should_leave_disclosed_contracts_null()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        var result = submission.WithDisclosedContracts(null);
+
+        result.DisclosedContracts.Should().BeNull();
+    }
+
+    [Fact]
+    public void DisclosedContract_equality_should_compare_blob_content_across_allocations()
+    {
+        var left = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var right = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+
+        left.Should().Be(right);
+        (left == right).Should().BeTrue();
+        left.GetHashCode().Should().Be(right.GetHashCode());
+    }
+
+    [Fact]
+    public void DisclosedContract_equality_should_distinguish_different_blob_content()
+    {
+        var identifier = new Identifier("pkg", "Module", "Template");
+        var left = new DisclosedContract(
+            "contract-id-1", identifier, "created-event-blob"u8.ToArray());
+        var right = new DisclosedContract(
+            "contract-id-1", identifier, "other-event-blob"u8.ToArray());
+
+        left.Should().NotBe(right);
+        (left != right).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithSubmitter_should_preserve_disclosed_contracts()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var submission = CommandsSubmission.Single(command)
+            .WithDisclosedContracts(disclosedContract);
+
+        // Act
+        var result = submission.WithSubmitter(new Party("Alice"));
+
+        // Assert
+        result.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+    }
+
+    [Fact]
     public void CommandsSubmission_should_chain_fluent_methods()
     {
         // Arrange
         var command = new CreateCommand(
             new Identifier("pkg", "Module", "Template"),
             DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
 
         // Act
         var submission = CommandsSubmission.Single(command)
             .WithWorkflowId(new WorkflowId("workflow-1"))
             .WithCommandId(new CommandId("cmd-1"))
             .WithActAs(new Party("Alice"))
-            .WithReadAs(new Party("Bob"));
+            .WithReadAs(new Party("Bob"))
+            .WithDisclosedContracts(disclosedContract);
 
         // Assert
         submission.WorkflowId.Should().Be(new WorkflowId("workflow-1"));
         submission.CommandId.Should().Be(new CommandId("cmd-1"));
         submission.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
         submission.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
+        submission.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
     }
 
     [Fact]

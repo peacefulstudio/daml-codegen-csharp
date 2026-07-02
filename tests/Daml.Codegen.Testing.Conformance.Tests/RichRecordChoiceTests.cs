@@ -55,6 +55,7 @@ public class RichRecordChoiceTests
             HoldingCids: new List<ContractId<IHolding>>(),
             Profile: new Profile("n", 0),
             Outcome: new Outcome.Pending(),
+            Suit: Suit.Spades,
             Fee: 0m);
         var @event = new CreatedEvent(
             EventId: "ev-1",

@@ -33,6 +33,114 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.2.0-preview.2] — 2026-07-02
+
+### Added
+
+- `Daml.Runtime.Commands.DisclosedContract(string ContractId, Identifier TemplateId,
+  ReadOnlyMemory<byte> CreatedEventBlob)` — a new record type carrying an explicitly
+  disclosed contract (Daml 3.x explicit disclosure). `CommandsSubmission` gains an
+  optional trailing `IReadOnlyList<DisclosedContract>? DisclosedContracts` parameter and
+  a `WithDisclosedContracts(params DisclosedContract[])` fluent method, defaulting to
+  `null` so existing submissions are unaffected; calling it with no arguments, `null`,
+  or an empty array clears the field back to `null`. Record equality compares `CreatedEventBlob` by content, not by
+  memory reference. This repo only carries the value — mapping it onto the gRPC
+  `DisclosedContract` message lives in the ledger-client repo. (#482)
+- `Daml.Runtime.Commands.CommandsSubmission` gains an optional trailing
+  `SynchronizerId? SynchronizerId` parameter and a `WithSynchronizerId(SynchronizerId)`
+  fluent method, mirroring `WithWorkflowId`/`WithCommandId`, so callers can carry a
+  submission-time synchronizer pin alongside a submission. This repo only carries the
+  value — wiring it into `BuildCommands`/proto conversion lives in the ledger-client
+  repo.
+- `Daml.Runtime`: `ContractStreamEvent<T>.Unclassified(long Offset, string Kind)`
+  — new variant surfaced when a transport delivers an event that cannot be
+  mapped to any other discriminated-union case, so consumers can honour a
+  no-silent-drop policy instead of the event being dropped. Code that
+  exhaustively switches over `ContractStreamEvent<T>` needs a new arm.
+- `Daml.Runtime.Contracts`: new `CaughtException(string ErrorId, string Message,
+  IReadOnlyDictionary<string, string> Metadata)` record and an
+  `ExercisedEvent.CaughtExceptions` init-only property (defaults to empty), so
+  consumers can tell whether a successful exercise recovered from a Daml
+  `try`/`catch`. Additive — existing positional `ExercisedEvent` constructions
+  stay source-compatible. Populating `CaughtExceptions` from the ledger wire
+  format is client-side and not yet implemented (#483).
+- `Daml.Runtime.Contracts.TransactionTree` and `TreeEvent` (`Created`/`Exercised`
+  cases) — a transport-neutral, tree-shaped sibling of `TransactionResult` that
+  preserves the parent/child hierarchy of a transaction's events (which creates
+  and sub-exercises a given exercise caused), with wire-level `DamlValue`
+  payloads consistent with `ExercisedEvent`. `TreeEvent.DescendantEvents()` and
+  `TransactionTreeExtensions.AllEvents`/`ToTransactionResult` give depth-first
+  traversal and compat-flattening to the existing `TransactionResult` shape.
+  Additive — `TransactionResult` is unchanged. (#481)
+- `Daml.Codegen.Testing.Conformance.Richtypes.Suit` — a new pure
+  nullary-constructor Daml `enum` type in the `richtypes` conformance corpus,
+  plus a `SuitExtensions` class (`ToDamlEnum()`/`FromDamlEnum()`) and a new
+  `Suit Suit` field on `RichRecord` (positional constructor argument added
+  after `Outcome`). Closes the enum coverage gap flagged as a follow-up in
+  the bundle-level determinism gate (#485). (#487)
+
+### Changed
+
+- **BREAKING: `ContractStreamEvent<T>.Created`, `.Archived`, and `.Exercised` now carry
+  a `SynchronizerId SynchronizerId` parameter**, positioned right after `Offset` (before
+  `WitnessParties`), matching where `Assigned`/`Unassigned` already carry
+  `Source`/`Target : SynchronizerId`. Every positional construction of these three
+  records must pass a `SynchronizerId` argument in the new position; regenerate/update
+  call sites accordingly.
+- **The 4th NuGet version segment (`M.m.p.g`) of generated Splice/Daml.Finance
+  packages is now a uniform codegen-generation ordinal.** It is keyed to the
+  codegen-tool version and shared by every package — and every co-produced sibling
+  dependency floor — in a release, incrementing only when the codegen version
+  changes rather than per DAR-content change. This replaces the former per-package,
+  content-hash-driven revision counter and fixes two publish-time failures a codegen
+  upgrade could trigger: a new codegen version that changed emitted C# but not the
+  DAR proto hash previously froze the 4th segment, so regenerated packages collided
+  at the same version as the already-published set (`CS8920` on build, `NU1605` on
+  restore); and because all packages in a release now share one ordinal, co-produced
+  sibling `<PackageReference>` floors can no longer diverge from the versions actually
+  published together. The first post-upgrade ordinal is seeded above every published
+  revision (Splice → 3, Daml.Finance → 2). (#474)
+
+### Fixed
+
+- Generated Daml `enum` types now carry an XML doc comment (`/// <summary>...
+  enum constructor.</summary>`) above each constructor, matching every other
+  generated member. Previously the emitter produced undocumented constructors,
+  which built fine only because no pure nullary-constructor `enum` had ever
+  been generated; the first one (`Richtypes.Suit`, added in this release) failed
+  the build with `CS1591` under `TreatWarningsAsErrors`. (#487)
+- A Daml template whose name equals another interface's generated `I`-prefixed
+  marker name (e.g. template `IFactory` alongside interface `Factory`) no longer
+  collides with it. A package's generated types all share one flat C# namespace,
+  so both were previously declared as public `IFactory` types in that namespace,
+  and the generated set failed to compile with `CS0101`. The interface marker
+  name now appends a trailing `_` until it no longer collides with a template in
+  its own package, consistently wherever the marker is referenced (declaration,
+  file name, and every in-package or cross-package type reference to it). (#488)
+
+- The `<Choice>Result` projector (`FromCreatedContracts`) now matches an
+  interface-typed created slot against the created contract's `InterfaceIds`
+  rather than its `TemplateId`. A choice returning `ContractId I` (where `I` is a
+  Daml interface) previously emitted `IFactory.TemplateId.ModuleName` — but
+  generated interface markers expose no public `TemplateId` (it is an explicit
+  `IDamlType` member), so the projector failed to compile with `CS0117`. Slots to
+  a concrete template are unchanged. Surfaced by the full Splice/Daml.Finance
+  release build (`daml-finance-interface-holding-v4`,
+  `daml-finance-interface-instrument-base-v4`). (#473)
+- Generated interface markers now expose a plain `public static Identifier InterfaceId
+  { get; }` alongside the existing explicit `IDamlInterface.InterfaceId`
+  implementation. For a `ContractId I` choice-result slot targeting a foreign
+  (cross-package) interface, the `<Choice>Result` projector's interface-matching
+  branch reads `{Interface}.InterfaceId.ModuleName`/`.EntityName` off this new member
+  instead of baking the interface's module/entity as string literals into the
+  emitted source — robustness/consistency with the template branch, which already
+  reads `{Template}.TemplateId`. Slots targeting a *local* interface ref keep
+  matching via string literals baked at codegen time: the LF-mandated record
+  RecordEmitter always emits alongside a local `interface I where ...` declaration
+  is a throwing `ITemplate` placeholder stub with no `InterfaceId` member, so those
+  slots cannot safely reference a generated symbol. (#473)
+
+
 ## [0.2.0-preview.1] — 2026-06-30
 
 ### Added

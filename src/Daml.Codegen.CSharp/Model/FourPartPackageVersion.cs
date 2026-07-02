@@ -6,11 +6,12 @@ using System.Globalization;
 namespace Daml.Codegen.CSharp.Model;
 
 /// <summary>
-/// 4-part NuGet version <c>Major.Minor.Patch.Revision</c>, optionally carrying a
+/// 4-part NuGet version <c>Major.Minor.Patch.Generation</c>, optionally carrying a
 /// SemVer prerelease suffix (e.g. <c>0.1.6.1-preview.2</c>).
-/// Segments 1–3 are the DAR-intrinsic version; segment 4 (<see cref="Revision"/>) is
-/// the monotonic emitter counter that disambiguates content-identical re-emissions
-/// of the same DAR-intrinsic version under different emitter versions.
+/// Segments 1–3 are the DAR-intrinsic version; segment 4 (<see cref="Generation"/>) is
+/// the codegen-generation ordinal — a uniform, DAR-independent value shared by every
+/// package produced by one codegen version, incremented only when the codegen version
+/// changes.
 /// <see cref="PrereleaseSuffix"/> is stored without the leading dash; an empty,
 /// null, or whitespace value means no suffix.
 /// </summary>
@@ -18,27 +19,27 @@ internal readonly record struct FourPartPackageVersion(
     int Major,
     int Minor,
     int Patch,
-    int Revision,
+    int Generation,
     string? PrereleaseSuffix = null)
 {
     /// <summary>
     /// Lifts a 3-part DAR-intrinsic <see cref="Version"/> (as produced by
     /// <see cref="PackageVersionParser.Parse"/>) into a 4-part version by
-    /// attaching the supplied <paramref name="revision"/> as segment 4 and,
+    /// attaching the supplied <paramref name="generation"/> as segment 4 and,
     /// when supplied, the SemVer <paramref name="prereleaseSuffix"/> (without
     /// a leading dash).
     /// </summary>
-    public static FourPartPackageVersion FromIntrinsic(Version intrinsic, int revision, string? prereleaseSuffix = null)
+    public static FourPartPackageVersion FromIntrinsic(Version intrinsic, int generation, string? prereleaseSuffix = null)
     {
         ArgumentNullException.ThrowIfNull(intrinsic);
-        ArgumentOutOfRangeException.ThrowIfNegative(revision);
+        ArgumentOutOfRangeException.ThrowIfNegative(generation);
         var patch = Math.Max(0, intrinsic.Build);
-        return new FourPartPackageVersion(intrinsic.Major, intrinsic.Minor, patch, revision, NormalizeSuffix(prereleaseSuffix));
+        return new FourPartPackageVersion(intrinsic.Major, intrinsic.Minor, patch, generation, NormalizeSuffix(prereleaseSuffix));
     }
 
     /// <summary>
-    /// Parses a version string <c>M.m.p.r</c>, optionally followed by a SemVer
-    /// prerelease suffix <c>-suffix</c>. The trailing <c>r</c> segment is
+    /// Parses a version string <c>M.m.p.g</c>, optionally followed by a SemVer
+    /// prerelease suffix <c>-suffix</c>. The trailing generation segment <c>g</c> is
     /// optional and defaults to <c>0</c> when absent (so <c>"0.1.17"</c> ≡
     /// <c>"0.1.17.0"</c>). The numeric core's segments must be non-negative
     /// <see cref="int"/> values; the suffix, when present, must be a non-empty
@@ -69,24 +70,24 @@ internal readonly record struct FourPartPackageVersion(
             return false;
         }
 
-        var revision = 0;
-        if (segments.Length == 4 && !TryParseSegment(segments[3], out revision))
+        var generation = 0;
+        if (segments.Length == 4 && !TryParseSegment(segments[3], out generation))
         {
             return false;
         }
 
-        version = new FourPartPackageVersion(major, minor, patch, revision, suffix);
+        version = new FourPartPackageVersion(major, minor, patch, generation, suffix);
         return true;
     }
 
     /// <summary>
-    /// Returns the canonical <c>"M.m.p.r"</c> string form, appending
-    /// <c>"-{suffix}"</c> when a prerelease suffix is present.
+    /// Returns the canonical <c>"M.m.p.g"</c> string form, where segment 4 is the
+    /// generation ordinal, appending <c>"-{suffix}"</c> when a prerelease suffix is present.
     /// </summary>
     public override string ToString() =>
         string.IsNullOrWhiteSpace(PrereleaseSuffix)
-            ? string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}.{Patch}.{Revision}")
-            : string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}.{Patch}.{Revision}-{PrereleaseSuffix}");
+            ? string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}.{Patch}.{Generation}")
+            : string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}.{Patch}.{Generation}-{PrereleaseSuffix}");
 
     private static string? NormalizeSuffix(string? suffix) =>
         string.IsNullOrWhiteSpace(suffix) ? null : suffix;

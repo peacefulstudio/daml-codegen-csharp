@@ -40,6 +40,10 @@ public sealed class EnumEmitter(
 
         foreach (var ctor in enumDef.Constructors)
         {
+            if (options.GenerateXmlDocs)
+            {
+                indent.AppendLine($"/// <summary>{ctor} enum constructor.</summary>");
+            }
             indent.AppendLine($"{EmitterHelpers.SanitizeIdentifier(ctor)},");
         }
 

@@ -53,7 +53,7 @@ public partial class ProjectFileGeneratorTests
         var act = () => generator.GenerateProjectFile(package);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*EmitterCounter*M.m.p.r*");
+            .WithMessage("*EmitterCounter*M.m.p.g*");
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public partial class ProjectFileGeneratorTests
         var act = () => generator.GenerateProjectFile(package);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*3-part*M.m.p.r*");
+            .WithMessage("*3-part*M.m.p.g*");
     }
 
     [Fact]

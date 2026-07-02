@@ -13,7 +13,49 @@ public class SynchronizerIdFieldTypingTests
 {
     private static readonly SynchronizerId Source = new("global_sync::abc::35-0");
     private static readonly SynchronizerId Target = new("local_sync::def::35-0");
+    private static readonly SynchronizerId Domain = new("event_sync::xyz::35-0");
     private static readonly Party Alice = new("alice");
+
+    [Fact]
+    public void Created_SynchronizerId_should_be_typed_as_SynchronizerId()
+    {
+        var ev = new ContractStreamEvent<TestTemplate>.Created(
+            new ContractId<TestTemplate>("c1"),
+            DamlRecord.Create(),
+            1L,
+            Domain,
+            [Alice]);
+
+        ev.SynchronizerId.Should().BeOfType<SynchronizerId>().And.Be(Domain);
+    }
+
+    [Fact]
+    public void Archived_SynchronizerId_should_be_typed_as_SynchronizerId()
+    {
+        var ev = new ContractStreamEvent<TestTemplate>.Archived(
+            new ContractId<TestTemplate>("c1"),
+            2L,
+            Domain,
+            [Alice]);
+
+        ev.SynchronizerId.Should().BeOfType<SynchronizerId>().And.Be(Domain);
+    }
+
+    [Fact]
+    public void Exercised_SynchronizerId_should_be_typed_as_SynchronizerId()
+    {
+        var ev = new ContractStreamEvent<TestTemplate>.Exercised(
+            new ContractId<TestTemplate>("c1"),
+            "Accept",
+            DamlUnit.Instance,
+            DamlUnit.Instance,
+            true,
+            3L,
+            Domain,
+            [Alice]);
+
+        ev.SynchronizerId.Should().BeOfType<SynchronizerId>().And.Be(Domain);
+    }
 
     [Fact]
     public void Assigned_Source_should_be_typed_as_SynchronizerId()

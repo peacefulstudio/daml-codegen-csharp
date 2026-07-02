@@ -70,6 +70,15 @@ public class DarCrossPackageResolverTests
             Interfaces = [new DamlInterface { Name = interfaceName, Choices = [], ViewType = null }]
         };
 
+    private static DamlModule InterfaceModuleWithMarkerReservingTemplate(string moduleName, string interfaceName) =>
+        new()
+        {
+            Name = moduleName,
+            DataTypes = [Record(interfaceName), Record("I" + interfaceName)],
+            Templates = [new DamlTemplate { Name = "I" + interfaceName, Fields = [], Choices = [] }],
+            Interfaces = [new DamlInterface { Name = interfaceName, Choices = [], ViewType = null }]
+        };
+
     private static PackageEmitContext ContextFor(DamlPackage main) =>
         PackageEmitContext.ForPackage(main, new CodeGenOptions());
 
@@ -107,6 +116,31 @@ public class DarCrossPackageResolverTests
 
         result.Should().Be("Foreign.Pkg.IHolding");
         resolver.DiscoveredExternalPackageIds.Should().Contain("foreign-id");
+    }
+
+    [Fact]
+    public void resolve_disambiguates_a_local_interface_marker_reserved_by_a_template()
+    {
+        var main = Package("main-id", "my-pkg", InterfaceModuleWithMarkerReservingTemplate("M", "Holding"));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), Substitute.For<ICodegenLogger>());
+
+        var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Holding"), ContextFor(main));
+
+        result.Should().Be("IHolding_");
+    }
+
+    [Fact]
+    public void resolve_disambiguates_a_cross_package_interface_marker_reserved_by_a_foreign_template()
+    {
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var foreign = Package(
+            "foreign-id", "foreign-pkg", InterfaceModuleWithMarkerReservingTemplate("Splice.Holding", "Holding"));
+        var resolver = new DarCrossPackageResolver(
+            new FakeDarSource(main, foreign), Substitute.For<ICodegenLogger>());
+
+        var result = resolver.Resolve(new DamlTypeRef("foreign-id", "Splice.Holding", "Holding"), ContextFor(main));
+
+        result.Should().Be("Foreign.Pkg.IHolding_");
     }
 
     [Fact]

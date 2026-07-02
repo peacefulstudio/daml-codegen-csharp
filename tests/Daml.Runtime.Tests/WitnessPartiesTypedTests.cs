@@ -21,6 +21,7 @@ public class WitnessPartiesTypedTests
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
             1L,
+            new SynchronizerId("sync"),
             [Alice, Bob]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();
@@ -33,6 +34,7 @@ public class WitnessPartiesTypedTests
         var ev = new ContractStreamEvent<TestTemplate>.Archived(
             new ContractId<TestTemplate>("c1"),
             2L,
+            new SynchronizerId("sync"),
             [Alice]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();
@@ -49,6 +51,7 @@ public class WitnessPartiesTypedTests
             DamlUnit.Instance,
             Consuming: true,
             Offset: 3L,
+            SynchronizerId: new SynchronizerId("sync"),
             WitnessParties: [Alice, Bob]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();

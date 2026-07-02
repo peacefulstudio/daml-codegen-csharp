@@ -23,10 +23,10 @@ namespace Daml.Codegen.Testing.Conformance.Richtypes;
 public sealed partial record Asset([property: DamlFieldAttribute("issuer")] Party Issuer, [property: DamlFieldAttribute("amount")] decimal Amount) : ITemplate
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb", "RichTypes", "Asset");
+    public static Identifier TemplateId { get; } = new("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "Asset");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb";
+    public static string PackageId => "22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";

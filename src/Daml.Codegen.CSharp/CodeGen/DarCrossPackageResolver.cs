@@ -18,6 +18,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
     private readonly HashSet<string> _discoveredExternalPackageIds = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
     private readonly Dictionary<string, IReadOnlySet<string>> _foreignInterfaceCache = [];
+    private readonly Dictionary<string, IReadOnlySet<string>> _foreignTemplateClassNameCache = [];
 
     /// <summary>Creates a resolver scoped to a single <see cref="IDarSource"/>.</summary>
     public DarCrossPackageResolver(IDarSource dar, ICodegenLogger logger)
@@ -46,7 +47,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
         {
             if (context.InterfacePlaceholderQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}"))
             {
-                return Identifiers.InterfaceMarkerName(typeRef.Name);
+                return Identifiers.InterfaceMarkerName(typeRef.Name, context.LocalTemplateClassNames);
             }
             if (context.LocalChoiceArgToTemplate.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var parentTemplate))
             {
@@ -77,7 +78,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
         var foreignNs = Identifiers.DeriveNamespace(foreignPkg.Name);
         if (ForeignInterfaceQualifiedNames(foreignPkg).Contains($"{typeRef.Module}:{typeRef.Name}"))
         {
-            return $"{foreignNs}.{Identifiers.InterfaceMarkerName(typeRef.Name)}";
+            return $"{foreignNs}.{Identifiers.InterfaceMarkerName(typeRef.Name, ForeignTemplateClassNames(foreignPkg))}";
         }
         if (!_foreignChoiceArgCache.TryGetValue(typeRef.PackageId, out var foreignChoiceArgMap))
         {
@@ -101,6 +102,22 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
             _foreignInterfaceCache[pkg.PackageId] = qualifiedNames;
         }
         return qualifiedNames;
+    }
+
+    /// <summary>
+    /// Sanitised C# class names of every template declared in <paramref name="pkg"/>,
+    /// mirroring <see cref="PackageEmitContext.LocalTemplateClassNames"/> for a foreign
+    /// package — needed so a marker referenced across packages disambiguates against
+    /// the same reserved set the declaring package's own emission used.
+    /// </summary>
+    private IReadOnlySet<string> ForeignTemplateClassNames(DamlPackage pkg)
+    {
+        if (!_foreignTemplateClassNameCache.TryGetValue(pkg.PackageId, out var templateClassNames))
+        {
+            templateClassNames = PackageEmitContext.TemplateClassNames(pkg);
+            _foreignTemplateClassNameCache[pkg.PackageId] = templateClassNames;
+        }
+        return templateClassNames;
     }
 
     /// <summary>

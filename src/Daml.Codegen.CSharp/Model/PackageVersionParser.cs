@@ -8,7 +8,7 @@ namespace Daml.Codegen.CSharp.Model;
 /// <summary>
 /// Parses a Daml package version string into a <see cref="Version"/>. The
 /// DAR-intrinsic version is a 3-part <c>Major.Minor.Patch</c> shape;
-/// the optional 4th segment of the generated package's M.m.p.r NuGet version
+/// the optional 4th segment of the generated package's M.m.p.g NuGet version
 /// is added downstream at pack time. Used by both the proto-direct
 /// <c>IntermediateDarReader</c> and the parser-direct <c>DalfReader</c>
 /// so the two paths report identical versions for the same DAR.

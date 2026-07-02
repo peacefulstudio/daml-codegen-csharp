@@ -22,10 +22,10 @@ namespace Daml.Codegen.Testing.Conformance.Richtypes;
 public interface IHolding : IDamlInterface, IHasView<HoldingView>
 {
     /// <summary>Gets the interface identifier.</summary>
-    static Identifier IDamlInterface.InterfaceId => new("29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb", "RichTypes", "Holding");
+    static Identifier IDamlInterface.InterfaceId => new("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "Holding");
 
     /// <summary>Gets the package ID.</summary>
-    static string IDamlInterface.PackageId => "29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb";
+    static string IDamlInterface.PackageId => "22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491";
 
     /// <summary>Gets the package name.</summary>
     static string IDamlInterface.PackageName => "richtypes";
@@ -34,7 +34,7 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
     static Version IDamlInterface.PackageVersion => new(0, 0, 1);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
-    static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier("29997531c65a76719794e26591b1a3aa36accc050996752c640daff4e4d07bcb", "RichTypes", "Holding"), DamlTypeKind.Interface, "richtypes");
+    static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "Holding"), DamlTypeKind.Interface, "richtypes");
 
     // Interface method Archive.
     // Choice Archive() -> DamlUnit
