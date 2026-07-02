@@ -278,25 +278,32 @@ jobs:
           fi
           echo "Smoke test OK — first generated file: ${first_cs}"
 
-          if [ ! -f "${COUNTERS}" ]; then
-            echo "::error::--release-counters did not write ${COUNTERS}"
+          if [ ! -s "${COUNTERS}" ]; then
+            echo "::error::--release-counters did not write a non-empty ${COUNTERS}"
             exit 1
           fi
-          store_version="$(jq -r '.store_version' "${COUNTERS}")"
-          if [ "${store_version}" != "1" ]; then
-            echo "::error::expected release-counters store_version 1, got ${store_version}"
+          if ! jq -e 'type == "object"' "${COUNTERS}" > /dev/null; then
+            echo "::error::release-counters file is not a valid JSON object: ${COUNTERS}"
+            cat "${COUNTERS}" >&2
+            exit 1
+          fi
+          if ! jq -e '.store_version == 1' "${COUNTERS}" > /dev/null; then
+            echo "::error::expected release-counters store_version 1, got $(jq -c '.store_version' "${COUNTERS}")"
             jq . "${COUNTERS}" >&2
             exit 1
           fi
-          generation_count="$(jq '.codegen_generations | length' "${COUNTERS}")"
-          if [ "${generation_count}" != "1" ]; then
-            echo "::error::expected exactly one codegen-generation entry, got ${generation_count}"
+          if ! jq -e '.codegen_generations | type == "object"' "${COUNTERS}" > /dev/null; then
+            echo "::error::expected codegen_generations to be an object, got $(jq -r '.codegen_generations | type' "${COUNTERS}")"
             jq . "${COUNTERS}" >&2
             exit 1
           fi
-          ordinal="$(jq -r '.codegen_generations | to_entries[0].value' "${COUNTERS}")"
-          if [ "${ordinal}" != "0" ]; then
-            echo "::error::expected first-emission generation ordinal 0, got ${ordinal}"
+          if ! jq -e '.codegen_generations | length == 1' "${COUNTERS}" > /dev/null; then
+            echo "::error::expected exactly one codegen-generation entry, got $(jq '.codegen_generations | length' "${COUNTERS}")"
+            jq . "${COUNTERS}" >&2
+            exit 1
+          fi
+          if ! jq -e '.codegen_generations | to_entries[0].value == 0' "${COUNTERS}" > /dev/null; then
+            echo "::error::expected first-emission generation ordinal 0, got $(jq -c '.codegen_generations | to_entries[0].value' "${COUNTERS}")"
             jq . "${COUNTERS}" >&2
             exit 1
           fi
