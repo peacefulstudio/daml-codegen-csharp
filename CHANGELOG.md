@@ -45,7 +45,7 @@ because they are versioned in lockstep:
   `null` so existing submissions are unaffected; calling it with no arguments, `null`,
   or an empty array clears the field back to `null`. Record equality compares `CreatedEventBlob` by content, not by
   memory reference. This repo only carries the value — mapping it onto the gRPC
-  `DisclosedContract` message lives in the ledger-client repo. (#482)
+  `DisclosedContract` message lives in the ledger-client repo.
 - `Daml.Runtime.Commands.CommandsSubmission` gains an optional trailing
   `SynchronizerId? SynchronizerId` parameter and a `WithSynchronizerId(SynchronizerId)`
   fluent method, mirroring `WithWorkflowId`/`WithCommandId`, so callers can carry a
@@ -63,7 +63,7 @@ because they are versioned in lockstep:
   consumers can tell whether a successful exercise recovered from a Daml
   `try`/`catch`. Additive — existing positional `ExercisedEvent` constructions
   stay source-compatible. Populating `CaughtExceptions` from the ledger wire
-  format is client-side and not yet implemented (#483).
+  format is client-side and not yet implemented.
 - `Daml.Runtime.Contracts.TransactionTree` and `TreeEvent` (`Created`/`Exercised`
   cases) — a transport-neutral, tree-shaped sibling of `TransactionResult` that
   preserves the parent/child hierarchy of a transaction's events (which creates
@@ -71,13 +71,13 @@ because they are versioned in lockstep:
   payloads consistent with `ExercisedEvent`. `TreeEvent.DescendantEvents()` and
   `TransactionTreeExtensions.AllEvents`/`ToTransactionResult` give depth-first
   traversal and compat-flattening to the existing `TransactionResult` shape.
-  Additive — `TransactionResult` is unchanged. (#481)
+  Additive — `TransactionResult` is unchanged.
 - `Daml.Codegen.Testing.Conformance.Richtypes.Suit` — a new pure
   nullary-constructor Daml `enum` type in the `richtypes` conformance corpus,
   plus a `SuitExtensions` class (`ToDamlEnum()`/`FromDamlEnum()`) and a new
   `Suit Suit` field on `RichRecord` (positional constructor argument added
   after `Outcome`). Closes the enum coverage gap flagged as a follow-up in
-  the bundle-level determinism gate (#485). (#487)
+  the bundle-level determinism gate.
 
 ### Changed
 
@@ -99,7 +99,7 @@ because they are versioned in lockstep:
   restore); and because all packages in a release now share one ordinal, co-produced
   sibling `<PackageReference>` floors can no longer diverge from the versions actually
   published together. The first post-upgrade ordinal is seeded above every published
-  revision (Splice → 3, Daml.Finance → 2). (#474)
+  revision (Splice → 3, Daml.Finance → 2).
 
 ### Fixed
 
@@ -108,7 +108,7 @@ because they are versioned in lockstep:
   generated member. Previously the emitter produced undocumented constructors,
   which built fine only because no pure nullary-constructor `enum` had ever
   been generated; the first one (`Richtypes.Suit`, added in this release) failed
-  the build with `CS1591` under `TreatWarningsAsErrors`. (#487)
+  the build with `CS1591` under `TreatWarningsAsErrors`.
 - A Daml template whose name equals another interface's generated `I`-prefixed
   marker name (e.g. template `IFactory` alongside interface `Factory`) no longer
   collides with it. A package's generated types all share one flat C# namespace,
@@ -116,7 +116,7 @@ because they are versioned in lockstep:
   and the generated set failed to compile with `CS0101`. The interface marker
   name now appends a trailing `_` until it no longer collides with a template in
   its own package, consistently wherever the marker is referenced (declaration,
-  file name, and every in-package or cross-package type reference to it). (#488)
+  file name, and every in-package or cross-package type reference to it).
 
 - The `<Choice>Result` projector (`FromCreatedContracts`) now matches an
   interface-typed created slot against the created contract's `InterfaceIds`
@@ -126,7 +126,7 @@ because they are versioned in lockstep:
   `IDamlType` member), so the projector failed to compile with `CS0117`. Slots to
   a concrete template are unchanged. Surfaced by the full Splice/Daml.Finance
   release build (`daml-finance-interface-holding-v4`,
-  `daml-finance-interface-instrument-base-v4`). (#473)
+  `daml-finance-interface-instrument-base-v4`).
 - Generated interface markers now expose a plain `public static Identifier InterfaceId
   { get; }` alongside the existing explicit `IDamlInterface.InterfaceId`
   implementation. For a `ContractId I` choice-result slot targeting a foreign
@@ -138,7 +138,7 @@ because they are versioned in lockstep:
   matching via string literals baked at codegen time: the LF-mandated record
   RecordEmitter always emits alongside a local `interface I where ...` declaration
   is a throwing `ITemplate` placeholder stub with no `InterfaceId` member, so those
-  slots cannot safely reference a generated symbol. (#473)
+  slots cannot safely reference a generated symbol.
 
 
 ## [0.2.0-preview.1] — 2026-06-30
