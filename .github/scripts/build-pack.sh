@@ -23,6 +23,10 @@ Reads (env):
   GH_TOKEN            Token for the github NuGet source credential.
   SOURCE_LABEL        Short label used in the build summary.
   DRY_RUN             dry-run flag, reported in the build summary.
+  ALLOW_PARTIAL       when "true", a partial pack (some families failed but
+                       at least one packed) exits 0 instead of 1 and failures
+                       are annotated as warnings instead of errors. Default
+                       "false": any family failure fails the run.
 
 Writes (when set):
   GITHUB_ENV          LOCAL_FEED, NUPKG_DIR.
@@ -128,11 +132,12 @@ while :; do
 done
 
 ok_count=0; skip_count=0; fail_count=0
+failed_families=()
 for fam in "${families[@]}"; do
   case "${status[$fam]:-fail}" in
     ok)   ok_count=$((ok_count + 1)) ;;
     skip) skip_count=$((skip_count + 1)) ;;
-    *)    fail_count=$((fail_count + 1)) ;;
+    *)    fail_count=$((fail_count + 1)); failed_families+=("$fam") ;;
   esac
 done
 echo "Result: $ok_count packed, $skip_count skipped, $fail_count failed (of ${#families[@]})"
@@ -157,7 +162,24 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   } >> "$GITHUB_STEP_SUMMARY"
 fi
 
+if [ "$fail_count" -gt 0 ]; then
+  fail_annotation="error"
+  if [ "$ok_count" -gt 0 ] && [ "${ALLOW_PARTIAL:-false}" = "true" ]; then
+    fail_annotation="warning"
+  fi
+  for fam in "${failed_families[@]}"; do
+    echo "::${fail_annotation}::[$fam] failed to pack (${reason[$fam]:-unknown})"
+  done
+  echo "::${fail_annotation}::$fail_count of ${#families[@]} families failed to pack: ${failed_families[*]}"
+fi
+
 if [ "$ok_count" -eq 0 ]; then
-  echo "::error::No families packed (0 of ${#families[@]}). See per-family logs above."
+  if [ "$fail_count" -eq 0 ]; then
+    echo "::error::No families packed (0 of ${#families[@]}): every family was skipped."
+  fi
+  exit 1
+fi
+
+if [ "$fail_count" -gt 0 ] && [ "${ALLOW_PARTIAL:-false}" != "true" ]; then
   exit 1
 fi
