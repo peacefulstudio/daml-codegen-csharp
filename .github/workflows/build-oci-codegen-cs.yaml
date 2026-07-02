@@ -282,19 +282,25 @@ jobs:
             echo "::error::--release-counters did not write ${COUNTERS}"
             exit 1
           fi
-          entry_count="$(jq 'length' "${COUNTERS}")"
-          if [ "${entry_count}" != "1" ]; then
-            echo "::error::expected exactly one release-counter entry, got ${entry_count}"
+          store_version="$(jq -r '.store_version' "${COUNTERS}")"
+          if [ "${store_version}" != "1" ]; then
+            echo "::error::expected release-counters store_version 1, got ${store_version}"
             jq . "${COUNTERS}" >&2
             exit 1
           fi
-          revision="$(jq -r 'to_entries[0].value.revision' "${COUNTERS}")"
-          if [ "${revision}" != "0" ]; then
-            echo "::error::expected first-emission revision 0, got ${revision}"
+          generation_count="$(jq '.codegen_generations | length' "${COUNTERS}")"
+          if [ "${generation_count}" != "1" ]; then
+            echo "::error::expected exactly one codegen-generation entry, got ${generation_count}"
             jq . "${COUNTERS}" >&2
             exit 1
           fi
-          echo "Release-counter OK — first emission recorded revision 0"
+          ordinal="$(jq -r '.codegen_generations | to_entries[0].value' "${COUNTERS}")"
+          if [ "${ordinal}" != "0" ]; then
+            echo "::error::expected first-emission generation ordinal 0, got ${ordinal}"
+            jq . "${COUNTERS}" >&2
+            exit 1
+          fi
+          echo "Release-counter OK — first emission recorded generation ordinal 0"
 
           csproj="$(find "${OUT}" -type f -name '*.csproj' -print -quit)"
           if [ -z "${csproj}" ]; then
