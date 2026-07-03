@@ -268,7 +268,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// Subscribes to the active-contract-set snapshot for a single Daml type
     /// (template or interface marker) at the current ledger end using a
     /// <see cref="SubmitterInfo"/>, projected to strongly-typed
-    /// <see cref="ContractStreamEvent{T}.Created"/> values. The combined
+    /// <see cref="ContractStreamEvent{T}"/> values. The combined
     /// <c>ActAs ∪ ReadAs</c> set scopes visibility for the snapshot.
     /// Implementations filter by <typeparamref name="T"/>'s identifier — by
     /// <c>TemplateId</c> for templates, by <c>InterfaceIds</c> for interface
@@ -293,17 +293,37 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// includes in-flight reassignment entries — these carry
     /// create-arguments for contracts that are mid-reassignment and are
     /// required for a complete ACS view in those deployments.
+    /// Although the widened return type structurally admits every
+    /// <see cref="ContractStreamEvent{T}"/> variant, a snapshot emits only
+    /// <see cref="ContractStreamEvent{T}.Created"/> and
+    /// <see cref="ContractStreamEvent{T}.Unclassified"/> — the in-flight
+    /// reassignment entries above surface as
+    /// <see cref="ContractStreamEvent{T}.Created"/> carrying their
+    /// create-arguments, not as
+    /// <see cref="ContractStreamEvent{T}.Assigned"/>/<see cref="ContractStreamEvent{T}.Unassigned"/>.
+    /// <see cref="ContractStreamEvent{T}.Archived"/>,
+    /// <see cref="ContractStreamEvent{T}.Exercised"/>,
+    /// <see cref="ContractStreamEvent{T}.Assigned"/>,
+    /// <see cref="ContractStreamEvent{T}.Unassigned"/>,
+    /// <see cref="ContractStreamEvent{T}.Checkpoint"/>, and
+    /// <see cref="ContractStreamEvent{T}.StreamError"/> are not surfaced in-band from
+    /// this overload, so a consumer pattern-matching over the wide type can treat
+    /// those arms as unreachable here.
     /// To stay current after the snapshot completes, follow up with
     /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/> using the offset returned by
     /// <see cref="GetLedgerEndAsync"/> at the time of the snapshot.
-    /// Mid-stream transport failures throw rather than surfacing in-band as
-    /// the typed <see cref="ContractStreamEvent{T}.StreamError"/> variant —
-    /// the public return type
-    /// (<see cref="IAsyncEnumerable{T}"/> of <see cref="ContractStreamEvent{T}.Created"/>) can't carry the variant.
-    /// Wrap in <c>try</c>/<c>catch</c> for in-band tolerance, or use
-    /// <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/> directly.
+    /// Unlike the live <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>
+    /// stream — which surfaces transport failures in-band as
+    /// <see cref="ContractStreamEvent{T}.StreamError"/> — mid-stream transport
+    /// failures on this snapshot throw instead.
+    /// An entry the transport cannot fully attribute — for example a missing
+    /// synchronizer id, or one whose <c>InterfaceIds</c>/<c>TemplateId</c>
+    /// don't resolve against <typeparamref name="T"/> — surfaces as
+    /// <see cref="ContractStreamEvent{T}.Unclassified"/> rather than being
+    /// silently dropped, matching the live <see cref="SubscribeAsync{T}(SubmitterInfo, long?, CancellationToken)"/>
+    /// stream.
     /// </remarks>
-    IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+    IAsyncEnumerable<ContractStreamEvent<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
         where T : IDamlType;
@@ -323,7 +343,7 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
     /// overload.
     /// </param>
     /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
-    IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+    IAsyncEnumerable<ContractStreamEvent<T>> SubscribeActiveAsync<T>(
         Party actAs,
         CancellationToken cancellationToken = default)
         where T : IDamlType

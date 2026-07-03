@@ -89,7 +89,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         where T : IDamlType =>
         throw new NotSupportedException();
 
-    public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+    public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
         where T : IDamlType =>

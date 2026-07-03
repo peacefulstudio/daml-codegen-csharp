@@ -428,11 +428,11 @@ public class LedgerClientExtensionsTests
             where T : IDamlType
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
-        public IAsyncEnumerable<ContractStreamEvent<T>.Created> SubscribeActiveAsync<T>(
+        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             CancellationToken cancellationToken = default)
             where T : IDamlType
-            => EmptyAsync<ContractStreamEvent<T>.Created>(cancellationToken);
+            => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
         public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(0L);

@@ -33,6 +33,22 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.2.0-preview.3] — 2026-07-03
+
+### Changed
+
+- **BREAKING: `ILedgerClient.SubscribeActiveAsync<T>` (`Daml.Ledger.Abstractions`) now returns
+  `IAsyncEnumerable<ContractStreamEvent<T>>`** (was
+  `IAsyncEnumerable<ContractStreamEvent<T>.Created>`), so the active-contract-set
+  snapshot can surface `ContractStreamEvent<T>.Unclassified` for an entry the
+  transport can't fully attribute — a missing synchronizer id, or a
+  template/interface mismatch — instead of silently dropping it. This brings the
+  snapshot to parity with the live `SubscribeAsync<T>` stream, which already
+  returns the wide type. Source-breaking: implementations of the narrower
+  `.Created`-only return type must widen it, and consumers exhaustively pattern
+  matching over the stream need a new arm. Part of the v0.2.0 breaking bundle; the
+  downstream fix lands in the ledger-client library.
+
 ## [0.2.0-preview.2] — 2026-07-02
 
 ### Added
