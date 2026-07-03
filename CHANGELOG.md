@@ -47,7 +47,7 @@ because they are versioned in lockstep:
   returns the wide type. Source-breaking: implementations of the narrower
   `.Created`-only return type must widen it, and consumers exhaustively pattern
   matching over the stream need a new arm. Part of the v0.2.0 breaking bundle; the
-  downstream fix lands in `canton-ledger-api-csharp` (#179).
+  downstream fix lands in the ledger-client library.
 
 ## [0.2.0-preview.2] — 2026-07-02
 
