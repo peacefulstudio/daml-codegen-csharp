@@ -36,9 +36,11 @@ public abstract record TreeEvent
     }
 
     /// <summary>
-    /// Enumerates every event nested under this one, recursively, in
-    /// depth-first pre-order. Empty for <see cref="Created"/> events and for
-    /// <see cref="Exercised"/> events with no <see cref="Exercised.ChildEvents"/>.
+    /// Enumerates every event nested under this one, in depth-first pre-order.
+    /// Safe on arbitrarily deep trees — traversal does not use call-stack
+    /// recursion, so it cannot overflow the stack. Empty for
+    /// <see cref="Created"/> events and for <see cref="Exercised"/> events
+    /// with no <see cref="Exercised.ChildEvents"/>.
     /// </summary>
     public IEnumerable<TreeEvent> DescendantEvents()
     {
@@ -47,13 +49,26 @@ public abstract record TreeEvent
             yield break;
         }
 
-        foreach (var child in exercised.ChildEvents)
+        var stack = new Stack<TreeEvent>();
+        PushChildrenInPreOrder(stack, exercised.ChildEvents);
+
+        while (stack.Count > 0)
         {
-            yield return child;
-            foreach (var descendant in child.DescendantEvents())
+            var current = stack.Pop();
+            yield return current;
+
+            if (current is Exercised currentExercised && currentExercised.ChildEvents.Count > 0)
             {
-                yield return descendant;
+                PushChildrenInPreOrder(stack, currentExercised.ChildEvents);
             }
+        }
+    }
+
+    private static void PushChildrenInPreOrder(Stack<TreeEvent> stack, IReadOnlyList<TreeEvent> children)
+    {
+        for (var i = children.Count - 1; i >= 0; i--)
+        {
+            stack.Push(children[i]);
         }
     }
 

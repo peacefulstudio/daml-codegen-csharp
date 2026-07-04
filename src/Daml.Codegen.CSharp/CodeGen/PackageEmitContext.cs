@@ -27,12 +27,27 @@ public sealed class PackageEmitContext
     public IReadOnlyDictionary<string, DamlDataType> DataTypes { get; }
 
     /// <summary>
-    /// Sanitised C# class names of every template declared anywhere in the package.
-    /// The package's C# namespace is flat across all its modules, so this set is the
-    /// reserved-name input <see cref="Identifiers.InterfaceMarkerName"/> disambiguates
-    /// interface marker names against.
+    /// Sanitised C# names of every top-level type declared anywhere in the package —
+    /// every template plus every record/enum/variant, excluding interface-placeholder
+    /// records (they are replaced by the marker itself, so counting them would falsely
+    /// self-disambiguate) and choice-argument records (they are emitted nested inside
+    /// their parent template, not at the top level). The package's C# namespace is flat
+    /// across all its modules, so this is the reserved-name input
+    /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker
+    /// names against.
     /// </summary>
-    public IReadOnlySet<string> LocalTemplateClassNames { get; }
+    public IReadOnlySet<string> LocalReservedTypeNames { get; }
+
+    /// <summary>
+    /// Every interface declared in the package, keyed by its module-qualified
+    /// (<c>Module:Name</c>) name, mapped to its final disambiguated C# marker name. See
+    /// <see cref="InterfaceMarkerNames"/> for how the assignment is made deterministic.
+    /// Callers that need an interface's marker name — the interface emitter, the
+    /// generated file-path builder, and the cross-package resolver's local-ref path —
+    /// must look it up here rather than recomputing it ad hoc, so every reference to a
+    /// given interface agrees on the same marker.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> LocalInterfaceMarkerNames { get; }
 
     /// <summary>
     /// Module-qualified (<c>Module:Name</c>) names of enums declared in the package.
@@ -71,7 +86,8 @@ public sealed class PackageEmitContext
         string rootNamespace,
         TypeReferenceQualifier qualifier,
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
-        IReadOnlySet<string> localTemplateClassNames,
+        IReadOnlySet<string> localReservedTypeNames,
+        IReadOnlyDictionary<string, string> localInterfaceMarkerNames,
         IReadOnlySet<string> localEnumQualifiedNames,
         IReadOnlySet<string> localVariantQualifiedNames,
         IReadOnlySet<string> interfacePlaceholderQualifiedNames,
@@ -81,7 +97,8 @@ public sealed class PackageEmitContext
         RootNamespace = rootNamespace;
         Qualifier = qualifier;
         DataTypes = dataTypes;
-        LocalTemplateClassNames = localTemplateClassNames;
+        LocalReservedTypeNames = localReservedTypeNames;
+        LocalInterfaceMarkerNames = localInterfaceMarkerNames;
         LocalEnumQualifiedNames = localEnumQualifiedNames;
         LocalVariantQualifiedNames = localVariantQualifiedNames;
         InterfacePlaceholderQualifiedNames = interfacePlaceholderQualifiedNames;
@@ -106,8 +123,6 @@ public sealed class PackageEmitContext
 
         var rootNamespace = options.RootNamespace ?? Identifiers.DeriveNamespace(package.Name);
         var qualifier = new TypeReferenceQualifier([rootNamespace]);
-
-        var localTemplateClassNames = TemplateClassNames(package);
 
         var dataTypes = new Dictionary<string, DamlDataType>();
         var localEnumQualifiedNames = new HashSet<string>();
@@ -158,12 +173,16 @@ public sealed class PackageEmitContext
             }
         }
 
+        var localReservedTypeNames = ReservedTopLevelTypeNames(package);
+        var localInterfaceMarkerNames = InterfaceMarkerNames(package, localReservedTypeNames);
+
         return new PackageEmitContext(
             package,
             rootNamespace,
             qualifier,
             dataTypes,
-            localTemplateClassNames,
+            localReservedTypeNames,
+            localInterfaceMarkerNames,
             localEnumQualifiedNames,
             localVariantQualifiedNames,
             interfacePlaceholderQualifiedNames,
@@ -171,15 +190,98 @@ public sealed class PackageEmitContext
     }
 
     /// <summary>
-    /// Computes the sanitised C# class name of every template declared anywhere in
-    /// <paramref name="package"/> — the single source of the reserved-name set
+    /// Computes the sanitised C# name of every top-level type declared anywhere in
+    /// <paramref name="package"/> — every template plus every record/enum/variant,
+    /// excluding interface-placeholder records (replaced by the marker itself) and
+    /// choice-argument records (emitted nested inside their parent template, not at the
+    /// top level) — the single source of the reserved-name set
     /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates against, shared by
     /// <see cref="ForPackage"/> (for the emitting package) and the cross-package
     /// resolver (for foreign packages) so both sides derive the same marker name.
     /// </summary>
-    internal static IReadOnlySet<string> TemplateClassNames(DamlPackage package) =>
-        package.Modules
-            .SelectMany(module => module.Templates)
-            .Select(template => Identifiers.Sanitize(template.Name))
-            .ToHashSet();
+    internal static IReadOnlySet<string> ReservedTopLevelTypeNames(DamlPackage package)
+    {
+        var interfacePlaceholderQualifiedNames = new HashSet<string>();
+        var dataTypeNames = new HashSet<string>();
+        foreach (var module in package.Modules)
+        {
+            var interfaceNames = module.Interfaces.Select(i => i.Name).ToHashSet();
+            foreach (var dataType in module.DataTypes)
+            {
+                dataTypeNames.Add(dataType.Name);
+                if (interfaceNames.Contains(dataType.Name))
+                {
+                    interfacePlaceholderQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                }
+            }
+        }
+
+        var choiceArgumentQualifiedNames = new HashSet<string>();
+        foreach (var module in package.Modules)
+        {
+            foreach (var template in module.Templates)
+            {
+                foreach (var choice in template.Choices)
+                {
+                    if (choice.ArgumentType is DamlTypeRef typeRef && dataTypeNames.Contains(typeRef.Name))
+                    {
+                        choiceArgumentQualifiedNames.Add($"{typeRef.Module}:{typeRef.Name}");
+                    }
+                }
+            }
+        }
+
+        var reserved = new HashSet<string>();
+        foreach (var module in package.Modules)
+        {
+            foreach (var template in module.Templates)
+            {
+                reserved.Add(Identifiers.Sanitize(template.Name));
+            }
+            foreach (var dataType in module.DataTypes)
+            {
+                var qualifiedName = $"{module.Name}:{dataType.Name}";
+                if (interfacePlaceholderQualifiedNames.Contains(qualifiedName)
+                    || choiceArgumentQualifiedNames.Contains(qualifiedName))
+                {
+                    continue;
+                }
+                reserved.Add(Identifiers.Sanitize(dataType.Name));
+            }
+        }
+        return reserved;
+    }
+
+    /// <summary>
+    /// Precomputes the final disambiguated C# marker name for every interface in
+    /// <paramref name="package"/>, keyed by module-qualified (<c>Module:Name</c>) name,
+    /// seeded from <paramref name="reservedTypeNames"/> (see
+    /// <see cref="ReservedTopLevelTypeNames"/>). Interfaces are processed in a stable
+    /// ordinal sort over their qualified name — not module declaration order — so that
+    /// when two interfaces in different modules sanitise to the same marker, the same one
+    /// deterministically wins the unsuffixed name on every run; each assigned marker is
+    /// threaded into the reserved set before the next interface is disambiguated, so the
+    /// loser picks up the trailing <c>_</c>. Shared by <see cref="ForPackage"/> (for the
+    /// emitting package) and the cross-package resolver (for foreign packages) so both
+    /// sides derive the same marker assignment.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> InterfaceMarkerNames(
+        DamlPackage package, IReadOnlySet<string> reservedTypeNames)
+    {
+        var reserved = new HashSet<string>(reservedTypeNames);
+        var markers = new Dictionary<string, string>();
+
+        var interfaces = package.Modules
+            .SelectMany(module => module.Interfaces.Select(iface => (Module: module.Name, Interface: iface)))
+            .OrderBy(x => $"{x.Module}:{x.Interface.Name}", StringComparer.Ordinal);
+
+        foreach (var (moduleName, iface) in interfaces)
+        {
+            var marker = Identifiers.InterfaceMarkerName(iface.Name, reserved);
+            reserved.Add(marker);
+            markers[$"{moduleName}:{iface.Name}"] = marker;
+        }
+
+        return markers;
+    }
 }

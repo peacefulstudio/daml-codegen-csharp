@@ -18,7 +18,8 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
     private readonly HashSet<string> _discoveredExternalPackageIds = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
     private readonly Dictionary<string, IReadOnlySet<string>> _foreignInterfaceCache = [];
-    private readonly Dictionary<string, IReadOnlySet<string>> _foreignTemplateClassNameCache = [];
+    private readonly Dictionary<string, IReadOnlySet<string>> _foreignReservedTypeNameCache = [];
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignInterfaceMarkerNameCache = [];
 
     /// <summary>Creates a resolver scoped to a single <see cref="IDarSource"/>.</summary>
     public DarCrossPackageResolver(IDarSource dar, ICodegenLogger logger)
@@ -47,7 +48,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
         {
             if (context.InterfacePlaceholderQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}"))
             {
-                return Identifiers.InterfaceMarkerName(typeRef.Name, context.LocalTemplateClassNames);
+                return context.LocalInterfaceMarkerNames[$"{typeRef.Module}:{typeRef.Name}"];
             }
             if (context.LocalChoiceArgToTemplate.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var parentTemplate))
             {
@@ -78,7 +79,7 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
         var foreignNs = Identifiers.DeriveNamespace(foreignPkg.Name);
         if (ForeignInterfaceQualifiedNames(foreignPkg).Contains($"{typeRef.Module}:{typeRef.Name}"))
         {
-            return $"{foreignNs}.{Identifiers.InterfaceMarkerName(typeRef.Name, ForeignTemplateClassNames(foreignPkg))}";
+            return $"{foreignNs}.{ForeignInterfaceMarkerNames(foreignPkg)[$"{typeRef.Module}:{typeRef.Name}"]}";
         }
         if (!_foreignChoiceArgCache.TryGetValue(typeRef.PackageId, out var foreignChoiceArgMap))
         {
@@ -105,19 +106,36 @@ public sealed class DarCrossPackageResolver : ICrossPackageResolver
     }
 
     /// <summary>
-    /// Sanitised C# class names of every template declared in <paramref name="pkg"/>,
-    /// mirroring <see cref="PackageEmitContext.LocalTemplateClassNames"/> for a foreign
-    /// package — needed so a marker referenced across packages disambiguates against
-    /// the same reserved set the declaring package's own emission used.
+    /// Sanitised C# names of every top-level type declared in <paramref name="pkg"/>,
+    /// mirroring <see cref="PackageEmitContext.LocalReservedTypeNames"/> for a foreign
+    /// package — the seed <see cref="ForeignInterfaceMarkerNames"/> disambiguates against
+    /// so a marker referenced across packages agrees with the reserved set the declaring
+    /// package's own emission used.
     /// </summary>
-    private IReadOnlySet<string> ForeignTemplateClassNames(DamlPackage pkg)
+    private IReadOnlySet<string> ForeignReservedTypeNames(DamlPackage pkg)
     {
-        if (!_foreignTemplateClassNameCache.TryGetValue(pkg.PackageId, out var templateClassNames))
+        if (!_foreignReservedTypeNameCache.TryGetValue(pkg.PackageId, out var reservedTypeNames))
         {
-            templateClassNames = PackageEmitContext.TemplateClassNames(pkg);
-            _foreignTemplateClassNameCache[pkg.PackageId] = templateClassNames;
+            reservedTypeNames = PackageEmitContext.ReservedTopLevelTypeNames(pkg);
+            _foreignReservedTypeNameCache[pkg.PackageId] = reservedTypeNames;
         }
-        return templateClassNames;
+        return reservedTypeNames;
+    }
+
+    /// <summary>
+    /// The precomputed interface-marker map for <paramref name="pkg"/>, mirroring
+    /// <see cref="PackageEmitContext.LocalInterfaceMarkerNames"/> for a foreign package —
+    /// so a marker referenced across packages agrees with the same deterministic
+    /// assignment the declaring package's own emission used.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> ForeignInterfaceMarkerNames(DamlPackage pkg)
+    {
+        if (!_foreignInterfaceMarkerNameCache.TryGetValue(pkg.PackageId, out var markerNames))
+        {
+            markerNames = PackageEmitContext.InterfaceMarkerNames(pkg, ForeignReservedTypeNames(pkg));
+            _foreignInterfaceMarkerNameCache[pkg.PackageId] = markerNames;
+        }
+        return markerNames;
     }
 
     /// <summary>

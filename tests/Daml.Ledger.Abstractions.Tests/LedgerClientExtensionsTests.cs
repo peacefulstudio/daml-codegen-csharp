@@ -395,10 +395,10 @@ public class LedgerClientExtensionsTests
             CancellationToken cancellationToken = default)
             => Task.FromResult((ExerciseOutcome<TResult>)_outcome);
 
-        public Task<string> SubmitAndWaitAsync(
+        public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
             CommandsSubmission submission,
             CancellationToken cancellationToken = default)
-            => Task.FromResult("update-id");
+            => Task.FromResult(new SubmitAndWaitResult(new CommandId("cmd-id"), "update-id", 0L));
 
         public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
             CommandsSubmission submission,

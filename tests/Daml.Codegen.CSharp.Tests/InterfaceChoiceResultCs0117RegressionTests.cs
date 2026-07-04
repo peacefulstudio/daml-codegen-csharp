@@ -368,4 +368,191 @@ public class InterfaceChoiceResultCs0117RegressionTests
 
         files.Select(f => f.RelativePath).Should().Contain(p => p.EndsWith("IFactory_.cs"));
     }
+
+    private static DarModel RecordMarkerCollisionDar()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "GetFactory",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("Test.Module", "Factory"),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType { Name = "IFactory", Definition = new DamlRecordDefinition([]) },
+                new DamlDataType { Name = "Factory", Definition = new DamlRecordDefinition([]) },
+            ],
+            Interfaces = [new DamlInterface { Name = "Factory", ViewType = null, Choices = [] }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "record-marker-collision-pkg-id",
+            Name = "record-marker-collision-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        return new DarModel { MainPackage = package, Dependencies = [DamlPrim] };
+    }
+
+    [Fact]
+    public void disambiguates_record_colliding_with_interface_marker_name()
+    {
+        CompilesCleanly(RecordMarkerCollisionDar(), "a record literally named IFactory and an interface Factory (whose generated marker is also IFactory) must not both declare a public IFactory type in the same namespace");
+    }
+
+    [Fact]
+    public void writes_the_disambiguated_marker_file_for_a_record_colliding_with_it()
+    {
+        var files = CreateGenerator().Generate(RecordMarkerCollisionDar()).ToList();
+
+        files.Select(f => f.RelativePath).Should().Contain(p => p.EndsWith("IFactory_.cs"));
+    }
+
+    private static DarModel RecordMarkerCollisionWithFirstRoundDisambiguatedTemplateDar()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "IFactory",
+                    Fields = [],
+                    Choices = [],
+                },
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "IssueAll",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = TupleType(
+                                ContractIdOf("Test.Module", "IFactory"),
+                                ContractIdOf("Test.Module", "Factory")),
+                        },
+                    ],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType { Name = "IFactory", Definition = new DamlRecordDefinition([]) },
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType { Name = "IFactory_", Definition = new DamlRecordDefinition([]) },
+                new DamlDataType { Name = "Factory", Definition = new DamlRecordDefinition([]) },
+            ],
+            Interfaces = [new DamlInterface { Name = "Factory", ViewType = null, Choices = [] }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "record-first-round-collision-pkg-id",
+            Name = "record-first-round-collision-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        return new DarModel { MainPackage = package, Dependencies = [DamlPrim] };
+    }
+
+    [Fact]
+    public void disambiguates_record_colliding_with_the_first_round_disambiguated_marker()
+    {
+        CompilesCleanly(
+            RecordMarkerCollisionWithFirstRoundDisambiguatedTemplateDar(),
+            "a template IFactory, a record IFactory_, and an interface Factory (marker IFactory, then IFactory_) must each get a distinct public type in the same namespace");
+    }
+
+    [Fact]
+    public void writes_the_second_round_disambiguated_marker_file_when_both_rounds_collide()
+    {
+        var files = CreateGenerator().Generate(RecordMarkerCollisionWithFirstRoundDisambiguatedTemplateDar()).ToList();
+
+        files.Select(f => f.RelativePath).Should().Contain(p => p.EndsWith("IFactory__.cs"));
+    }
+
+    // Deliberately declares each interface with no matching interface-placeholder
+    // record: the real Daml-LF compiler always emits one alongside every interface,
+    // but that placeholder record's own name is disambiguated only by its module (a
+    // separate, pre-existing gap, not part of #492's marker-name fix). Omitting it
+    // isolates this DAR to exactly the marker-collision family under test.
+    private static DarModel TwoModuleInterfaceMarkerCollisionDar(string firstModuleName, string secondModuleName)
+    {
+        DamlModule InterfaceOnlyModule(string moduleName) => new()
+        {
+            Name = moduleName,
+            Templates = [],
+            DataTypes = [],
+            Interfaces = [new DamlInterface { Name = "Factory", ViewType = null, Choices = [] }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "two-module-interface-collision-pkg-id",
+            Name = "two-module-interface-collision-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [InterfaceOnlyModule(firstModuleName), InterfaceOnlyModule(secondModuleName)],
+            DependencyReferences = [],
+        };
+
+        return new DarModel { MainPackage = package, Dependencies = [] };
+    }
+
+    [Fact]
+    public void two_same_named_interfaces_in_different_modules_compile_cleanly_with_distinct_markers()
+    {
+        CompilesCleanly(
+            TwoModuleInterfaceMarkerCollisionDar("Alpha.Module", "Beta.Module"),
+            "two interfaces named Factory in different modules, both sanitising to marker IFactory, must not both declare a public IFactory type in the same flat namespace");
+    }
+
+    [Fact]
+    public void two_same_named_interfaces_in_different_modules_deterministically_assign_the_same_winner_regardless_of_module_order()
+    {
+        string WinnerModuleName(string firstModuleName, string secondModuleName)
+        {
+            var files = CreateGenerator().Generate(TwoModuleInterfaceMarkerCollisionDar(firstModuleName, secondModuleName));
+            var winnerFile = files.Single(f => f.RelativePath.EndsWith("IFactory.cs", StringComparison.Ordinal));
+            return winnerFile.Content.Contains("\"Alpha.Module\"", StringComparison.Ordinal) ? "Alpha.Module" : "Beta.Module";
+        }
+
+        WinnerModuleName("Alpha.Module", "Beta.Module").Should().Be("Alpha.Module");
+        WinnerModuleName("Beta.Module", "Alpha.Module").Should().Be("Alpha.Module");
+    }
 }

@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
@@ -113,15 +114,27 @@ public class TransactionResultTests
     }
 
     [Fact]
-    public void ExercisedEvents_defaults_to_empty_when_not_set()
+    public void CommandId_round_trips_on_the_transaction_result()
     {
-        // 0.1.4 callers used the 4-arg ctor; their TransactionResult instances must
-        // continue to round-trip without supplying ExercisedEvents.
         var result = new TransactionResult(
             UpdateId: "u1",
             CompletionOffset: 1L,
             CreatedContracts: [],
-            ArchivedContractIds: []);
+            ArchivedContractIds: [],
+            CommandId: new CommandId("cmd-42"));
+
+        result.CommandId.Value.Should().Be("cmd-42");
+    }
+
+    [Fact]
+    public void ExercisedEvents_defaults_to_empty_when_not_set()
+    {
+        var result = new TransactionResult(
+            UpdateId: "u1",
+            CompletionOffset: 1L,
+            CreatedContracts: [],
+            ArchivedContractIds: [],
+            CommandId: default);
 
         result.ExercisedEvents.Should().NotBeNull();
         result.ExercisedEvents.Should().BeEmpty();
@@ -147,7 +160,8 @@ public class TransactionResultTests
             UpdateId: "u1",
             CompletionOffset: 1L,
             CreatedContracts: [],
-            ArchivedContractIds: [])
+            ArchivedContractIds: [],
+            CommandId: default)
         {
             ExercisedEvents = [exercised],
         };
@@ -168,7 +182,8 @@ public class TransactionResultTests
             UpdateId: "u1",
             CompletionOffset: 5L,
             CreatedContracts: [new CreatedContract("00a", FooBar.TemplateId, "{}")],
-            ArchivedContractIds: ["00b"]);
+            ArchivedContractIds: ["00b"],
+            CommandId: default);
 
         var exercised = new ExercisedEvent(
             ContractId: "00c",
@@ -315,7 +330,8 @@ public class TransactionResultTests
             UpdateId: "u1",
             CompletionOffset: 1L,
             CreatedContracts: contracts,
-            ArchivedContractIds: []);
+            ArchivedContractIds: [],
+            CommandId: default);
     }
 
     private static TransactionResult MakeTransactionWithInterfaces(
@@ -330,7 +346,8 @@ public class TransactionResultTests
             UpdateId: "u1",
             CompletionOffset: 1L,
             CreatedContracts: contracts,
-            ArchivedContractIds: []);
+            ArchivedContractIds: [],
+            CommandId: default);
     }
 
     private sealed record FooBar(string Owner) : ITemplate

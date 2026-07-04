@@ -24,7 +24,7 @@ public class ExerciseOutcomeTests
     [Fact]
     public void One_carries_transaction_result_payload()
     {
-        var result = new TransactionResult("u1", 1L, [], []);
+        var result = new TransactionResult("u1", 1L, [], [], default);
         var outcome = new ExerciseOutcome<TransactionResult>.One(result);
 
         outcome.Result.Should().BeSameAs(result);

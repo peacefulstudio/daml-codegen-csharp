@@ -141,6 +141,109 @@ public class PackageEmitContextTests
     }
 
     [Fact]
+    public void for_package_widens_reserved_names_to_a_record_colliding_with_an_interface_marker()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("IFactory")],
+                    interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
+            Options());
+
+        context.LocalReservedTypeNames.Should().Contain("IFactory");
+        context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory_");
+    }
+
+    [Fact]
+    public void for_package_widens_reserved_names_to_a_record_colliding_with_the_first_round_disambiguated_marker()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("IFactory_")],
+                    templates:
+                    [
+                        new DamlTemplate { Name = "IFactory", Fields = [], Choices = [] },
+                    ],
+                    interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
+            Options());
+
+        context.LocalReservedTypeNames.Should().Contain("IFactory_");
+        context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory__");
+    }
+
+    [Fact]
+    public void for_package_excludes_interface_placeholder_records_from_the_reserved_set()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("Factory")],
+                    interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
+            Options());
+
+        context.LocalReservedTypeNames.Should().NotContain("Factory");
+        context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory");
+    }
+
+    [Fact]
+    public void for_package_deterministically_assigns_the_same_marker_winner_across_modules_regardless_of_declaration_order()
+    {
+        DamlInterface Factory() => new() { Name = "Factory", Choices = [] };
+
+        var declaredAlphaFirst = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module("Alpha", interfaces: [Factory()]),
+                Module("Beta", interfaces: [Factory()])),
+            Options());
+        var declaredBetaFirst = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module("Beta", interfaces: [Factory()]),
+                Module("Alpha", interfaces: [Factory()])),
+            Options());
+
+        declaredAlphaFirst.LocalInterfaceMarkerNames["Alpha:Factory"].Should().Be("IFactory");
+        declaredAlphaFirst.LocalInterfaceMarkerNames["Beta:Factory"].Should().Be("IFactory_");
+        declaredBetaFirst.LocalInterfaceMarkerNames["Alpha:Factory"].Should().Be("IFactory");
+        declaredBetaFirst.LocalInterfaceMarkerNames["Beta:Factory"].Should().Be("IFactory_");
+    }
+
+    [Fact]
+    public void for_package_excludes_nested_choice_argument_types_from_the_reserved_set()
+    {
+        var argType = Record("IFactory", new DamlFieldDefinition("to", new DamlPrimitiveType(DamlPrimitive.Party)));
+        var choice = new DamlChoice
+        {
+            Name = "Transfer",
+            Consuming = true,
+            ArgumentType = new DamlTypeRef("", "M", "IFactory"),
+            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+        };
+        var template = new DamlTemplate { Name = "Account", Fields = [], Choices = [choice] };
+
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [argType],
+                    templates: [template],
+                    interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
+            Options());
+
+        context.LocalReservedTypeNames.Should().NotContain("IFactory");
+        context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory");
+    }
+
+    [Fact]
     public void for_package_maps_nested_choice_argument_types_to_their_parent_template()
     {
         var argType = Record("TransferArg", new DamlFieldDefinition("to", new DamlPrimitiveType(DamlPrimitive.Party)));

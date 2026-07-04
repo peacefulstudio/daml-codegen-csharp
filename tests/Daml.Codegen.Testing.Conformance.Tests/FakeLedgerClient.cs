@@ -66,7 +66,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
-    public Task<string> SubmitAndWaitAsync(
+    public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
         CommandsSubmission submission,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();

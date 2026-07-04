@@ -182,7 +182,8 @@ public class NonContractChoiceProjectorTests
             UpdateId: "update-1",
             CompletionOffset: 1,
             CreatedContracts: [],
-            ArchivedContractIds: [])
+            ArchivedContractIds: [],
+            CommandId: default)
         {
             ExercisedEvents = events,
         };

@@ -42,7 +42,7 @@ public sealed class InterfaceEmitter(
             indent.AppendLine("/// </summary>");
         }
 
-        var interfaceName = Identifiers.InterfaceMarkerName(iface.Name, context.LocalTemplateClassNames);
+        var interfaceName = context.LocalInterfaceMarkerNames[$"{module.Name}:{iface.Name}"];
         indent.CurrentTypeName = interfaceName;
 
         var viewType = iface.ViewType is not null ? mapper.MapType(iface.ViewType) : null;
