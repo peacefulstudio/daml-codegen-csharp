@@ -193,7 +193,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 }
 
                 var code = GenerateInterface(context, interfaceEmitter, package, module, iface);
-                var path = RelativeFilePath(rootNamespace, $"{Identifiers.InterfaceMarkerName(iface.Name, context.LocalTemplateClassNames)}.cs");
+                var path = RelativeFilePath(rootNamespace, $"{context.LocalInterfaceMarkerNames[$"{module.Name}:{iface.Name}"]}.cs");
 
                 yield return GeneratedFile.Text(path, code);
             }

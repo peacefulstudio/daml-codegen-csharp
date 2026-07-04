@@ -54,6 +54,8 @@ public static class TransactionTreeExtensions
     /// its <see cref="ExercisedEvent.CaughtExceptions"/> is always empty here, since
     /// <see cref="TreeEvent.Exercised"/> doesn't carry that data. Callers that need those
     /// fields must walk <see cref="TransactionTree.RootEvents"/> directly instead.
+    /// <see cref="TransactionResult.CommandId"/> is <c>default</c> here because
+    /// <see cref="TransactionTree"/> carries no command id to project.
     /// </remarks>
     public static TransactionResult ToTransactionResult(this TransactionTree tree)
     {
@@ -102,7 +104,8 @@ public static class TransactionTreeExtensions
             tree.UpdateId,
             tree.CompletionOffset,
             createdContracts,
-            archivedContractIds)
+            archivedContractIds,
+            default)
         {
             ExercisedEvents = exercisedEvents,
         };

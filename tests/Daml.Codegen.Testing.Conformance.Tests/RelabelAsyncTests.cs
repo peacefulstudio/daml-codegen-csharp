@@ -21,7 +21,8 @@ public class RelabelAsyncTests
             UpdateId: "upd-1",
             CompletionOffset: 1,
             CreatedContracts: new[] { new CreatedContract(newRichRecordId, RichRecord.TemplateId, "{}") },
-            ArchivedContractIds: Array.Empty<string>());
+            ArchivedContractIds: Array.Empty<string>(),
+            CommandId: default);
 
     [Fact]
     public async Task projects_the_created_rich_record_on_success()

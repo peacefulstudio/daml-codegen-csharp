@@ -112,15 +112,24 @@ internal static partial class Identifiers
     /// interface name prefixed with <c>I</c> (e.g. Daml <c>Holding</c> →
     /// <c>IHolding</c>), appending a trailing <c>_</c> until the result is absent
     /// from <paramref name="reservedTypeNames"/> — a package's namespace is flat
-    /// across all its modules, so a Daml template anywhere in the package can legally
-    /// be named after an interface marker (e.g. template <c>IFactory</c> alongside
-    /// interface <c>Factory</c>), which would otherwise emit two public <c>IFactory</c>
+    /// across all its modules, so any top-level Daml declaration anywhere in the
+    /// package (template, record, enum, or variant) can legally sanitise to an
+    /// interface marker (e.g. record <c>IFactory</c> alongside interface
+    /// <c>Factory</c>), which would otherwise emit two public <c>IFactory</c>
     /// declarations in the same namespace (CS0101). Shared by the interface emitter
     /// and the type resolver so a reference to an interface names the same marker on
     /// the field-type path as on the choice-exercise path — callers must pass the
-    /// same reserved-name set (the declaring package's local template class names)
-    /// for every reference to a given interface.
+    /// declaring package's widened top-level type-name set
+    /// (<see cref="PackageEmitContext.LocalReservedTypeNames"/>) for every reference
+    /// to a given interface.
     /// </summary>
+    /// <param name="interfaceName">The Daml interface's simple name, before sanitisation.</param>
+    /// <param name="reservedTypeNames">
+    /// The declaring package's sanitised top-level type names — every template plus
+    /// every record/enum/variant, excluding interface-placeholder and choice-argument
+    /// records (see <see cref="PackageEmitContext.LocalReservedTypeNames"/>) — that the
+    /// returned marker must not collide with.
+    /// </param>
     internal static string InterfaceMarkerName(string interfaceName, IReadOnlySet<string> reservedTypeNames)
     {
         var marker = "I" + Sanitize(interfaceName);

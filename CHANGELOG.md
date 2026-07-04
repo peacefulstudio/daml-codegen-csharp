@@ -33,6 +33,35 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.3.0-preview.1] — 2026-07-04
+
+### Added
+
+- `Daml.Runtime.Contracts.SubmitAndWaitResult(CommandId CommandId, string UpdateId, long CompletionOffset)`
+  — a new record carrying the effective command id the participant recorded for a
+  fire-and-wait submission, together with the resulting transaction's update id and
+  completion offset. Returned by `ILedgerClient.SubmitAndWaitAsync` (see Changed) so
+  callers can correlate a completion with the command id used for deduplication — even
+  when that id was assigned by the client rather than supplied by the caller.
+- `TransactionResult` (`Daml.Runtime`) gains a trailing `CommandId CommandId` positional
+  parameter, surfacing the effective command id of the submission that produced the
+  transaction. The `TransactionTree.ToTransactionResult()` projection sets it to
+  `default` because a transaction tree carries no command id to project.
+
+### Changed
+
+- **BREAKING: `ILedgerClient.SubmitAndWaitAsync` (`Daml.Ledger.Abstractions`) now returns
+  `Task<SubmitAndWaitResult>`** (was `Task<string>`), so it surfaces the effective
+  `CommandId` and `CompletionOffset` alongside the `UpdateId` it already returned rather
+  than the update id alone. Source-breaking: implementations must widen the return type
+  and callers that consumed the returned update-id string must read `result.UpdateId`.
+  The downstream client lands in the ledger-client library.
+
+### Fixed
+
+- `TreeEvent.DescendantEvents()` (`Daml.Runtime`) no longer risks `StackOverflowException`
+  on deeply nested transaction trees — traversal is now iterative instead of recursive.
+
 ## [0.2.0-preview.3] — 2026-07-03
 
 ### Changed

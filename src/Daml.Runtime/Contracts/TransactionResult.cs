@@ -1,9 +1,27 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Commands;
 using Daml.Runtime.Data;
 
 namespace Daml.Runtime.Contracts;
+
+/// <summary>
+/// Outcome of a fire-and-wait submission: the effective <see cref="CommandId"/> the
+/// participant recorded for the submission, together with the resulting transaction's
+/// <see cref="UpdateId"/> and <see cref="CompletionOffset"/>. Returned by
+/// <c>ILedgerClient.SubmitAndWaitAsync</c> so callers can correlate the completion with
+/// the command id used for deduplication — even when the id was assigned by the client
+/// rather than supplied by the caller.
+/// </summary>
+/// <param name="CommandId">The effective command id the participant recorded for the
+/// submission, used for deduplication.</param>
+/// <param name="UpdateId">Ledger-assigned update identifier of the resulting transaction.</param>
+/// <param name="CompletionOffset">Offset at which the transaction was committed.</param>
+public sealed record SubmitAndWaitResult(
+    CommandId CommandId,
+    string UpdateId,
+    long CompletionOffset);
 
 /// <summary>
 /// Result of a submitted transaction.
@@ -13,11 +31,14 @@ namespace Daml.Runtime.Contracts;
 /// <param name="CreatedContracts">Contracts created by the transaction. Project to
 /// typed <see cref="ContractId{T}"/> values via <see cref="TransactionResultExtensions"/>.</param>
 /// <param name="ArchivedContractIds">Raw contract IDs archived by the transaction.</param>
+/// <param name="CommandId">The effective command id the participant recorded for the
+/// submission that produced this transaction, used for deduplication.</param>
 public sealed record TransactionResult(
     string UpdateId,
     long CompletionOffset,
     IReadOnlyList<CreatedContract> CreatedContracts,
-    IReadOnlyList<string> ArchivedContractIds)
+    IReadOnlyList<string> ArchivedContractIds,
+    CommandId CommandId)
 {
     /// <summary>
     /// Choice-exercise events observed in the transaction, in transaction order.

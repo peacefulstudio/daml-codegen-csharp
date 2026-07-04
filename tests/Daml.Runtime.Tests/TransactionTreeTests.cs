@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
@@ -68,6 +69,72 @@ public class TransactionTreeTests
     }
 
     [Fact]
+    public void descendant_events_handles_deeply_nested_trees_without_stack_overflow()
+    {
+        const int depth = 5000;
+        var leaf = MakeCreated("leaf");
+        TreeEvent deepTree = leaf;
+
+        for (int i = 0; i < depth; i++)
+        {
+            deepTree = MakeExercised($"level-{i:D5}", children: [deepTree]);
+        }
+
+        var descendants = deepTree.DescendantEvents().ToList();
+
+        descendants.Should().HaveCount(depth);
+        descendants.Should().OnlyHaveUniqueItems();
+        descendants[^1].Should().BeSameAs(leaf);
+    }
+
+    [Fact]
+    public void descendant_events_enumerates_many_siblings_in_declared_order()
+    {
+        var children = Enumerable.Range(0, 50)
+            .Select(i => (TreeEvent)MakeCreated($"00child-{i:D2}"))
+            .ToList();
+        var exercise = MakeExercised("00parent", children: children);
+
+        var descendants = exercise.DescendantEvents().ToList();
+
+        descendants.Should().Equal(children);
+    }
+
+    [Fact]
+    public void descendant_events_preserves_pre_order_across_branching_and_depth()
+    {
+        const int chainLength = 200;
+        TreeEvent tree = MakeCreated("leaf");
+
+        for (int i = 0; i < chainLength; i++)
+        {
+            var sibling = MakeCreated($"sibling-{i:D3}");
+            tree = MakeExercised($"level-{i:D3}", children: [tree, sibling]);
+        }
+
+        var descendants = tree.DescendantEvents().ToList();
+
+        descendants.Should().Equal(ExpectedPreOrder(((TreeEvent.Exercised)tree).ChildEvents));
+    }
+
+    private static List<TreeEvent> ExpectedPreOrder(IReadOnlyList<TreeEvent> events)
+    {
+        var result = new List<TreeEvent>();
+
+        foreach (var treeEvent in events)
+        {
+            result.Add(treeEvent);
+
+            if (treeEvent is TreeEvent.Exercised exercised)
+            {
+                result.AddRange(ExpectedPreOrder(exercised.ChildEvents));
+            }
+        }
+
+        return result;
+    }
+
+    [Fact]
     public void all_events_enumerates_roots_and_descendants_in_pre_order()
     {
         var child = MakeCreated("00child");
@@ -107,6 +174,16 @@ public class TransactionTreeTests
         result.CreatedContracts[0].ContractId.Should().Be("00alice");
         result.CreatedContracts[0].TemplateId.Should().Be(FooTemplateId);
         result.CreatedContracts[0].Payload.Should().Contain("alice");
+    }
+
+    [Fact]
+    public void to_transaction_result_defaults_command_id_since_tree_carries_none()
+    {
+        var tree = new TransactionTree("u1", 1L, [MakeCreated("00alice")]);
+
+        var result = tree.ToTransactionResult();
+
+        result.CommandId.Should().Be(default(CommandId));
     }
 
     [Fact]

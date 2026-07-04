@@ -77,12 +77,19 @@ public interface ILedgerClient : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Submits one or more commands as a single atomic transaction and waits for
-    /// completion, returning the update ID of the resulting transaction.
+    /// completion.
     /// </summary>
     /// <param name="submission">The commands submission.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The update ID of the resulting transaction.</returns>
-    Task<string> SubmitAndWaitAsync(
+    /// <returns>
+    /// A <see cref="SubmitAndWaitResult"/> carrying the effective
+    /// <see cref="SubmitAndWaitResult.CommandId"/> the participant recorded for the
+    /// submission (used for deduplication — surfaced so callers can correlate the
+    /// completion even when the id was assigned by the client), together with the
+    /// resulting transaction's <see cref="SubmitAndWaitResult.UpdateId"/> and
+    /// <see cref="SubmitAndWaitResult.CompletionOffset"/>.
+    /// </returns>
+    Task<SubmitAndWaitResult> SubmitAndWaitAsync(
         CommandsSubmission submission,
         CancellationToken cancellationToken = default);
 
