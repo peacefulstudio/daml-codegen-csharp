@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Streams;
@@ -20,7 +21,7 @@ public class WitnessPartiesTypedTests
         var ev = new ContractStreamEvent<TestTemplate>.Created(
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
-            1L,
+            LedgerOffset.At(1),
             new SynchronizerId("sync"),
             [Alice, Bob]);
 
@@ -33,7 +34,7 @@ public class WitnessPartiesTypedTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Archived(
             new ContractId<TestTemplate>("c1"),
-            2L,
+            LedgerOffset.At(2),
             new SynchronizerId("sync"),
             [Alice]);
 
@@ -50,7 +51,7 @@ public class WitnessPartiesTypedTests
             DamlUnit.Instance,
             DamlUnit.Instance,
             Consuming: true,
-            Offset: 3L,
+            Offset: LedgerOffset.At(3),
             SynchronizerId: new SynchronizerId("sync"),
             WitnessParties: [Alice, Bob]);
 
@@ -64,9 +65,11 @@ public class WitnessPartiesTypedTests
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
-            4L,
+            LedgerOffset.At(4),
             new SynchronizerId("src"),
             new SynchronizerId("tgt"),
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();
@@ -78,9 +81,11 @@ public class WitnessPartiesTypedTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Unassigned(
             new ContractId<TestTemplate>("c1"),
-            5L,
+            LedgerOffset.At(5),
             new SynchronizerId("src"),
             new SynchronizerId("tgt"),
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.WitnessParties.Should().BeAssignableTo<IReadOnlyList<Party>>();

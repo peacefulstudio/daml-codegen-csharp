@@ -16,7 +16,7 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
     [Fact]
     public void Emitted_template_with_key_compiles_standalone_with_throwing_key_stub()
     {
-        // ADR 0013: the body-less `partial Key` (CS9248 until a consumer supplied
+        // The body-less `partial Key` (CS9248 until a consumer supplied
         // an implementing partial) blocked the automated DAR publish pipeline, which
         // has no human to write that partial. The accessor is now a non-partial
         // throwing stub, so a key-bearing package compiles standalone with no consumer
@@ -28,7 +28,7 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
         errors.Should().BeEmpty(
-            "a key-bearing template must compile standalone now that Key is a throwing stub (ADR 0013), but got: {0}",
+            "a key-bearing template must compile standalone now that Key is a throwing stub, but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 
@@ -110,7 +110,7 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
     [Fact]
     public void Generate_should_emit_empty_langversion_marker_for_key_bearing_output()
     {
-        // ADR 0013: with the Key accessor reverted from a `partial` to a plain
+        // With the Key accessor reverted from a `partial` to a plain
         // throwing stub, key-bearing output no longer contains the C# 13
         // partial-property syntax, so the LangVersion marker stays empty just like
         // keyless output — the build no longer raises the SDK floor for keys.
@@ -119,7 +119,7 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
         var marker = files.Should().ContainSingle(f => f.RelativePath == ".daml-langversion",
             "build-integration tooling reads this state file to bump LangVersion").Subject;
         marker.Content.Should().BeEmpty(
-            "key-bearing output no longer requires C# 13 after the partial-property revert (ADR 0013)");
+            "key-bearing output no longer requires C# 13 after the partial-property revert");
     }
 
     [Fact]
@@ -170,14 +170,14 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
     {
         // Class-mode (`UseRecordTypes=false`) counterpart of the record-mode standalone
         // test: a key-bearing `partial class` template must also compile with no
-        // consumer contribution now that Key is a throwing stub (ADR 0013).
+        // consumer contribution now that Key is a throwing stub.
         var files = GenerateKeyBearingTemplate(useRecordTypes: false);
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
         errors.Should().BeEmpty(
-            "a class-mode key-bearing template must compile standalone now that Key is a throwing stub (ADR 0013), but got: {0}",
+            "a class-mode key-bearing template must compile standalone now that Key is a throwing stub, but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
     }
 

@@ -6,7 +6,7 @@ using Daml.Runtime.Outcomes;
 namespace Daml.Ledger.Abstractions;
 
 /// <summary>
-/// Thrown by the throwing convenience wrappers in <see cref="LedgerClientExtensions"/>
+/// Thrown by the throwing convenience wrappers in <see cref="Extensions.ThrowingExercise"/>
 /// when the underlying <c>Try*</c> method yields a non-success outcome. Carries the
 /// structured data of a <see cref="ExerciseOutcome{T}.DamlError"/> /
 /// <see cref="ExerciseOutcome{T}.InfraError"/> outcome so catch sites keep access to
@@ -80,6 +80,16 @@ public sealed class LedgerOperationException : InvalidOperationException
     /// </summary>
     public LedgerOperationException(string message, int statusCode)
         : base(message)
+    {
+        StatusCode = statusCode;
+    }
+
+    /// <summary>
+    /// Creates an exception carrying an <see cref="ExerciseOutcome{T}.InfraError"/> outcome
+    /// and preserving the transport exception that caused it.
+    /// </summary>
+    public LedgerOperationException(string message, int statusCode, Exception? innerException)
+        : base(message, innerException)
     {
         StatusCode = statusCode;
     }

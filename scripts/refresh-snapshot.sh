@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Peaceful Studio OÜ
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 # Refreshes a drift-detection snapshot by regenerating the expected/ tree from

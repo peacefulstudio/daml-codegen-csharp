@@ -72,7 +72,7 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_typed_wrapper_with_error_passthrough_and_filtering_projector_for_decimal_return()
+    public void non_contract_exerciser_emits_typed_wrapper_delegating_to_ProjectCommitted_with_filtering_projector_for_decimal_return()
     {
         var template = Template(
             "Oracle",
@@ -83,11 +83,11 @@ public class ChoiceEmitterValueReturnExerciserTests
         output.Should().Contain("public static class OracleNonContractExtensions");
         output.Should().Contain("public static async Task<ExerciseOutcome<decimal>> GetTrailingTwapAsync(");
         output.Should().Contain("this ContractId<Oracle> contractId,");
-        output.Should().Contain("ILedgerClient client,");
-        output.Should().Contain(".TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
-        output.Should().Contain("ExerciseOutcome<TransactionResult>.DamlError damlError => new ExerciseOutcome<decimal>.DamlError(");
-        output.Should().Contain("ExerciseOutcome<TransactionResult>.InfraError infraError => new ExerciseOutcome<decimal>.InfraError(");
-        output.Should().Contain("ProjectGetTrailingTwapResult(success.Result, contractId.Value)");
+        output.Should().Contain("ILedgerWriter client,");
+        output.Should().Contain(".TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("return outcome.ProjectCommitted(tx => ProjectGetTrailingTwapResult(tx, contractId.Value));");
+        output.Should().NotContain("Unhandled outcome");
+        output.Should().NotContain("ExerciseOutcome<TransactionResult>.DamlError");
         output.Should().Contain("string.Equals(exercised.ContractId, contractId, StringComparison.Ordinal)");
         output.Should().Contain("string.Equals(exercised.TemplateId.ModuleName, Oracle.TemplateId.ModuleName, StringComparison.Ordinal)");
         output.Should().Contain("string.Equals(exercised.TemplateId.EntityName, Oracle.TemplateId.EntityName, StringComparison.Ordinal)");

@@ -16,21 +16,30 @@ internal static class EmitterHelpers
 
     internal static string ToPascalCase(string name) => Identifiers.ToPascalCase(name);
 
+    /// <summary>
+    /// Derives the C# type-parameter name for a Daml type variable: PascalCased and
+    /// sanitised behind a <c>T</c> prefix. The <c>T</c> prefix combined with PascalCasing
+    /// makes a keyword collision unreachable — all C# reserved keywords are lowercase, so
+    /// <c>T</c> + an uppercase-initial identifier can never be one. The name is therefore
+    /// deliberately built from <see cref="Identifiers.SanitizeBare"/> — escaping first
+    /// would emit <c>T@event</c>, which parses as two identifiers rather than one.
+    /// </summary>
+    internal static string TypeParameterName(string damlTypeParam) =>
+        $"T{ToPascalCase(Identifiers.SanitizeBare(damlTypeParam))}";
+
     internal static string GetTypeParametersDeclaration(IReadOnlyList<string> typeParams)
     {
         if (typeParams.Count == 0)
             return string.Empty;
 
-        var sanitized = typeParams.Select(p => $"T{ToPascalCase(SanitizeIdentifier(p))}");
-        return $"<{string.Join(", ", sanitized)}>";
+        return $"<{string.Join(", ", typeParams.Select(TypeParameterName))}>";
     }
 
     internal static void WriteTypeParamDocs(IndentWriter indent, IReadOnlyList<string> typeParams)
     {
         foreach (var param in typeParams)
         {
-            var sanitized = $"T{ToPascalCase(SanitizeIdentifier(param))}";
-            indent.AppendLine($"/// <typeparam name=\"{sanitized}\">Type parameter {param}</typeparam>");
+            indent.AppendLine($"/// <typeparam name=\"{TypeParameterName(param)}\">Type parameter {param}</typeparam>");
         }
     }
 }

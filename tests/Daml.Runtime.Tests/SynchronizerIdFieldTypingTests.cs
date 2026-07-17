@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Streams;
@@ -22,7 +23,7 @@ public class SynchronizerIdFieldTypingTests
         var ev = new ContractStreamEvent<TestTemplate>.Created(
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
-            1L,
+            LedgerOffset.At(1),
             Domain,
             [Alice]);
 
@@ -34,7 +35,7 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Archived(
             new ContractId<TestTemplate>("c1"),
-            2L,
+            LedgerOffset.At(2),
             Domain,
             [Alice]);
 
@@ -50,7 +51,7 @@ public class SynchronizerIdFieldTypingTests
             DamlUnit.Instance,
             DamlUnit.Instance,
             true,
-            3L,
+            LedgerOffset.At(3),
             Domain,
             [Alice]);
 
@@ -63,9 +64,11 @@ public class SynchronizerIdFieldTypingTests
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
-            4L,
+            LedgerOffset.At(4),
             Source,
             Target,
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.Source.Should().BeOfType<SynchronizerId>().And.Be(Source);
@@ -77,9 +80,11 @@ public class SynchronizerIdFieldTypingTests
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
             DamlRecord.Create(),
-            4L,
+            LedgerOffset.At(4),
             Source,
             Target,
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.Target.Should().BeOfType<SynchronizerId>().And.Be(Target);
@@ -90,9 +95,11 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Unassigned(
             new ContractId<TestTemplate>("c1"),
-            5L,
+            LedgerOffset.At(5),
             Source,
             Target,
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.Source.Should().BeOfType<SynchronizerId>().And.Be(Source);
@@ -103,9 +110,11 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Unassigned(
             new ContractId<TestTemplate>("c1"),
-            5L,
+            LedgerOffset.At(5),
             Source,
             Target,
+            "reassignment-1",
+            7L,
             [Alice]);
 
         ev.Target.Should().BeOfType<SynchronizerId>().And.Be(Target);

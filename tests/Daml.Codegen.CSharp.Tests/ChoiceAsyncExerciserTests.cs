@@ -15,7 +15,7 @@ namespace Daml.Codegen.CSharp.Tests;
 /// Each choice with a typed
 /// <c>&lt;Choice&gt;Result</c> gets a static extension on
 /// <c>ContractId&lt;TemplateName&gt;</c> that calls
-/// <c>ILedgerClient.TrySubmitAndWaitForTransactionAsync</c> and projects the
+/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and projects the
 /// resulting transaction's created contracts to
 /// <c>ExerciseOutcome&lt;&lt;Choice&gt;Result&gt;</c>. Errors pass through.
 /// </summary>
@@ -151,7 +151,7 @@ public class ChoiceAsyncExerciserTests
 
         code.Should().Contain("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(");
         code.Should().Contain("this ContractId<Agreement> contractId");
-        code.Should().Contain("ILedgerClient client");
+        code.Should().Contain("ILedgerWriter client");
         // Dynamic-controller fallback shape: the wrapper takes a SubmitterInfo
         // parameter, never a string. Single-party callers stay one-liners via
         // SubmitterInfo's implicit conversion from string / Party.
@@ -209,7 +209,7 @@ public class ChoiceAsyncExerciserTests
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
+        code.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
     }
 
     [Fact]
@@ -220,32 +220,30 @@ public class ChoiceAsyncExerciserTests
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("RenewResult.FromCreatedContracts(success.Result.CreatedContracts)");
+        code.Should().Contain("RenewResult.FromCreatedContracts(tx.CreatedContracts)");
     }
 
     [Fact]
-    public void Generate_should_pass_through_DamlError_in_emitted_extension()
+    public void Generate_should_delegate_outcome_mapping_to_ProjectCommitted()
     {
         var module = ModuleWith(
             Template("Agreement", ContractIdOf("Agreement"), choiceName: "Renew"));
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        // DamlError variant is forwarded with all four fields.
-        code.Should().Contain("ExerciseOutcome<TransactionResult>.DamlError damlError");
-        code.Should().Contain("new ExerciseOutcome<RenewResult>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata)");
+        code.Should().Contain("return outcome.ProjectCommitted(tx => RenewResult.FromCreatedContracts(tx.CreatedContracts));");
     }
 
     [Fact]
-    public void Generate_should_pass_through_InfraError_in_emitted_extension()
+    public void Generate_should_not_emit_a_blind_unhandled_outcome_throw()
     {
         var module = ModuleWith(
             Template("Agreement", ContractIdOf("Agreement"), choiceName: "Renew"));
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("ExerciseOutcome<TransactionResult>.InfraError infraError");
-        code.Should().Contain("new ExerciseOutcome<RenewResult>.InfraError(infraError.StatusCode, infraError.Message)");
+        code.Should().NotContain("Unhandled outcome");
+        code.Should().NotContain("ExerciseOutcome<TransactionResult>.DamlError");
     }
 
     [Fact]
@@ -299,7 +297,7 @@ public class ChoiceAsyncExerciserTests
     public void Generate_should_emit_ledger_abstractions_using_for_extensions()
     {
         // The emitted file must `using Daml.Ledger.Abstractions;` so the
-        // ILedgerClient parameter type resolves at consumer compile time.
+        // ILedgerWriter parameter type resolves at consumer compile time.
         var module = ModuleWith(
             Template("Agreement", ContractIdOf("Agreement"), choiceName: "Renew"));
 

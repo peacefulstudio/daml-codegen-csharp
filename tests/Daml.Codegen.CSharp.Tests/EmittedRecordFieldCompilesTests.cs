@@ -216,6 +216,69 @@ public class EmittedRecordFieldCompilesTests
     }
 
     [Fact]
+    public void Emitted_record_with_nested_map_of_map_field_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "NestedMaps",
+                    Definition = new DamlRecordDefinition(
+                    [
+                        new DamlFieldDefinition("byGenMapOfGenMap", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Party),
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.GenMap),
+                                    [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Int64)])
+                            ])),
+                        new DamlFieldDefinition("byTextMapOfTextMap", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.TextMap),
+                            [new DamlTypeApp(
+                                new DamlPrimitiveType(DamlPrimitive.TextMap),
+                                [new DamlPrimitiveType(DamlPrimitive.Int64)])])),
+                        new DamlFieldDefinition("byGenMapOfTextMapOfList", new DamlTypeApp(
+                            new DamlPrimitiveType(DamlPrimitive.GenMap),
+                            [
+                                new DamlPrimitiveType(DamlPrimitive.Party),
+                                new DamlTypeApp(
+                                    new DamlPrimitiveType(DamlPrimitive.TextMap),
+                                    [new DamlTypeApp(
+                                        new DamlPrimitiveType(DamlPrimitive.List),
+                                        [new DamlPrimitiveType(DamlPrimitive.Int64)])])
+                            ])),
+                    ])
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "nested Map-of-Map FromRecord must compile without CS1503 against the declared nested IReadOnlyDictionary<K1, IReadOnlyDictionary<K2,V>>, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_record_with_either_field_compiles()
     {
         var stdlibPackage = new DamlPackage
@@ -296,7 +359,7 @@ public class EmittedRecordFieldCompilesTests
     [Fact]
     public void Emitted_record_with_unmappable_object_field_compiles()
     {
-        // Regression (#397): ToValue's `_` arm unconditionally emitted
+        // Regression: ToValue's `_` arm unconditionally emitted
         // `<value>.ToRecord()` for any field the type mapper falls back to
         // `object` for. `object` has no ToRecord(), so the emitted body was CS1061.
         // The fallback-producing shape is a higher-kinded application (`f a` where

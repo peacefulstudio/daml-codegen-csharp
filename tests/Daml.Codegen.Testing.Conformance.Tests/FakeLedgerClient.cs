@@ -27,6 +27,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
         CommandsSubmission submission,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         LastSubmission = submission;
@@ -37,6 +38,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
         TTemplate payload,
         SubmitterInfo submitter,
         string? workflowId = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
         where TTemplate : ITemplate
     {
@@ -55,7 +57,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
             ExerciseOutcome<object>.DamlError e =>
                 new ExerciseOutcome<ContractId<TTemplate>>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
             ExerciseOutcome<object>.InfraError e =>
-                new ExerciseOutcome<ContractId<TTemplate>>.InfraError(e.StatusCode, e.Message),
+                new ExerciseOutcome<ContractId<TTemplate>>.InfraError(e.StatusCode, e.Message, e.SourceException),
             _ => new ExerciseOutcome<ContractId<TTemplate>>.None(),
         };
 
@@ -63,34 +65,32 @@ internal sealed class FakeLedgerClient : ILedgerClient
         ExerciseCommand command,
         SubmitterInfo submitter,
         string? workflowId = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
         CommandsSubmission submission,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
-    public Task<ExerciseOutcome<ContractId<TTemplate>>> TryExerciseForCreatedAsync<TTemplate>(
-        ExerciseCommand command,
-        SubmitterInfo submitter,
-        string? workflowId = null,
-        CancellationToken cancellationToken = default)
-        where TTemplate : IDamlType =>
-        throw new NotSupportedException();
-
-    public Task<long> GetLedgerEndAsync(CancellationToken cancellationToken = default) =>
+    public Task<LedgerOffset> GetLedgerEndAsync(
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
         SubmitterInfo submitter,
-        long? fromOffset = null,
+        LedgerOffset? fromOffset = null,
+        LedgerOffset? toOffset = null,
         CancellationToken cancellationToken = default)
         where T : IDamlType =>
         throw new NotSupportedException();
 
-    public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeActiveAsync<T>(
+    public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
+        LedgerOffset? activeAtOffset = null,
         CancellationToken cancellationToken = default)
         where T : IDamlType =>
         throw new NotSupportedException();

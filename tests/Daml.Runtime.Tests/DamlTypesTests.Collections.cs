@@ -149,6 +149,17 @@ public partial class DamlTypesTests
     }
 
     [Fact]
+    public void DamlList_constructor_should_defensively_copy_values()
+    {
+        var values = new List<DamlValue> { new DamlInt64(1) };
+
+        var list = new DamlList(values);
+        values.Add(new DamlInt64(2));
+
+        list.Values.Should().ContainSingle();
+    }
+
+    [Fact]
     public void DamlTextMap_should_store_and_retrieve_values()
     {
         // Arrange & Act
@@ -174,6 +185,18 @@ public partial class DamlTypesTests
 
         map.TryGetValue("nonexistent", out var missingValue).Should().BeFalse();
         missingValue.Should().BeNull();
+    }
+
+    [Fact]
+    public void DamlTextMap_constructor_should_defensively_copy_values()
+    {
+        var values = new Dictionary<string, DamlValue> { ["a"] = new DamlInt64(1) };
+
+        var map = new DamlTextMap(values);
+        values["b"] = new DamlInt64(2);
+
+        map.Values.Should().ContainSingle();
+        map.Values.Should().ContainKey("a");
     }
 
     [Fact]
@@ -211,6 +234,35 @@ public partial class DamlTypesTests
             (new DamlText("k2"), new DamlInt64(2)));
 
         act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void DamlGenMap_constructor_should_defensively_copy_entries()
+    {
+        var entries = new List<(DamlValue Key, DamlValue Value)>
+        {
+            (new DamlText("k1"), new DamlInt64(1))
+        };
+
+        var map = new DamlGenMap(entries);
+        entries.Add((new DamlText("k2"), new DamlInt64(2)));
+
+        map.Entries.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void DamlGenMap_constructor_should_reject_duplicate_keys()
+    {
+        var entries = new List<(DamlValue Key, DamlValue Value)>
+        {
+            (new DamlText("k"), new DamlInt64(1)),
+            (new DamlText("k"), new DamlInt64(2))
+        };
+
+        var act = () => new DamlGenMap(entries);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*duplicate*",
+            "the constructor enforces the same invariant as Create");
     }
 
     [Fact]

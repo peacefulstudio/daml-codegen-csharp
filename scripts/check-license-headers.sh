@@ -39,4 +39,4 @@ exec addlicense "${action[@]}" -s=only -l apache -c "Peaceful Studio OÜ" \
   -ignore '**/*.xml' \
   -ignore '**/Snapshots/**' \
   -ignore '**/Generated/**' \
-  src tests jvm-helper samples
+  src tests jvm-helper samples scripts

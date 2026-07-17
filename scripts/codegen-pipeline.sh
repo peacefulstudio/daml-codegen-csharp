@@ -31,8 +31,10 @@ Options:
   --runtime-version <ver>  Daml.Runtime NuGet version for the generated .csproj.
                            Recommended when --publish-nuget is set; omitting it
                            leaves a wildcard (*) dependency.
-  --helper-jar             Path to daml-codegen-jvm-helper.jar
-                           (default: jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar)
+  --helper-jar             Path to daml-codegen-jvm-helper.jar. Overriding this
+                           skips the freshness check; you own the JAR's currency.
+                           (default: the repo JAR, reassembled from source when
+                           stale via scripts/ensure-jvm-helper-jar.sh)
   --cli-bin                Path to the Daml.Codegen.CSharp.Cli binary
                            (default: src/Daml.Codegen.CSharp.Cli/bin/Release/net10.0/Daml.Codegen.CSharp.Cli)
 EOF
@@ -49,7 +51,7 @@ PUBLISH_NUGET=""
 NUGET_CONFIG=""
 NUGET_SOURCE=""
 RUNTIME_VERSION=""
-HELPER_JAR="$PROJECT_ROOT/jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar"
+HELPER_JAR=""
 CLI_BIN="$PROJECT_ROOT/src/Daml.Codegen.CSharp.Cli/bin/Release/net10.0/Daml.Codegen.CSharp.Cli"
 
 while [[ $# -gt 0 ]]; do
@@ -78,11 +80,15 @@ if [[ -n "${PUBLISH_NUGET}" ]] && ! command -v dotnet >/dev/null 2>&1; then
 fi
 [[ -n "${PUBLISH_NUGET}" && -z "${RUNTIME_VERSION}" ]] && echo "codegen-pipeline.sh: warning: --runtime-version not set; generated .csproj will reference Daml.Runtime with wildcard version (*)" >&2
 [[ -f "$DAR" ]] || { echo "codegen-pipeline.sh: DAR file not found: $DAR" >&2; exit 1; }
-[[ -f "$HELPER_JAR" ]] || {
-  echo "codegen-pipeline.sh: JVM helper JAR not found: $HELPER_JAR" >&2
-  echo "Build it with: (cd jvm-helper && sbt assembly)" >&2
-  exit 1
-}
+if [[ -z "$HELPER_JAR" ]]; then
+  HELPER_JAR="$("$SCRIPT_DIR/ensure-jvm-helper-jar.sh")"
+else
+  [[ -f "$HELPER_JAR" ]] || {
+    echo "codegen-pipeline.sh: JVM helper JAR not found: $HELPER_JAR" >&2
+    echo "Build it with: scripts/ensure-jvm-helper-jar.sh" >&2
+    exit 1
+  }
+fi
 [[ -x "$CLI_BIN" ]] || {
   echo "codegen-pipeline.sh: CLI binary not found or not executable: $CLI_BIN" >&2
   echo "Build it with: dotnet build src/Daml.Codegen.CSharp.Cli -c Release" >&2

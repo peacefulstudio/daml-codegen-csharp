@@ -12,7 +12,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <c>&lt;PackageReference&gt;</c> per id. Lives for one
 /// <see cref="CSharpCodeGenerator.Generate"/> call.
 /// </summary>
-public interface ICrossPackageResolver
+internal interface ICrossPackageResolver
 {
     /// <summary>
     /// Resolves <paramref name="typeRef"/> to a C# identifier or fully qualified name.

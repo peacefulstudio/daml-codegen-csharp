@@ -92,4 +92,34 @@ public class ChoiceEmitterInterfaceExtensionTests
     {
         EmitExtensions(Interface()).Should().NotContain("public static class");
     }
+
+    [Fact]
+    public void interface_exerciser_accepts_optional_command_id_override()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
+
+        output.Should().Contain("CommandId? commandId = null,");
+        output.Should().Contain(".WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));");
+
+        var idxWorkflowId = output.IndexOf("string? workflowId = null,", StringComparison.Ordinal);
+        var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
+        var idxCancellationToken = output.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
+        idxWorkflowId.Should().BeLessThan(idxCommandId);
+        idxCommandId.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void interface_exerciser_forwards_optional_timeout()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
+
+        output.Should().Contain("TimeSpan? timeout = null,");
+        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+
+        var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
+        var idxTimeout = output.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
+        var idxCancellationToken = output.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
+        idxCommandId.Should().BeLessThan(idxTimeout);
+        idxTimeout.Should().BeLessThan(idxCancellationToken);
+    }
 }

@@ -20,7 +20,7 @@ public class TransactionTreeTests
         var first = MakeCreated("00first");
         var second = MakeCreated("00second");
 
-        var tree = new TransactionTree("u1", 1L, [first, second]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[first, second]);
 
         tree.RootEvents.Should().HaveCount(2);
         tree.RootEvents[0].Should().BeSameAs(first);
@@ -140,7 +140,7 @@ public class TransactionTreeTests
         var child = MakeCreated("00child");
         var rootExercise = MakeExercised("00root-exercise", children: [child]);
         var rootCreated = MakeCreated("00root-created");
-        var tree = new TransactionTree("u1", 1L, [rootExercise, rootCreated]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[rootExercise, rootCreated]);
 
         var all = tree.AllEvents().ToList();
 
@@ -164,12 +164,12 @@ public class TransactionTreeTests
     public void to_transaction_result_flattens_created_events_with_serialized_payload()
     {
         var created = MakeCreated("00alice");
-        var tree = new TransactionTree("u1", 5L, [created]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(5), [created]);
 
         var result = tree.ToTransactionResult();
 
         result.UpdateId.Should().Be("u1");
-        result.CompletionOffset.Should().Be(5L);
+        result.CompletionOffset.Should().Be(LedgerOffset.At(5));
         result.CreatedContracts.Should().ContainSingle();
         result.CreatedContracts[0].ContractId.Should().Be("00alice");
         result.CreatedContracts[0].TemplateId.Should().Be(FooTemplateId);
@@ -179,7 +179,7 @@ public class TransactionTreeTests
     [Fact]
     public void to_transaction_result_defaults_command_id_since_tree_carries_none()
     {
-        var tree = new TransactionTree("u1", 1L, [MakeCreated("00alice")]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[MakeCreated("00alice")]);
 
         var result = tree.ToTransactionResult();
 
@@ -191,7 +191,7 @@ public class TransactionTreeTests
     {
         var interfaceId = new RuntimeIdentifier("test-pkg", "Acme.Foo", "IAsset");
         var created = MakeCreated("00iface") with { InterfaceIds = [interfaceId] };
-        var tree = new TransactionTree("u1", 1L, [created]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[created]);
 
         var result = tree.ToTransactionResult();
 
@@ -204,7 +204,7 @@ public class TransactionTreeTests
     {
         var childCreate = MakeCreated("00child");
         var innerExercise = MakeExercised("00inner", children: [childCreate], choiceName: "Inner");
-        var tree = new TransactionTree("u1", 1L, [innerExercise]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[innerExercise]);
 
         var result = tree.ToTransactionResult();
 
@@ -217,7 +217,7 @@ public class TransactionTreeTests
     {
         var consuming = MakeExercised("00consumed", children: [], consuming: true);
         var nonConsuming = MakeExercised("00untouched", children: [], consuming: false);
-        var tree = new TransactionTree("u1", 1L, [consuming, nonConsuming]);
+        var tree = new TransactionTree("u1", LedgerOffset.At(1),[consuming, nonConsuming]);
 
         var result = tree.ToTransactionResult();
 

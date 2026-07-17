@@ -12,6 +12,27 @@ namespace Daml.Runtime.Tests;
 public class DamlJsonSerializerStructuralTests
 {
     [Fact]
+    public void Deserialize_should_reject_json_larger_than_configured_limit()
+    {
+        var json = """{"field":"abcdef"}""";
+        var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: json.Length - 1);
+
+        var act = () => DamlJsonSerializer.DeserializeRecord(json, limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
+    }
+
+    [Fact]
+    public void Deserialize_should_reject_arrays_wider_than_configured_limit()
+    {
+        var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
+
+        var act = () => DamlJsonSerializer.Deserialize("[1,2,3]", limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
+    }
+
+    [Fact]
     public void Serialize_should_render_DamlGenMap_as_array_of_two_element_arrays()
     {
         var genMap = DamlGenMap.Create(
@@ -55,6 +76,14 @@ public class DamlJsonSerializerStructuralTests
 
         deserialized.Should().BeOfType<DamlGenMap>();
         deserialized.As<DamlGenMap>().Entries.Should().BeEquivalentTo(original.Entries);
+    }
+
+    [Fact]
+    public void Deserialize_should_throw_JsonException_for_DamlGenMap_duplicate_keys()
+    {
+        var act = () => DamlJsonSerializer.Deserialize("""[["k",1],["k",2]]""");
+
+        act.Should().Throw<JsonException>().WithMessage("*duplicate key*");
     }
 
     [Fact]

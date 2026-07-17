@@ -14,7 +14,7 @@ public sealed partial record Iou
     /// <summary>
     /// Choice argument type for Transfer.
     /// </summary>
-public sealed record Transfer(Party NewOwner    ) : IDamlRecord
+    public sealed record Transfer([property: DamlFieldAttribute("newOwner")] Party NewOwner) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

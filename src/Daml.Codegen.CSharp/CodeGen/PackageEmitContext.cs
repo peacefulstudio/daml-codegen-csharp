@@ -12,7 +12,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// choice-argument name sets. Built once per package by
 /// <see cref="ForPackage"/>; read-only during emission.
 /// </summary>
-public sealed class PackageEmitContext
+internal sealed class PackageEmitContext
 {
     /// <summary>The Daml package this context was built for.</summary>
     public DamlPackage Package { get; }
@@ -23,7 +23,12 @@ public sealed class PackageEmitContext
     /// <summary>Qualifier scoped to the package's generated namespaces.</summary>
     public TypeReferenceQualifier Qualifier { get; }
 
-    /// <summary>Last-wins lookup of every data type across all modules, keyed by simple name.</summary>
+    /// <summary>
+    /// Lookup of every data type across all modules, keyed by module-qualified
+    /// (<c>Module:Name</c>) name. Module-qualified because Daml allows the same simple
+    /// name in multiple modules — keying on the simple name alone would let one module's
+    /// data type silently shadow another's and emit the wrong field list.
+    /// </summary>
     public IReadOnlyDictionary<string, DamlDataType> DataTypes { get; }
 
     /// <summary>
@@ -134,7 +139,7 @@ public sealed class PackageEmitContext
 
             foreach (var dataType in module.DataTypes)
             {
-                dataTypes[dataType.Name] = dataType;
+                dataTypes[$"{module.Name}:{dataType.Name}"] = dataType;
                 if (dataType.Definition is DamlEnumDefinition)
                 {
                     localEnumQualifiedNames.Add($"{module.Name}:{dataType.Name}");
@@ -157,17 +162,20 @@ public sealed class PackageEmitContext
             {
                 foreach (var choice in template.Choices)
                 {
-                    if (choice.ArgumentType is DamlTypeRef typeRef && dataTypes.ContainsKey(typeRef.Name))
+                    if (choice.ArgumentType is DamlTypeRef typeRef)
                     {
                         var key = $"{typeRef.Module}:{typeRef.Name}";
-                        if (localChoiceArgToTemplate.TryGetValue(key, out var existingTemplate)
-                            && existingTemplate != template.Name)
+                        if (dataTypes.ContainsKey(key))
                         {
-                            logger?.Warning(
-                                $"Choice-argument type {key} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
-                            continue;
+                            if (localChoiceArgToTemplate.TryGetValue(key, out var existingTemplate)
+                                && existingTemplate != template.Name)
+                            {
+                                logger?.Warning(
+                                    $"Choice-argument type {key} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
+                                continue;
+                            }
+                            localChoiceArgToTemplate[key] = template.Name;
                         }
-                        localChoiceArgToTemplate[key] = template.Name;
                     }
                 }
             }

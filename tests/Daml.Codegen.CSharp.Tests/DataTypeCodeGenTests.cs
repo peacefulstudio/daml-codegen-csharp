@@ -286,12 +286,12 @@ public class DataTypeCodeGenTests
         // Act
         var files = generator.Generate(dar);
 
-        // Assert - Should have _ prefix
+        // Assert
         files.Should().NotBeEmpty();
-        var typeFile = files.FirstOrDefault(f => f.RelativePath.Contains("_123Type.cs"));
+        var typeFile = files.FirstOrDefault(f => f.RelativePath.Contains("_u003123Type.cs"));
         typeFile.Should().NotBeNull();
         var code = typeFile!.Content;
-        code.Should().Contain("public sealed record _123Type");
+        code.Should().Contain("public sealed record _u003123Type");
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public class DataTypeCodeGenTests
 
         code.Should().Contain("LowerCaseField");
         code.Should().Contain("CamelCaseField");
-        code.Should().Contain("KebabCaseField");
+        code.Should().Contain("KebabU002dcaseU002dfield");
     }
 
     [Fact]

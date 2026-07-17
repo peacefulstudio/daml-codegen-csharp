@@ -65,7 +65,7 @@ public class NewFeaturesCodeGenTests
         var code = assetFile!.Content;
 
         code.Should().Contain("IHasKey<string>");
-        // ADR 0013: the Key accessor is a non-partial throwing stub until the DALF
+        // The Key accessor is a non-partial throwing stub until the DALF
         // key-expression analysis lands. The template still
         // declares `: IHasKey<string>`, but the body throws rather than deferring to a
         // consumer-supplied partial (which broke the automated publish pipeline).
@@ -595,7 +595,7 @@ public class NewFeaturesCodeGenTests
         var code = wrapperFile!.Content;
 
         code.Should().Contain("TSomeType");
-        code.Should().Contain("TAnotherType");
+        code.Should().Contain("TAnotherU002dtype");
     }
 
     #endregion

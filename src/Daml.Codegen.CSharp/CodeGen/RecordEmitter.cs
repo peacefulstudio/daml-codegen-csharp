@@ -19,7 +19,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// the common usings; this emitter writes the record body into the provided
 /// <see cref="IndentWriter"/>.
 /// </summary>
-public sealed class RecordEmitter(
+internal sealed class RecordEmitter(
     PackageEmitContext context,
     CodeGenOptions options,
     RecordSerializationEmitter serialization)

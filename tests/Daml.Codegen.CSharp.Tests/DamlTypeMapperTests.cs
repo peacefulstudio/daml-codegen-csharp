@@ -130,6 +130,17 @@ public class DamlTypeMapperTests
     }
 
     [Fact]
+    public void map_type_rejects_excessively_deep_types_before_managed_stack_overflow()
+    {
+        var type = Enumerable.Range(0, 300)
+            .Aggregate((DamlType)Prim(DamlPrimitive.Text), (inner, _) => App(DamlPrimitive.List, inner));
+
+        Mapper().Invoking(m => m.MapType(type))
+            .Should().Throw<InvalidDataException>()
+            .WithMessage("*depth*");
+    }
+
+    [Fact]
     public void map_type_nests_optional_inside_a_genmap_value()
     {
         Mapper().MapType(App(DamlPrimitive.GenMap, Prim(DamlPrimitive.Text), App(DamlPrimitive.Optional, Prim(DamlPrimitive.Int64))))
@@ -176,6 +187,17 @@ public class DamlTypeMapperTests
     }
 
     [Fact]
+    public void to_value_rejects_excessively_deep_types_before_managed_stack_overflow()
+    {
+        var type = Enumerable.Range(0, 300)
+            .Aggregate((DamlType)Prim(DamlPrimitive.Text), (inner, _) => App(DamlPrimitive.List, inner));
+
+        Mapper().Invoking(m => m.ToValue(type, "Items"))
+            .Should().Throw<InvalidDataException>()
+            .WithMessage("*depth*");
+    }
+
+    [Fact]
     public void to_value_serializes_parametric_stdlib_type_through_the_stub()
     {
         var resolver = new StubResolver(packages: new Dictionary<string, DamlPackage> { [StdlibPackageId] = StdlibPackage() });
@@ -206,6 +228,31 @@ public class DamlTypeMapperTests
     {
         Mapper().FromValue(App(DamlPrimitive.List, App(DamlPrimitive.Optional, Prim(DamlPrimitive.Text))), "value")
             .Should().Be("(IReadOnlyList<string?>)value.As<DamlList>().Values.Select(x => x.AsOptional().HasValue ? x.AsOptional().Value!.As<DamlText>().Value : null).ToList()");
+    }
+
+    [Fact]
+    public void from_value_casts_a_nested_genmap_of_genmap_to_the_declared_ireadonlydictionary()
+    {
+        Mapper().FromValue(App(DamlPrimitive.GenMap, Prim(DamlPrimitive.Party), App(DamlPrimitive.GenMap, Prim(DamlPrimitive.Text), Prim(DamlPrimitive.Int64))), "value")
+            .Should().Be("(IReadOnlyDictionary<Party, IReadOnlyDictionary<string, long>>)value.As<DamlGenMap>().Entries.ToDictionary(kv => Party.FromDamlValue(kv.Key.As<DamlParty>()), kv => (IReadOnlyDictionary<string, long>)kv.Value.As<DamlGenMap>().Entries.ToDictionary(kv => kv.Key.As<DamlText>().Value, kv => kv.Value.As<DamlInt64>().Value))");
+    }
+
+    [Fact]
+    public void from_value_casts_a_nested_textmap_of_textmap_to_the_declared_ireadonlydictionary()
+    {
+        Mapper().FromValue(App(DamlPrimitive.TextMap, App(DamlPrimitive.TextMap, Prim(DamlPrimitive.Int64))), "value")
+            .Should().Be("(IReadOnlyDictionary<string, IReadOnlyDictionary<string, long>>)value.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, long>)kv.Value.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => kv.Value.As<DamlInt64>().Value))");
+    }
+
+    [Fact]
+    public void from_value_rejects_excessively_deep_types_before_managed_stack_overflow()
+    {
+        var type = Enumerable.Range(0, 300)
+            .Aggregate((DamlType)Prim(DamlPrimitive.Text), (inner, _) => App(DamlPrimitive.List, inner));
+
+        Mapper().Invoking(m => m.FromValue(type, "value"))
+            .Should().Throw<InvalidDataException>()
+            .WithMessage("*depth*");
     }
 
     [Fact]

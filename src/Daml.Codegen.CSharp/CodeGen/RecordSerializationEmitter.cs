@@ -15,7 +15,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// the DAR-scoped <see cref="ICrossPackageResolver"/>, the shared
 /// <see cref="CodeGenOptions"/>, and the package's <see cref="DamlTypeMapper"/>.
 /// </summary>
-public sealed class RecordSerializationEmitter(
+internal sealed class RecordSerializationEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
     CodeGenOptions options,

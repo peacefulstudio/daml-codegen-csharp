@@ -15,7 +15,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// without duplicating the logic. Shared dependency of the choice-exerciser and
 /// submission-extension emitters.
 /// </summary>
-public sealed class PartyAnalysis
+internal sealed class PartyAnalysis
 {
     /// <summary>
     /// Computes the effective <c>readAs</c> set for a choice as the union of two
@@ -162,15 +162,15 @@ public sealed class PartyAnalysis
 
     private static string ToCamelCaseParam(string name)
     {
-        var sanitized = Identifiers.Sanitize(name);
+        var sanitized = Identifiers.SanitizeBare(name);
         if (string.IsNullOrEmpty(sanitized))
         {
             return sanitized;
         }
         if (char.IsUpper(sanitized[0]))
         {
-            return char.ToLowerInvariant(sanitized[0]) + sanitized[1..];
+            sanitized = char.ToLowerInvariant(sanitized[0]) + sanitized[1..];
         }
-        return sanitized;
+        return Identifiers.EscapeKeyword(sanitized);
     }
 }

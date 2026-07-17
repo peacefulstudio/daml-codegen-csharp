@@ -20,7 +20,7 @@ namespace Daml.Runtime.Contracts;
 /// <see cref="TreeEvent.Exercised.ChildEvents"/>.</param>
 public sealed record TransactionTree(
     string UpdateId,
-    long CompletionOffset,
+    LedgerOffset CompletionOffset,
     IReadOnlyList<TreeEvent> RootEvents);
 
 /// <summary>

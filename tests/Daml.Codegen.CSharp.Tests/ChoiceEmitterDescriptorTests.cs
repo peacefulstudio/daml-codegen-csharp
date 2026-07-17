@@ -160,4 +160,48 @@ public class ChoiceEmitterDescriptorTests
         isNested.Should().BeTrue();
         fields.Should().NotBeNull();
     }
+
+    [Fact]
+    public void get_choice_argument_info_resolves_the_argument_from_its_own_module_when_simple_names_collide()
+    {
+        var package = new DamlPackage
+        {
+            PackageId = LocalPackageId,
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                ModuleWithExpireRecord(
+                    "Agreement",
+                    [new DamlFieldDefinition("actor", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                ModuleWithExpireRecord("Offer", []),
+            ],
+            DependencyReferences = [],
+        };
+        var context = Context(package);
+        var emitter = Emitter(context, new StubResolver());
+        var choice = Choice("Expire", new DamlTypeRef(LocalPackageId, "Agreement", "Expire"), new DamlPrimitiveType(DamlPrimitive.Unit));
+
+        var (_, fields, isFallback, _) = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
+
+        isFallback.Should().BeFalse();
+        fields.Should().ContainSingle(field => field.Name == "actor");
+    }
+
+    private static DamlModule ModuleWithExpireRecord(string moduleName, DamlFieldDefinition[] expireFields) =>
+        new()
+        {
+            Name = moduleName,
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Expire",
+                    Definition = new DamlRecordDefinition(expireFields),
+                },
+            ],
+            Interfaces = [],
+        };
 }

@@ -19,7 +19,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// resolved choice-argument metadata. Distinct from the create/submission path: creating
 /// a contract is not exercising a choice.
 /// </summary>
-public sealed partial class ChoiceEmitter(
+internal sealed partial class ChoiceEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
     CodeGenOptions options,
@@ -47,7 +47,7 @@ public sealed partial class ChoiceEmitter(
     {
         if (choice.ArgumentType is DamlTypeRef typeRef
             && context.IsLocalRef(typeRef)
-            && dataTypes.TryGetValue(typeRef.Name, out var dataType))
+            && dataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var dataType))
         {
             var fields = dataType.Definition is DamlRecordDefinition recordDef ? recordDef.Fields : null;
             return (SanitizeIdentifier(choice.Name), fields, false, true);

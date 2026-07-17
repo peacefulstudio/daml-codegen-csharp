@@ -142,4 +142,63 @@ public class ChoiceEmitterContractIdExerciserTests
         structs.Should().BeEmpty();
         exercisers.Should().BeEmpty();
     }
+
+    [Fact]
+    public void create_bearing_choice_exerciser_accepts_optional_command_id_override()
+    {
+        var template = Template(
+            [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+            Choice("Spawn", ContractIdOf("Token"), controllers: StaticParties("owner")));
+
+        var (_, exercisers) = Emit(template);
+
+        exercisers.Should().Contain("CommandId? commandId = null,");
+        exercisers.Should().Contain(".WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));");
+
+        var idxWorkflowId = exercisers.IndexOf("string? workflowId = null,", StringComparison.Ordinal);
+        var idxCommandId = exercisers.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
+        var idxCancellationToken = exercisers.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
+        idxWorkflowId.Should().BeLessThan(idxCommandId);
+        idxCommandId.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void create_bearing_choice_exerciser_forwards_optional_timeout()
+    {
+        var template = Template(
+            [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+            Choice("Spawn", ContractIdOf("Token"), controllers: StaticParties("owner")));
+
+        var (_, exercisers) = Emit(template);
+
+        exercisers.Should().Contain("TimeSpan? timeout = null,");
+        exercisers.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+
+        var idxCommandId = exercisers.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
+        var idxTimeout = exercisers.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
+        var idxCancellationToken = exercisers.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
+        idxCommandId.Should().BeLessThan(idxTimeout);
+        idxTimeout.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void contract_overload_forwards_timeout_positionally_to_the_contract_id_overload()
+    {
+        var template = Template(
+            [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+            Choice("Spawn", ContractIdOf("Token"), controllers: StaticParties("owner")));
+
+        var (_, exercisers) = Emit(template);
+
+        var delegationStart = exercisers.IndexOf("return contract.Id.SpawnAsync(", StringComparison.Ordinal);
+        delegationStart.Should().BeGreaterThanOrEqualTo(0);
+        var delegation = exercisers.Substring(delegationStart);
+
+        var idxCommandId = delegation.IndexOf("commandId,", StringComparison.Ordinal);
+        var idxTimeout = delegation.IndexOf("timeout,", StringComparison.Ordinal);
+        var idxCancellationToken = delegation.IndexOf("cancellationToken);", StringComparison.Ordinal);
+        idxCommandId.Should().BeGreaterThanOrEqualTo(0);
+        idxTimeout.Should().BeGreaterThan(idxCommandId);
+        idxCancellationToken.Should().BeGreaterThan(idxTimeout);
+    }
 }

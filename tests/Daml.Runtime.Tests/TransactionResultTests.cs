@@ -118,7 +118,7 @@ public class TransactionResultTests
     {
         var result = new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 1L,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: [],
             ArchivedContractIds: [],
             CommandId: new CommandId("cmd-42"));
@@ -131,7 +131,7 @@ public class TransactionResultTests
     {
         var result = new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 1L,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: [],
             ArchivedContractIds: [],
             CommandId: default);
@@ -158,7 +158,7 @@ public class TransactionResultTests
 
         var result = new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 1L,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: [],
             ArchivedContractIds: [],
             CommandId: default)
@@ -180,7 +180,7 @@ public class TransactionResultTests
     {
         var original = new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 5L,
+            CompletionOffset: LedgerOffset.At(5),
             CreatedContracts: [new CreatedContract("00a", FooBar.TemplateId, "{}")],
             ArchivedContractIds: ["00b"],
             CommandId: default);
@@ -199,7 +199,7 @@ public class TransactionResultTests
         var withEvents = original with { ExercisedEvents = [exercised] };
 
         withEvents.UpdateId.Should().Be("u1");
-        withEvents.CompletionOffset.Should().Be(5L);
+        withEvents.CompletionOffset.Should().Be(LedgerOffset.At(5));
         withEvents.CreatedContracts.Should().HaveCount(1);
         withEvents.ArchivedContractIds.Should().ContainSingle().Which.Should().Be("00b");
         withEvents.ExercisedEvents.Should().ContainSingle();
@@ -328,7 +328,7 @@ public class TransactionResultTests
         }
         return new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 1L,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: contracts,
             ArchivedContractIds: [],
             CommandId: default);
@@ -344,7 +344,7 @@ public class TransactionResultTests
         }
         return new TransactionResult(
             UpdateId: "u1",
-            CompletionOffset: 1L,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: contracts,
             ArchivedContractIds: [],
             CommandId: default);

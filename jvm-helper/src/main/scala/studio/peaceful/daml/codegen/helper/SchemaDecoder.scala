@@ -17,7 +17,7 @@ import java.io.File
   * `Ast.PackageSignature` (i.e. `Ast.GenPackage[Unit]`).
   * Two patch-different versions of the same package decode to identical
   * `PackageSignature` values, which is load-bearing for the 4-part NuGet
-  * versioning per ADR 0002.
+  * versioning scheme.
   */
 object SchemaDecoder {
 

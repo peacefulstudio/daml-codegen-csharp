@@ -314,16 +314,16 @@ public partial class CodeGenEdgeCaseTests
         // the call site.
         code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
         code.Should().Contain("this ContractId<IHolding> contractId,");
-        code.Should().Contain("ILedgerClient client,");
+        code.Should().Contain("ILedgerWriter client,");
         code.Should().Contain("Transfer argument,");
         code.Should().Contain("Party actAs,");
         // Internally builds the command via the runtime ForInterface helper — the
         // wire-level template_id slot carries IHolding.InterfaceId, and the choice
         // argument is serialised via argument.ToRecord().
         code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord())");
-        // Submission is funnelled through ILedgerClient.TrySubmitAndWaitForTransactionAsync
+        // Submission is funnelled through ILedgerWriter.TrySubmitAndWaitForTransactionAsync
         // — same submission path as concrete-template <Choice>Async.
-        code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken)");
+        code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
 
         // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
         code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> LockAsync(");

@@ -3,10 +3,16 @@
 
 using AwesomeAssertions;
 using Xunit;
+using PbBuiltinType = Daml.Codegen.Intermediate.BuiltinType;
+using PbChoice = Daml.Codegen.Intermediate.Choice;
 using PbDataType = Daml.Codegen.Intermediate.DataType;
 using PbEnum = Daml.Codegen.Intermediate.Enum;
+using PbField = Daml.Codegen.Intermediate.Field;
+using PbInterface = Daml.Codegen.Intermediate.Interface;
 using PbRecord = Daml.Codegen.Intermediate.Record;
 using PbTemplate = Daml.Codegen.Intermediate.Template;
+using PbType = Daml.Codegen.Intermediate.Type;
+using PbVariant = Daml.Codegen.Intermediate.Variant;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -20,6 +26,7 @@ public partial class IntermediateDarReaderTests
             "New\nLine",
             "Angle<Name>",
             "Semi;colon",
+            "Foo\n",
         ];
 
     [Theory]
@@ -65,6 +72,104 @@ public partial class IntermediateDarReaderTests
         act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
     }
 
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_choice_names_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m => m.Templates.Add(new PbTemplate
+        {
+            Name = "T",
+            Choices =
+            {
+                new PbChoice
+                {
+                    Name = maliciousName,
+                    ArgumentType = new PbType { Builtin = PbBuiltinType.Unit },
+                    ReturnType = new PbType { Builtin = PbBuiltinType.Unit },
+                },
+            },
+        }));
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_variant_constructors_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m => m.DataTypes.Add(new PbDataType
+        {
+            Name = "Outcome",
+            Variant = new PbVariant { Constructors = { TextField(maliciousName) } },
+        }));
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_interface_names_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m => m.Interfaces.Add(new PbInterface { Name = maliciousName }));
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_module_name_segments_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m =>
+        {
+            m.NameSegments.Clear();
+            m.NameSegments.Add(maliciousName);
+        });
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_type_parameters_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m => m.DataTypes.Add(new PbDataType
+        {
+            Name = "Box",
+            TypeParameters = { maliciousName },
+            Record = new PbRecord(),
+        }));
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideTheDamlLfIdentifierGrammar))]
+    public void Read_rejects_type_variables_outside_the_identifier_grammar(string maliciousName)
+    {
+        var proto = MakePackageWith(m => m.DataTypes.Add(new PbDataType
+        {
+            Name = "Box",
+            Record = new PbRecord
+            {
+                Fields = { new PbField { Name = "v", Type = new PbType { TypeVar = maliciousName } } },
+            },
+        }));
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*identifier*");
+    }
+
     [Fact]
     public void Read_accepts_dotted_type_names_and_tuple_style_field_names()
     {
@@ -77,6 +182,52 @@ public partial class IntermediateDarReaderTests
         var act = () => IntermediateDarReader.Read(proto);
 
         act.Should().NotThrow("dotted Daml-LF type names and tuple field labels are inside the grammar");
+    }
+
+    public static TheoryData<string> NamesOutsideThePackageCoordinateGrammar() =>
+        [
+            "evil\"name",
+            "back\\slash",
+            "space name",
+            "semi;colon",
+            "new\nline",
+            "pkg\n",
+        ];
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideThePackageCoordinateGrammar))]
+    public void Read_rejects_package_ids_outside_the_package_coordinate_grammar(string maliciousCoordinate)
+    {
+        var proto = MakePackageWith(_ => { });
+        proto.Main.PackageId = maliciousCoordinate;
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*package id*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideThePackageCoordinateGrammar))]
+    public void Read_rejects_package_names_outside_the_package_coordinate_grammar(string maliciousCoordinate)
+    {
+        var proto = MakePackageWith(_ => { });
+        proto.Main.PackageName = maliciousCoordinate;
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*package name*");
+    }
+
+    [Theory]
+    [MemberData(nameof(NamesOutsideThePackageCoordinateGrammar))]
+    public void Read_rejects_upgraded_package_ids_outside_the_package_coordinate_grammar(string maliciousCoordinate)
+    {
+        var proto = MakePackageWith(_ => { });
+        proto.Main.UpgradedPackageId = maliciousCoordinate;
+
+        var act = () => IntermediateDarReader.Read(proto);
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*upgraded package id*");
     }
 
     [Fact]

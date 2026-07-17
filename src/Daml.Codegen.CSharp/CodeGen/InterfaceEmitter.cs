@@ -20,7 +20,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// owns the file scaffold and the common usings; this emitter writes the interface body
 /// into the provided <see cref="IndentWriter"/>.
 /// </summary>
-public sealed class InterfaceEmitter(
+internal sealed class InterfaceEmitter(
     PackageEmitContext context,
     DamlTypeMapper mapper,
     ChoiceEmitter choiceEmitter,

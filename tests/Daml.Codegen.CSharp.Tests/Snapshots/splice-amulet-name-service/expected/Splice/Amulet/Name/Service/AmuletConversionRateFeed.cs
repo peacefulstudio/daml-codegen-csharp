@@ -129,7 +129,7 @@ public static class AmuletConversionRateFeedSubmissionExtensions
     /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static Task<ExerciseOutcome<ContractId<AmuletConversionRateFeed>>> CreateAsync(
-        this ILedgerClient client,
+        this ILedgerWriter client,
         AmuletConversionRateFeed payload,
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
@@ -145,7 +145,7 @@ public static class AmuletConversionRateFeedSubmissionExtensions
 /// Async exerciser extensions for <see cref="AmuletConversionRateFeed"/> contract IDs whose choices
 /// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).
 /// Each method submits the choice via
-/// <c>ILedgerClient.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
+/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
 /// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.
 /// </summary>
 public static class AmuletConversionRateFeedNonContractExtensions
@@ -160,13 +160,17 @@ public static class AmuletConversionRateFeedNonContractExtensions
     /// <param name="argument">The choice argument.</param>
     /// <param name="actAs">The party submitting the command.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>> AmuletConversionRateFeed_ArchiveAsDsoAsync(
         this ContractId<AmuletConversionRateFeed> contractId,
-        ILedgerClient client,
+        ILedgerWriter client,
         AmuletConversionRateFeed.AmuletConversionRateFeed_ArchiveAsDso argument,
         Party actAs,
         string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contractId);
@@ -180,21 +184,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         var submission = CommandsSubmission.Single(command)
             .WithActAs(actAs)
-            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
+            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return outcome switch
-        {
-            ExerciseOutcome<TransactionResult>.One success => ProjectAmuletConversionRateFeed_ArchiveAsDsoResult(success.Result, contractId.Value),
-            ExerciseOutcome<TransactionResult>.DamlError damlError => new ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),
-            ExerciseOutcome<TransactionResult>.InfraError infraError => new ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>.InfraError(infraError.StatusCode, infraError.Message),
-            _ => throw new InvalidOperationException($"Unhandled outcome: {outcome.GetType().Name}"),
-        };
+        return outcome.ProjectCommitted(tx => ProjectAmuletConversionRateFeed_ArchiveAsDsoResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -207,13 +205,17 @@ public static class AmuletConversionRateFeedNonContractExtensions
     /// <param name="argument">The choice argument.</param>
     /// <param name="actAs">The party submitting the command.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>> AmuletConversionRateFeed_UpdateAsync(
         this ContractId<AmuletConversionRateFeed> contractId,
-        ILedgerClient client,
+        ILedgerWriter client,
         AmuletConversionRateFeed.AmuletConversionRateFeed_Update argument,
         Party actAs,
         string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contractId);
@@ -227,21 +229,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         var submission = CommandsSubmission.Single(command)
             .WithActAs(actAs)
-            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
+            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return outcome switch
-        {
-            ExerciseOutcome<TransactionResult>.One success => ProjectAmuletConversionRateFeed_UpdateResult(success.Result, contractId.Value),
-            ExerciseOutcome<TransactionResult>.DamlError damlError => new ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),
-            ExerciseOutcome<TransactionResult>.InfraError infraError => new ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>.InfraError(infraError.StatusCode, infraError.Message),
-            _ => throw new InvalidOperationException($"Unhandled outcome: {outcome.GetType().Name}"),
-        };
+        return outcome.ProjectCommitted(tx => ProjectAmuletConversionRateFeed_UpdateResult(tx, contractId.Value));
     }
 
     private static ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult> ProjectAmuletConversionRateFeed_ArchiveAsDsoResult(TransactionResult tx, string contractId)
@@ -260,8 +256,8 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         throw new InvalidOperationException(
             $"Submission succeeded but no 'AmuletConversionRateFeed_ArchiveAsDso' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
-            "This is most often caused by the ILedgerClient implementation not populating TransactionResult.ExercisedEvents — " +
-            "your ILedgerClient implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
             "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
             "LedgerEffects with verbose events so the exercise event survives projection.");
     }
@@ -282,8 +278,8 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         throw new InvalidOperationException(
             $"Submission succeeded but no 'AmuletConversionRateFeed_Update' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
-            "This is most often caused by the ILedgerClient implementation not populating TransactionResult.ExercisedEvents — " +
-            "your ILedgerClient implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
             "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
             "LedgerEffects with verbose events so the exercise event survives projection.");
     }

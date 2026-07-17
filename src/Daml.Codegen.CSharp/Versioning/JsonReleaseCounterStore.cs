@@ -40,7 +40,7 @@ namespace Daml.Codegen.CSharp.Versioning;
 /// as fresh, because a genuinely fresh or legacy-only store can never reach this branch
 /// (see <see cref="OpenOrCreate"/>). This closes the gap where a misspelled, moved, or
 /// wrong-shape <c>codegen_generations</c> field was indistinguishable from a legitimately
-/// empty store (issue #477).</para>
+/// empty store.</para>
 /// </remarks>
 internal sealed class JsonReleaseCounterStore
 {

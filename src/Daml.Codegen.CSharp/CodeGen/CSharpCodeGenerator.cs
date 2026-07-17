@@ -169,7 +169,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 {
                     // Check if this choice's argument type is a data type that should be nested
                     if (choice.ArgumentType is DamlTypeRef typeRef &&
-                        context.DataTypes.TryGetValue(typeRef.Name, out var argDataType) &&
+                        context.DataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var argDataType) &&
                         argDataType.Definition is DamlRecordDefinition)
                     {
                         var code = GenerateNestedChoiceArgumentType(context, templateEmitter,

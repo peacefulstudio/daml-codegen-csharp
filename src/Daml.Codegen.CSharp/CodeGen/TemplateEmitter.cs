@@ -26,7 +26,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// common usings; this emitter writes the template body into the provided
 /// <see cref="IndentWriter"/>.
 /// </summary>
-public sealed class TemplateEmitter(
+internal sealed class TemplateEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
     DamlTypeMapper mapper,
@@ -228,9 +228,9 @@ public sealed class TemplateEmitter(
         // Translating the template's `key` Daml expression to a C# projection is
         // not yet implemented; the intermediate model carries only the key type, not
         // the expression. Until that projection (or an upstream Daml-LF projection)
-        // lands, the accessor throws. ADR 0013 records why this reverts the
-        // partial-property contract (the CS9248 compile gate blocked the automated
-        // DAR publish pipeline, which has no human to supply an implementing partial).
+        // lands, the accessor throws. This deliberately reverts the earlier
+        // partial-property contract: its CS9248 compile gate blocked the automated
+        // DAR publish pipeline, which has no human to supply an implementing partial.
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
