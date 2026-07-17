@@ -309,7 +309,7 @@ public class DarCrossPackageResolverTests
 
         resolver.Resolve(new DamlTypeRef("foreign-id", "Banking", "Transfer"), context)
             .Should().Be("Foreign.Pkg.Account.Transfer");
-        logger.Received(1).Warning(Arg.Is<string>(m => m.Contains("Banking:Transfer") && m.Contains("Account") && m.Contains("Vault") && m.Contains("in the same package")));
+        logger.Received(1).Warning(Arg.Is<string>(m => m != null && m.Contains("Banking:Transfer") && m.Contains("Account") && m.Contains("Vault") && m.Contains("in the same package")));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Streams;
@@ -16,14 +17,14 @@ public class ContractStreamEventTests
     {
         ContractStreamEvent<TestTemplate>[] events =
         [
-            new ContractStreamEvent<TestTemplate>.Created(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 1L, new SynchronizerId("sync"), [new Party("alice")]),
-            new ContractStreamEvent<TestTemplate>.Archived(new ContractId<TestTemplate>("c1"), 2L, new SynchronizerId("sync"), [new Party("alice")]),
-            new ContractStreamEvent<TestTemplate>.Exercised(new ContractId<TestTemplate>("c1"), "Accept", DamlUnit.Instance, DamlUnit.Instance, true, 3L, new SynchronizerId("sync"), [new Party("alice")]),
-            new ContractStreamEvent<TestTemplate>.Assigned(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), 4L, new SynchronizerId("src"), new SynchronizerId("tgt"), [new Party("alice")]),
-            new ContractStreamEvent<TestTemplate>.Unassigned(new ContractId<TestTemplate>("c1"), 5L, new SynchronizerId("src"), new SynchronizerId("tgt"), [new Party("alice")]),
-            new ContractStreamEvent<TestTemplate>.Checkpoint(6L),
+            new ContractStreamEvent<TestTemplate>.Created(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), LedgerOffset.At(1), new SynchronizerId("sync"), [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Archived(new ContractId<TestTemplate>("c1"), LedgerOffset.At(2), new SynchronizerId("sync"), [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Exercised(new ContractId<TestTemplate>("c1"), "Accept", DamlUnit.Instance, DamlUnit.Instance, true, LedgerOffset.At(3), new SynchronizerId("sync"), [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Assigned(new ContractId<TestTemplate>("c1"), DamlRecord.Create(), LedgerOffset.At(4), new SynchronizerId("src"), new SynchronizerId("tgt"), "reassignment-1", 7L, [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Unassigned(new ContractId<TestTemplate>("c1"), LedgerOffset.At(5), new SynchronizerId("src"), new SynchronizerId("tgt"), "reassignment-1", 7L, [new Party("alice")]),
+            new ContractStreamEvent<TestTemplate>.Checkpoint(LedgerOffset.At(6)),
             new ContractStreamEvent<TestTemplate>.StreamError(14, "unavailable"),
-            new ContractStreamEvent<TestTemplate>.Unclassified(7L, "TopologyEvent"),
+            new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent"),
         ];
 
         var seen = events.Select(e => e switch
@@ -45,16 +46,16 @@ public class ContractStreamEventTests
     [Fact]
     public void Variants_with_same_payload_should_be_value_equal()
     {
-        var a = new ContractStreamEvent<TestTemplate>.Checkpoint(42L);
-        var b = new ContractStreamEvent<TestTemplate>.Checkpoint(42L);
+        var a = new ContractStreamEvent<TestTemplate>.Checkpoint(LedgerOffset.At(42));
+        var b = new ContractStreamEvent<TestTemplate>.Checkpoint(LedgerOffset.At(42));
         a.Should().Be(b);
     }
 
     [Fact]
     public void Unclassified_with_same_payload_should_be_value_equal()
     {
-        var a = new ContractStreamEvent<TestTemplate>.Unclassified(7L, "TopologyEvent");
-        var b = new ContractStreamEvent<TestTemplate>.Unclassified(7L, "TopologyEvent");
+        var a = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
+        var b = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
         a.Should().Be(b);
     }
 
@@ -71,9 +72,9 @@ public class ContractStreamEventTests
     [Fact]
     public void Unclassified_should_expose_offset_and_kind()
     {
-        var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(7L, "TopologyEvent");
+        var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
 
-        unclassified.Offset.Should().Be(7L);
+        unclassified.Offset.Should().Be(LedgerOffset.At(7));
         unclassified.Kind.Should().Be("TopologyEvent");
     }
 

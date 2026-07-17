@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
 using AwesomeAssertions;
 using Xunit;
@@ -53,4 +54,117 @@ public class IdentifiersTests
     {
         Identifiers.InterfaceMarkerName("Factory", new HashSet<string> { "IFactory", "IFactory_" }).Should().Be("IFactory__");
     }
+
+    [Theory]
+    [InlineData("Foo$u0027", "Foo_u0027")]
+    [InlineData("Foo_u0027", "Foo__u0027")]
+    [InlineData("foo_bar", "foo_bar")]
+    [InlineData("AnsEntry_Expire", "AnsEntry_Expire")]
+    [InlineData("foo__u0027", "foo____u0027")]
+    [InlineData("_u0024", "__u0024")]
+    [InlineData("Void$u0023", "Void_u0023")]
+    [InlineData("Void$u00232", "Void_u00232")]
+    [InlineData("Foo$u003a", "Foo_u003a")]
+    [InlineData("0x", "_u0030x")]
+    public void SanitizeBare_injectively_escapes_the_mangled_name(string mangled, string expected)
+    {
+        Identifiers.SanitizeBare(mangled).Should().Be(expected);
+    }
+
+    [Fact]
+    public void SanitizeBare_uppercase_dollar_u_escape_is_not_decoded_damlc_always_emits_lowercase_hex()
+    {
+        Identifiers.SanitizeBare("$u004A").Should().Be("_u0024u004A");
+    }
+
+    [Theory]
+    [InlineData("Outcome.Win", "Outcome_Win")]
+    [InlineData("Tree.Node", "Tree_Node")]
+    [InlineData("Outcome.Win$u0027", "Outcome_Win_u0027")]
+    public void Sanitize_joins_structural_dots_in_compound_variant_payload_names_with_underscore(
+        string compoundName, string expected)
+    {
+        Identifiers.Sanitize(compoundName).Should().Be(expected);
+    }
+
+    [Fact]
+    public void SanitizeBare_is_injective_and_round_trips_across_the_damlc_mangler_domain()
+    {
+        var encodedToSource = new Dictionary<string, string>();
+        var collisions = new List<string>();
+        var roundTripFailures = new List<string>();
+
+        foreach (var name in ManglerDomainNames(6))
+        {
+            var encoded = Identifiers.SanitizeBare(name);
+            var decoded = Decode(encoded);
+            if (decoded != name)
+            {
+                roundTripFailures.Add($"{name} -> {encoded} -> {decoded}");
+            }
+
+            if (encodedToSource.TryGetValue(encoded, out var prior) && prior != name)
+            {
+                collisions.Add($"{prior} and {name} both -> {encoded}");
+            }
+            encodedToSource[encoded] = name;
+        }
+
+        roundTripFailures.Should().BeEmpty();
+        collisions.Should().BeEmpty();
+    }
+
+    private static IEnumerable<string> ManglerDomainNames(int maxLength)
+    {
+        const string alphabet = "_ua0'#.x27";
+        var current = new List<string> { string.Empty };
+        for (var length = 1; length <= maxLength; length++)
+        {
+            var next = new List<string>(current.Count * alphabet.Length);
+            foreach (var prefix in current)
+            {
+                foreach (var c in alphabet)
+                {
+                    next.Add(prefix + c);
+                }
+            }
+            current = next;
+            foreach (var name in current)
+            {
+                if (!char.IsAsciiDigit(name[0]))
+                {
+                    yield return name;
+                }
+            }
+        }
+    }
+
+    private static string Decode(string encoded)
+    {
+        var decoded = new StringBuilder(encoded.Length);
+        var i = 0;
+        while (i < encoded.Length)
+        {
+            if (encoded[i] == '_' && i + 1 < encoded.Length && encoded[i + 1] == '_')
+            {
+                decoded.Append('_');
+                i += 2;
+            }
+            else if (encoded[i] == '_' && i + 5 < encoded.Length && encoded[i + 1] == 'u'
+                && IsLowerHexDigit(encoded[i + 2]) && IsLowerHexDigit(encoded[i + 3])
+                && IsLowerHexDigit(encoded[i + 4]) && IsLowerHexDigit(encoded[i + 5]))
+            {
+                decoded.Append((char)Convert.ToInt32(encoded.Substring(i + 2, 4), 16));
+                i += 6;
+            }
+            else
+            {
+                decoded.Append(encoded[i]);
+                i++;
+            }
+        }
+        return decoded.ToString();
+    }
+
+    private static bool IsLowerHexDigit(char c) => c is >= '0' and <= '9' or >= 'a' and <= 'f';
 }

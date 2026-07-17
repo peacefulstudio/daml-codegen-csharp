@@ -234,7 +234,7 @@ public class EmittedVariantCompilesTests
     [Fact]
     public void Emitted_recursive_variant_with_direct_nested_variant_payload_compiles()
     {
-        // Regression (#397): a recursive VARIANT like DA.Logic.Types.Formula<a>
+        // Regression: a recursive VARIANT like DA.Logic.Types.Formula<a>
         // has constructors (Negation/Conjunction/Disjunction) whose payloads are
         // themselves Formula<a> — a DamlTypeApp over the variant's own TypeRef.
         // ToValue's `_` arm wrongly emitted `Value.ToRecord()` for that payload
@@ -293,7 +293,7 @@ public class EmittedVariantCompilesTests
     [Fact]
     public void Emitted_variant_with_list_of_nested_variant_payload_compiles()
     {
-        // Regression (#397): Formula<a>'s Conjunction/Disjunction carry
+        // Regression: Formula<a>'s Conjunction/Disjunction carry
         // [Formula a] — a List of nested-variant payloads. The list element
         // serializer inside the `.Select(x => ...)` previously emitted
         // `x.ToRecord()`; it must emit `x.ToVariant()`.

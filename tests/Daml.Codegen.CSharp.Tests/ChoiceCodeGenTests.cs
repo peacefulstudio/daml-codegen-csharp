@@ -489,4 +489,75 @@ public class ChoiceCodeGenTests
         // Archive - uses DamlUnit for external type
         code.Should().Contain("Choice<Holding, DamlUnit, DamlUnit> ChoiceArchive");
     }
+
+    [Fact]
+    public void Generate_should_keep_choice_argument_fields_when_simple_names_collide_across_modules()
+    {
+        var agreementModule = ModuleWithExpireChoice(
+            "Test.Agreement",
+            "Agreement",
+            [new DamlFieldDefinition("actor", new DamlPrimitiveType(DamlPrimitive.Party))]);
+        var offerModule = ModuleWithExpireChoice("Test.Offer", "Offer", []);
+
+        var dar = new DamlModelBuilder()
+            .WithModules(agreementModule, offerModule)
+            .WithDependency(StdlibStub)
+            .Build();
+        var generator = CreateGenerator();
+
+        var files = generator.Generate(dar).ToList();
+        var agreementExpire = files.FirstOrDefault(f => f.RelativePath.EndsWith("Agreement.Expire.cs", StringComparison.Ordinal));
+        var offerExpire = files.FirstOrDefault(f => f.RelativePath.EndsWith("Offer.Expire.cs", StringComparison.Ordinal));
+
+        agreementExpire.Should().NotBeNull();
+        agreementExpire!.Content.Should().Contain(
+            "public sealed record Expire([property: DamlFieldAttribute(\"actor\")] Party Actor) : IDamlRecord",
+            "the Agreement module's Expire argument record must keep its own fields instead of the Offer module's");
+        offerExpire.Should().NotBeNull();
+        offerExpire!.Content.Should().Contain(
+            "public sealed record Expire : IDamlRecord",
+            "the Offer module's Expire argument record is genuinely field-less");
+        offerExpire.Content.Should().NotContain("Actor");
+    }
+
+    private static DamlModule ModuleWithExpireChoice(
+        string moduleName,
+        string templateName,
+        DamlFieldDefinition[] expireFields) =>
+        new()
+        {
+            Name = moduleName,
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = templateName,
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Expire",
+                            Consuming = true,
+                            ArgumentType = new DamlTypeRef("", moduleName, "Expire"),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        }
+                    ]
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = templateName,
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                },
+                new DamlDataType
+                {
+                    Name = "Expire",
+                    Definition = new DamlRecordDefinition(expireFields)
+                },
+            ],
+            Interfaces = []
+        };
 }

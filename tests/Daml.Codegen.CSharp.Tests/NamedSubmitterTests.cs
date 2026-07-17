@@ -108,7 +108,7 @@ public class NamedSubmitterTests
         // Public surface: extension class, payload-only CreateAsync.
         content.Should().Contain("public static class AgreementSubmissionExtensions");
         content.Should().Contain("public static Task<ExerciseOutcome<ContractId<Agreement>>> CreateAsync(");
-        content.Should().Contain("this ILedgerClient client,");
+        content.Should().Contain("this ILedgerWriter client,");
         content.Should().Contain("Agreement payload,");
         // No explicit actAs parameter — the payload is sufficient.
         content.Should().NotContain("string actAs,");
@@ -195,7 +195,7 @@ public class NamedSubmitterTests
     }
 
     [Fact]
-    public void CreateAsync_emits_extension_method_taking_ILedgerClient_as_this()
+    public void CreateAsync_emits_extension_method_taking_ILedgerWriter_as_this()
     {
         var module = MakeAgreementModule(DamlPartyAnalysis.Static(
         [
@@ -205,9 +205,9 @@ public class NamedSubmitterTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
 
-        // The wrapper is an extension method on ILedgerClient — the call site
+        // The wrapper is an extension method on ILedgerWriter — the call site
         // reads `client.CreateAsync(payload)`.
-        content.Should().Contain("this ILedgerClient client");
+        content.Should().Contain("this ILedgerWriter client");
     }
 
     #endregion
@@ -287,6 +287,10 @@ public class NamedSubmitterTests
         offer.Should().Contain("Party counterparty,");
         offer.Should().NotContain("string actAs,");
         offer.Should().NotContain("SubmitterInfo submitter,");
+
+        // Every emitted controller Party parameter carries a matching XML doc
+        // <param> tag, or a doc-generating consumer project fails with CS1573.
+        offer.Should().Contain("/// <param name=\"counterparty\">");
     }
 
     [Fact]
@@ -499,6 +503,31 @@ public class NamedSubmitterTests
         var idxController = content.IndexOf("contract.Data.Platform,", StringComparison.Ordinal);
         var idxObserver = content.IndexOf("contract.Data.Holder,", StringComparison.Ordinal);
         idxController.Should().BeLessThan(idxObserver);
+    }
+
+    [Fact]
+    public void ChoiceAsync_contract_sibling_passes_command_id_through()
+    {
+        var module = MakeAgreementWithObservers(
+            signatories: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            templateObservers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("holder")]),
+            choiceControllers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            choiceObservers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]));
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
+
+        content.Should().Contain("this Agreement.Contract contract,");
+        var idxContractParam = content.IndexOf("this Agreement.Contract contract,", StringComparison.Ordinal);
+        var idxDelegate = content.IndexOf("return contract.Id.RenewAsync(", StringComparison.Ordinal);
+        idxDelegate.Should().BeGreaterThan(0);
+        content[idxContractParam..idxDelegate].Should().Contain("CommandId? commandId = null,");
+        var delegateBody = content[idxDelegate..];
+        var idxWorkflowId = delegateBody.IndexOf("workflowId,", StringComparison.Ordinal);
+        var idxCommandId = delegateBody.IndexOf("commandId,", StringComparison.Ordinal);
+        var idxCancellationToken = delegateBody.IndexOf("cancellationToken);", StringComparison.Ordinal);
+        idxWorkflowId.Should().BeLessThan(idxCommandId);
+        idxCommandId.Should().BeLessThan(idxCancellationToken);
     }
 
     [Fact]
@@ -782,7 +811,7 @@ public class NamedSubmitterTests
     public void Generate_choice_async_with_no_observers_emits_no_readAs_contribution()
     {
         // No observers anywhere. The wrapper still uses SubmitterInfo (and the
-        // SubmitterInfo overload on ILedgerClient) — readAs stays empty by
+        // SubmitterInfo overload on ILedgerWriter) — readAs stays empty by
         // construction. The single-controller fast-path lets us pass the Party
         // directly via implicit conversion.
         var module = MakeAgreementWithObservers(

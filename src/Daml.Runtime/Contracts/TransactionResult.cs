@@ -21,7 +21,7 @@ namespace Daml.Runtime.Contracts;
 public sealed record SubmitAndWaitResult(
     CommandId CommandId,
     string UpdateId,
-    long CompletionOffset);
+    LedgerOffset CompletionOffset);
 
 /// <summary>
 /// Result of a submitted transaction.
@@ -35,7 +35,7 @@ public sealed record SubmitAndWaitResult(
 /// submission that produced this transaction, used for deduplication.</param>
 public sealed record TransactionResult(
     string UpdateId,
-    long CompletionOffset,
+    LedgerOffset CompletionOffset,
     IReadOnlyList<CreatedContract> CreatedContracts,
     IReadOnlyList<string> ArchivedContractIds,
     CommandId CommandId)

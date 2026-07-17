@@ -161,6 +161,6 @@ public sealed record GeneratedFile
         {
             throw new ArgumentException("A binary generated file must carry non-empty content.", nameof(binaryContent));
         }
-        return new GeneratedFile(relativePath, string.Empty, binaryContent);
+        return new GeneratedFile(relativePath, string.Empty, binaryContent.ToArray());
     }
 }

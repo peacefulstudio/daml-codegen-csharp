@@ -1,6 +1,8 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -22,40 +24,220 @@ public sealed record DamlInt64(long Value) : DamlValue
 /// Represents a Daml Numeric value (fixed-point decimal).
 /// </summary>
 /// <remarks>
-/// A Daml Numeric carries up to 38 significant digits on the ledger, but the
-/// backing <see cref="decimal"/> holds at most 28-29. Ledger values that need
-/// more digits cannot be represented losslessly by this type:
-/// <see cref="Serialization.DamlJsonSerializer"/> rounds excess fractional
-/// precision to the nearest representable <see cref="decimal"/> and throws
-/// <see cref="System.Text.Json.JsonException"/> for magnitudes beyond
-/// <see cref="decimal.MaxValue"/>.
+/// A Daml Numeric carries up to 38 significant digits on the ledger. This type
+/// backs the value with a sign, a <see cref="BigInteger"/> unscaled mantissa, and
+/// an integer mantissa scale, so it round-trips any legal Daml-LF Numeric —
+/// including magnitudes above <see cref="decimal.MaxValue"/> — with zero precision
+/// loss. <see cref="Value"/> narrows to a <see cref="decimal"/> for convenience and
+/// throws <see cref="OverflowException"/> rather than silently rounding when the
+/// stored value has more precision than a <see cref="decimal"/> can represent
+/// exactly.
 /// <para>
-/// Equality compares <see cref="Value"/> only: <see cref="Scale"/> is not part
-/// of the wire format (<see cref="Serialization.DamlJsonSerializer"/> never
-/// writes it and deserialization reconstructs the default of 10), so two
-/// Numerics with the same value but different scales are equal. The
-/// <see cref="Scale"/> property is retained as the hook for future
-/// scale-padded reading.
+/// Equality and hashing compare the numeric value only, normalized by stripping
+/// trailing mantissa zeros: <see cref="Scale"/> is not part of the wire format
+/// (<see cref="Serialization.DamlJsonSerializer"/> never writes it and
+/// deserialization reconstructs the default of 10), so two Numerics with the same
+/// value but different <see cref="Scale"/> hints — or different mantissa
+/// precision, e.g. <c>1.50</c> vs <c>1.5</c> — are equal. The <see cref="Scale"/>
+/// property is retained as the hook for future scale-padded reading.
 /// </para>
 /// </remarks>
-/// <param name="Value">The decimal value.</param>
-/// <param name="Scale">The scale (number of decimal places) of the numeric.</param>
-public sealed record DamlNumeric(decimal Value, int Scale = 10) : DamlValue
+public sealed record DamlNumeric : DamlValue
 {
+    private const int MaxSignificantDigits = 38;
+    private const int MaxMantissaScale = 37;
+    private const int MaxDecimalMantissaScale = 28;
+    private const int DefaultScale = 10;
+
+    private static readonly BigInteger MaxDecimalUnscaledMagnitude = (BigInteger.One << 96) - 1;
+    private static readonly BigInteger UInt32Mask = uint.MaxValue;
+
+    private readonly bool _isNegative;
+    private readonly BigInteger _unscaledMagnitude;
+    private readonly int _mantissaScale;
+
+    /// <summary>The scale (number of decimal places) of the numeric; not part of the wire format.</summary>
+    public int Scale { get; }
+
+    /// <summary>Creates a Daml Numeric from a <see cref="decimal"/>, preserving its exact bit pattern.</summary>
+    public DamlNumeric(decimal value, int scale = DefaultScale)
+        : this(DecomposeDecimal(value), scale)
+    {
+    }
+
+    private DamlNumeric((bool IsNegative, BigInteger UnscaledMagnitude, int MantissaScale) decomposed, int scale)
+        : this(decomposed.IsNegative, decomposed.UnscaledMagnitude, decomposed.MantissaScale, scale)
+    {
+    }
+
+    private DamlNumeric(bool isNegative, BigInteger unscaledMagnitude, int mantissaScale, int scale)
+    {
+        if (unscaledMagnitude.Sign < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(unscaledMagnitude), unscaledMagnitude,
+                "Unscaled magnitude must be non-negative; sign is tracked separately.");
+        }
+        if (mantissaScale is < 0 or > MaxMantissaScale)
+        {
+            throw new ArgumentOutOfRangeException(nameof(mantissaScale), mantissaScale,
+                $"Daml-LF Numeric scale must be between 0 and {MaxMantissaScale}.");
+        }
+        var digitCount = unscaledMagnitude.IsZero ? 1 : unscaledMagnitude.ToString(CultureInfo.InvariantCulture).Length;
+        if (digitCount > MaxSignificantDigits)
+        {
+            throw new ArgumentOutOfRangeException(nameof(unscaledMagnitude), unscaledMagnitude,
+                $"Daml-LF Numeric supports at most {MaxSignificantDigits} significant digits.");
+        }
+
+        _isNegative = isNegative && !unscaledMagnitude.IsZero;
+        _unscaledMagnitude = unscaledMagnitude;
+        _mantissaScale = mantissaScale;
+        Scale = scale;
+    }
+
+    /// <summary>
+    /// The <see cref="decimal"/> narrowing of this value.
+    /// </summary>
+    /// <exception cref="OverflowException">
+    /// The stored value cannot be represented exactly as a <see cref="decimal"/>: its magnitude
+    /// exceeds <see cref="decimal.MaxValue"/>, or it has more fractional digits than
+    /// <see cref="decimal"/> can hold. The narrowing throws rather than silently rounding.
+    /// </exception>
+    public decimal Value =>
+        TryToDecimal(out var value)
+            ? value
+            : throw new OverflowException(
+                $"DamlNumeric value '{ToCanonicalString()}' has more precision than decimal can represent exactly (decimal supports at most 28-29 significant digits).");
+
+    private bool TryToDecimal(out decimal value)
+    {
+        if (_mantissaScale > MaxDecimalMantissaScale || _unscaledMagnitude > MaxDecimalUnscaledMagnitude)
+        {
+            value = default;
+            return false;
+        }
+
+        var lo = unchecked((int)(uint)(_unscaledMagnitude & UInt32Mask));
+        var mid = unchecked((int)(uint)((_unscaledMagnitude >> 32) & UInt32Mask));
+        var hi = unchecked((int)(uint)((_unscaledMagnitude >> 64) & UInt32Mask));
+        value = new decimal(lo, mid, hi, _isNegative, (byte)_mantissaScale);
+        return true;
+    }
+
+    /// <summary>
+    /// Formats this value in the exact canonical wire shape: no scientific notation,
+    /// trailing mantissa zeros stripped down to a single guaranteed fractional digit.
+    /// </summary>
+    internal string ToCanonicalString()
+    {
+        var digits = _unscaledMagnitude.ToString(CultureInfo.InvariantCulture).PadLeft(_mantissaScale + 1, '0');
+        var integerPart = digits[..^_mantissaScale];
+        var fractionalPart = digits[^_mantissaScale..].TrimEnd('0');
+        if (fractionalPart.Length == 0)
+        {
+            fractionalPart = "0";
+        }
+        return _isNegative ? $"-{integerPart}.{fractionalPart}" : $"{integerPart}.{fractionalPart}";
+    }
+
+    /// <summary>
+    /// Parses the exact canonical wire shape (<c>-?digits(.digits)?</c>, no exponent)
+    /// into a <see cref="DamlNumeric"/> with zero precision loss, rejecting magnitudes
+    /// or scales beyond the Daml-LF Numeric bound (38 significant digits, scale 0-37).
+    /// </summary>
+    internal static bool TryParseCanonical(string text, out DamlNumeric result)
+    {
+        result = null!;
+        var isNegative = text.StartsWith('-');
+        var digitsStart = isNegative ? 1 : 0;
+        if (digitsStart >= text.Length)
+        {
+            return false;
+        }
+
+        var dotIndex = text.IndexOf('.', digitsStart);
+        var integerPart = dotIndex < 0 ? text[digitsStart..] : text[digitsStart..dotIndex];
+        var fractionalPart = dotIndex < 0 ? string.Empty : text[(dotIndex + 1)..];
+        if (integerPart.Length == 0 || (dotIndex >= 0 && fractionalPart.Length == 0))
+        {
+            return false;
+        }
+        if (!IsAllAsciiDigits(integerPart) || !IsAllAsciiDigits(fractionalPart))
+        {
+            return false;
+        }
+
+        var mantissaScale = fractionalPart.Length;
+        if (integerPart.Length + fractionalPart.Length > MaxSignificantDigits || mantissaScale > MaxMantissaScale)
+        {
+            return false;
+        }
+
+        var unscaledMagnitude = BigInteger.Parse(integerPart + fractionalPart, CultureInfo.InvariantCulture);
+        result = new DamlNumeric(isNegative, unscaledMagnitude, mantissaScale, DefaultScale);
+        return true;
+    }
+
+    private static bool IsAllAsciiDigits(string s)
+    {
+        foreach (var c in s)
+        {
+            if (!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static (bool IsNegative, BigInteger UnscaledMagnitude, int MantissaScale) DecomposeDecimal(decimal value)
+    {
+        var bits = decimal.GetBits(value);
+        var isNegative = (bits[3] & unchecked((int)0x80000000)) != 0;
+        var mantissaScale = (bits[3] >> 16) & 0x7F;
+        var unscaledMagnitude = ((BigInteger)(uint)bits[2] << 64) | ((BigInteger)(uint)bits[1] << 32) | (uint)bits[0];
+        return (isNegative, unscaledMagnitude, mantissaScale);
+    }
+
     /// <summary>Unwraps the underlying decimal, discarding the Daml scale.</summary>
+    /// <exception cref="OverflowException">The stored value has more precision than <see cref="decimal"/> can represent exactly.</exception>
     public static implicit operator decimal(DamlNumeric value) => value.Value;
 
     /// <summary>Wraps a decimal as a Daml Numeric with the default scale of 10.</summary>
     public static implicit operator DamlNumeric(decimal value) => new(value);
 
     /// <summary>
-    /// Compares by <see cref="Value"/> only; <see cref="Scale"/> never reaches the
-    /// wire, so including it would break round-trip equality for any non-default scale.
+    /// Compares by numeric value only, normalized across differing mantissa precision;
+    /// <see cref="Scale"/> never reaches the wire, so including it would break round-trip
+    /// equality for any non-default scale.
     /// </summary>
-    public bool Equals(DamlNumeric? other) => other is not null && Value == other.Value;
+    public bool Equals(DamlNumeric? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+        var (mantissaA, scaleA, negativeA) = Normalize(_unscaledMagnitude, _mantissaScale, _isNegative);
+        var (mantissaB, scaleB, negativeB) = Normalize(other._unscaledMagnitude, other._mantissaScale, other._isNegative);
+        return negativeA == negativeB && scaleA == scaleB && mantissaA == mantissaB;
+    }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => Value.GetHashCode();
+    public override int GetHashCode()
+    {
+        var (mantissa, scale, negative) = Normalize(_unscaledMagnitude, _mantissaScale, _isNegative);
+        return HashCode.Combine(negative, scale, mantissa);
+    }
+
+    private static (BigInteger Mantissa, int Scale, bool IsNegative) Normalize(BigInteger mantissa, int scale, bool isNegative)
+    {
+        while (scale > 0 && mantissa % 10 == 0)
+        {
+            mantissa /= 10;
+            scale--;
+        }
+        return (mantissa, scale, isNegative);
+    }
 }
 
 /// <summary>
@@ -97,17 +279,45 @@ public sealed record DamlUnit : DamlValue
 /// </summary>
 public sealed record DamlDate(DateOnly Value) : DamlValue
 {
+    private static readonly int EpochDayNumber = DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
+
     /// <summary>
     /// Creates a DamlDate from days since epoch (1970-01-01).
     /// </summary>
-    public static DamlDate FromDaysSinceEpoch(int days) =>
-        new(DateOnly.FromDayNumber(days + DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber));
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="days"/> does not resolve to a date within the Daml-LF Date range
+    /// (0001-01-01 to 9999-12-31), including values that would otherwise silently overflow
+    /// the underlying day-number arithmetic.
+    /// </exception>
+    public static DamlDate FromDaysSinceEpoch(int days)
+    {
+        int dayNumber;
+        try
+        {
+            dayNumber = checked(days + EpochDayNumber);
+        }
+        catch (OverflowException)
+        {
+            throw DaysOutOfRange(days);
+        }
+
+        if (dayNumber < DateOnly.MinValue.DayNumber || dayNumber > DateOnly.MaxValue.DayNumber)
+        {
+            throw DaysOutOfRange(days);
+        }
+
+        return new(DateOnly.FromDayNumber(dayNumber));
+    }
+
+    private static ArgumentOutOfRangeException DaysOutOfRange(int days) =>
+        new(nameof(days), days,
+            "Days since epoch must resolve to a date within the Daml-LF Date range (0001-01-01 to 9999-12-31).");
 
     /// <summary>
     /// Gets the number of days since epoch.
     /// </summary>
     public int DaysSinceEpoch =>
-        Value.DayNumber - DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
+        Value.DayNumber - EpochDayNumber;
 
     /// <summary>Unwraps the underlying calendar date.</summary>
     public static implicit operator DateOnly(DamlDate value) => value.Value;
@@ -121,17 +331,48 @@ public sealed record DamlDate(DateOnly Value) : DamlValue
 /// </summary>
 public sealed record DamlTimestamp(DateTimeOffset Value) : DamlValue
 {
+    private const long TicksPerMicrosecond = 10;
+    private static readonly long MinTicksSinceEpoch = (DateTimeOffset.MinValue - DateTimeOffset.UnixEpoch).Ticks;
+    private static readonly long MaxTicksSinceEpoch =
+        (DateTimeOffset.MaxValue - DateTimeOffset.UnixEpoch).Ticks / TicksPerMicrosecond * TicksPerMicrosecond;
+
     /// <summary>
     /// Creates a DamlTimestamp from microseconds since epoch.
     /// </summary>
-    public static DamlTimestamp FromMicrosecondsSinceEpoch(long microseconds) =>
-        new(DateTimeOffset.UnixEpoch.AddTicks(microseconds * 10));
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="microseconds"/> does not resolve to a timestamp within the Daml-LF
+    /// Timestamp range (0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999Z), including
+    /// values that would otherwise silently overflow the underlying tick arithmetic.
+    /// </exception>
+    public static DamlTimestamp FromMicrosecondsSinceEpoch(long microseconds)
+    {
+        long ticks;
+        try
+        {
+            ticks = checked(microseconds * TicksPerMicrosecond);
+        }
+        catch (OverflowException)
+        {
+            throw MicrosecondsOutOfRange(microseconds);
+        }
+
+        if (ticks < MinTicksSinceEpoch || ticks > MaxTicksSinceEpoch)
+        {
+            throw MicrosecondsOutOfRange(microseconds);
+        }
+
+        return new(DateTimeOffset.UnixEpoch.AddTicks(ticks));
+    }
+
+    private static ArgumentOutOfRangeException MicrosecondsOutOfRange(long microseconds) =>
+        new(nameof(microseconds), microseconds,
+            "Microseconds since epoch must resolve to a timestamp within the Daml-LF Timestamp range (0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999Z).");
 
     /// <summary>
     /// Gets the microseconds since epoch.
     /// </summary>
     public long MicrosecondsSinceEpoch =>
-        (Value - DateTimeOffset.UnixEpoch).Ticks / 10;
+        (Value - DateTimeOffset.UnixEpoch).Ticks / TicksPerMicrosecond;
 
     /// <summary>Unwraps the underlying timestamp.</summary>
     public static implicit operator DateTimeOffset(DamlTimestamp value) => value.Value;

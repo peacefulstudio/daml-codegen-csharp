@@ -11,7 +11,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// external-package-id set are DAR-scoped — they live for the resolver's lifetime,
 /// not per package.
 /// </summary>
-public sealed class DarCrossPackageResolver : ICrossPackageResolver
+internal sealed class DarCrossPackageResolver : ICrossPackageResolver
 {
     private readonly IDarSource _dar;
     private readonly ICodegenLogger _logger;

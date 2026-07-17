@@ -23,6 +23,12 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
     )
   )
 
+  private val TemplatesFixtureDar = Paths.get(
+    sys.props.getOrElse("jvmHelper.testTemplatesFixtureDar",
+      "../tests/Daml.Codegen.CSharp.Tests/Snapshots/splice-amulet-name-service/splice-amulet-name-service.dar"
+    )
+  )
+
   private def nonEmptyProto: IntermediateDar =
     IntermediateDar(main = Some(IntermediatePackage(packageId = "abc", packageName = "p")))
 
@@ -38,7 +44,7 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
       }
     }
 
-    "default schemaOnly to false (full-decode is the default per ADR 0003 amendment)" in {
+    "default schemaOnly to false (full-decode is the default decode mode)" in {
       Decode.parseArgs(List("--dar", "a.dar", "--out", "b.binpb")) match {
         case Right(Decode.CliCommand.Run(args)) => args.schemaOnly shouldBe false
         case other => fail(s"expected Run, got $other")
@@ -91,16 +97,21 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
       }
     }
 
-    "default decode populates the signatories field on every template" in {
-      Files.exists(FixtureDar) shouldBe true
-      val outPath = Files.createTempFile("intermediate-dar-default-", ".binpb")
+    "default decode threads real PartyAnalyses.compute output into the proto: every template's built-in Archive choice gets a genuine Static([]) observers verdict" in {
+      Files.exists(TemplatesFixtureDar) shouldBe true
+      val outPath = Files.createTempFile("intermediate-dar-default-static-", ".binpb")
       try {
-        Decode.run(Decode.ParsedArgs(FixtureDar, outPath, schemaOnly = false)) shouldBe Right(())
+        Decode.run(Decode.ParsedArgs(TemplatesFixtureDar, outPath, schemaOnly = false)) shouldBe Right(())
         val proto = IntermediateDar.parseFrom(Files.readAllBytes(outPath))
         val allTemplates = (proto.main.toSeq ++ proto.dependencies).flatMap(_.modules).flatMap(_.templates)
+        allTemplates should not be empty
         forAll(allTemplates) { tmpl =>
-          tmpl.signatories shouldBe defined
-          tmpl.observers shouldBe defined
+          tmpl.signatories.value.shape.isDynamic shouldBe true
+          val archive = tmpl.choices
+            .find(_.name == "Archive")
+            .getOrElse(fail(s"built-in Archive choice not found on template ${tmpl.name}"))
+          archive.observers.value.shape.isStatic shouldBe true
+          archive.observers.value.getStatic.payloadFields shouldBe empty
         }
       } finally {
         Files.deleteIfExists(outPath)

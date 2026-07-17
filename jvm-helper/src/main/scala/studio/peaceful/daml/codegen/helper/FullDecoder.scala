@@ -20,8 +20,8 @@ import java.io.File
   * [[SignatureErasure.erasePackage]] itself — that step is applied by the
   * caller in `Decode.decodeFull`.
   *
-  * Full-decode is the default path on the proto pipeline per the ADR 0003
-  * amendment (2026-05-27). The `--schema-only` opt-out routes through
+  * Full-decode is the default path on the proto pipeline.
+  * The `--schema-only` opt-out routes through
   * [[SchemaDecoder]] instead — that path is patch-version-insensitive but
   * gives up static `actAs` derivation. Switching defaults to full-decode
   * means generated code is patch-version-sensitive by default; consumers

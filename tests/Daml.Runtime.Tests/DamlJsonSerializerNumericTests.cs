@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text.Json;
+using System.Globalization;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
 using AwesomeAssertions;
@@ -98,16 +99,58 @@ public class DamlJsonSerializerNumericTests
     }
 
     [Fact]
-    public void DeserializeRecord_should_round_raw_json_number_beyond_decimal_precision_per_documented_bound()
+    public void DeserializeRecord_should_preserve_raw_json_number_precision_beyond_decimal_range()
     {
         var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
         var json = $"{{\"amount\":{thirtyEightSignificantDigits}}}";
 
         var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
 
-        record.GetRequiredField("amount").As<DamlNumeric>().Value
-            .Should().Be(decimal.Parse(thirtyEightSignificantDigits, System.Globalization.CultureInfo.InvariantCulture),
-                "a raw JSON number takes the TryGetDecimal path, which rounds excess fractional precision to the nearest representable decimal");
+        var roundTripped = DamlJsonSerializer.Serialize(numeric);
+
+        roundTripped.Should().Be($"\"{thirtyEightSignificantDigits}\"",
+            "a raw JSON number beyond decimal's ~29-digit range must still round-trip with zero precision loss");
+    }
+
+    [Fact]
+    public void DeserializeRecord_should_preserve_magnitude_beyond_decimal_max_value()
+    {
+        var beyondDecimalMaxValue = "79228162514264337593543950336.0";
+        var json = $"{{\"amount\":{beyondDecimalMaxValue}}}";
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
+
+        var roundTripped = DamlJsonSerializer.Serialize(numeric);
+
+        roundTripped.Should().Be($"\"{beyondDecimalMaxValue}\"");
+    }
+
+    [Fact]
+    public void DamlNumeric_value_should_throw_on_inexact_narrowing_beyond_decimal_range()
+    {
+        var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
+        var json = $"{{\"amount\":{thirtyEightSignificantDigits}}}";
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
+
+        var act = () => numeric.Value;
+
+        act.Should().Throw<OverflowException>();
+    }
+
+    [Fact]
+    public void DamlNumeric_value_should_throw_on_magnitude_beyond_decimal_max_value()
+    {
+        var beyondDecimalMaxValue = "79228162514264337593543950336.0";
+        var json = $"{{\"amount\":{beyondDecimalMaxValue}}}";
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
+
+        var act = () => numeric.Value;
+
+        act.Should().Throw<OverflowException>();
     }
 
     [Fact]
@@ -144,11 +187,10 @@ public class DamlJsonSerializerNumericTests
     [Fact]
     public void Serialize_DamlNumeric_should_be_locale_independent()
     {
-        var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        var previousCulture = Thread.CurrentThread.CurrentCulture;
         try
         {
-            System.Threading.Thread.CurrentThread.CurrentCulture =
-                System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+            Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
 
             var record = DamlRecord.Create(
                 DamlField.Create("amount", new DamlNumeric(123.456789m, 10))
@@ -161,7 +203,25 @@ public class DamlJsonSerializerNumericTests
         }
         finally
         {
-            System.Threading.Thread.CurrentThread.CurrentCulture = previousCulture;
+            Thread.CurrentThread.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void Deserialize_should_parse_canonical_numeric_strings_with_invariant_culture()
+    {
+        var previousCulture = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+
+            var value = DamlJsonSerializer.Deserialize("\"1.5\"");
+
+            value.As<DamlNumeric>().Value.Should().Be(1.5m);
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = previousCulture;
         }
     }
 }

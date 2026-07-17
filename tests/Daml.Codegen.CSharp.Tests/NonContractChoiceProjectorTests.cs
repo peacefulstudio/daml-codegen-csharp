@@ -4,6 +4,7 @@
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.CSharp.Model;
+using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
 using AwesomeAssertions;
@@ -180,7 +181,7 @@ public class NonContractChoiceProjectorTests
     private static TransactionResult TransactionWith(params ExercisedEvent[] events) =>
         new(
             UpdateId: "update-1",
-            CompletionOffset: 1,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: [],
             ArchivedContractIds: [],
             CommandId: default)

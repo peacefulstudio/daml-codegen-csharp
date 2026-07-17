@@ -34,6 +34,17 @@ public class GeneratedFileTests
     }
 
     [Fact]
+    public void Binary_should_defensively_copy_bytes()
+    {
+        var bytes = new byte[] { 0x89, 0x50 };
+
+        var file = GeneratedFile.Binary("icon.png", bytes);
+        bytes[0] = 0x00;
+
+        file.BinaryContent.Should().Equal(0x89, 0x50);
+    }
+
+    [Fact]
     public void Binary_should_reject_empty_content()
     {
         var act = () => GeneratedFile.Binary("icon.png", []);

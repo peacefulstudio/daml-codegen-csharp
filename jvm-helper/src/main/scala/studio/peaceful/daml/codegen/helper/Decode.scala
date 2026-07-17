@@ -18,8 +18,7 @@ import java.nio.file.{Files, Path, Paths}
   * [[SignatureErasure]] applied after analysis so the proto carries only
   * data signatures plus the analyzer's verdicts. The `--schema-only`
   * opt-out routes through [[SchemaDecoder]] instead and emits `Dynamic`
-  * everywhere — patch-version-insensitive but no typed-`actAs`. See ADR
-  * 0003 (amendment 2026-05-27).
+  * everywhere — patch-version-insensitive but no typed-`actAs`.
   *
   * This object stays free of any `daml-lf-archive` Scala case-class shapes.
   * All coupling to upstream DA AST types lives in [[AstToIntermediate]],
@@ -35,8 +34,7 @@ object Decode {
       |Options:
       |  --schema-only  Opt into the patch-version-insensitive schema-mode decode path.
       |                 The default is full-decode + static party-expression analysis,
-      |                 which is patch-version-sensitive but enables typed-actAs codegen
-      |                 (see ADR 0003 amendment, 2026-05-27).""".stripMargin
+      |                 which is patch-version-sensitive but enables typed-actAs codegen.""".stripMargin
 
   def main(args: Array[String]): Unit = sys.exit(runCli(args.toList))
 
@@ -75,8 +73,7 @@ object Decode {
     * the emitted proto carries `Static`/`Dynamic` verdicts on each
     * template / choice. `args.schemaOnly == true` skips the analyser
     * and the proto carries `Dynamic` everywhere — patch-version-insensitive
-    * but loses the typed-actAs codegen path. See ADR 0003 (amendment
-    * 2026-05-27).
+    * but loses the typed-actAs codegen path.
     */
   def run(args: ParsedArgs): Either[String, Unit] =
     for {

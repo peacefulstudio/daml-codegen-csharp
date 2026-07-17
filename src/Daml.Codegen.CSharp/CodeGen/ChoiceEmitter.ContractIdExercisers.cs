@@ -5,7 +5,7 @@ using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
-public sealed partial class ChoiceEmitter
+internal sealed partial class ChoiceEmitter
 {
     /// <summary>
     /// Emits the <c>&lt;Choice&gt;Result</c> nested record (typed result struct) and a
@@ -113,7 +113,7 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Static <c>&lt;Choice&gt;Async</c> extension methods for <see cref=\"{templateClassName}\"/>.");
             indent.AppendLine("/// One method per create-bearing choice; each delegates to");
-            indent.AppendLine("/// <see cref=\"global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync\"/>");
+            indent.AppendLine("/// <see cref=\"global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync\"/>");
             indent.AppendLine($"/// and projects success via <c>&lt;Choice&gt;Result.FromCreatedContracts</c>.");
             indent.AppendLine("/// </summary>");
         }
@@ -201,7 +201,7 @@ public sealed partial class ChoiceEmitter
             {
                 indent.AppendLine("/// One <c>Party</c> parameter is emitted per Daml controller (declaration order).");
                 indent.AppendLine("/// The wrapper builds a <see cref=\"SubmitterInfo\"/> from those parties before");
-                indent.AppendLine("/// dispatching to <c>ILedgerClient</c>.");
+                indent.AppendLine("/// dispatching to <c>ILedgerWriter</c>.");
             }
             else
             {
@@ -217,11 +217,24 @@ public sealed partial class ChoiceEmitter
             {
                 indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
             }
-            if (!staticControllers)
+            if (staticControllers)
+            {
+                foreach (var paramName in controllerParams)
+                {
+                    indent.AppendLine($"/// <param name=\"{Identifiers.DocCommentName(paramName)}\">Controller party from the Daml <c>controller</c> clause, routed into the submission's <c>actAs</c> set.</param>");
+                }
+                foreach (var paramName in readAsParams)
+                {
+                    indent.AppendLine($"/// <param name=\"{Identifiers.DocCommentName(paramName)}\">Observer party from the Daml <c>observer</c> clause, routed into the submission's <c>readAs</c> set.</param>");
+                }
+            }
+            else
             {
                 indent.AppendLine("/// <param name=\"submitter\">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>");
             }
             indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"commandId\">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>");
+            indent.AppendLine("/// <param name=\"timeout\">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>");
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
@@ -229,7 +242,7 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
         indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -254,6 +267,8 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
         }
         indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
+        indent.AppendLine("TimeSpan? timeout = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
         indent.AppendLine("{");
@@ -311,7 +326,7 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithSubmitter(submitter)");
-        indent.AppendLine($".WithCommandId(new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
+        indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
         indent.AppendLine("{");
@@ -320,17 +335,9 @@ public sealed partial class ChoiceEmitter
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();
-        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
-        indent.AppendLine("return outcome switch");
-        indent.AppendLine("{");
-        indent.Indent();
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.One success => {resultName}.FromCreatedContracts(success.Result.CreatedContracts),");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.DamlError damlError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.InfraError infraError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.InfraError(infraError.StatusCode, infraError.Message),");
-        indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
-        indent.Dedent();
-        indent.AppendLine("};");
+        indent.AppendLine($"return outcome.ProjectCommitted(tx => {resultName}.FromCreatedContracts(tx.CreatedContracts));");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -386,13 +393,15 @@ public sealed partial class ChoiceEmitter
                 indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
             }
             indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"commandId\">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>");
+            indent.AppendLine("/// <param name=\"timeout\">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>");
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
         indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
         indent.AppendLine($"this {templateClassName}.Contract contract,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -401,6 +410,8 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine($"{argParamType} argument,");
         }
         indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
+        indent.AppendLine("TimeSpan? timeout = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
         indent.AppendLine("{");
@@ -426,6 +437,8 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine($"{partyArgument},");
         }
         indent.AppendLine("workflowId,");
+        indent.AppendLine("commandId,");
+        indent.AppendLine("timeout,");
         indent.AppendLine("cancellationToken);");
         indent.Dedent();
 
@@ -655,17 +668,12 @@ public sealed partial class ChoiceEmitter
             // count > 1 branch (correct: the consumer asked for one, ledger created
             // many). If the last slot is List, the leftover was already drained by
             // the while loop above.
-            indent.AppendLine($"if (templateMatchIndex{g} < templateMatches{g}.Count)");
-            indent.AppendLine("{");
-            indent.Indent();
             var lastSlotIndex = slotIndexes[^1];
             indent.AppendLine($"while (templateMatchIndex{g} < templateMatches{g}.Count)");
             indent.AppendLine("{");
             indent.Indent();
             indent.AppendLine($"matches{lastSlotIndex}.Add(templateMatches{g}[templateMatchIndex{g}]);");
             indent.AppendLine($"templateMatchIndex{g}++;");
-            indent.Dedent();
-            indent.AppendLine("}");
             indent.Dedent();
             indent.AppendLine("}");
         }

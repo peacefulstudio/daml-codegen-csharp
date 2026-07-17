@@ -189,7 +189,7 @@ public class DamlJsonSerializerValueOverloadsTests
         var recordJson = DamlJsonSerializer.Serialize(
             DamlRecord.Create(DamlField.Create("t", new DamlTimestamp(timestamp))));
 
-        valueJson.Should().Be("\"2023-06-15T12:30:45.0000000\\u002B00:00\"");
+        valueJson.Should().Be("\"2023-06-15T12:30:45Z\"");
         recordJson.Should().Be($"{{\"t\":{valueJson}}}");
     }
 

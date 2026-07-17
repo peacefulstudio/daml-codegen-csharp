@@ -86,7 +86,7 @@ public class EmittedTemplateChoiceCompilesTests
         // Bare ContractId<T> return is the simplest path that exercises:
         //   - the <Choice>Result record (one slot named after the template)
         //   - the FromCreatedContracts projector (cardinality + global:: qualifier)
-        //   - the <Choice>Async extension (ILedgerClient + ExerciseOutcome plumbing)
+        //   - the <Choice>Async extension (ILedgerWriter + ExerciseOutcome plumbing)
         // Tuple returns hit the unrelated DA.Types:TupleN result-decoder mapping
         // path, which is orthogonal to this PR — covered by string-shape tests
         // upstream.

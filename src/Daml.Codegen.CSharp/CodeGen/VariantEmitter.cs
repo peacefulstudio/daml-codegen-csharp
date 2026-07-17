@@ -15,7 +15,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// the common usings; this emitter writes the variant body into the provided
 /// <see cref="IndentWriter"/>.
 /// </summary>
-public sealed class VariantEmitter(
+internal sealed class VariantEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
     CodeGenOptions options,

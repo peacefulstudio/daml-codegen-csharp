@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -19,7 +20,7 @@ public class RelabelAsyncTests
     private static TransactionResult TransactionCreating(string newRichRecordId) =>
         new(
             UpdateId: "upd-1",
-            CompletionOffset: 1,
+            CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: new[] { new CreatedContract(newRichRecordId, RichRecord.TemplateId, "{}") },
             ArchivedContractIds: Array.Empty<string>(),
             CommandId: default);

@@ -181,7 +181,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       foundEnum shouldBe true
     }
 
-    "emit modules sorted by qualified name (load-bearing for ADR 0002 determinism)" in {
+    "emit modules sorted by qualified name (load-bearing for byte-identical determinism)" in {
       val allPackages = translated.main.toSeq ++ translated.dependencies
       forAll(allPackages) { pkg =>
         val qualified = pkg.modules.map(_.nameSegments.mkString("."))
@@ -243,7 +243,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       }
     }
 
-    "emit dependencies sorted by package id (load-bearing for ADR 0002 determinism)" in {
+    "emit dependencies sorted by package id (load-bearing for byte-identical determinism)" in {
       val packageIds = translated.dependencies.map(_.packageId)
       packageIds shouldBe packageIds.sorted
     }

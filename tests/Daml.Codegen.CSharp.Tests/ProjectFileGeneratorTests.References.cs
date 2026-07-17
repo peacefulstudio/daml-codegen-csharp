@@ -185,12 +185,6 @@ public partial class ProjectFileGeneratorTests
     [Fact]
     public void GenerateProjectFile_should_include_ledger_abstractions_package_reference()
     {
-        // Generated code's <Choice>Async extensions reference
-        // Daml.Ledger.Abstractions.ILedgerClient. The csproj must declare that
-        // package as a NuGet reference alongside Daml.Runtime so consumer
-        // builds resolve the type. Emitted unconditionally — pure-projector
-        // consumers absorb the reference at zero transitive cost (interface-
-        // only package).
         var options = CreateOptions();
         var generator = new ProjectFileGenerator(options);
         var package = new DamlPackage

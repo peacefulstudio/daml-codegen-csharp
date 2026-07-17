@@ -14,7 +14,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// usings; this emitter writes the enum body into the provided
 /// <see cref="IndentWriter"/>.
 /// </summary>
-public sealed class EnumEmitter(
+internal sealed class EnumEmitter(
     PackageEmitContext context,
     CodeGenOptions options)
 {

@@ -12,7 +12,7 @@ using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
-/// Compile-level regression coverage for the CS0117 reported in issue #472:
+/// Compile-level regression coverage for a reported CS0117 build failure:
 /// the two Daml.Finance interface families (<c>daml-finance-interface-holding-v4</c>,
 /// <c>daml-finance-interface-instrument-base-v4</c>) failed to pack because a
 /// <c>Reference</c> template choice returning <c>ContractId Factory</c> /
@@ -509,7 +509,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     // Deliberately declares each interface with no matching interface-placeholder
     // record: the real Daml-LF compiler always emits one alongside every interface,
     // but that placeholder record's own name is disambiguated only by its module (a
-    // separate, pre-existing gap, not part of #492's marker-name fix). Omitting it
+    // separate, pre-existing gap, not part of this marker-name fix). Omitting it
     // isolates this DAR to exactly the marker-collision family under test.
     private static DarModel TwoModuleInterfaceMarkerCollisionDar(string firstModuleName, string secondModuleName)
     {

@@ -83,11 +83,11 @@ public class PackageEmitContextTests
                 Module("M2", dataTypes: [Record("Beta")])),
             Options());
 
-        context.DataTypes.Keys.Should().BeEquivalentTo("Alpha", "Beta");
+        context.DataTypes.Keys.Should().BeEquivalentTo("M1:Alpha", "M2:Beta");
     }
 
     [Fact]
-    public void for_package_data_type_lookup_is_last_wins_across_module_name_collisions()
+    public void for_package_keeps_same_named_data_types_from_different_modules_distinct()
     {
         var first = Record("Amulet", new DamlFieldDefinition("a", new DamlPrimitiveType(DamlPrimitive.Text)));
         var second = Enum("Amulet", "X");
@@ -98,7 +98,8 @@ public class PackageEmitContextTests
                 Module("Splice.AmuletConfig", dataTypes: [second])),
             Options());
 
-        context.DataTypes["Amulet"].Should().BeSameAs(second);
+        context.DataTypes["Splice.Amulet:Amulet"].Should().BeSameAs(first);
+        context.DataTypes["Splice.AmuletConfig:Amulet"].Should().BeSameAs(second);
     }
 
     [Fact]
@@ -358,6 +359,6 @@ public class PackageEmitContextTests
             logger);
 
         context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be("Account");
-        logger.Received(1).Warning(Arg.Is<string>(m => m.Contains("M:Transfer") && m.Contains("Account") && m.Contains("Vault") && m.Contains("in the same package")));
+        logger.Received(1).Warning(Arg.Is<string>(m => m != null && m.Contains("M:Transfer") && m.Contains("Account") && m.Contains("Vault") && m.Contains("in the same package")));
     }
 }

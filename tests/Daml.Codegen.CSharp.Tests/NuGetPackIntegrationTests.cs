@@ -49,8 +49,7 @@ public class NuGetPackIntegrationTests
         Assert.SkipUnless(
             !string.IsNullOrWhiteSpace(generatorCmd),
             "Integration test requires CODEGEN_CS_CMD — the codegen-cs generator to exercise (a branch-local " +
-            "bundle entrypoint, a locally-built OCI bundle entrypoint, or `dpm`). CI sets it per gate; " +
-            "see .github/workflows/nuget-pack-integration*.yaml.");
+            "bundle entrypoint, a locally-built OCI bundle entrypoint, or `dpm`). CI sets it per gate.");
 
         var localNuGetSource = LocateLocalNuGetSource();
         Assert.SkipUnless(

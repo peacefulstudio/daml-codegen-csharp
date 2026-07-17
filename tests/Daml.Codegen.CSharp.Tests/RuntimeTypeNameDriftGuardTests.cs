@@ -10,7 +10,7 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Drift guard for the runtime type-name string literals that cannot be
-/// <c>nameof</c>-backed (#361). <see cref="RuntimeTypeNames.Contract"/>,
+/// <c>nameof</c>-backed. <see cref="RuntimeTypeNames.Contract"/>,
 /// <see cref="RuntimeTypeNames.IContract"/>, <see cref="RuntimeTypeNames.Choice"/>
 /// and <see cref="RuntimeTypeNames.IExercises"/> are blocked by CS8920 (they name
 /// generic types constrained by <c>ITemplate</c>'s static-abstract members, which

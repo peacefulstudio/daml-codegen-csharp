@@ -22,7 +22,10 @@ namespace Daml.Codegen.Testing.Conformance.Richtypes;
 public interface IHolding : IDamlInterface, IHasView<HoldingView>
 {
     /// <summary>Gets the interface identifier.</summary>
-    static Identifier IDamlInterface.InterfaceId => new("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "Holding");
+    static Identifier IDamlInterface.InterfaceId => InterfaceId;
+
+    /// <summary>Gets the interface identifier.</summary>
+    public static new Identifier InterfaceId { get; } = new("22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491", "RichTypes", "Holding");
 
     /// <summary>Gets the package ID.</summary>
     static string IDamlInterface.PackageId => "22047ae2d2f5de6f0baaa0080343fe0c5d5e59507a5dfafc5c8ca141cfa40491";
@@ -45,7 +48,7 @@ public interface IHolding : IDamlInterface, IHasView<HoldingView>
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
-/// through <see cref="global::Daml.Ledger.Abstractions.ILedgerClient.TrySubmitAndWaitForTransactionAsync"/>
+/// through <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/>
 /// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
 /// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
 /// implementing template (and therefore the produced contracts' shapes) is unknown
@@ -62,12 +65,16 @@ public static class IHoldingExtensions
     /// <param name="client">The ledger client.</param>
     /// <param name="actAs">The party submitting the command.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
         this ContractId<IHolding> contractId,
-        ILedgerClient client,
+        ILedgerWriter client,
         Party actAs,
         string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contractId);
@@ -76,12 +83,12 @@ public static class IHoldingExtensions
 
         var submission = CommandsSubmission.Single(command)
             .WithActAs(actAs)
-            .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
+            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);
+        return await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 }

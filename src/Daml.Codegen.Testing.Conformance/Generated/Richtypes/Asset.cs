@@ -101,7 +101,7 @@ public static class AssetSubmissionExtensions
     /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static Task<ExerciseOutcome<ContractId<Asset>>> CreateAsync(
-        this ILedgerClient client,
+        this ILedgerWriter client,
         Asset payload,
         SubmitterInfo submitter,
         CancellationToken cancellationToken = default)

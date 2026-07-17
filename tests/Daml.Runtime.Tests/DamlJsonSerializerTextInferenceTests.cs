@@ -91,14 +91,17 @@ public class DamlJsonSerializerTextInferenceTests
 
     public static TheoryData<string> NumericLikeTextOutsideCanonicalGrammar() => new()
     {
-        "42",
-        "-42",
         ".5",
         "1.",
         "1.5.0",
         "1,5",
         "1e5",
         "+1.5",
+        "+42",
+        "042",
+        "-042",
+        "042.5",
+        "-042.5",
     };
 
     [Theory]
@@ -116,7 +119,6 @@ public class DamlJsonSerializerTextInferenceTests
     {
         new string('9', 38) + ".0",
         "-" + new string('9', 38) + ".0",
-        "79228162514264337593543950336.0",
     };
 
     [Theory]
@@ -142,15 +144,60 @@ public class DamlJsonSerializerTextInferenceTests
     }
 
     [Fact]
-    public void DeserializeRecord_should_round_canonical_numeric_text_beyond_decimal_precision_per_documented_bound()
+    public void deserialize_record_should_preserve_canonical_numeric_text_precision_beyond_decimal_range()
     {
         var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
         var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = thirtyEightSignificantDigits });
 
         var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
 
-        record.GetRequiredField("amount").As<DamlNumeric>().Value
-            .Should().Be(decimal.Parse(thirtyEightSignificantDigits, System.Globalization.CultureInfo.InvariantCulture));
+        var roundTripped = DamlJsonSerializer.Serialize(numeric);
+
+        roundTripped.Should().Be($"\"{thirtyEightSignificantDigits}\"");
+    }
+
+    [Fact]
+    public void deserialize_record_should_preserve_canonical_numeric_text_beyond_decimal_max_value()
+    {
+        var beyondDecimalMaxValue = "79228162514264337593543950336.0";
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = beyondDecimalMaxValue });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+        var numeric = record.GetRequiredField("amount").As<DamlNumeric>();
+
+        var roundTripped = DamlJsonSerializer.Serialize(numeric);
+
+        roundTripped.Should().Be($"\"{beyondDecimalMaxValue}\"");
+    }
+
+    public static TheoryData<string, long> BareIntegerText() => new()
+    {
+        { "42", 42L },
+        { "-42", -42L },
+        { "0", 0L },
+    };
+
+    [Theory]
+    [MemberData(nameof(BareIntegerText))]
+    public void deserialize_record_should_infer_damlint64_from_bare_integer_text(string text, long expected)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = text });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("amount").As<DamlInt64>().Value.Should().Be(expected);
+    }
+
+    [Fact]
+    public void deserialize_record_should_keep_bare_integer_beyond_int64_range_as_damltext()
+    {
+        var beyondInt64Range = "99999999999999999999";
+        var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = beyondInt64Range });
+
+        var record = DamlJsonSerializer.DeserializeRecord(json);
+
+        record.GetRequiredField("amount").Should().Be(new DamlText(beyondInt64Range));
     }
 
     [Fact]

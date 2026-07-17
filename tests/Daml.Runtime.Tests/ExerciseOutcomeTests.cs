@@ -24,7 +24,7 @@ public class ExerciseOutcomeTests
     [Fact]
     public void One_carries_transaction_result_payload()
     {
-        var result = new TransactionResult("u1", 1L, [], [], default);
+        var result = new TransactionResult("u1", LedgerOffset.At(1), [], [], default);
         var outcome = new ExerciseOutcome<TransactionResult>.One(result);
 
         outcome.Result.Should().BeSameAs(result);
@@ -102,14 +102,16 @@ public class ExerciseOutcomeTests
     }
 
     [Fact]
-    public void InfraError_carries_status_code_and_message()
+    public void InfraError_carries_status_code_message_and_source_exception()
     {
         // StatusCode is `int` (cast `(int)Grpc.Core.StatusCode.DeadlineExceeded` at the
         // gRPC client construction site) so this type stays free of any transport-library dep.
-        var outcome = new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.DeadlineExceeded, "deadline");
+        var sourceException = new InvalidOperationException("transport failed");
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.DeadlineExceeded, "deadline", sourceException);
 
         outcome.StatusCode.Should().Be(StatusCodes.DeadlineExceeded);
         outcome.Message.Should().Be("deadline");
+        outcome.SourceException.Should().BeSameAs(sourceException);
     }
 
     [Fact]

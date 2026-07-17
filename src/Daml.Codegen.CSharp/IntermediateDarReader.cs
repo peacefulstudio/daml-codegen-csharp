@@ -32,10 +32,10 @@ namespace Daml.Codegen.CSharp;
 /// </summary>
 public static partial class IntermediateDarReader
 {
-    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_$]*$")]
+    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_$]*\z")]
     private static partial Regex IdentifierGrammar();
 
-    [GeneratedRegex(@"^[A-Za-z0-9._-]+$")]
+    [GeneratedRegex(@"\A[A-Za-z0-9._-]+\z")]
     private static partial Regex PackageCoordinateGrammar();
 
     private static string RequireIdentifier(string value, string kind)

@@ -72,4 +72,5 @@ internal static class RuntimeTypeNames
     public const string IExercises = "IExercises";
 
     public const string ILedgerClient = nameof(Daml.Ledger.Abstractions.ILedgerClient);
+    public const string ILedgerWriter = nameof(Daml.Ledger.Abstractions.ILedgerWriter);
 }

@@ -7,12 +7,9 @@ import com.digitalasset.daml.lf.archive.Dar
 import com.digitalasset.daml.lf.data.Ref.{ChoiceName, DottedName, PackageId}
 import com.digitalasset.daml.lf.language.Ast
 
-/** Per-template static analysis verdicts, computed against a fully-decoded
-  * `Ast.Package` (i.e. before `SignatureErasure`). Both template-level
-  * (`signatories`, `observers`) and per-choice (`controllers`,
-  * `choiceObservers`) verdicts are carried; the missing-key default is
-  * `Dynamic` so this map can be empty when the JVM helper runs in
-  * `--schema-only` mode and the proto carries `Dynamic` everywhere.
+/** Static party verdicts for one template: its `signatories` and `observers`,
+  * and the `controllers` / `choiceObservers` of each choice declared directly
+  * on it. A template with no recorded analysis defaults to [[TemplatePartyAnalysis.dynamic]].
   */
 final case class TemplatePartyAnalysis(
     signatories: PartyAnalysisResult,
@@ -21,11 +18,6 @@ final case class TemplatePartyAnalysis(
 )
 
 object TemplatePartyAnalysis {
-
-  /** The all-Dynamic verdict — used as the lookup default when no
-    * analysis was recorded for a template (the helper ran in
-    * `--schema-only` mode, or the template lookup missed).
-    */
   val dynamic: TemplatePartyAnalysis =
     TemplatePartyAnalysis(
       signatories = PartyAnalysisResult.Dynamic,
@@ -40,20 +32,12 @@ final case class ChoicePartyAnalysis(
 )
 
 object ChoicePartyAnalysis {
-
-  /** The all-Dynamic verdict — used as the default when no analysis was
-    * recorded for a choice (either because the helper ran in
-    * `--schema-only` mode, or because the choice belongs to an interface
-    * rather than a template, or because the analyser short-circuited).
-    */
   val dynamic: ChoicePartyAnalysis =
     ChoicePartyAnalysis(PartyAnalysisResult.Dynamic, PartyAnalysisResult.Dynamic)
 }
 
-/** Lookup table keyed by `(packageId, moduleName, templateName)` from
-  * [[PartyAnalyses.compute]] over a fully-decoded DAR. Returned as a
-  * plain `Map` for trivially-deterministic iteration; `AstToIntermediate`
-  * looks up entries by key during translation.
+/** Verdicts keyed by `(packageId, moduleName, templateName)`, produced by
+  * [[PartyAnalyses.compute]] and queried by [[PartyAnalyses.lookup]].
   */
 final case class PartyAnalyses(
     byTemplate: Map[(PackageId, DottedName, DottedName), TemplatePartyAnalysis]
@@ -72,43 +56,62 @@ object PartyAnalyses {
 
   /** Runs [[PartyExpressionAnalyzer]] over every template, and every choice
     * declared directly on each template, in a fully-decoded DAR. Interface
-    * choices (`mod.interfaces` / `Ast.DefInterface.choices`) and interface
-    * implementations on templates (`tmpl.implements`) are intentionally NOT
-    * analysed — [[AstToIntermediate.translateInterface]] stamps
-    * [[ChoicePartyAnalysis.dynamic]] on every interface choice. Adding
-    * typed-`actAs` derivation for interface choices is a deliberate
-    * follow-up. The output is a map keyed by
-    * `(packageId, moduleName, templateName)`.
+    * choices and interface implementations on templates are not analysed;
+    * their choices are left [[ChoicePartyAnalysis.dynamic]].
     */
   def compute(dar: Dar[(PackageId, Ast.Package)]): PartyAnalyses = {
     val builder = Map.newBuilder[(PackageId, DottedName, DottedName), TemplatePartyAnalysis]
     (dar.main +: dar.dependencies).foreach { case (packageId, pkg) =>
+      val resolveValue = samePackageValueResolver(packageId, pkg)
       pkg.modules.foreach { case (modName, mod) =>
         mod.templates.foreach { case (tmplName, tmpl) =>
-          builder += ((packageId, modName, tmplName) -> analyseTemplate(tmpl))
+          builder += ((packageId, modName, tmplName) -> analyseTemplate(tmpl, packageId, resolveValue))
         }
       }
     }
     PartyAnalyses(builder.result())
   }
 
-  private def analyseTemplate(tmpl: Ast.Template): TemplatePartyAnalysis =
+  /** A [[PartyExpressionAnalyzer.ValueResolver]] that resolves a top-level
+    * value reference to its defining expression within `pkg` only, returning
+    * None when the reference targets a different package or names a
+    * module/value that `pkg` does not define.
+    */
+  def samePackageValueResolver(
+      packageId: PackageId,
+      pkg: Ast.Package,
+  ): PartyExpressionAnalyzer.ValueResolver =
+    ref =>
+      if (ref.packageId != packageId) None
+      else
+        pkg.modules
+          .get(ref.qualifiedName.module)
+          .flatMap(_.definitions.get(ref.qualifiedName.name))
+          .collect { case Ast.DValue(_, body) => body }
+
+  private def analyseTemplate(
+      tmpl: Ast.Template,
+      currentPackageId: PackageId,
+      resolveValue: PartyExpressionAnalyzer.ValueResolver,
+  ): TemplatePartyAnalysis =
     TemplatePartyAnalysis(
-      signatories = PartyExpressionAnalyzer.analyze(tmpl.signatories, tmpl.param),
-      observers = PartyExpressionAnalyzer.analyze(tmpl.observers, tmpl.param),
+      signatories = PartyExpressionAnalyzer.analyze(tmpl.signatories, tmpl.param, resolveValue, currentPackageId),
+      observers = PartyExpressionAnalyzer.analyze(tmpl.observers, tmpl.param, resolveValue, currentPackageId),
       choices = tmpl.choices.map { case (name, choice) =>
-        name -> analyseChoice(choice, tmpl.param)
+        name -> analyseChoice(choice, tmpl.param, currentPackageId, resolveValue)
       },
     )
 
   private def analyseChoice(
       choice: Ast.TemplateChoice,
       templateParam: String,
+      currentPackageId: PackageId,
+      resolveValue: PartyExpressionAnalyzer.ValueResolver,
   ): ChoicePartyAnalysis =
     ChoicePartyAnalysis(
-      controllers = PartyExpressionAnalyzer.analyze(choice.controllers, templateParam),
+      controllers = PartyExpressionAnalyzer.analyze(choice.controllers, templateParam, resolveValue, currentPackageId),
       observers = choice.choiceObservers
-        .map(PartyExpressionAnalyzer.analyze(_, templateParam))
+        .map(PartyExpressionAnalyzer.analyze(_, templateParam, resolveValue, currentPackageId))
         .getOrElse(PartyAnalysisResult.Static(Nil)),
     )
 }

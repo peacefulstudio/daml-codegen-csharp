@@ -22,23 +22,68 @@ namespace Daml.Runtime.Streams;
 ///   <item><see cref="Created"/> — a contract of type <typeparamref name="T"/>
 ///   was created on the ledger; full payload is available.</item>
 ///   <item><see cref="Archived"/> — a contract of type <typeparamref name="T"/>
-///   was archived; payload is not available (Canton does not re-emit it).</item>
+///   was archived; payload is not available (Canton does not re-emit it).
+///   Emitted only on ACS-delta-shaped streams; the live update subscription
+///   (<c>ILedgerStreamer.SubscribeAsync</c>, ledger-effects shape) never yields
+///   this variant — an archive there arrives as a consuming
+///   <see cref="Exercised"/> (<see cref="Exercised.Consuming"/> is <c>true</c>).</item>
 ///   <item><see cref="Exercised"/> — a choice was exercised on a contract of
-///   type <typeparamref name="T"/>; choice argument and result are available
-///   when the stream was opened with ledger-effects shape.</item>
+///   type <typeparamref name="T"/>; choice argument and result are available.
+///   Emitted only on the ledger-effects shape (the shape the live
+///   <c>ILedgerStreamer.SubscribeAsync</c> stream uses); a consuming exercise
+///   (<see cref="Exercised.Consuming"/> is <c>true</c>) is that shape's
+///   archival signal.</item>
 ///   <item><see cref="Assigned"/>/<see cref="Unassigned"/> — a contract of
 ///   type <typeparamref name="T"/> was reassigned across synchronizers.</item>
-///   <item><see cref="Checkpoint"/> — a participant-emitted offset checkpoint.
-///   Carries no contract payload; consumers persist <see cref="Checkpoint.Offset"/>
-///   to advance the resume offset during quiet periods (no template-matching
-///   transactions arriving), avoiding the re-process-from-stale-offset failure
-///   mode after a crash.</item>
+///   <item><see cref="Checkpoint"/> — an offset checkpoint carrying no
+///   contract payload: a participant-emitted marker on a live subscription that
+///   consumers persist via <see cref="Checkpoint.Offset"/> to advance the
+///   resume offset during quiet periods (no template-matching transactions
+///   arriving), avoiding the re-process-from-stale-offset failure mode after
+///   a crash. Active-contract-set snapshots stream
+///   <see cref="AcsSnapshotEntry{T}"/> instead of this type; their terminal
+///   marker is <see cref="AcsSnapshotEntry{T}.Checkpoint"/>.</item>
 ///   <item><see cref="StreamError"/> — the transport stream failed mid-flight.
 ///   Surfaced as a value rather than thrown so the consuming
 ///   <c>await foreach</c> loop can decide whether to retry, log, or stop.</item>
 ///   <item><see cref="Unclassified"/> — an event the transport delivered but
 ///   this layer could not map to any other variant; surfaced as a value so
 ///   consumers can implement a no-silent-drop policy for themselves.</item>
+/// </list>
+/// <para>
+/// Which variants a stream yields is a property of its transaction shape, not
+/// of this type: the union structurally admits every variant, but a given
+/// stream emits only the subset its shape produces.
+/// </para>
+/// <list type="table">
+///   <listheader>
+///     <term>Stream</term>
+///     <description>Variants emitted</description>
+///   </listheader>
+///   <item>
+///     <term>Ledger-effects live update stream
+///     (<c>ILedgerStreamer.SubscribeAsync</c>)</term>
+///     <description><see cref="Created"/>, <see cref="Exercised"/> (a consuming
+///     exercise is the archival signal), <see cref="Assigned"/>,
+///     <see cref="Unassigned"/>, <see cref="Checkpoint"/>,
+///     <see cref="StreamError"/>, <see cref="Unclassified"/>. Never
+///     <see cref="Archived"/>.</description>
+///   </item>
+///   <item>
+///     <term>ACS-delta-shaped stream</term>
+///     <description><see cref="Created"/>, <see cref="Archived"/>,
+///     <see cref="Assigned"/>, <see cref="Unassigned"/>,
+///     <see cref="Checkpoint"/>, <see cref="StreamError"/>,
+///     <see cref="Unclassified"/>. Never <see cref="Exercised"/>.</description>
+///   </item>
+///   <item>
+///     <term>Active-contract-set snapshot
+///     (<c>ILedgerStreamer.SubscribeActiveAsync</c>)</term>
+///     <description><see cref="Created"/> and <see cref="Unclassified"/>
+///     entries followed by a single terminal <see cref="Checkpoint"/>.
+///     In-flight reassignments surface as <see cref="Created"/>, not
+///     <see cref="Assigned"/>/<see cref="Unassigned"/>.</description>
+///   </item>
 /// </list>
 /// </remarks>
 public abstract record ContractStreamEvent<T>
@@ -60,12 +105,16 @@ public abstract record ContractStreamEvent<T>
     public sealed record Created(
         ContractId<T> ContractId,
         DamlRecord Payload,
-        long Offset,
+        LedgerOffset Offset,
         SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
-    /// A contract of type <typeparamref name="T"/> was archived.
+    /// A contract of type <typeparamref name="T"/> was archived. Emitted only on
+    /// ACS-delta-shaped streams; the live update subscription
+    /// (<c>ILedgerStreamer.SubscribeAsync</c>, ledger-effects shape) never yields
+    /// this variant — an archive there arrives as a consuming
+    /// <see cref="Exercised"/> (<see cref="Exercised.Consuming"/> is <c>true</c>).
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID.</param>
     /// <param name="Offset">The ledger offset at which the contract was archived.</param>
@@ -73,14 +122,18 @@ public abstract record ContractStreamEvent<T>
     /// <param name="WitnessParties">Parties that witnessed the archive event.</param>
     public sealed record Archived(
         ContractId<T> ContractId,
-        long Offset,
+        LedgerOffset Offset,
         SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
     /// A choice was exercised on a contract of type <typeparamref name="T"/>.
-    /// Only emitted when the stream is opened with ledger-effects shape;
+    /// Only emitted when the stream is opened with ledger-effects shape (the
+    /// shape the live <c>ILedgerStreamer.SubscribeAsync</c> update stream uses);
     /// ACS-delta streams emit only <see cref="Created"/> and <see cref="Archived"/>.
+    /// On the ledger-effects shape a consuming exercise (<see cref="Consuming"/>
+    /// is <c>true</c>) is the contract's archival signal — there is no separate
+    /// <see cref="Archived"/> event on that shape.
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID the choice was exercised on.</param>
     /// <param name="ChoiceName">The choice name.</param>
@@ -96,7 +149,7 @@ public abstract record ContractStreamEvent<T>
         DamlValue ChoiceArgument,
         DamlValue ExerciseResult,
         bool Consuming,
-        long Offset,
+        LedgerOffset Offset,
         SynchronizerId SynchronizerId,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
@@ -112,13 +165,20 @@ public abstract record ContractStreamEvent<T>
     /// <param name="Offset">The ledger offset of the assignment.</param>
     /// <param name="Source">The synchronizer the contract was reassigned from.</param>
     /// <param name="Target">The synchronizer the contract was reassigned to.</param>
+    /// <param name="ReassignmentId">The reassignment's unique id — the same value on the
+    /// paired unassignment and assignment, and the input to the completing assign command.</param>
+    /// <param name="ReassignmentCounter">The reassignment counter shared by the paired
+    /// unassignment and assignment; consumers pair the two events (and dedup replays) by
+    /// matching this value.</param>
     /// <param name="WitnessParties">Parties that witnessed the assignment.</param>
     public sealed record Assigned(
         ContractId<T> ContractId,
         DamlRecord Payload,
-        long Offset,
+        LedgerOffset Offset,
         SynchronizerId Source,
         SynchronizerId Target,
+        string ReassignmentId,
+        long ReassignmentCounter,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
@@ -130,35 +190,53 @@ public abstract record ContractStreamEvent<T>
     /// <param name="Offset">The ledger offset of the unassignment.</param>
     /// <param name="Source">The synchronizer the contract is leaving.</param>
     /// <param name="Target">The synchronizer the contract is moving to.</param>
+    /// <param name="ReassignmentId">The reassignment's unique id — the same value on the
+    /// paired assignment, and the input to the assign command that completes the move.</param>
+    /// <param name="ReassignmentCounter">The reassignment counter shared by the paired
+    /// assignment; consumers pair the two events (and dedup replays) by matching this value.</param>
     /// <param name="WitnessParties">Parties that witnessed the unassignment.</param>
     public sealed record Unassigned(
         ContractId<T> ContractId,
-        long Offset,
+        LedgerOffset Offset,
         SynchronizerId Source,
         SynchronizerId Target,
+        string ReassignmentId,
+        long ReassignmentCounter,
         IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
 
     /// <summary>
-    /// A participant-emitted offset checkpoint with no template-matching
-    /// activity to surface. Canton emits these on a participant-configured
+    /// An offset checkpoint with no contract payload: on a live update
+    /// subscription, a participant-emitted marker with no template-matching
+    /// activity to surface — Canton emits these on a participant-configured
     /// cadence (<c>max_offset_checkpoint_emission_delay</c>) regardless of
     /// the active filter, so consumers can advance their persisted resume
-    /// offset during quiet periods.
+    /// offset during quiet periods. Active-contract-set snapshots stream
+    /// <see cref="AcsSnapshotEntry{T}"/> and carry their own terminal
+    /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/>.
     /// </summary>
     /// <remarks>
-    /// Without this signal a low-traffic subscription that crashes during a
-    /// quiet period would resume from a stale <c>Created</c>/<c>Archived</c>/
-    /// <c>Exercised</c> offset and re-process every transaction the
-    /// participant has retained between then and now.
+    /// Without the quiet-period signal a low-traffic subscription that
+    /// crashes during a quiet period would resume from a stale
+    /// <c>Created</c>/<c>Exercised</c> offset and re-process
+    /// every transaction the participant has retained between then and now.
     /// </remarks>
-    /// <param name="Offset">The participant's current ledger offset.</param>
-    public sealed record Checkpoint(long Offset) : ContractStreamEvent<T>;
+    /// <param name="Offset">The participant's current ledger offset; persist it
+    /// as the resume offset for a subsequent subscription. That subscription
+    /// treats its lower bound as exclusive, so resuming from this offset does
+    /// not re-deliver any event already seen up to it.</param>
+    public sealed record Checkpoint(LedgerOffset Offset) : ContractStreamEvent<T>;
 
     /// <summary>
     /// The transport stream failed mid-flight. Surfaced in-band rather than
     /// thrown so callers can decide policy — log and continue with a fresh
     /// stream from the last good offset, terminate, etc.
     /// </summary>
+    /// <remarks>
+    /// Emitted only by the live update subscription
+    /// (<c>ILedgerStreamer.SubscribeAsync</c>). Active-contract-set snapshots
+    /// stream <see cref="AcsSnapshotEntry{T}"/>, which has no error variant;
+    /// mid-stream transport failures on the snapshot throw instead.
+    /// </remarks>
     /// <param name="StatusCode">Transport status code from the failed call.
     /// For gRPC streams this is <c>(int)Grpc.Core.StatusCode</c>; consumers
     /// that want the typed enum cast back. Held as <c>int</c> so this type
@@ -179,6 +257,6 @@ public abstract record ContractStreamEvent<T>
     /// <param name="Kind">A short description of the unrecognized event, for
     /// logging/diagnostics.</param>
     public sealed record Unclassified(
-        long Offset,
+        LedgerOffset Offset,
         string Kind) : ContractStreamEvent<T>;
 }

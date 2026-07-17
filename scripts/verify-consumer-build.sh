@@ -44,7 +44,10 @@ Options:
   --package-license <spdx> SPDX license stamped into generated packages
                           (default: \$PACKAGE_LICENSE, else unset).
   --helper-jar <path>     daml-codegen-jvm-helper.jar (only needed for --dar
-                          inputs). Default: <repo>/jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar
+                          inputs). Overriding this skips the freshness check; you
+                          own the JAR's currency. Default: the repo JAR,
+                          reassembled from source when stale via
+                          scripts/ensure-jvm-helper-jar.sh
   --cli-bin <path>        Daml.Codegen.CSharp.Cli binary. Default:
                           <repo>/src/Daml.Codegen.CSharp.Cli/bin/Release/net10.0/Daml.Codegen.CSharp.Cli
   --keep                  Do not wipe <out> before running.
@@ -62,7 +65,7 @@ FEED=""
 CONSUME=""
 RUNTIME_VERSION="${RUNTIME_VERSION:-}"
 PACKAGE_LICENSE="${PACKAGE_LICENSE:-}"
-HELPER_JAR="$REPO_ROOT/jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar"
+HELPER_JAR=""
 CLI_BIN="$REPO_ROOT/src/Daml.Codegen.CSharp.Cli/bin/Release/net10.0/Daml.Codegen.CSharp.Cli"
 KEEP=""
 
@@ -142,11 +145,15 @@ if [[ -n "$INTERMEDIATE_LIST" ]]; then
 fi
 
 if [[ -n "$DAR_LIST" ]]; then
-  [[ -f "$HELPER_JAR" ]] || {
-    echo "verify-consumer-build.sh: JVM helper JAR not found: $HELPER_JAR" >&2
-    echo "Build it with: (cd jvm-helper && sbt assembly)" >&2
-    exit 1
-  }
+  if [[ -z "$HELPER_JAR" ]]; then
+    HELPER_JAR="$("$SCRIPT_DIR/ensure-jvm-helper-jar.sh")"
+  else
+    [[ -f "$HELPER_JAR" ]] || {
+      echo "verify-consumer-build.sh: JVM helper JAR not found: $HELPER_JAR" >&2
+      echo "Build it with: scripts/ensure-jvm-helper-jar.sh" >&2
+      exit 1
+    }
+  fi
   command -v java >/dev/null 2>&1 || { echo "verify-consumer-build.sh: 'java' not found on PATH (required for --dar inputs)" >&2; exit 1; }
   BINPB_DIR="$OUT/binpb"
   mkdir -p "$BINPB_DIR"

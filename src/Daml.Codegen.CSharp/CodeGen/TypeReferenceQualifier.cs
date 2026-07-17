@@ -13,7 +13,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// enclosing namespace scopes before consulting <c>using</c> directives, so a
 /// generated namespace segment equal to an imported type name produces CS0118.
 /// </summary>
-public sealed class TypeReferenceQualifier
+internal sealed class TypeReferenceQualifier
 {
     private const string GlobalPrefix = "global::";
 
@@ -84,6 +84,7 @@ public sealed class TypeReferenceQualifier
             [RuntimeTypeNames.Unit] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.GenericStub] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.ILedgerClient] = LedgerNamespaces.Abstractions,
+            [RuntimeTypeNames.ILedgerWriter] = LedgerNamespaces.Abstractions,
             ["IReadOnlyList"] = "System.Collections.Generic",
             ["IReadOnlyDictionary"] = "System.Collections.Generic",
             ["HashSet"] = "System.Collections.Generic",

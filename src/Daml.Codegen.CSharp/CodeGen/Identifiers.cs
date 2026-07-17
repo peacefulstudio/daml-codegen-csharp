@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -11,7 +10,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// scan. Pure functions over a Daml name: escape invalid characters, avoid
 /// leading-digit and keyword collisions, and PascalCase segment-delimited names.
 /// </summary>
-internal static partial class Identifiers
+internal static class Identifiers
 {
     private const string FallbackNamespace = "DamlGenerated";
 
@@ -31,30 +30,136 @@ internal static partial class Identifiers
     }
 
     /// <summary>
-    /// Replaces characters invalid in a C# identifier with <c>_</c>, prefixes a
-    /// leading digit with <c>_</c>, and escapes C# keywords with <c>@</c>.
+    /// Maps a Daml name to a legal C# identifier. A synthetic variant-payload data type
+    /// carries a compound <c>Type.Constructor</c> name (e.g. <c>Outcome.Win</c>) whose
+    /// <c>.</c> is a structural separator, not identifier content, so each
+    /// <c>.</c>-delimited segment is leaf-sanitised (see <see cref="SanitizeBare"/>) and
+    /// the segments are rejoined with <c>_</c> to a flat C# type name
+    /// (<c>Outcome.Win</c> → <c>Outcome_Win</c>). C# keywords are escaped with <c>@</c>
+    /// last. A leaf name never contains a <c>.</c> (damlc mangles it), so a single-segment
+    /// name passes through <see cref="SanitizeBare"/> unchanged.
     /// </summary>
-    public static string Sanitize(string name)
+    public static string Sanitize(string name) =>
+        EscapeKeyword(string.Join('_', name.Split('.').Select(SanitizeBare)));
+
+    /// <summary>
+    /// Injectively maps a Daml LF name to a C# identifier body, leaving keyword
+    /// collisions unescaped. Demangles damlc's mangling (<c>$$</c> → <c>$</c>,
+    /// <c>$uXXXX</c> → the UTF-16 code unit) and then escapes every character C#
+    /// forbids as <c>_uXXXX</c> (lowercase hex), doubling a literal <c>_</c> to
+    /// <c>__</c> only where it would otherwise read back as an escape, and escaping a
+    /// leading digit rather than prefixing it — so distinct Daml names never share a
+    /// C# identifier. Callers that further transform the result — recasing or
+    /// prefixing it — must compose this with <see cref="EscapeKeyword"/> applied last,
+    /// because a transform both introduces collisions an earlier escape cannot see
+    /// (Daml <c>Operator</c> recases to the keyword <c>operator</c>) and invalidates
+    /// ones an earlier escape wrongly applied (a type variable <c>event</c> escaped to
+    /// <c>@event</c> cannot then be prefixed: <c>T@event</c> parses as two identifiers,
+    /// not one).
+    /// </summary>
+    /// <remarks>
+    /// The demangling step is injective only over the image of damlc's mangler: a name
+    /// carrying a raw unpaired <c>$</c> would be mis-decoded (both <c>$</c> and
+    /// <c>$$</c> demangle to <c>$</c>). The emitter only ever sees damlc output, where
+    /// every <c>$</c> is paired or introduces a well-formed <c>$uXXXX</c> escape, so the
+    /// precondition holds.
+    /// </remarks>
+    internal static string SanitizeBare(string name) => EscapeToIdentifier(Demangle(name));
+
+    private static string Demangle(string mangled)
     {
-        var sanitized = IdentifierRegex().Replace(name, "_");
-
-        if (sanitized.Length == 0)
+        var demangled = new StringBuilder(mangled.Length);
+        var i = 0;
+        while (i < mangled.Length)
         {
-            return sanitized;
+            if (mangled[i] == '$' && i + 1 < mangled.Length && mangled[i + 1] == '$')
+            {
+                demangled.Append('$');
+                i += 2;
+            }
+            else if (mangled[i] == '$' && i + 5 < mangled.Length && mangled[i + 1] == 'u'
+                && IsLowerHexDigit(mangled[i + 2]) && IsLowerHexDigit(mangled[i + 3])
+                && IsLowerHexDigit(mangled[i + 4]) && IsLowerHexDigit(mangled[i + 5]))
+            {
+                demangled.Append((char)Convert.ToInt32(mangled.Substring(i + 2, 4), 16));
+                i += 6;
+            }
+            else
+            {
+                demangled.Append(mangled[i]);
+                i++;
+            }
         }
-
-        if (char.IsDigit(sanitized[0]))
-        {
-            sanitized = "_" + sanitized;
-        }
-
-        if (CSharpKeywords.Contains(sanitized))
-        {
-            sanitized = "@" + sanitized;
-        }
-
-        return sanitized;
+        return demangled.ToString();
     }
+
+    private static string EscapeToIdentifier(string demangled)
+    {
+        var fragments = new List<string>(demangled.Length);
+        var tailPrefix = string.Empty;
+        for (var i = demangled.Length - 1; i >= 0; i--)
+        {
+            var c = demangled[i];
+            string fragment;
+            if (c == '_')
+            {
+                fragment = TailWouldExtendUnderscoreEscape(tailPrefix) ? "__" : "_";
+            }
+            else if (char.IsAsciiLetterOrDigit(c))
+            {
+                fragment = c.ToString();
+            }
+            else
+            {
+                fragment = HexEscape(c);
+            }
+
+            fragments.Add(fragment);
+            var combined = fragment + tailPrefix;
+            tailPrefix = combined.Length > UnderscoreEscapeLookahead ? combined[..UnderscoreEscapeLookahead] : combined;
+        }
+
+        fragments.Reverse();
+        var result = string.Concat(fragments);
+        return result.Length > 0 && char.IsAsciiDigit(result[0])
+            ? HexEscape(result[0]) + result[1..]
+            : result;
+    }
+
+    private const int UnderscoreEscapeLookahead = 5;
+
+    private static bool TailWouldExtendUnderscoreEscape(string encodedTail) =>
+        encodedTail.StartsWith('_') || BeginsWithHexEscapeBody(encodedTail);
+
+    private static bool BeginsWithHexEscapeBody(string encodedTail) =>
+        encodedTail.Length >= 5
+        && encodedTail[0] == 'u'
+        && IsLowerHexDigit(encodedTail[1])
+        && IsLowerHexDigit(encodedTail[2])
+        && IsLowerHexDigit(encodedTail[3])
+        && IsLowerHexDigit(encodedTail[4]);
+
+    private static string HexEscape(char c) => "_u" + ((int)c).ToString("x4");
+
+    private static bool IsLowerHexDigit(char c) => c is >= '0' and <= '9' or >= 'a' and <= 'f';
+
+    /// <summary>
+    /// Prefixes <c>@</c> when <paramref name="identifier"/> collides with a C# keyword,
+    /// making it legal as a declaration. Apply last, once every casing and prefixing
+    /// transform has run — see <see cref="SanitizeBare"/>.
+    /// </summary>
+    internal static string EscapeKeyword(string identifier) =>
+        CSharpKeywords.Contains(identifier) ? "@" + identifier : identifier;
+
+    /// <summary>
+    /// Strips the keyword-escaping <c>@</c> for an XML doc <c>name=</c> attribute, which
+    /// binds to a declared symbol by its bare name and rejects the escape (CS1572 on the
+    /// tag, CS1573 on the now-undocumented parameter). Exact because
+    /// <see cref="SanitizeBare"/> rewrites every <c>@</c> carried by the Daml name to
+    /// <c>_</c>, so the only <c>@</c> that can reach an emitted identifier is the single
+    /// leading one <see cref="EscapeKeyword"/> prepends.
+    /// </summary>
+    internal static string DocCommentName(string identifier) => identifier.TrimStart('@');
 
     /// <summary>
     /// PascalCases a name across <c>_</c>, <c>-</c> and <c>.</c> delimiters,
@@ -147,9 +252,6 @@ internal static partial class Identifiers
     /// </summary>
     internal static string Disambiguate(string identifier, string enclosingTypeName) =>
         identifier == enclosingTypeName ? identifier + "_" : identifier;
-
-    [GeneratedRegex("[^a-zA-Z0-9_]")]
-    private static partial Regex IdentifierRegex();
 
     private static readonly HashSet<string> CSharpKeywords =
     [

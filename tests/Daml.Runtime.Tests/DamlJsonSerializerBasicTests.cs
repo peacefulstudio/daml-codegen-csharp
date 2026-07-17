@@ -129,6 +129,16 @@ public class DamlJsonSerializerBasicTests
     }
 
     [Fact]
+    public void Serialize_should_emit_DamlTimestamp_with_Z_utc_designator()
+    {
+        var timestamp = new DateTimeOffset(2023, 6, 15, 14, 30, 45, TimeSpan.FromHours(2));
+
+        var json = DamlJsonSerializer.Serialize(new DamlTimestamp(timestamp));
+
+        json.Should().Be("\"2023-06-15T12:30:45Z\"");
+    }
+
+    [Fact]
     public void Serialize_should_handle_DamlParty()
     {
         var record = DamlRecord.Create(
@@ -375,7 +385,7 @@ public class DamlJsonSerializerBasicTests
 
             var json = DamlJsonSerializer.Serialize(record);
 
-            json.Should().Contain("\"updatedAt\":\"2024-03-15T09:08:07.0000000");
+            json.Should().Contain("\"updatedAt\":\"2024-03-15T09:08:07Z\"");
         }
         finally
         {

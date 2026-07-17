@@ -15,7 +15,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 ///   <item>One <c>CreateAsync</c> overload that takes the template payload (and
 ///   any extra parties that the analyzer flagged as not derivable from the
 ///   payload) and submits a Create command via
-///   <c>ILedgerClient.TryCreateAsync</c>. When every signatory is a payload
+///   <c>ILedgerWriter.TryCreateAsync</c>. When every signatory is a payload
 ///   field reference (<c>signatory platform, initiator, counterparty</c> with
 ///   matching <c>Party</c> fields), the wrapper picks them off the payload
 ///   automatically — the caller never restates a party that's already in the
@@ -43,7 +43,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// one-liner.
 /// </para>
 /// </summary>
-public sealed class SubmissionExtensionsEmitter(
+internal sealed class SubmissionExtensionsEmitter(
     PackageEmitContext context,
     CodeGenOptions options,
     PartyAnalysis party)
@@ -147,7 +147,7 @@ public sealed class SubmissionExtensionsEmitter(
 
         indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}>>> CreateAsync(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
         indent.AppendLine($"{className} payload,");
         if (!staticParties)
         {

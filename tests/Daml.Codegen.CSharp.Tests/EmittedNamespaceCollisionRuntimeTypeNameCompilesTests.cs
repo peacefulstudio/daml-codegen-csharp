@@ -87,7 +87,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
             f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
             "the test only guards the shadowing bug if the derived namespace actually ends in .Party");
 
-        // The key-bearing template emits a throwing `public ... Key =>` stub (ADR 0013)
+        // The key-bearing template emits a throwing `public ... Key =>` stub
         // whose key type must be global::-qualified so it doesn't resolve against the
         // shadowing `Canton.Party` namespace. The generated files compile standalone.
         var diagnostics = CompileEmittedFiles(files);

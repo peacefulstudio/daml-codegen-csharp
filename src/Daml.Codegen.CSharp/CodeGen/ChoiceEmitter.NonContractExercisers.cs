@@ -5,7 +5,7 @@ using Daml.Codegen.CSharp.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
-public sealed partial class ChoiceEmitter
+internal sealed partial class ChoiceEmitter
 {
     /// <summary>
     /// Returns <c>true</c> when the choice is the synthetic <c>Archive</c>
@@ -128,7 +128,7 @@ public sealed partial class ChoiceEmitter
             indent.AppendLine($"/// Async exerciser extensions for <see cref=\"{className}\"/> contract IDs whose choices");
             indent.AppendLine("/// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).");
             indent.AppendLine("/// Each method submits the choice via");
-            indent.AppendLine("/// <c>ILedgerClient.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result");
+            indent.AppendLine("/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result");
             indent.AppendLine("/// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.");
             indent.AppendLine("/// </summary>");
         }
@@ -187,13 +187,15 @@ public sealed partial class ChoiceEmitter
             }
             indent.AppendLine("/// <param name=\"actAs\">The party submitting the command.</param>");
             indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"commandId\">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>");
+            indent.AppendLine("/// <param name=\"timeout\">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>");
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
         indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>> {choiceName}Async(");
         indent.Indent();
         indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerClient, context.RootNamespace)} client,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
         if (hasArg)
         {
             var argParamType = isNestedTemplateArg
@@ -203,6 +205,8 @@ public sealed partial class ChoiceEmitter
         }
         indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} actAs,");
         indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
+        indent.AppendLine("TimeSpan? timeout = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
         indent.AppendLine("{");
@@ -225,7 +229,7 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
         indent.AppendLine(".WithActAs(actAs)");
-        indent.AppendLine($".WithCommandId(new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
+        indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
         indent.AppendLine("{");
@@ -235,17 +239,9 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine("}");
 
         indent.AppendLine();
-        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
-        indent.AppendLine("return outcome switch");
-        indent.AppendLine("{");
-        indent.Indent();
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.One success => Project{choiceName}Result(success.Result, contractId.Value),");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.DamlError damlError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>.DamlError(damlError.Category, damlError.ErrorId, damlError.Message, damlError.Metadata),");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>.InfraError infraError => new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>.InfraError(infraError.StatusCode, infraError.Message),");
-        indent.AppendLine("_ => throw new InvalidOperationException($\"Unhandled outcome: {outcome.GetType().Name}\"),");
-        indent.Dedent();
-        indent.AppendLine("};");
+        indent.AppendLine($"return outcome.ProjectCommitted(tx => Project{choiceName}Result(tx, contractId.Value));");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -311,8 +307,8 @@ public sealed partial class ChoiceEmitter
         indent.AppendLine("throw new InvalidOperationException(");
         indent.Indent();
         indent.AppendLine($"$\"Submission succeeded but no '{choice.Name}' exercise on contract '{{contractId}}' was recorded on transaction {{tx.UpdateId}}. \" +");
-        indent.AppendLine("\"This is most often caused by the ILedgerClient implementation not populating TransactionResult.ExercisedEvents — \" +");
-        indent.AppendLine("\"your ILedgerClient implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. \" +");
+        indent.AppendLine("\"This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — \" +");
+        indent.AppendLine("\"your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. \" +");
         indent.AppendLine("\"If your implementation does populate ExercisedEvents, ensure the participant is configured to return \" +");
         indent.AppendLine("\"LedgerEffects with verbose events so the exercise event survives projection.\");");
         indent.Dedent();

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using AwesomeAssertions;
 using Xunit;
 
@@ -53,6 +54,18 @@ public partial class DamlTypesTests
     public void DamlNumeric_equality_should_still_distinguish_different_values()
     {
         new DamlNumeric(1.5m, 38).Should().NotBe(new DamlNumeric(2.5m, 38));
+    }
+
+    [Fact]
+    public void damlnumeric_equality_should_hold_beyond_decimal_range_across_differing_scales()
+    {
+        var padded = DamlJsonSerializer.DeserializeRecord("""{"amount":"100000000000000000000000000000.00"}""")
+            .GetRequiredField("amount").As<DamlNumeric>();
+        var stripped = DamlJsonSerializer.DeserializeRecord("""{"amount":"100000000000000000000000000000.0"}""")
+            .GetRequiredField("amount").As<DamlNumeric>();
+
+        padded.Should().Be(stripped);
+        padded.GetHashCode().Should().Be(stripped.GetHashCode());
     }
 
     [Fact]
@@ -366,5 +379,118 @@ public partial class DamlTypesTests
 
         // Assert
         result.Should().Be(dto);
+    }
+
+    [Fact]
+    public void DamlDate_FromDaysSinceEpoch_should_accept_daml_date_boundary_values()
+    {
+        // Arrange
+        var epochDayNumber = DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
+        var minValidDays = DateOnly.MinValue.DayNumber - epochDayNumber;
+        var maxValidDays = DateOnly.MaxValue.DayNumber - epochDayNumber;
+
+        // Act
+        var minDate = DamlDate.FromDaysSinceEpoch(minValidDays);
+        var maxDate = DamlDate.FromDaysSinceEpoch(maxValidDays);
+
+        // Assert
+        minDate.Value.Should().Be(DateOnly.MinValue);
+        maxDate.Value.Should().Be(DateOnly.MaxValue);
+    }
+
+    [Fact]
+    public void DamlDate_FromDaysSinceEpoch_should_throw_when_days_precede_daml_date_lower_bound()
+    {
+        // Arrange
+        var epochDayNumber = DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
+        var minValidDays = DateOnly.MinValue.DayNumber - epochDayNumber;
+
+        // Act
+        var act = () => DamlDate.FromDaysSinceEpoch(minValidDays - 1);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DamlDate_FromDaysSinceEpoch_should_throw_when_days_exceed_daml_date_upper_bound()
+    {
+        // Arrange
+        var epochDayNumber = DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber;
+        var maxValidDays = DateOnly.MaxValue.DayNumber - epochDayNumber;
+
+        // Act
+        var act = () => DamlDate.FromDaysSinceEpoch(maxValidDays + 1);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DamlDate_FromDaysSinceEpoch_should_throw_instead_of_silently_wrapping_on_int_overflow()
+    {
+        // Act
+        var act = () => DamlDate.FromDaysSinceEpoch(int.MaxValue);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DamlTimestamp_FromMicrosecondsSinceEpoch_should_accept_daml_timestamp_boundary_values()
+    {
+        // Arrange
+        var minTicksSinceEpoch = (DateTimeOffset.MinValue - DateTimeOffset.UnixEpoch).Ticks;
+        var maxTicksSinceEpoch = (DateTimeOffset.MaxValue - DateTimeOffset.UnixEpoch).Ticks;
+        var minValidMicroseconds = minTicksSinceEpoch / 10;
+        var maxValidMicroseconds = maxTicksSinceEpoch / 10;
+
+        // Act
+        var minTimestamp = DamlTimestamp.FromMicrosecondsSinceEpoch(minValidMicroseconds);
+        var maxTimestamp = DamlTimestamp.FromMicrosecondsSinceEpoch(maxValidMicroseconds);
+
+        // Assert
+        minTimestamp.Value.Should().Be(DateTimeOffset.MinValue);
+        maxTimestamp.Value.Should().Be(DateTimeOffset.UnixEpoch.AddTicks(maxValidMicroseconds * 10));
+    }
+
+    [Fact]
+    public void DamlTimestamp_FromMicrosecondsSinceEpoch_should_throw_when_microseconds_precede_daml_timestamp_lower_bound()
+    {
+        // Arrange
+        var minTicksSinceEpoch = (DateTimeOffset.MinValue - DateTimeOffset.UnixEpoch).Ticks;
+        var minValidMicroseconds = minTicksSinceEpoch / 10;
+
+        // Act
+        var act = () => DamlTimestamp.FromMicrosecondsSinceEpoch(minValidMicroseconds - 1);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DamlTimestamp_FromMicrosecondsSinceEpoch_should_throw_when_microseconds_exceed_daml_timestamp_upper_bound()
+    {
+        // Arrange
+        var maxTicksSinceEpoch = (DateTimeOffset.MaxValue - DateTimeOffset.UnixEpoch).Ticks;
+        var maxValidMicroseconds = maxTicksSinceEpoch / 10;
+
+        // Act
+        var act = () => DamlTimestamp.FromMicrosecondsSinceEpoch(maxValidMicroseconds + 1);
+
+        // Assert
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DamlTimestamp_FromMicrosecondsSinceEpoch_should_throw_instead_of_silently_wrapping_on_long_overflow()
+    {
+        // Act
+        var actMax = () => DamlTimestamp.FromMicrosecondsSinceEpoch(long.MaxValue);
+        var actMin = () => DamlTimestamp.FromMicrosecondsSinceEpoch(long.MinValue);
+
+        // Assert
+        actMax.Should().Throw<ArgumentOutOfRangeException>();
+        actMin.Should().Throw<ArgumentOutOfRangeException>();
     }
 }

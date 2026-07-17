@@ -330,6 +330,26 @@ public class ChoiceResultStructTests
     }
 
     [Fact]
+    public void Generate_should_drain_leftover_created_contracts_without_redundant_if_guard()
+    {
+        var module = ModuleWith(
+            Template("Splitter", TupleType(
+                ContractIdOf("Half"),
+                ContractIdOf("Half")),
+                choiceName: "Split"),
+            siblingTemplateNames: ["Half"]);
+
+        var code = GenerateAndReadTemplate(module, "Splitter");
+
+        code.Should().NotContain(
+            """
+            if (templateMatchIndex0 < templateMatches0.Count)
+            {
+                while (templateMatchIndex0 < templateMatches0.Count)
+            """);
+    }
+
+    [Fact]
     public void Generate_should_not_share_a_bucket_between_a_template_and_an_interface_with_the_same_generated_name()
     {
         // A template named `IFactory` and an interface named `Factory` both resolve to

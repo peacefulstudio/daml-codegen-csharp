@@ -132,8 +132,8 @@ public sealed class ProjectFileGenerator
         sb.AppendLine($"    dotnet add package {packageId}{prereleaseFlag}");
         sb.AppendLine();
         sb.AppendLine("## Usage");
-        sb.AppendLine("Generated types live under the package's namespace; use them with an");
-        sb.AppendLine("`ILedgerClient` (`Daml.Ledger.Abstractions`) to submit commands and read contracts.");
+        sb.AppendLine("Generated types live under the package's namespace; submit commands and exercise choices");
+        sb.AppendLine("through an `ILedgerWriter`, and read or stream contracts via `ILedgerReader`/`ILedgerStreamer` (`Daml.Ledger.Abstractions`).");
         sb.AppendLine();
         sb.AppendLine("## Provenance");
         sb.AppendLine("| | |");
@@ -205,11 +205,6 @@ public sealed class ProjectFileGenerator
         // Runtime package reference
         var runtimeVersion = EscapeXmlText(_options.RuntimePackageVersion ?? EmitterLockstepVersion);
         sb.AppendLine($"    <PackageReference Include=\"Daml.Runtime\" Version=\"{runtimeVersion}\" />");
-        // Ledger-abstractions package reference. Required by the codegen-emitted
-        // `<Choice>Async` extension methods (which take `ILedgerClient`). Emitted
-        // unconditionally: the package is interface-only and lockstep-versioned
-        // with Daml.Runtime, so pure-projector consumers absorb it at zero
-        // transitive weight.
         sb.AppendLine($"    <PackageReference Include=\"Daml.Ledger.Abstractions\" Version=\"{runtimeVersion}\" />");
 
         // Add cross-DAR package references for any external types referenced in generated code.
