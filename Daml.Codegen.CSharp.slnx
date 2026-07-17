@@ -11,6 +11,7 @@
     <Project Path="src/Daml.Codegen.CSharp.Cli/Daml.Codegen.CSharp.Cli.csproj" />
     <Project Path="src/Daml.Codegen.CSharp/Daml.Codegen.CSharp.csproj" />
     <Project Path="src/Daml.Codegen.Testing.Conformance/Daml.Codegen.Testing.Conformance.csproj" />
+    <Project Path="src/Daml.Ledger.Abstractions.Testing.Conformance/Daml.Ledger.Abstractions.Testing.Conformance.csproj" />
     <Project Path="src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj" />
     <Project Path="src/Daml.Runtime/Daml.Runtime.csproj" />
   </Folder>
@@ -18,6 +19,7 @@
     <Project Path="tests/Daml.Codegen.CSharp.Cli.Tests/Daml.Codegen.CSharp.Cli.Tests.csproj" />
     <Project Path="tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj" />
     <Project Path="tests/Daml.Codegen.Testing.Conformance.Tests/Daml.Codegen.Testing.Conformance.Tests.csproj" />
+    <Project Path="tests/Daml.Ledger.Abstractions.Testing.Conformance.Tests/Daml.Ledger.Abstractions.Testing.Conformance.Tests.csproj" />
     <Project Path="tests/Daml.Ledger.Abstractions.Tests/Daml.Ledger.Abstractions.Tests.csproj" />
     <Project Path="tests/Daml.Runtime.Tests/Daml.Runtime.Tests.csproj" />
   </Folder>
