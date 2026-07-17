@@ -4,10 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       splice_version:
-        description: 'Splice version (decentralized-canton-sync release tag, e.g. 0.6.5).'
-        required: false
+        description: 'Splice version (decentralized-canton-sync release tag, e.g. 0.6.11). No default — always pass the version explicitly.'
+        required: true
         type: string
-        default: '0.6.5'
       codegen_cs_version:
         description: 'Version of ghcr.io/peacefulstudio/dpm-codegen-cs to pull. Empty = Directory.Build.props <Version>.'
         required: false
