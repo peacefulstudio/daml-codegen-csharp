@@ -10,7 +10,10 @@ because they are versioned in lockstep:
 
 - `Daml.Codegen.CSharp` — C# emitter library (NuGet package)
 - `Daml.Runtime` — runtime types referenced by generated code
-- `Daml.Ledger.Abstractions` — transport-agnostic `ILedgerClient` interface
+- `Daml.Ledger.Abstractions` — transport-agnostic ledger client contract
+  (`ILedgerClient`, composed of `ILedgerWriter`/`ILedgerReader`/`ILedgerStreamer`)
+- `Daml.Ledger.Abstractions.Testing.Conformance` — behavioral conformance test kit
+  for `ILedgerClient` implementations
 - `Daml.Codegen.Testing.Conformance` — compiled conformance corpus types + embedded DAR
 
 > **Versioning and stability.** This project is pre-1.0: under SemVer 0.x, any
@@ -32,6 +35,270 @@ because they are versioned in lockstep:
 ### Fixed
 
 ### Security
+
+## [0.4.0-preview.1] — 2026-07-17
+
+### Added
+
+- Unary write/read operations — `TryExerciseAsync`, `SubmitAndWaitAsync`,
+  `TrySubmitAndWaitForTransactionAsync`, `TryCreateAsync` (`ILedgerWriter`),
+  `GetLedgerEndAsync` (`ILedgerReader`), the create-by-exercise extensions (see the
+  one/many split under Changed), and the
+  `Party` convenience overloads — accept an optional `TimeSpan? timeout` applied
+  best-effort by the transport (for gRPC, mapped to `CallOptions.Deadline`). Streaming
+  operations deliberately take no wall-clock deadline: the `CancellationToken` remains
+  the sole time bound (use `CancelAfter` for a watch window, `break` for an event
+  boundary).
+- Generated `<Choice>Async` exercisers (both the `ContractId<T>` receiver and the
+  non-contract-returning overloads) and generated interface-choice extension methods now
+  accept an optional `TimeSpan? timeout`, positioned before the trailing
+  `CancellationToken`, and forward it to `ILedgerWriter.TrySubmitAndWaitForTransactionAsync`
+  as the per-call best-effort deadline. The default `null` leaves the emitted call
+  behaviourally identical to previous output, so regenerating against this release is a
+  source- and runtime-compatible change for existing call sites.
+- `ILedgerStreamer.SubscribeAsync` accepts an optional end-inclusive `LedgerOffset? toOffset`;
+  when set, the stream yields the updates in `(fromOffset, toOffset]` and then completes
+  normally — bounded historical replay for audits, backfills, and deterministic tests
+  without cancellation plumbing. The `(fromOffset, toOffset]` window is now normative in
+  the interface docs — `fromOffset` stays exclusive, so resuming from a returned
+  checkpoint or completion offset never re-delivers the event at that offset — and both
+  boundaries are conformance-tested.
+- `ILedgerStreamer.SubscribeActiveAsync` accepts an optional `LedgerOffset? activeAtOffset`
+  and now ends every snapshot with a terminal `AcsSnapshotEntry<T>.Checkpoint` carrying
+  the snapshot's effective offset, so consumers resume `SubscribeAsync` from exactly the
+  snapshot boundary instead of handling duplicates around a separately-fetched ledger end.
+  The terminal `Checkpoint` is guaranteed even when the snapshot is empty.
+- New package `Daml.Ledger.Abstractions.Testing.Conformance`: an abstract xUnit base,
+  `LedgerClientConformanceTests<TProbe>`, that an `ILedgerClient` implementation
+  subclasses to verify the documented behavioral contract — a cancelled subscription
+  surfaces `OperationCanceledException`, an unclassifiable snapshot row surfaces as
+  `AcsSnapshotEntry<T>.Unclassified` instead of being dropped, the active-contract-set
+  snapshot always ends with a terminal `Checkpoint` (even when the snapshot is empty),
+  seeded rows arrive before it, and bounded subscriptions honor the
+  `(fromOffset, toOffset]` window on both boundaries. Streams the contract requires to
+  terminate run under the overridable `StreamTimeout` budget (30 seconds by default), so
+  a non-terminating implementation fails the named conformance test with a
+  contract-naming `TimeoutException` instead of hanging the adopter's test run. Adopters
+  whose transport rejects an active-contract-set query at offset 0 override
+  `EmptySnapshotOffset` to point the empty-snapshot check at a known-empty offset.
+- `ExerciseOutcome<TransactionResult>.ProjectCommitted<TProjected>(Func<TransactionResult, ExerciseOutcome<TProjected>>)`
+  (`Daml.Runtime.Outcomes`): projects a transaction-level outcome onto a typed result outcome — invoking the
+  projector on a committed transaction and propagating `None`/`Many`/`DamlError`/`InfraError` faithfully. The
+  generated `<Choice>Async` exercisers now delegate their outcome mapping to it, so the exhaustive per-variant
+  handling lives and is unit-tested in one place.
+
+### Changed
+
+- **BREAKING: `ILedgerClient` (`Daml.Ledger.Abstractions`) is now the composition of
+  three capability interfaces** — `ILedgerWriter` (submit commands, create contracts,
+  exercise choices), `ILedgerReader` (query the ledger end), and `ILedgerStreamer`
+  (subscribe to contract events and active-contract-set snapshots) — instead of one flat
+  interface declaring every member directly; `ILedgerClient` itself now only adds the
+  `IDisposable`/`IAsyncDisposable` bridge. Derived convenience methods move out of
+  `Daml.Ledger.Abstractions` entirely and into the new `Daml.Ledger.Abstractions.Extensions`
+  namespace, opt in with `using Daml.Ledger.Abstractions.Extensions;`: the single-`Party`
+  overloads of `TryExerciseAsync`/`TryCreateAsync`/`SubscribeAsync`/`SubscribeActiveAsync`,
+  the throwing `ExerciseAsync` convenience wrappers (including the void overloads, which no
+  longer route through a discarded `object` result sentinel), and the create-by-exercise
+  helpers (replacing `TryExerciseForCreatedAsync` — see the one/many split entry
+  below). The primitives that take an explicit
+  `SubmitterInfo` remain directly on `ILedgerWriter`/`ILedgerStreamer` with no extra `using`.
+  Source-breaking for implementers, who now override the split interfaces instead of one
+  flat `ILedgerClient`; source-breaking for consumers who called a moved convenience method,
+  since every such call site now needs a new `using Daml.Ledger.Abstractions.Extensions;`
+  import that a plain `using Daml.Ledger.Abstractions;` did not previously require.
+- **BREAKING: create-by-exercise is an explicit one/many split** — `TryExerciseForCreatedAsync`
+  is replaced by `TryCreateOneByExerciseAsync` and `TryCreateManyByExerciseAsync`, plus the
+  throwing `CreateOneByExerciseAsync`/`CreateManyByExerciseAsync` wrappers
+  (`Daml.Ledger.Abstractions.Extensions`). `TryCreateOneByExerciseAsync` expects exactly one
+  created contract and propagates every outcome faithfully — in particular a `Many` returned
+  by the writer is never collapsed into `None`, so a committed transaction can no longer be
+  misread as "created nothing" and resubmitted as a duplicate. `TryCreateManyByExerciseAsync`
+  accepts any number of created contracts: success is `One` carrying the (possibly empty)
+  `IReadOnlyList<ContractId<T>>`, and a single create yields a one-element list.
+  `CreateOneByExerciseAsync` throws `LedgerOperationException` when the choice created none
+  or many; `CreateManyByExerciseAsync` returns the list and throws only on error outcomes.
+- **BREAKING: `LedgerOffset` (`Daml.Runtime`) replaces raw `long` ledger offsets across
+  `Daml.Ledger.Abstractions` and `Daml.Runtime`** — `ILedgerReader.GetLedgerEndAsync`,
+  `ILedgerStreamer.SubscribeAsync`'s `fromOffset`/`toOffset`, `SubscribeActiveAsync`'s
+  `activeAtOffset`, every offset carried on `ContractStreamEvent<T>`/`AcsSnapshotEntry<T>`,
+  and the write-path completion offsets — `SubmitAndWaitResult.CompletionOffset`,
+  `TransactionResult.CompletionOffset`, and `TransactionTree.CompletionOffset` —
+  now use the value type instead of a bare `long`. Construct one with `LedgerOffset.Begin`
+  (start of stream) or `LedgerOffset.At(value)`; read the raw value back via `.Value`. This
+  closes the same silent-transposition footgun the project has already closed for
+  `ContractId`/`Party`/`ChoiceName` — an offset can no longer flow unnoticed into an
+  arbitrary `long` parameter.
+- **BREAKING: `ILedgerStreamer.SubscribeActiveAsync<T>` now returns
+  `IAsyncEnumerable<AcsSnapshotEntry<T>>`** (was `IAsyncEnumerable<ContractStreamEvent<T>>`),
+  a discriminated union scoped to the active-contract-set snapshot: `Created`,
+  `Unclassified` (an unrecognized row, surfaced rather than dropped), and a terminal
+  `Checkpoint` carrying the snapshot's effective offset. Source-breaking: implementations
+  must return the new type, and consumers exhaustively pattern matching over the stream
+  need to switch from `ContractStreamEvent<T>`'s cases to `AcsSnapshotEntry<T>`'s.
+- `ContractStreamEvent<T>.Assigned` and `.Unassigned` (`Daml.Runtime`) now carry
+  `ReassignmentId` (string) and `ReassignmentCounter` (long), positioned after
+  `Target` and before `WitnessParties`. Canton stamps an unassignment and its
+  completing assignment with the same reassignment id and counter, so a consumer
+  can pair the two halves of a cross-synchronizer move, detect a missed hop, and
+  dedup replays by matching them — the pairing rule the reassignment protocol
+  documents. Source-breaking for code that constructs these two variants
+  positionally (two new required parameters); readers gain two properties.
+- The README emitted into every generated package now points consumers at `ILedgerWriter`
+  for command submission (with `ILedgerReader`/`ILedgerStreamer` for reads and streams)
+  instead of the pre-split `ILedgerClient`.
+- Generated `<Choice>Async` exercisers (both the `ContractId<T>` receiver and the non-contract-returning
+  overloads) now map a writer-level `None`/`Many` outcome to a structured `ExerciseOutcome<TResult>.None`/`.Many`
+  (via `ExerciseOutcome<TransactionResult>.ProjectCommitted`) instead of throwing a generic
+  `InvalidOperationException`. A `Many` carries the committed contract ids, so — as with the create-by-exercise
+  one/many split — a committed transaction can no longer be misread as a submission failure and blindly
+  resubmitted as a duplicate. Migration: a call site that caught `InvalidOperationException` around a generated
+  `<Choice>Async` to handle these outcomes now receives them as `ExerciseOutcome<TResult>.None`/`.Many` on the
+  returned outcome and should handle them in its `switch`; regenerate against this release to pick up the new shape.
+
+### Removed
+
+- The C# emitter machinery (`ChoiceEmitter`, `RecordEmitter`, `TemplateEmitter`,
+  `EnumEmitter`, `VariantEmitter`, `InterfaceEmitter`, `RecordSerializationEmitter`,
+  `SubmissionExtensionsEmitter`, `DamlTypeMapper`, `PackageEmitContext`,
+  `TypeReferenceQualifier`, `ICrossPackageResolver`, `DarCrossPackageResolver`, and
+  `PartyAnalysis`) is no longer public on `Daml.Codegen.CSharp`. These types are
+  implementation detail used only within the codegen pipeline, not a supported
+  extension point; the public entry points remain `CSharpCodeGenerator`,
+  `CodeGenOptions`, and `IntermediateDarReader`.
+
+### Fixed
+
+- Generated bindings now compile for a record field whose type is a nested map — `Map k1 (Map k2 v)`,
+  including the `TextMap`-of-`TextMap` and list-leaf variants. The deserializer left each map's
+  `ToDictionary(...)` result uncast, so a map-of-map inferred a concrete
+  `Dictionary<K1, Dictionary<K2,V>>` value type that is not assignable to the declared
+  `IReadOnlyDictionary<K1, IReadOnlyDictionary<K2,V>>` (CS1503, because `IReadOnlyDictionary`
+  is invariant in its value). Each generated map deserialization now casts to its declared
+  `IReadOnlyDictionary<...>` at every nesting level, mirroring the existing list-leaf cast.
+  Single-level-map consumers are behaviourally unaffected.
+
+- Generated bindings now compile when a Daml name collides with a C# keyword. The emitter
+  escaped such names once, up front, and reused that one string across grammars that
+  disagree about the escape. Three defects followed. A choice whose controller field is a
+  keyword (e.g. `operator : Party`) emitted `<param name="@operator">` against a parameter
+  named `operator`, which fails any consumer building with XML documentation enabled
+  (CS1572/CS1573) — doc `name=` attributes take the bare identifier. A Daml type variable
+  named after a keyword (e.g. `event`) emitted the type parameter `T@event`, which C#
+  parses as two identifiers rather than one. A payload field cased as `Operator` escaped
+  nothing, then camelCased to a bare `operator`. Escaping now runs last, after casing and
+  prefixing, and the doc emitter names the unescaped identifier. Generated public API is
+  unchanged: parameters and properties keep their `@` escape.
+
+- Distinct Daml type names no longer collide onto one C# type. The emitter rewrote every
+  character C# forbids to `_`, which is lossy: a Daml `Foo'` (damlc-mangled to `Foo$u0027`)
+  and a literal `Foo_u0027` both emitted `Foo_u0027`, producing two `Foo_u0027` declarations
+  in one namespace (CS0101). Type-path sanitisation now demangles damlc's `$uXXXX`/`$$`
+  mangling and escapes forbidden characters into an injective `_uXXXX` form, so distinct
+  names stay distinct. This affects only type-ish names (templates, records, variant
+  constructors, type names); the field/member path is unchanged, so Daml Finance's `y'`/`m'`/`d'`
+  fields still emit `YU0027`/`MU0027`/`DU0027` as before. No emitted identifier in the current
+  corpus changes.
+
+- Generated bindings no longer silently drop choice-argument fields when two same-named
+  data types live in different modules of the same package. The emitter's data-type
+  lookup was keyed by simple name with last-wins semantics, so a choice-argument record
+  could be emitted from the wrong module's type — the nested record, its
+  `ToRecord`/`FromRecord`, and the `<Choice>Async` parameters all lost fields, compiling
+  cleanly but failing at exercise time on the ledger. The lookup is now module-qualified,
+  so each choice resolves the argument type declared in its own module.
+- `DamlJsonSerializer` (`Daml.Runtime`) now rejects oversized JSON inputs and
+  over-broad JSON arrays before materializing schemaless values, limiting
+  shallow allocation-amplification inputs while keeping configurable limits for
+  callers that need a tighter envelope.
+- `DamlJsonSerializer` (`Daml.Runtime`) now rejects duplicate keys when deserializing
+  GenMap-shaped JSON arrays, emits timestamps with the canonical UTC `Z` designator, and
+  runtime value constructors defensively copy caller-owned collection and byte-array inputs.
+- Codegen now rejects excessively deep Daml-LF type shapes with `InvalidDataException`
+  before managed type conversion or value-mapping recursion can overflow the stack, and
+  generated created-contract projectors now emit the leftover-copy loop without a
+  redundant outer guard.
+- `ThrowingExercise` (`Daml.Ledger.Abstractions.Extensions`) now preserves the original
+  transport exception as `LedgerOperationException.InnerException` when an
+  `ExerciseOutcome.InfraError` carries one, so throwing wrappers retain transport
+  details such as trailers, retry metadata, and stack traces.
+- Generated `<Choice>Async` exercise wrappers accept an optional `CommandId?`
+  parameter, defaulting to a fresh id only when the caller omits one, instead of
+  always minting a new `Guid`-derived command id. Retrying a lost-but-accepted
+  submission with the same id now lets the ledger deduplicate the resubmission
+  instead of re-executing the choice.
+- The throwing `Try*` convenience wrappers on `ThrowingExercise` (`Daml.Ledger.Abstractions.Extensions`)
+  no longer mask caller cancellation as an infrastructure failure: when the caller's
+  `CancellationToken` is cancelled, an `ExerciseOutcome.InfraError` outcome now surfaces as
+  `OperationCanceledException` instead of `LedgerOperationException`, so `catch
+  (OperationCanceledException)` around a unary call behaves the same as it already does
+  around the streaming methods.
+- `ContractStreamEvent<T>` (`Daml.Runtime`) and `ILedgerStreamer.SubscribeAsync`
+  (`Daml.Ledger.Abstractions`) XML docs now state which variants each stream shape
+  actually emits. The live update subscription uses ledger-effects shape and never
+  emits `Archived` — a consuming `Exercised` (`Consuming == true`) is a contract's
+  archival on that shape, and `Archived` appears only on ACS-delta-shaped streams.
+  The previous docs promised `Archived` on the live stream and told consumers to
+  evict caches and checkpoint on it, guidance that would leave archived contracts
+  cached forever (later exercises then failing `CONTRACT_NOT_FOUND`). Consumers
+  maintaining a cache on the live stream must evict on the consuming `Exercised`,
+  not on `Archived`.
+- `DamlNumeric` (`Daml.Runtime`) now backs its value with a sign, `BigInteger` mantissa,
+  and scale instead of `decimal`, so it round-trips any legal Daml-LF Numeric (up to 38
+  significant digits, including magnitudes above `decimal.MaxValue`) with zero precision
+  loss. `DamlJsonSerializer` no longer silently rounds excess precision on deserialize;
+  `DamlNumeric.Value` now throws `OverflowException` instead of rounding when the stored
+  value has more precision than `decimal` can represent exactly.
+- The static party-expression analyzer now resolves a template's `signatory`/`observer`
+  clause (and choice `controller`/`observer` clauses) through this SDK's generic-template
+  dictionary-method indirection — a function application of the template's payload to a
+  same-package top-level value, optionally type-applied — instead of unconditionally
+  falling back to a dynamic submitter parameter. Templates whose party clause resolves
+  through exactly this one level of indirection to a plain payload-field reference (or a
+  literal empty list) now get the typed `actAs`/named-signatory codegen surface instead of
+  the generic `SubmitterInfo` fallback.
+- The static party-expression analyzer now also resolves a choice `controller <field>` /
+  `observer <field>` clause that compiles to the per-choice `App(Val(<self>), [this, arg])`
+  indirection whose body reduces to `\this -> let ds = this.<field> in \arg -> toParties ds`,
+  binding the controller to a single payload-field `Party`. A generated `<Choice>Async`
+  exerciser for such a choice now takes a typed `Party` parameter per controller (in
+  declaration order) plus a payload-reading contract overload that reads the parties off the
+  fetched contract, instead of a single explicit `SubmitterInfo submitter`. For example the
+  Quickstart `Iou.Transfer` exerciser now takes `Party owner`. The one-argument
+  template-`signatory` twin of this idiom stays a dynamic submitter as before.
+- Generated `<Choice>Async` exercisers with statically-resolved controllers now emit an XML
+  doc `<param>` tag for every controller and observer `Party` parameter, so a consumer
+  project that compiles the generated code with documentation generation and
+  warnings-as-errors no longer fails with CS1573.
+- `DamlJsonSerializer`'s schemaless deserialize path now infers a bare integer string
+  (e.g. `"1234"`, the JSON Ledger API's preferred `Int` encoding) as `DamlInt64` instead
+  of `DamlText`, so generated `.As<DamlInt64>()` accessors no longer throw
+  `InvalidCastException` on values round-tripped through the untyped path.
+- `DamlDate.FromDaysSinceEpoch` and `DamlTimestamp.FromMicrosecondsSinceEpoch`
+  (`Daml.Runtime`) now use checked arithmetic and validate the result against the
+  Daml-LF Date/Timestamp bounds (`0001-01-01` to `9999-12-31`), throwing
+  `ArgumentOutOfRangeException` instead of silently wrapping to a valid-looking but
+  wrong date or timestamp for out-of-range or overflowing input.
+- `Daml.Codegen.Testing.Conformance`'s generated `IHolding` interface now also exposes
+  `public static new Identifier InterfaceId` (previously reachable only through
+  the explicit `IDamlInterface.InterfaceId` implementation), matching the
+  interface-identifier shape the emitter has produced for every other generated
+  interface since the CS0117 interface-matching fix; the package's checked-in
+  generated tree had never been regenerated to pick it up.
+
+### Security
+
+- The internal DAR/DALF reader (used by the codegen pipeline) no longer
+  recurses without bound when a hand-crafted DALF's signatory/observer/controller expression contains a
+  cyclic interned-expression reference; it now falls back to the dynamic (explicit-submitter) party path
+  instead of crashing the process with an uncatchable `StackOverflowException`.
+- The internal DAR/DALF reader now caps per-entry (256 MiB) and total (1 GiB) decompressed size before
+  inflating a `.dalf` zip entry, and re-enables the protobuf message-size backstop it had previously
+  disabled, so a zip-bomb DAR fails fast with `InvalidDataException` instead of exhausting memory.
+- The `IntermediateDar` name-validation gate now anchors its identifier and package-coordinate
+  regexes with `\A`/`\z` instead of `^`/`$`, closing a bypass where a name ending in a newline
+  (e.g. a template or choice name of `"Foo\n"`) slipped past validation — `$` matches immediately
+  before a trailing newline in .NET, `\z` does not.
 
 ## [0.3.0-preview.1] — 2026-07-04
 
@@ -343,7 +610,7 @@ because they are versioned in lockstep:
 
 ### Changed — BREAKING
 
-- **`IDamlValue` is now a bare marker interface; its `DamlRecord ToRecord()` member moved to a new `IDamlRecord : IDamlValue`, alongside a new `IDamlVariant : IDamlValue` carrying `DamlVariant ToVariant()`.** Generated record types and template choice-argument types now implement `IDamlRecord` instead of `IDamlValue`, and `ITemplate` / `IDamlInterface` now extend `IDamlRecord` (so every template and interface still exposes `ToRecord()`). Code that holds a value as `IDamlValue` and calls `.ToRecord()` must now hold it as `IDamlRecord` (or `ITemplate`); generic constraints `where T : IDamlValue` that relied on `ToRecord()` should be widened to `IDamlRecord`. Wire format and `ToRecord()` output are unchanged. Variant emission is unchanged in this slice (the design decision is kept in the project's internal ADR collection; variant round-trip lands in a follow-up).
+- **`IDamlValue` is now a bare marker interface; its `DamlRecord ToRecord()` member moved to a new `IDamlRecord : IDamlValue`, alongside a new `IDamlVariant : IDamlValue` carrying `DamlVariant ToVariant()`.** Generated record types and template choice-argument types now implement `IDamlRecord` instead of `IDamlValue`, and `ITemplate` / `IDamlInterface` now extend `IDamlRecord` (so every template and interface still exposes `ToRecord()`). Code that holds a value as `IDamlValue` and calls `.ToRecord()` must now hold it as `IDamlRecord` (or `ITemplate`); generic constraints `where T : IDamlValue` that relied on `ToRecord()` should be widened to `IDamlRecord`. Wire format and `ToRecord()` output are unchanged. Variant emission is unchanged in this slice (variant round-trip lands in a follow-up).
 - **Removed the unused public interfaces `ITemplateCompanion<T>` and `ICreateAnd<T>` from `Daml.Runtime`.** Neither was ever implemented by generated code or referenced anywhere, so no consumer can be relying on them; they are deleted rather than frozen into the current 0.x surface.
 - **`Contract<T>`, `TransactionResult`, and `CreatedContract` (in `Daml.Runtime.Contracts`) are now `sealed`.** These public result records can no longer be subclassed. Nothing was expected to derive from them, so this is a technically-breaking change only for consumers who had created their own subtypes; switch to wrapping or composing these records instead.
 - **`ILedgerClient` submitter API is now strongly typed: the single-party convenience overloads of `TryExerciseAsync<TResult>`, `TryCreateAsync<TTemplate>`, `TryExerciseForCreatedAsync<TTemplate>`, `SubscribeAsync<T>`, and `SubscribeActiveAsync<T>` (and `LedgerClientExtensions.ExerciseAsync`) take `Party actAs` instead of `string actAs`.** The `SubmitterInfo` overloads remain the abstract primitives implementations override; the `Party actAs` overloads are convenience default-interface-methods that forward to them with that single `ActAs` party and empty `ReadAs`. Replace `client.ExerciseAsync(cmd, "alice")` with `client.ExerciseAsync(cmd, new Party("alice"))`.
@@ -357,8 +624,8 @@ because they are versioned in lockstep:
 - **`ExerciseCommand.ContractId` is now the abstract `ContractId` base type** (was `string`). A new non-generic `abstract record ContractId` in `Daml.Runtime.Contracts` is the base of `ContractId<T>`, so the typed contract id flows onto the command with no unwrap/rewrap; the bare-`string` positional construction path is gone — build commands via `ExerciseCommand.For<T>` / `ForInterface<T>` (which now also reject a `null` contract id), and read the raw string back via `.Value`. The value still projects onto the Ledger API `contract_id` string field unchanged.
 - **`ContractId<T>` now validates its value on construction** — `new ContractId<T>(value)` throws `ArgumentException` when `value` is null, empty, or whitespace (previously it silently accepted them). All real ledger contract ids are non-empty, so legitimate callers are unaffected; a malformed/empty id now fails loud instead of carrying `""`.
 - **`ContractId<T>` is no longer a positional record, so its compiler-generated `Deconstruct(out string)` is removed.** Consumers using positional deconstruction (`var (value) = contractId;`) must read `.Value` instead.
-- **`Choice<TTemplate, TArg, TResult>.Name` is now the value type `ChoiceName`** (was `string`). Generated choice metadata now constructs it explicitly — `Name = "Archive"` becomes `Name = new ChoiceName("Archive")`; read the raw string back via `.Value`. This extends the project-wide "no bare `string` choice names" pass (a decision kept in the project's internal ADR collection) to the choice-metadata record.
-- **Generated variants now round-trip through `DamlVariant` instead of `DamlRecord`.** A generated variant's abstract base now implements `IDamlVariant` (was `IDamlValue`) and exposes `DamlVariant ToVariant()` plus a static `FromVariant(DamlVariant)` that dispatches on the constructor tag; each case overrides `ToVariant()` to produce `DamlVariant.Create("<Tag>", <payload>)` (a no-argument case uses `DamlUnit.Instance` as its value). The previous lossy `ToRecord()` / throwing `FromRecord(...)` stubs are gone, so a record or choice-result field whose type is a variant now serializes and deserializes correctly instead of throwing `NotImplementedException` at runtime. Hand-written code that called `.ToRecord()` / `.FromRecord(...)` on a generated variant must switch to `.ToVariant()` / `.FromVariant(...)`. Wire format is unchanged — the runtime `DamlVariant` JSON shape is the same (per a decision kept in the project's internal ADR collection).
+- **`Choice<TTemplate, TArg, TResult>.Name` is now the value type `ChoiceName`** (was `string`). Generated choice metadata now constructs it explicitly — `Name = "Archive"` becomes `Name = new ChoiceName("Archive")`; read the raw string back via `.Value`. This extends the project-wide "no bare `string` choice names" pass to the choice-metadata record.
+- **Generated variants now round-trip through `DamlVariant` instead of `DamlRecord`.** A generated variant's abstract base now implements `IDamlVariant` (was `IDamlValue`) and exposes `DamlVariant ToVariant()` plus a static `FromVariant(DamlVariant)` that dispatches on the constructor tag; each case overrides `ToVariant()` to produce `DamlVariant.Create("<Tag>", <payload>)` (a no-argument case uses `DamlUnit.Instance` as its value). The previous lossy `ToRecord()` / throwing `FromRecord(...)` stubs are gone, so a record or choice-result field whose type is a variant now serializes and deserializes correctly instead of throwing `NotImplementedException` at runtime. Hand-written code that called `.ToRecord()` / `.FromRecord(...)` on a generated variant must switch to `.ToVariant()` / `.FromVariant(...)`. Wire format is unchanged — the runtime `DamlVariant` JSON shape is the same.
 - **Generated enum serialization extensions are renamed `ToRecord`/`FromRecord` → `ToDamlEnum`/`FromDamlEnum`** so the method name matches its `DamlEnum` return/parameter type (an enum's `ToRecord()` never returned a `DamlRecord`). For a generated `enum Status`, replace `status.ToRecord()` with `status.ToDamlEnum()` and `StatusExtensions.FromRecord(value)` with `StatusExtensions.FromDamlEnum(value)`. Generated `ToValue`/`FromValue` round-tripping is updated automatically; only hand-written code that called the enum extensions directly needs migrating. Record/variant/template `ToRecord`/`FromRecord` are unchanged.
 - **Removed `CodeGenOptions.GenerateJsonSupport`, `CodeGenOptions.OutputDirectory`, `CodeGenOptions.Verbosity`, and the `--json` CLI flag.** All four were documented no-ops — setting them never changed emitter behavior or output. Delete any assignments and drop the flag; generated output is unchanged.
 - **Removed the dead interface member `IDarSource.ResolveAllDependencyReferences()`.** No code path ever called it; implementations simply delete their override.
@@ -370,7 +637,7 @@ because they are versioned in lockstep:
 
 ### Changed
 
-- **`DamlNumeric` now serializes to JSON in canonical unpadded decimal form.** Trailing zeros are stripped and at least one fractional digit is always emitted, so the wire shape no longer depends on how the `decimal` was constructed: `1.5m` and `1.50m` both serialize to `"1.5"`, and an integer value such as `42m` serializes to `"42.0"`. Scientific notation is never emitted (e.g. `0.0000000001m` → `"0.0000000001"`). Previously the output preserved the `decimal`'s internal scale (`1.50m` → `"1.50"`, `42m` → `"42"`). This is the commitment-grade wire shape for the current 0.x surface, per a decision kept in the project's internal ADR collection; PQS-style scale-padded reading remains out of scope (deferred to a future release).
+- **`DamlNumeric` now serializes to JSON in canonical unpadded decimal form.** Trailing zeros are stripped and at least one fractional digit is always emitted, so the wire shape no longer depends on how the `decimal` was constructed: `1.5m` and `1.50m` both serialize to `"1.5"`, and an integer value such as `42m` serializes to `"42.0"`. Scientific notation is never emitted (e.g. `0.0000000001m` → `"0.0000000001"`). Previously the output preserved the `decimal`'s internal scale (`1.50m` → `"1.50"`, `42m` → `"42"`). This is the commitment-grade wire shape for the current 0.x surface; PQS-style scale-padded reading remains out of scope (deferred to a future release).
 - Licensing: every source file now carries the two-line SPDX Apache-2.0 header (`Copyright (c) 2026 Peaceful Studio OÜ` + `SPDX-License-Identifier: Apache-2.0`); the central `<Copyright>` tag in `Directory.Build.props` is retained for assembly metadata. (open-source prep)
 - `DamlJsonSerializer` failures now always surface as `JsonException`: a number outside `decimal` range, a non-object top level passed to `DeserializeRecord`, an unsupported `DamlValue` subtype, and value nesting beyond 64 levels all throw `JsonException` instead of leaking `FormatException`/`InvalidOperationException`/`NotSupportedException`.
 - **`DamlRecord`, `DamlList`, `DamlTextMap`, and `DamlGenMap` now implement structural equality** — two values with equal contents compare equal, so two `ToRecord()` results of the same payload now satisfy `Equals`. `DamlNumeric` equality compares the numeric value only, ignoring `Scale`, so a deserialized Numeric (always reconstructed at the default scale) compares equal to the value it round-tripped from. `DamlGenMap.Create` now rejects structurally-equal duplicate keys, matching `DamlTextMap`.
@@ -417,11 +684,11 @@ because they are versioned in lockstep:
 ### Added
 
 - **`Daml.Runtime.Stdlib.Either<TL, TR>` runtime type, and codegen now maps `DA.Types.Either a b` onto it.** Previously a Daml field or choice type of `Either a b` emitted a bare `Either<TL, TR>` with no definition or `using`, so any DAR using `Either` (e.g. `canton-ping`) failed to compile (`CS0246`). `Either` is now a parametric stdlib type: `Either<TL, TR>` is an abstract record with `Left`/`Right` cases, round-tripping through `DamlVariant` via `ToValue`/`FromValue`. Generated code references it as `Daml.Runtime.Stdlib.Either<…>`.
-- **`ghcr.io/peacefulstudio/dpm-codegen-cs` OCI bundle contract is now codified** (the contract document is kept in the project's internal ADR collection). Anyone integrating with the artifact directly — not via `dpm` — gets a versioned contract for the bundle layout (top-level `component.yaml`, `bin/<exe>`, `bin/<jar>`), the per-layer OCI media type (`application/vnd.component.file`), the required `network.canton.dpm.file-{mode,modtime,name}` annotations (`file-name` is the relative path inside the bundle, not the basename), and the consumer `daml.yaml` shape (`components: ["oci://…"]`, no `sdk-version:` alongside, never the dead-code `override-components: <name>: image-tag:`). Stock `dpm ≥ 1.0.12` required on the consumer side; `dpm 1.0.16` is what our workflows pin. Public-package consumers must NOT `docker login ghcr.io` with `${{ secrets.GITHUB_TOKEN }}` — anonymous pull is the supported path.
-- **`daml-codegen-csharp --release-counters <path>` resolves the 4th NuGet version segment from a `JsonReleaseCounterStore`**. When the flag is supplied the CLI computes the content hash of the `IntermediateDar` proto, opens the store at `<path>`, resolves the revision via the release-counter versioning machinery (now internal to the emitter), and uses that as `CodeGenOptions.EmitterCounter` — replacing the explicit `--emitter-counter <int>` static override for CI-driven publishing. The `Canton.Splice.*` publish workflow now wires this flag end-to-end: the counter store is the source of truth for the 4th segment, and consumers see monotonically increasing `M.m.p.r` versions across re-emissions of the same DAR-intrinsic version when emitter output content changes. The store lives in a GitHub Actions repo variable, a placement decision kept in the project's internal ADR collection; local-dev invocations omit `--release-counters` and continue to default to `r=0`.
-- **`dpm codegen-cs` is now distributable as a multi-arch OCI artifact at `ghcr.io/peacefulstudio/dpm-codegen-cs`**. The new `.github/workflows/build-oci-codegen-cs.yaml` builds a self-contained single-file C# emitter binary for `linux/amd64`, `linux/arm64`, `darwin/arm64`, and `windows/amd64`, bundles each with the JVM helper JAR + a small `dpm-codegen-cs` entrypoint script, pushes each per-RID directory as its own OCI artifact, and composes them into a multi-arch index under `ghcr.io/peacefulstudio/dpm-codegen-cs:<version>`. Per the component-distribution decision kept in the project's internal ADR collection, stock `dpm` fetches the right RID lazily on first invocation using its `<os>/<arch>=<path>` asset-selection syntax — no host .NET runtime required on the consumer side; a host JDK is the only runtime precondition. Triggers: `workflow_dispatch` (manual) and `workflow_call` (orchestration by a release pipeline).
-- **JVM helper `--schema-only` opt-out flag** (per an amendment kept in the project's internal ADR collection). The JVM helper's default decode is now full-decode + static party-expression analysis; pass `--schema-only` to opt into the previous schema-mode decode (`SignatureErasure` runs on `signatories` / `observers` / `controllers` / `choiceObservers` expression bodies). The opt-out is patch-version-insensitive — two patch-different versions of the same package produce identical `IntermediateDar` bytes — at the cost of disabling the typed-`actAs` codegen path on the proto pipeline. `scripts/codegen-pipeline.sh` exposes the same `--schema-only` flag to chain it through to the helper.
-- **4-part `M.m.p.r` NuGet versioning** (scheme kept in the project's internal ADR collection), exposed as the new `Daml.Codegen.CSharp.Versioning` namespace. Segments 1–3 of a generated package's NuGet version are the DAR-intrinsic `Major.Minor.Patch`; segment 4 (`r`) is a monotonic emitter counter that disambiguates content-identical re-emissions of the same DAR-intrinsic version under different emitter versions. New consumer-facing API: `SpliceNuGetVersion.Compute(packageName, intrinsicVersion, contentHash, counterStore)` (now internal to the emitter, renamed `NuGetVersionResolver`) returns the canonical 4-part `FourPartPackageVersion`. The counter is persisted in a JSON file (`JsonReleaseCounterStore.OpenOrCreate(path)`) keyed by `{packageName}@{M.m.p}`; first emission of a (package, intrinsic-version) pair returns `r=0`, identical re-emissions hold the revision steady, and any content change bumps it. `IntermediatePackageContentHash.Compute(IntermediatePackage)` returns the stable SHA-256 over the deterministic protobuf encoding for use as the content-hash input. The NuGet packing step consumes this API; consumers see the new 4-segment versions on the wire.
+- **`ghcr.io/peacefulstudio/dpm-codegen-cs` OCI bundle contract is now codified**. Anyone integrating with the artifact directly — not via `dpm` — gets a versioned contract for the bundle layout (top-level `component.yaml`, `bin/<exe>`, `bin/<jar>`), the per-layer OCI media type (`application/vnd.component.file`), the required `network.canton.dpm.file-{mode,modtime,name}` annotations (`file-name` is the relative path inside the bundle, not the basename), and the consumer `daml.yaml` shape (`components: ["oci://…"]`, no `sdk-version:` alongside, never the dead-code `override-components: <name>: image-tag:`). Stock `dpm ≥ 1.0.12` required on the consumer side; `dpm 1.0.16` is what our workflows pin. Public-package consumers must NOT `docker login ghcr.io` with `${{ secrets.GITHUB_TOKEN }}` — anonymous pull is the supported path.
+- **`daml-codegen-csharp --release-counters <path>` resolves the 4th NuGet version segment from a `JsonReleaseCounterStore`**. When the flag is supplied the CLI computes the content hash of the `IntermediateDar` proto, opens the store at `<path>`, resolves the revision via the release-counter versioning machinery (now internal to the emitter), and uses that as `CodeGenOptions.EmitterCounter` — replacing the explicit `--emitter-counter <int>` static override for CI-driven publishing. The `Canton.Splice.*` publish workflow now wires this flag end-to-end: the counter store is the source of truth for the 4th segment, and consumers see monotonically increasing `M.m.p.r` versions across re-emissions of the same DAR-intrinsic version when emitter output content changes. The store lives in a GitHub Actions repo variable; local-dev invocations omit `--release-counters` and continue to default to `r=0`.
+- **`dpm codegen-cs` is now distributable as a multi-arch OCI artifact at `ghcr.io/peacefulstudio/dpm-codegen-cs`**. The new `.github/workflows/build-oci-codegen-cs.yaml` builds a self-contained single-file C# emitter binary for `linux/amd64`, `linux/arm64`, `darwin/arm64`, and `windows/amd64`, bundles each with the JVM helper JAR + a small `dpm-codegen-cs` entrypoint script, pushes each per-RID directory as its own OCI artifact, and composes them into a multi-arch index under `ghcr.io/peacefulstudio/dpm-codegen-cs:<version>`. Stock `dpm` fetches the right RID lazily on first invocation using its `<os>/<arch>=<path>` asset-selection syntax — no host .NET runtime required on the consumer side; a host JDK is the only runtime precondition. Triggers: `workflow_dispatch` (manual) and `workflow_call` (orchestration by a release pipeline).
+- **JVM helper `--schema-only` opt-out flag**. The JVM helper's default decode is now full-decode + static party-expression analysis; pass `--schema-only` to opt into the previous schema-mode decode (`SignatureErasure` runs on `signatories` / `observers` / `controllers` / `choiceObservers` expression bodies). The opt-out is patch-version-insensitive — two patch-different versions of the same package produce identical `IntermediateDar` bytes — at the cost of disabling the typed-`actAs` codegen path on the proto pipeline. `scripts/codegen-pipeline.sh` exposes the same `--schema-only` flag to chain it through to the helper.
+- **4-part `M.m.p.r` NuGet versioning**, exposed as the new `Daml.Codegen.CSharp.Versioning` namespace. Segments 1–3 of a generated package's NuGet version are the DAR-intrinsic `Major.Minor.Patch`; segment 4 (`r`) is a monotonic emitter counter that disambiguates content-identical re-emissions of the same DAR-intrinsic version under different emitter versions. New consumer-facing API: `SpliceNuGetVersion.Compute(packageName, intrinsicVersion, contentHash, counterStore)` (now internal to the emitter, renamed `NuGetVersionResolver`) returns the canonical 4-part `FourPartPackageVersion`. The counter is persisted in a JSON file (`JsonReleaseCounterStore.OpenOrCreate(path)`) keyed by `{packageName}@{M.m.p}`; first emission of a (package, intrinsic-version) pair returns `r=0`, identical re-emissions hold the revision steady, and any content change bumps it. `IntermediatePackageContentHash.Compute(IntermediatePackage)` returns the stable SHA-256 over the deterministic protobuf encoding for use as the content-hash input. The NuGet packing step consumes this API; consumers see the new 4-segment versions on the wire.
 - **Codegen now emits a buildable `.csproj` and packs a NuGet package per Daml package**. Generated projects carry versions per the 4-part `M.m.p.r` versioning scheme (Daml package version supplies segments 1–3; the 4th segment is the emitter counter, defaulting to `0` for the first emission), declare `<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>` (configurable via the new `--package-license <SPDX>` CLI flag / `CodeGenOptions.PackageLicenseExpression` for non-Apache DARs), and reference `Daml.Runtime` and `Daml.Ledger.Abstractions` so consumers can run `dotnet add package <Pkg>` + `dotnet build` against an unmodified output tree. A new `--emitter-counter <int>` flag on the emitter CLI (validated at the boundary to reject negatives) exposes the 4th-segment override for the Splice publish pipeline; local-dev invocations leave the default in place. `CodeGenOptions.EmitterCounter` is the integration point for the per-emitter mapping table.
 - `Daml.Codegen.CSharp.IntermediateDarReader.Read(IntermediateDar)` — proto-to-model adapter; the new public API surface for emitter consumers. Throws `InvalidDataException` fail-fast on malformed input (missing data-type shape, missing choice `argument_type` / `return_type`, unknown proto sort, `BUILTIN_TYPE_UNSPECIFIED`) and `NotSupportedException` on intentionally-deferred builtins; no silent fallback to `Unit` or empty record.
 - `Daml.Codegen.CSharp.Model.DarModel` and `Daml.Codegen.CSharp.Model.IDarSource` — the emitter input contract. `CSharpCodeGenerator.Generate` now takes `IDarSource`, satisfied by `DarModel` (proto-direct).
@@ -973,7 +1240,14 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.3...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.0-preview.1...HEAD
+[0.4.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.3.0-preview.1...v0.4.0-preview.1
+[0.3.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.2.0-preview.3...v0.3.0-preview.1
+[0.2.0-preview.3]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.2.0-preview.2...v0.2.0-preview.3
+[0.2.0-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.2.0-preview.1...v0.2.0-preview.2
+[0.2.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.5...v0.2.0-preview.1
+[0.1.8-preview.5]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.4...v0.1.8-preview.5
+[0.1.8-preview.4]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...v0.1.8-preview.4
 [0.1.8-preview.3]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.2...v0.1.8-preview.3
 [0.1.8-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.1.8-preview.1...v0.1.8-preview.2
 [0.1.8-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/releases/tag/v0.1.8-preview.1
