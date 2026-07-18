@@ -24,7 +24,7 @@ public class ContractStreamEventTests
             new ContractStreamEvent<TestTemplate>.Unassigned(new ContractId<TestTemplate>("c1"), LedgerOffset.At(5), new SynchronizerId("src"), new SynchronizerId("tgt"), "reassignment-1", 7L, [new Party("alice")]),
             new ContractStreamEvent<TestTemplate>.Checkpoint(LedgerOffset.At(6)),
             new ContractStreamEvent<TestTemplate>.StreamError(14, "unavailable"),
-            new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent"),
+            new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, "TopologyEvent"),
         ];
 
         var seen = events.Select(e => e switch
@@ -54,8 +54,8 @@ public class ContractStreamEventTests
     [Fact]
     public void Unclassified_with_same_payload_should_be_value_equal()
     {
-        var a = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
-        var b = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
+        var a = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, "TopologyEvent");
+        var b = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, "TopologyEvent");
         a.Should().Be(b);
     }
 
@@ -70,12 +70,56 @@ public class ContractStreamEventTests
     }
 
     [Fact]
-    public void Unclassified_should_expose_offset_and_kind()
+    public void Unclassified_should_expose_offset_and_enumerated_kind()
     {
-        var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), "TopologyEvent");
+        var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.DecodeFailure);
 
         unclassified.Offset.Should().Be(LedgerOffset.At(7));
-        unclassified.Kind.Should().Be("TopologyEvent");
+        unclassified.Kind.Should().Be(UnclassifiedKind.DecodeFailure);
+        unclassified.RawKind.Should().BeNull();
+    }
+
+    [Fact]
+    public void Unclassified_unknown_kind_preserves_the_raw_descriptor()
+    {
+        var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, "TopologyEvent");
+
+        unclassified.Kind.Should().Be(UnclassifiedKind.Unknown);
+        unclassified.RawKind.Should().Be("TopologyEvent");
+    }
+
+    [Fact]
+    public void Unclassified_rejects_a_raw_descriptor_on_an_enumerated_kind()
+    {
+        var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.DecodeFailure, "EventCase_1");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Unclassified_rejects_an_unknown_kind_without_a_raw_descriptor()
+    {
+        var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, null);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Unclassified_with_new_offset_preserves_kind_and_raw_descriptor()
+    {
+        var original = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, "TopologyEvent");
+
+        var moved = original with { Offset = LedgerOffset.At(9) };
+
+        moved.Offset.Should().Be(LedgerOffset.At(9));
+        moved.Kind.Should().Be(UnclassifiedKind.Unknown);
+        moved.RawKind.Should().Be("TopologyEvent");
+    }
+
+    [Fact]
+    public void UnclassifiedKind_default_is_Unknown()
+    {
+        default(UnclassifiedKind).Should().Be(UnclassifiedKind.Unknown);
     }
 
     private sealed record TestTemplate(string Owner) : ITemplate

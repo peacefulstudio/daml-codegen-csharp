@@ -88,6 +88,14 @@ internal sealed class FakeLedgerClient : ILedgerClient
         where T : IDamlType =>
         throw new NotSupportedException();
 
+    public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        SubmitterInfo submitter,
+        LedgerOffset? fromOffset = null,
+        LedgerOffset? toOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : IDamlType =>
+        throw new NotSupportedException();
+
     public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? activeAtOffset = null,

@@ -17,10 +17,15 @@ namespace Daml.Ledger.Abstractions.Testing.Conformance;
 /// <summary>
 /// The documented behavioral contract for an <see cref="ILedgerClient"/> implementation.
 /// Adopters subclass with a concrete client factory and a probe Daml marker; the seeded
-/// client must expose the canonical scenario (at least one active contract, one
-/// unclassifiable row, a terminal checkpoint, at least one event on the subscription
-/// stream, honored <c>(fromOffset, toOffset]</c> bounds, and cancellation-honoring
-/// streams).
+/// client must expose the canonical scenario: at least one active contract, one
+/// unclassifiable row, a terminal checkpoint, at least one event on both the ACS-delta
+/// subscription (<see cref="ILedgerStreamer.SubscribeAsync{T}"/>, which surfaces archival
+/// as a first-class <see cref="ContractStreamEvent{T}.Archived"/> and never an
+/// <see cref="ContractStreamEvent{T}.Exercised"/>) and the ledger-effects subscription
+/// (<see cref="ILedgerStreamer.SubscribeLedgerEffectsAsync{T}"/>, which signals archival
+/// with a consuming <see cref="ContractStreamEvent{T}.Exercised"/> and never an
+/// <see cref="ContractStreamEvent{T}.Archived"/>), honored <c>(fromOffset, toOffset]</c>
+/// bounds, and cancellation-honoring streams.
 /// </summary>
 /// <typeparam name="TProbe">The Daml marker the seeded snapshot/stream is filtered to.</typeparam>
 public abstract class LedgerClientConformanceTests<TProbe>
@@ -46,6 +51,17 @@ public abstract class LedgerClientConformanceTests<TProbe>
     /// <c>INVALID_ARGUMENT</c> override this to a known-empty offset their transport accepts.
     /// </summary>
     protected virtual LedgerOffset EmptySnapshotOffset => LedgerOffset.Begin;
+
+    /// <summary>
+    /// A client whose active-contract-set snapshot faults mid-stream, or <c>null</c> if
+    /// the adopter's transport cannot induce a mid-snapshot transport fault
+    /// deterministically. When non-null, the returned client's
+    /// <see cref="ILedgerStreamer.SubscribeActiveAsync{T}"/> must terminate with a single
+    /// <see cref="AcsSnapshotEntry{T}.StreamError"/> and yield no terminal
+    /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/>. Defaults to <c>null</c>, which skips
+    /// the fault-path conformance check.
+    /// </summary>
+    protected virtual ILedgerClient? CreateFaultingSnapshotClient() => null;
 
     /// <summary>A cancelled live subscription surfaces cancellation, not an in-band error.</summary>
     [Fact]
@@ -109,6 +125,31 @@ public abstract class LedgerClientConformanceTests<TProbe>
             .Which.Should().BeOfType<AcsSnapshotEntry<TProbe>.Checkpoint>();
     }
 
+    /// <summary>
+    /// A mid-snapshot transport fault surfaces in-band as a terminal
+    /// <see cref="AcsSnapshotEntry{T}.StreamError"/>, never thrown, and in place of the
+    /// terminal <see cref="AcsSnapshotEntry{T}.Checkpoint"/> a successful snapshot ends with.
+    /// Opt-in: skipped unless the adopter overrides <see cref="CreateFaultingSnapshotClient"/>.
+    /// </summary>
+    [Fact]
+    public async Task Active_snapshot_surfaces_a_mid_snapshot_fault_as_StreamError()
+    {
+        var faultingClient = CreateFaultingSnapshotClient();
+        Assert.SkipWhen(
+            faultingClient is null,
+            "adopter opted out of the fault-path check: its transport cannot induce a deterministic mid-snapshot fault");
+        await using var client = faultingClient!;
+
+        var entries = await CollectSnapshot(client);
+
+        entries.Should().NotBeEmpty();
+        entries[^1].Should().BeOfType<AcsSnapshotEntry<TProbe>.StreamError>(
+            "a mid-snapshot transport fault must surface in-band as a terminal StreamError, not be thrown");
+        entries.Should().NotContain(
+            e => e is AcsSnapshotEntry<TProbe>.Checkpoint,
+            "a faulted snapshot yields no terminal Checkpoint — there is no valid snapshot offset to hand over to a live subscription");
+    }
+
     /// <summary>fromOffset is exclusive: resuming from an offset does not re-deliver the event at it.</summary>
     [Fact]
     public async Task Subscribing_from_an_offset_excludes_the_event_at_that_offset()
@@ -148,6 +189,48 @@ public abstract class LedgerClientConformanceTests<TProbe>
         bounded.Should().OnlyContain(
             e => OffsetOf(e).Value <= boundary.Value,
             "a bounded subscription must complete at toOffset and deliver nothing past it");
+    }
+
+    /// <summary>
+    /// The ledger-effects subscription signals archival with a consuming
+    /// <see cref="ContractStreamEvent{T}.Exercised"/>, never an
+    /// <see cref="ContractStreamEvent{T}.Archived"/> variant — the shape's defining contract.
+    /// </summary>
+    [Fact]
+    public async Task Ledger_effects_subscription_never_yields_Archived()
+    {
+        await using var client = CreateClient();
+        var end = await client.GetLedgerEndAsync();
+
+        var events = await CollectWithinBudget(
+            client.SubscribeLedgerEffectsAsync<TProbe>(Reader, LedgerOffset.Begin, end),
+            $"A bounded SubscribeLedgerEffectsAsync (toOffset {end.Value}) must complete");
+
+        events.Should().NotBeEmpty(
+            "the conformance scenario must seed at least one event on the ledger-effects stream");
+        events.Should().NotContain(
+            e => e is ContractStreamEvent<TProbe>.Archived,
+            "the ledger-effects shape signals archival via a consuming Exercised, never an Archived variant");
+    }
+
+    /// <summary>
+    /// The ACS-delta subscription surfaces archival as a first-class
+    /// <see cref="ContractStreamEvent{T}.Archived"/> event, never an
+    /// <see cref="ContractStreamEvent{T}.Exercised"/> variant — the shape's defining contract.
+    /// </summary>
+    [Fact]
+    public async Task Acs_delta_subscription_never_yields_Exercised()
+    {
+        await using var client = CreateClient();
+        var end = await client.GetLedgerEndAsync();
+
+        var events = await CollectBounded(client, LedgerOffset.Begin, end);
+
+        events.Should().NotBeEmpty(
+            "the conformance scenario must seed at least one event on the subscription stream");
+        events.Should().NotContain(
+            e => e is ContractStreamEvent<TProbe>.Exercised,
+            "the ACS-delta shape surfaces archival as a first-class Archived event, never an Exercised variant");
     }
 
     private Task<IReadOnlyList<AcsSnapshotEntry<TProbe>>> CollectSnapshot(

@@ -23,16 +23,17 @@ namespace Daml.Runtime.Streams;
 ///   was created on the ledger; full payload is available.</item>
 ///   <item><see cref="Archived"/> — a contract of type <typeparamref name="T"/>
 ///   was archived; payload is not available (Canton does not re-emit it).
-///   Emitted only on ACS-delta-shaped streams; the live update subscription
-///   (<c>ILedgerStreamer.SubscribeAsync</c>, ledger-effects shape) never yields
-///   this variant — an archive there arrives as a consuming
+///   Emitted only on ACS-delta-shaped streams (the shape the live
+///   <c>ILedgerStreamer.SubscribeAsync</c> stream uses); the ledger-effects
+///   subscription (<c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c>) never
+///   yields this variant — an archive there arrives as a consuming
 ///   <see cref="Exercised"/> (<see cref="Exercised.Consuming"/> is <c>true</c>).</item>
 ///   <item><see cref="Exercised"/> — a choice was exercised on a contract of
 ///   type <typeparamref name="T"/>; choice argument and result are available.
 ///   Emitted only on the ledger-effects shape (the shape the live
-///   <c>ILedgerStreamer.SubscribeAsync</c> stream uses); a consuming exercise
-///   (<see cref="Exercised.Consuming"/> is <c>true</c>) is that shape's
-///   archival signal.</item>
+///   <c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c> stream uses); a
+///   consuming exercise (<see cref="Exercised.Consuming"/> is <c>true</c>) is
+///   that shape's archival signal.</item>
 ///   <item><see cref="Assigned"/>/<see cref="Unassigned"/> — a contract of
 ///   type <typeparamref name="T"/> was reassigned across synchronizers.</item>
 ///   <item><see cref="Checkpoint"/> — an offset checkpoint carrying no
@@ -62,7 +63,7 @@ namespace Daml.Runtime.Streams;
 ///   </listheader>
 ///   <item>
 ///     <term>Ledger-effects live update stream
-///     (<c>ILedgerStreamer.SubscribeAsync</c>)</term>
+///     (<c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c>)</term>
 ///     <description><see cref="Created"/>, <see cref="Exercised"/> (a consuming
 ///     exercise is the archival signal), <see cref="Assigned"/>,
 ///     <see cref="Unassigned"/>, <see cref="Checkpoint"/>,
@@ -70,7 +71,8 @@ namespace Daml.Runtime.Streams;
 ///     <see cref="Archived"/>.</description>
 ///   </item>
 ///   <item>
-///     <term>ACS-delta-shaped stream</term>
+///     <term>ACS-delta live update stream
+///     (<c>ILedgerStreamer.SubscribeAsync</c>)</term>
 ///     <description><see cref="Created"/>, <see cref="Archived"/>,
 ///     <see cref="Assigned"/>, <see cref="Unassigned"/>,
 ///     <see cref="Checkpoint"/>, <see cref="StreamError"/>,
@@ -111,9 +113,10 @@ public abstract record ContractStreamEvent<T>
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was archived. Emitted only on
-    /// ACS-delta-shaped streams; the live update subscription
-    /// (<c>ILedgerStreamer.SubscribeAsync</c>, ledger-effects shape) never yields
-    /// this variant — an archive there arrives as a consuming
+    /// ACS-delta-shaped streams (the shape the live
+    /// <c>ILedgerStreamer.SubscribeAsync</c> stream uses); the ledger-effects
+    /// subscription (<c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c>) never
+    /// yields this variant — an archive there arrives as a consuming
     /// <see cref="Exercised"/> (<see cref="Exercised.Consuming"/> is <c>true</c>).
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID.</param>
@@ -129,11 +132,11 @@ public abstract record ContractStreamEvent<T>
     /// <summary>
     /// A choice was exercised on a contract of type <typeparamref name="T"/>.
     /// Only emitted when the stream is opened with ledger-effects shape (the
-    /// shape the live <c>ILedgerStreamer.SubscribeAsync</c> update stream uses);
-    /// ACS-delta streams emit only <see cref="Created"/> and <see cref="Archived"/>.
-    /// On the ledger-effects shape a consuming exercise (<see cref="Consuming"/>
-    /// is <c>true</c>) is the contract's archival signal — there is no separate
-    /// <see cref="Archived"/> event on that shape.
+    /// shape the live <c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c> update
+    /// stream uses); ACS-delta streams emit only <see cref="Created"/> and
+    /// <see cref="Archived"/>. On the ledger-effects shape a consuming exercise
+    /// (<see cref="Consuming"/> is <c>true</c>) is the contract's archival
+    /// signal — there is no separate <see cref="Archived"/> event on that shape.
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID the choice was exercised on.</param>
     /// <param name="ChoiceName">The choice name.</param>
@@ -232,10 +235,12 @@ public abstract record ContractStreamEvent<T>
     /// stream from the last good offset, terminate, etc.
     /// </summary>
     /// <remarks>
-    /// Emitted only by the live update subscription
-    /// (<c>ILedgerStreamer.SubscribeAsync</c>). Active-contract-set snapshots
-    /// stream <see cref="AcsSnapshotEntry{T}"/>, which has no error variant;
-    /// mid-stream transport failures on the snapshot throw instead.
+    /// Emitted only by the live update subscriptions
+    /// (<c>ILedgerStreamer.SubscribeAsync</c> and
+    /// <c>ILedgerStreamer.SubscribeLedgerEffectsAsync</c>). Active-contract-set
+    /// snapshots stream <see cref="AcsSnapshotEntry{T}"/> and surface a
+    /// mid-snapshot transport fault in-band as their own terminal
+    /// <see cref="AcsSnapshotEntry{T}.StreamError"/> variant instead.
     /// </remarks>
     /// <param name="StatusCode">Transport status code from the failed call.
     /// For gRPC streams this is <c>(int)Grpc.Core.StatusCode</c>; consumers
@@ -254,9 +259,47 @@ public abstract record ContractStreamEvent<T>
     /// are available to attach here.
     /// </summary>
     /// <param name="Offset">The ledger offset at which the unrecognized event occurred.</param>
-    /// <param name="Kind">A short description of the unrecognized event, for
-    /// logging/diagnostics.</param>
+    /// <param name="Kind">Why the event could not be mapped to a typed variant, as a
+    /// strongly-typed discriminator consumers <c>switch</c> on. <see cref="UnclassifiedKind.Unknown"/>
+    /// means the transport delivered a variant this layer does not recognise; the raw
+    /// descriptor is then on <paramref name="RawKind"/>.</param>
+    /// <param name="RawKind">The transport's raw descriptor for the unrecognized event. The
+    /// constructor guarantees the invariant that <paramref name="RawKind"/> is non-<c>null</c>
+    /// exactly when <paramref name="Kind"/> is <see cref="UnclassifiedKind.Unknown"/>, and
+    /// <c>null</c> for every enumerated reason — so a consumer never sees a stale descriptor
+    /// attached to a named kind. Preserves forward-compatibility with server event variants
+    /// added after <see cref="UnclassifiedKind"/> was published, so such an event is surfaced
+    /// as data rather than dropped.</param>
+    /// <exception cref="ArgumentException"><paramref name="Kind"/> is
+    /// <see cref="UnclassifiedKind.Unknown"/> with a <c>null</c> <paramref name="RawKind"/>, or an
+    /// enumerated <paramref name="Kind"/> with a non-<c>null</c> <paramref name="RawKind"/>.</exception>
     public sealed record Unclassified(
         LedgerOffset Offset,
-        string Kind) : ContractStreamEvent<T>;
+        UnclassifiedKind Kind,
+        string? RawKind = null) : ContractStreamEvent<T>
+    {
+        /// <summary>
+        /// Why the event could not be mapped to a typed variant, as a strongly-typed
+        /// discriminator consumers <c>switch</c> on. Get-only, so a <c>with</c> expression
+        /// cannot reassign it independently of <see cref="RawKind"/>.
+        /// </summary>
+        public UnclassifiedKind Kind { get; } = Kind;
+
+        /// <summary>
+        /// The transport's raw descriptor for the unrecognized event — non-<c>null</c> exactly
+        /// when <see cref="Kind"/> is <see cref="UnclassifiedKind.Unknown"/>, and <c>null</c>
+        /// otherwise. Get-only, so the invariant validated at construction cannot be bypassed by
+        /// a <c>with</c> expression.
+        /// </summary>
+        public string? RawKind { get; } = (Kind, RawKind) switch
+        {
+            (UnclassifiedKind.Unknown, null) => throw new ArgumentException(
+                "An Unclassified event with Kind Unknown must carry the transport's raw descriptor in RawKind.",
+                nameof(RawKind)),
+            (not UnclassifiedKind.Unknown, not null) => throw new ArgumentException(
+                $"An Unclassified event with the enumerated Kind '{Kind}' must not carry a RawKind; RawKind is populated only for Unknown.",
+                nameof(RawKind)),
+            _ => RawKind,
+        };
+    }
 }

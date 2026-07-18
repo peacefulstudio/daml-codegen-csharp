@@ -19,6 +19,11 @@ internal sealed class ConformingFakeClient : ILedgerClient
 {
     private static readonly LedgerOffset LedgerEnd = LedgerOffset.At(3);
 
+    private readonly bool _faultsMidSnapshot;
+
+    public ConformingFakeClient(bool faultsMidSnapshot = false) =>
+        _faultsMidSnapshot = faultsMidSnapshot;
+
     public async IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? activeAtOffset = null,
@@ -28,6 +33,15 @@ internal sealed class ConformingFakeClient : ILedgerClient
         cancellationToken.ThrowIfCancellationRequested();
         var effective = activeAtOffset ?? LedgerEnd;
         await Task.CompletedTask;
+
+        if (_faultsMidSnapshot)
+        {
+            yield return new AcsSnapshotEntry<T>.Created(
+                new ContractId<T>("c1"), DamlRecord.Create(), LedgerOffset.At(1),
+                new SynchronizerId("sync"), [new Party("alice")]);
+            yield return new AcsSnapshotEntry<T>.StreamError(14, "UNAVAILABLE: transport fault mid-snapshot");
+            yield break;
+        }
 
         if (effective.Value >= 1)
         {
@@ -79,6 +93,45 @@ internal sealed class ConformingFakeClient : ILedgerClient
         }
     }
 
+    public async IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        SubmitterInfo submitter,
+        LedgerOffset? fromOffset = null,
+        LedgerOffset? toOffset = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        where T : IDamlType
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var lower = (fromOffset ?? LedgerOffset.Begin).Value;
+        await Task.CompletedTask;
+
+        foreach (var (offset, evt) in SeededEffectsStream<T>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (offset <= lower)
+            {
+                continue;
+            }
+
+            if (toOffset is { } upper && offset > upper.Value)
+            {
+                yield break;
+            }
+
+            yield return evt;
+        }
+    }
+
+    private static IEnumerable<(long Offset, ContractStreamEvent<T> Event)> SeededEffectsStream<T>()
+        where T : IDamlType
+    {
+        yield return (1, new ContractStreamEvent<T>.Created(
+            new ContractId<T>("c1"), DamlRecord.Create(), LedgerOffset.At(1),
+            new SynchronizerId("sync"), [new Party("alice")]));
+        yield return (2, new ContractStreamEvent<T>.Exercised(
+            new ContractId<T>("c1"), "Archive", DamlUnit.Instance, DamlUnit.Instance, true,
+            LedgerOffset.At(2), new SynchronizerId("sync"), [new Party("alice")]));
+    }
+
     private static IEnumerable<(long Offset, ContractStreamEvent<T> Event)> SeededStream<T>()
         where T : IDamlType
     {
@@ -88,7 +141,7 @@ internal sealed class ConformingFakeClient : ILedgerClient
         yield return (2, new ContractStreamEvent<T>.Created(
             new ContractId<T>("c2"), DamlRecord.Create(), LedgerOffset.At(2),
             new SynchronizerId("sync"), [new Party("alice")]));
-        yield return (3, new ContractStreamEvent<T>.Unclassified(LedgerOffset.At(3), "UNMAPPED"));
+        yield return (3, new ContractStreamEvent<T>.Unclassified(LedgerOffset.At(3), UnclassifiedKind.Unknown, "UNMAPPED"));
     }
 
     public Task<LedgerOffset> GetLedgerEndAsync(

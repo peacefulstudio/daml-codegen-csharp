@@ -13,31 +13,32 @@ namespace Daml.Ledger.Abstractions;
 public interface ILedgerStreamer
 {
     /// <summary>
-    /// Streams contract events for <typeparamref name="T"/> over the half-open
-    /// offset window <c>(fromOffset, toOffset]</c> — lower bound exclusive, upper
-    /// bound inclusive.
+    /// Streams active-contract-set delta events for <typeparamref name="T"/> over the
+    /// half-open offset window <c>(fromOffset, toOffset]</c> — lower bound exclusive,
+    /// upper bound inclusive.
     /// </summary>
     /// <remarks>
-    /// Uses ledger-effects transaction shape. The stream emits
-    /// <see cref="ContractStreamEvent{T}.Created"/> and
-    /// <see cref="ContractStreamEvent{T}.Exercised"/> events — a consuming exercise
-    /// (<see cref="ContractStreamEvent{T}.Exercised.Consuming"/> is <c>true</c>) is a
-    /// contract's archival on this shape, so there is no separate
-    /// <see cref="ContractStreamEvent{T}.Archived"/> event — plus
+    /// Uses ACS-delta transaction shape with stakeholder-based visibility — the same
+    /// visibility basis as the <see cref="SubscribeActiveAsync{T}"/> snapshot, so the
+    /// live stream and the snapshot reconstruct the same contract set: a snapshot
+    /// followed by a resume from its offset rebuilds exactly the contracts the
+    /// snapshot held, plus every subsequent delta, with no divergence. The stream
+    /// emits <see cref="ContractStreamEvent{T}.Created"/> and
+    /// <see cref="ContractStreamEvent{T}.Archived"/> events — an archival is a
+    /// first-class <see cref="ContractStreamEvent{T}.Archived"/> event, not a
+    /// consuming exercise — plus
     /// <see cref="ContractStreamEvent{T}.Assigned"/>/<see cref="ContractStreamEvent{T}.Unassigned"/>
     /// for cross-synchronizer reassignments,
     /// <see cref="ContractStreamEvent{T}.Checkpoint"/>,
     /// <see cref="ContractStreamEvent{T}.StreamError"/>, and
     /// <see cref="ContractStreamEvent{T}.Unclassified"/>. It never emits
-    /// <see cref="ContractStreamEvent{T}.Archived"/>; that variant appears only on
-    /// ACS-delta-shaped streams. A consumer maintaining a contract cache must
-    /// therefore evict on the consuming
-    /// <see cref="ContractStreamEvent{T}.Exercised"/>, not on
-    /// <see cref="ContractStreamEvent{T}.Archived"/> — waiting on the latter here
-    /// leaves archived contracts cached forever. For an event boundary (e.g. the
-    /// target contract's consuming <see cref="ContractStreamEvent{T}.Exercised"/>
-    /// event), <c>break</c> out of the enumeration; for an offset boundary, pass
-    /// <paramref name="toOffset"/>.
+    /// <see cref="ContractStreamEvent{T}.Exercised"/>; that variant appears only on
+    /// the ledger-effects shape exposed by <see cref="SubscribeLedgerEffectsAsync{T}"/>.
+    /// A consumer maintaining a contract cache evicts on
+    /// <see cref="ContractStreamEvent{T}.Archived"/> and checkpoints on the last
+    /// observed offset — the documented cache/checkpoint pattern is sound on this
+    /// shape. For an event boundary, <c>break</c> out of the enumeration; for an
+    /// offset boundary, pass <paramref name="toOffset"/>.
     /// </remarks>
     /// <typeparam name="T">A Daml template or interface marker.</typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
@@ -64,13 +65,17 @@ public interface ILedgerStreamer
 
     /// <summary>Streams the active-contract-set snapshot for <typeparamref name="T"/>.</summary>
     /// <remarks>
-    /// The snapshot stream always terminates with a single terminal
+    /// A successful snapshot stream terminates with a single terminal
     /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/> carrying the snapshot's
     /// effective offset — emitted even when the snapshot is empty. Resume a live
     /// <see cref="SubscribeAsync{T}"/> from that offset for a gapless,
     /// duplicate-free handover: because <see cref="SubscribeAsync{T}"/> treats its
     /// lower bound as exclusive, the event at the snapshot offset is not delivered
-    /// twice across the handover.
+    /// twice across the handover. A mid-snapshot transport fault surfaces in-band
+    /// as a terminal <see cref="AcsSnapshotEntry{T}.StreamError"/> in place of that
+    /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/>, so a caller draining the
+    /// snapshot handles faults as values rather than exceptions — the same fault
+    /// contract as <see cref="SubscribeAsync{T}"/>.
     /// </remarks>
     /// <typeparam name="T">A Daml template or interface marker.</typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
@@ -79,6 +84,64 @@ public interface ILedgerStreamer
     IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? activeAtOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : IDamlType;
+
+    /// <summary>
+    /// Streams ledger-effects events for <typeparamref name="T"/> over the half-open
+    /// offset window <c>(fromOffset, toOffset]</c> — lower bound exclusive, upper
+    /// bound inclusive.
+    /// </summary>
+    /// <remarks>
+    /// Uses ledger-effects transaction shape with witness-based visibility. The
+    /// stream emits <see cref="ContractStreamEvent{T}.Created"/> and
+    /// <see cref="ContractStreamEvent{T}.Exercised"/> events — a consuming exercise
+    /// (<see cref="ContractStreamEvent{T}.Exercised.Consuming"/> is <c>true</c>) is a
+    /// contract's archival on this shape, so there is no separate
+    /// <see cref="ContractStreamEvent{T}.Archived"/> event — plus
+    /// <see cref="ContractStreamEvent{T}.Assigned"/>/<see cref="ContractStreamEvent{T}.Unassigned"/>
+    /// for cross-synchronizer reassignments,
+    /// <see cref="ContractStreamEvent{T}.Checkpoint"/>,
+    /// <see cref="ContractStreamEvent{T}.StreamError"/>, and
+    /// <see cref="ContractStreamEvent{T}.Unclassified"/>. It never emits
+    /// <see cref="ContractStreamEvent{T}.Archived"/>; that variant appears only on
+    /// the ACS-delta shape exposed by <see cref="SubscribeAsync{T}"/>. A consumer
+    /// maintaining a contract cache must therefore evict on the consuming
+    /// <see cref="ContractStreamEvent{T}.Exercised"/>, not on
+    /// <see cref="ContractStreamEvent{T}.Archived"/> — waiting on the latter here
+    /// leaves archived contracts cached forever.
+    /// <para>
+    /// This shape matches on witnesses, whereas <see cref="SubscribeActiveAsync{T}"/>
+    /// matches on stakeholders, so the two reconstruct different contract sets. Do
+    /// not hand a <see cref="SubscribeActiveAsync{T}"/> snapshot over to this stream
+    /// for a snapshot-then-resume cache rebuild — that pairing is unsound; use
+    /// <see cref="SubscribeAsync{T}"/>, whose ACS-delta shape shares the snapshot's
+    /// stakeholder visibility, for the snapshot-resume handover.
+    /// </para>
+    /// For an event boundary (e.g. the target contract's consuming
+    /// <see cref="ContractStreamEvent{T}.Exercised"/> event), <c>break</c> out of the
+    /// enumeration; for an offset boundary, pass <paramref name="toOffset"/>.
+    /// </remarks>
+    /// <typeparam name="T">A Daml template or interface marker.</typeparam>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="fromOffset">
+    /// Exclusive lower bound: the stream resumes strictly after this offset, so the
+    /// event at <paramref name="fromOffset"/> is never delivered. <c>null</c> means
+    /// <see cref="LedgerOffset.Begin"/>. Because the bound is exclusive, resuming
+    /// from a previously returned offset — a persisted
+    /// <see cref="ContractStreamEvent{T}.Checkpoint"/> offset or a completion
+    /// offset — never re-delivers the event already seen at that offset.
+    /// </param>
+    /// <param name="toOffset">
+    /// Inclusive, terminal upper bound: the event at <paramref name="toOffset"/> is
+    /// delivered and then the bounded stream completes. <c>null</c> follows the live
+    /// stream, which does not complete on its own.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        SubmitterInfo submitter,
+        LedgerOffset? fromOffset = null,
+        LedgerOffset? toOffset = null,
         CancellationToken cancellationToken = default)
         where T : IDamlType;
 }

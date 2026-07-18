@@ -7,10 +7,12 @@ using Daml.Runtime.Data;
 namespace Daml.Runtime.Streams;
 
 /// <summary>
-/// One entry in an active-contract-set snapshot. The snapshot only ever yields
-/// <see cref="Created"/> rows, an <see cref="Unclassified"/> row for anything the
-/// projector cannot classify, and always ends with a single terminal
-/// <see cref="Checkpoint"/> — emitted even when the snapshot is empty.
+/// One entry in an active-contract-set snapshot. The snapshot yields
+/// <see cref="Created"/> rows and an <see cref="Unclassified"/> row for anything
+/// the projector cannot classify, then ends with a single terminal
+/// <see cref="Checkpoint"/> — emitted even when the snapshot is empty — or, when
+/// the transport faults mid-snapshot, a terminal <see cref="StreamError"/> in
+/// place of that <see cref="Checkpoint"/>.
 /// </summary>
 /// <typeparam name="T">
 /// The Daml marker the snapshot is filtered to: a template (matched by
@@ -55,4 +57,27 @@ public abstract record AcsSnapshotEntry<T>
     /// duplicate-free handover; that subscription's lower bound is exclusive, so
     /// the event at this offset is not re-delivered.</param>
     public sealed record Checkpoint(LedgerOffset Offset) : AcsSnapshotEntry<T>;
+
+    /// <summary>
+    /// The transport stream failed mid-snapshot. Surfaced in-band rather than
+    /// thrown so a caller draining the snapshot with <c>await foreach</c> can
+    /// decide policy — retry from a fresh snapshot, log, or stop — with the same
+    /// value-not-exception handling it uses for
+    /// <see cref="ContractStreamEvent{T}.StreamError"/> on the live subscription.
+    /// </summary>
+    /// <remarks>
+    /// Terminal, and mutually exclusive with <see cref="Checkpoint"/>: a faulted
+    /// snapshot ends with this entry instead of the <see cref="Checkpoint"/> a
+    /// successful snapshot ends with, so no snapshot offset is available to hand
+    /// over to a live subscription and the caller must treat the snapshot as
+    /// incomplete.
+    /// </remarks>
+    /// <param name="StatusCode">Transport status code from the failed call.
+    /// For gRPC streams this is <c>(int)Grpc.Core.StatusCode</c>; consumers that
+    /// want the typed enum cast back. Held as <c>int</c> so this type stays free
+    /// of any transport-library dep.</param>
+    /// <param name="Message">Status detail / message from the participant or transport.</param>
+    public sealed record StreamError(
+        int StatusCode,
+        string Message) : AcsSnapshotEntry<T>;
 }
