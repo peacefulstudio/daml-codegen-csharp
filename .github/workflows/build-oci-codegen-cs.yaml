@@ -673,10 +673,20 @@ jobs:
       - name: Attach bundles to draft release (never publish)
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --prerelease --verify-tag --title "$TAG" --notes "Draft release assembled by CI. OCI bundle + NuGet packages are attached automatically; attach Splice/Daml.Finance packages, then publish manually." || true
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --prerelease --verify-tag --title "$TAG" \
+              --notes "Draft release assembled by CI. OCI bundle + NuGet packages are attached automatically; attach Splice/Daml.Finance packages, then publish manually."
+          fi
           shopt -s nullglob
           files=(bundles/*.tar.gz)
-          [ ${#files[@]} -gt 0 ] && gh release upload "$TAG" "${files[@]}" --clobber || echo "no tarballs to attach"
+          expected=4
+          if [ "${#files[@]}" -ne "${expected}" ]; then
+            echo "::error::expected ${expected} bundle tarball(s) under bundles/, found ${#files[@]} — the build-per-rid matrix legs are hard dependencies, so a mismatch means the download step or an upstream build broke."
+            printf '  found: %s\n' "${files[@]:-<none>}"
+            exit 1
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
