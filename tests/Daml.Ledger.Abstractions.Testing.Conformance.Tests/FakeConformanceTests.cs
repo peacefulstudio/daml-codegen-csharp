@@ -10,5 +10,8 @@ public sealed class FakeConformanceTests : LedgerClientConformanceTests<Conforma
 {
     protected override ILedgerClient CreateClient() => new ConformingFakeClient();
 
+    protected override ILedgerClient CreateFaultingSnapshotClient() =>
+        new ConformingFakeClient(faultsMidSnapshot: true);
+
     protected override SubmitterInfo Reader { get; } = new Party("alice");
 }

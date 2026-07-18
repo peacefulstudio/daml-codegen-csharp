@@ -83,6 +83,53 @@ public partial class DamlTypesTests
     }
 
     [Fact]
+    public void ToCanonicalString_formats_a_within_decimal_value()
+    {
+        new DamlNumeric(123.45m).ToCanonicalString().Should().Be("123.45");
+    }
+
+    [Fact]
+    public void ToCanonicalString_round_trips_a_magnitude_beyond_decimal_range()
+    {
+        const string canonical = "1000000000000000000000000000000.5";
+
+        DamlNumeric.TryParseCanonical(canonical, out var value).Should().BeTrue();
+        value.ToCanonicalString().Should().Be(canonical);
+        value.Invoking(v => v.Value).Should().Throw<OverflowException>(
+            "the magnitude exceeds decimal.MaxValue and must not silently narrow");
+    }
+
+    [Fact]
+    public void ToCanonicalString_round_trips_more_fractional_digits_than_decimal_holds()
+    {
+        const string canonical = "0.12345678901234567890123456789";
+
+        DamlNumeric.TryParseCanonical(canonical, out var value).Should().BeTrue();
+        value.ToCanonicalString().Should().Be(canonical);
+        value.Invoking(v => v.Value).Should().Throw<OverflowException>(
+            "29 fractional digits exceed decimal's 28-digit limit and must not silently round");
+    }
+
+    [Theory]
+    [InlineData("nope")]
+    [InlineData("1e5")]
+    [InlineData("1.")]
+    [InlineData(".5")]
+    [InlineData("")]
+    public void TryParseCanonical_rejects_non_canonical_text(string text)
+    {
+        DamlNumeric.TryParseCanonical(text, out var value).Should().BeFalse();
+        value.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryParseCanonical_returns_false_for_null()
+    {
+        DamlNumeric.TryParseCanonical(null!, out var value).Should().BeFalse();
+        value.Should().BeNull();
+    }
+
+    [Fact]
     public void DamlText_should_convert_to_and_from_string()
     {
         // Arrange

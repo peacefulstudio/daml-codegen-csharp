@@ -28,6 +28,12 @@ public class MyClientConformanceTests : LedgerClientConformanceTests<MyProbeTemp
 - **Empty-snapshot checkpoint** — a snapshot with no active contracts (taken at
   `EmptySnapshotOffset`, `LedgerOffset.Begin` by default) still ends with that single
   terminal `Checkpoint`.
+- **Fault surfacing (opt-in)** — a mid-snapshot transport fault surfaces in-band as a
+  terminal `AcsSnapshotEntry<T>.StreamError` in place of the `Checkpoint`, never thrown,
+  so a caller draining the snapshot handles faults as values. Skipped unless the adopter
+  overrides `CreateFaultingSnapshotClient()` to return a client whose snapshot faults
+  mid-stream; the default returns `null` because inducing a deterministic mid-snapshot
+  fault is transport-specific.
 - **Offset boundaries `(fromOffset, toOffset]`** — `fromOffset` is exclusive, so
   resuming from a returned offset does not re-deliver the event at it;
   `toOffset` is inclusive and terminal, so a bounded subscription delivers the
@@ -54,5 +60,10 @@ scenario:
 
 The inherited `[Fact]` methods then exercise that seeded client against the
 documented contract.
+
+To also cover the fault path, override `CreateFaultingSnapshotClient()` to return a
+separate client whose snapshot faults mid-stream (yielding a terminal
+`AcsSnapshotEntry<T>.StreamError` and no `Checkpoint`). Leaving it at its `null` default
+skips only the fault-surfacing check.
 
 Not for production use.

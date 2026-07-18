@@ -128,7 +128,10 @@ public sealed record DamlNumeric : DamlValue
     /// Formats this value in the exact canonical wire shape: no scientific notation,
     /// trailing mantissa zeros stripped down to a single guaranteed fractional digit.
     /// </summary>
-    internal string ToCanonicalString()
+    /// <returns>The canonical decimal string (<c>-?digits.digits</c>), losslessly
+    /// round-trippable through <see cref="TryParseCanonical"/> even for magnitudes or
+    /// fractional precision beyond what <see cref="decimal"/> can represent.</returns>
+    public string ToCanonicalString()
     {
         var digits = _unscaledMagnitude.ToString(CultureInfo.InvariantCulture).PadLeft(_mantissaScale + 1, '0');
         var integerPart = digits[..^_mantissaScale];
@@ -145,9 +148,17 @@ public sealed record DamlNumeric : DamlValue
     /// into a <see cref="DamlNumeric"/> with zero precision loss, rejecting magnitudes
     /// or scales beyond the Daml-LF Numeric bound (38 significant digits, scale 0-37).
     /// </summary>
-    internal static bool TryParseCanonical(string text, out DamlNumeric result)
+    /// <param name="text">The canonical numeric text to parse.</param>
+    /// <param name="result">On success, the parsed value; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if <paramref name="text"/> is a well-formed canonical
+    /// Numeric within the Daml-LF bound; otherwise <see langword="false"/>.</returns>
+    public static bool TryParseCanonical(string text, out DamlNumeric result)
     {
         result = null!;
+        if (text is null)
+        {
+            return false;
+        }
         var isNegative = text.StartsWith('-');
         var digitsStart = isNegative ? 1 : 0;
         if (digitsStart >= text.Length)

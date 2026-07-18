@@ -455,6 +455,14 @@ public class LedgerClientSubmitterInfoTests
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
+        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+            SubmitterInfo submitter,
+            LedgerOffset? fromOffset = null,
+            LedgerOffset? toOffset = null,
+            CancellationToken cancellationToken = default)
+            where T : IDamlType
+            => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
+
         public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,

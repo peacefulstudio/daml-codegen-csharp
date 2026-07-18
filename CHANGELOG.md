@@ -36,6 +36,76 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.4.0-preview.2] — 2026-07-18
+
+### Added
+
+- `AcsSnapshotEntry<T>.StreamError(int StatusCode, string Message)` (`Daml.Runtime`): a
+  new variant of the active-contract-set snapshot union that surfaces a mid-snapshot
+  transport fault in-band instead of throwing, mirroring
+  `ContractStreamEvent<T>.StreamError` on the live subscription. It is terminal and
+  mutually exclusive with `AcsSnapshotEntry<T>.Checkpoint` — a faulted snapshot ends with
+  `StreamError` in place of the `Checkpoint` a successful snapshot ends with — so a caller
+  draining `ILedgerStreamer.SubscribeActiveAsync` with `await foreach` handles snapshot
+  faults as values under the same fault contract as `SubscribeAsync`. `StatusCode` is held
+  as `int` (`(int)Grpc.Core.StatusCode` for gRPC) so the runtime type takes no
+  transport-library dependency. Additive: the union stays closed (`private protected`
+  constructor) and existing `Created`/`Unclassified`/`Checkpoint` handling is unaffected.
+- `LedgerClientConformanceTests<TProbe>` (`Daml.Ledger.Abstractions.Testing.Conformance`)
+  now asserts the snapshot fault contract: a new opt-in test
+  `Active_snapshot_surfaces_a_mid_snapshot_fault_as_StreamError` verifies that a
+  mid-snapshot transport fault surfaces as a terminal `AcsSnapshotEntry<T>.StreamError`
+  (and yields no terminal `Checkpoint`), rather than being thrown. Adopters enable it by
+  overriding the new `CreateFaultingSnapshotClient()` seam to supply a client whose
+  snapshot faults mid-stream; it defaults to `null` and the check is skipped, because
+  inducing a deterministic mid-snapshot fault is transport-specific.
+- `DamlNumeric.ToCanonicalString()` and `DamlNumeric.TryParseCanonical(string, out DamlNumeric)`
+  (`Daml.Runtime`) are now `public` (previously `internal`, and undocumented on the public
+  surface despite appearing in the shipped `Daml.Runtime.xml`). They are the lossless
+  canonical-wire round-trip primitives for Numeric values whose magnitude or fractional
+  precision exceeds `decimal` (up to 38 significant digits, scale 0-37) — the `decimal`-based
+  constructor and `Value` accessor cannot express or read back such values, so transport
+  bridges now serialize via `ToCanonicalString()` and deserialize via `TryParseCanonical(...)`.
+- `ILedgerStreamer.SubscribeLedgerEffectsAsync<T>` (`Daml.Ledger.Abstractions`) — a new
+  streaming method exposing the **ledger-effects** transaction shape: it emits `Created` and
+  `Exercised` events (a consuming `Exercised`, `Consuming == true`, is the archival signal on
+  this shape) and never `Archived`, with witness-based visibility. Signature mirrors
+  `SubscribeAsync<T>` (`SubmitterInfo`, exclusive `fromOffset` / inclusive `toOffset`,
+  `CancellationToken`). Unlike `SubscribeAsync<T>` it must **not** be paired with a
+  `SubscribeActiveAsync<T>` snapshot for a resume handover — the two use different visibility
+  bases (witnesses vs stakeholders) and reconstruct different contract sets. No single-`Party`
+  convenience overload is added (`SubmitterInfo`-only; a twin is additive later if wanted).
+  Adding an interface member is **source-breaking for implementers**, who must implement the
+  new member; non-breaking for consumers.
+
+### Changed
+
+- `ILedgerStreamer.SubscribeAsync<T>` is now contractually the **ACS-delta**-shaped stream:
+  it emits `Created`/`Archived` (never `Exercised`) with stakeholder-based visibility, so it
+  matches the `SubscribeActiveAsync<T>` snapshot — a snapshot followed by a resume rebuilds
+  the same contract set, and the documented cache/checkpoint pattern (evict on `Archived`) is
+  sound. Its XML contract previously described the ledger-effects shape, whose `Archived` arm
+  was unreachable; that shape now lives on the new `SubscribeLedgerEffectsAsync<T>` (see
+  Added). This is an XML-contract change on the transport-agnostic abstraction; concrete gRPC
+  transports adopt the new stream shape in their own releases.
+- **BREAKING: `ContractStreamEvent<T>.Unclassified.Kind` (`Daml.Runtime`) is now the
+  strongly-typed `UnclassifiedKind` enum instead of a `string`**, and the variant gains a
+  nullable `RawKind` string. Consumers `switch` on the enum — so the compiler catches a
+  missing or misspelled arm — instead of comparing magic strings. The enum enumerates the
+  reasons an event is surfaced unclassified (a create/archive/exercise/assign/unassign
+  event whose contract is not of the subscribed marker, a missing synchronizer id, an
+  unavailable interface view, a decode failure, an empty reassignment) plus `Unknown` for a
+  transport-delivered variant this layer does not recognise; in the `Unknown` case the
+  transport's raw descriptor is carried on `RawKind`, preserving forward-compatibility with
+  server event variants added later. The `RawKind`/`Kind` relationship is a guaranteed
+  invariant, not just a convention: the constructor throws `ArgumentException` unless `RawKind`
+  is non-`null` exactly when `Kind` is `Unknown` (and `null` for every enumerated reason), and
+  `Kind`/`RawKind` are get-only so a `with`-expression clone cannot reassign them and strand the
+  invariant (only `Offset` is `with`-able) — so a consumer never sees a stale descriptor on a
+  named kind. Source-breaking for code that constructs `Unclassified` with a string
+  discriminator or reads `Kind` as a string; construct with an `UnclassifiedKind` value (and,
+  for `Unknown`, pass the raw descriptor as `RawKind`).
+
 ## [0.4.0-preview.1] — 2026-07-17
 
 ### Added
@@ -1240,7 +1310,8 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.0-preview.1...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.0-preview.2...HEAD
+[0.4.0-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.0-preview.1...v0.4.0-preview.2
 [0.4.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.3.0-preview.1...v0.4.0-preview.1
 [0.3.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.2.0-preview.3...v0.3.0-preview.1
 [0.2.0-preview.3]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.2.0-preview.2...v0.2.0-preview.3

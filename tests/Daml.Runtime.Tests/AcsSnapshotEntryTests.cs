@@ -30,10 +30,47 @@ public sealed class AcsSnapshotEntryTests
             AcsSnapshotEntry<TestTemplate>.Created => "created",
             AcsSnapshotEntry<TestTemplate>.Unclassified => "unclassified",
             AcsSnapshotEntry<TestTemplate>.Checkpoint => "checkpoint",
+            AcsSnapshotEntry<TestTemplate>.StreamError => "error",
             _ => "other",
         };
 
         matched.Should().Be("unclassified");
+    }
+
+    [Fact]
+    public void StreamError_is_distinguishable_via_pattern_match()
+    {
+        AcsSnapshotEntry<TestTemplate> entry =
+            new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
+
+        var matched = entry switch
+        {
+            AcsSnapshotEntry<TestTemplate>.Created => "created",
+            AcsSnapshotEntry<TestTemplate>.Unclassified => "unclassified",
+            AcsSnapshotEntry<TestTemplate>.Checkpoint => "checkpoint",
+            AcsSnapshotEntry<TestTemplate>.StreamError => "error",
+            _ => "other",
+        };
+
+        matched.Should().Be("error");
+    }
+
+    [Fact]
+    public void StreamError_StatusCode_is_int_so_no_transport_dep_leaks()
+    {
+        var error = new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
+
+        error.StatusCode.Should().BeOfType(typeof(int));
+        error.StatusCode.Should().Be(14);
+        error.Message.Should().Be("unavailable");
+    }
+
+    [Fact]
+    public void StreamError_with_same_payload_should_be_value_equal()
+    {
+        var a = new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
+        var b = new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
+        a.Should().Be(b);
     }
 
     [Fact]
