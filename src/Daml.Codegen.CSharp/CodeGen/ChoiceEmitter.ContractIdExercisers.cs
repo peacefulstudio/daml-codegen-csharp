@@ -149,6 +149,10 @@ internal sealed partial class ChoiceEmitter
             if (controllers.Source == DamlPartySource.Static && controllers.Parties.Count > 0)
             {
                 indent.AppendLine();
+                WriteSubmitterInfoChoiceAsyncExerciser(
+                    indent, choice, templateClassName, dataTypes);
+
+                indent.AppendLine();
                 WriteSingleContractChoiceAsyncExerciser(
                     indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
             }
@@ -312,6 +316,99 @@ internal sealed partial class ChoiceEmitter
             }
         }
 
+        WriteExerciserCommandDispatchAndProject(indent, choice, templateClassName, dataTypes);
+
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    /// <summary>
+    /// Emits the readAs-capable <c>&lt;Choice&gt;Async</c> overload on
+    /// <c>ContractId&lt;TemplateName&gt;</c> that takes an explicit
+    /// <c>SubmitterInfo</c> instead of named <c>Party</c> parameters.
+    /// Companion to the ergonomic named-<c>Party</c> overload for choices whose
+    /// created contracts are visible to an observer but not to the submitter —
+    /// the caller supplies <c>readAs</c> parties the payload cannot derive.
+    /// Emitted alongside the named-<c>Party</c> overload whenever controllers are
+    /// statically resolvable; the dynamic-controller case already surfaces a
+    /// <c>SubmitterInfo</c> parameter on its sole overload.
+    /// </summary>
+    private void WriteSubmitterInfoChoiceAsyncExerciser(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var resultName = $"{choiceName}Result";
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Exercises the {choice.Name} choice with an explicit <see cref=\"SubmitterInfo\"/> and projects the resulting transaction's created contracts to a typed <see cref=\"{resultName}\"/>.");
+            indent.AppendLine("/// Companion to the named-<c>Party</c> overload for the case where the submitter must");
+            indent.AppendLine("/// read contracts it does not act as — the choice's created contracts are visible to an");
+            indent.AppendLine("/// observer but not to the submitter, so the caller supplies the <c>readAs</c> parties.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
+            indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+            indent.AppendLine("/// <param name=\"submitter\">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>");
+            indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
+            indent.AppendLine("/// <param name=\"commandId\">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>");
+            indent.AppendLine("/// <param name=\"timeout\">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>");
+            indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
+        }
+
+        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.Indent();
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        if (hasArg)
+        {
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"{argParamType} argument,");
+        }
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
+        indent.AppendLine("string? workflowId = null,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
+        indent.AppendLine("TimeSpan? timeout = null,");
+        indent.AppendLine("CancellationToken cancellationToken = default)");
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
+        if (hasArg)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
+
+        WriteExerciserCommandDispatchAndProject(indent, choice, templateClassName, dataTypes);
+
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    private void WriteExerciserCommandDispatchAndProject(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var resultName = $"{choiceName}Result";
+        var (argTypeName, _, _, _) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
+
         indent.AppendLine();
         var argExpr = hasArg ? "argument.ToRecord()" : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
         indent.AppendLine($"var command = new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
@@ -338,9 +435,6 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
         indent.AppendLine($"return outcome.ProjectCommitted(tx => {resultName}.FromCreatedContracts(tx.CreatedContracts));");
-
-        indent.Dedent();
-        indent.AppendLine("}");
     }
 
     /// <summary>

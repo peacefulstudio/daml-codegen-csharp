@@ -236,6 +236,53 @@ public static class RichRecordExtensions
     }
 
     /// <summary>
+    /// Exercises the Relabel choice with an explicit <see cref="SubmitterInfo"/> and projects the resulting transaction's created contracts to a typed <see cref="RelabelResult"/>.
+    /// Companion to the named-<c>Party</c> overload for the case where the submitter must
+    /// read contracts it does not act as — the choice's created contracts are visible to an
+    /// observer but not to the submitter, so the caller supplies the <c>readAs</c> parties.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="client">The ledger client.</param>
+    /// <param name="argument">The choice argument.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
+    /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<ExerciseOutcome<RelabelResult>> RelabelAsync(
+        this ContractId<RichRecord> contractId,
+        ILedgerWriter client,
+        RichRecord.Relabel argument,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(argument);
+
+        var command = new ExerciseCommand(
+            RichRecord.TemplateId,
+            contractId,
+            new ChoiceName("Relabel"),
+            argument.ToRecord());
+
+        var submission = CommandsSubmission.Single(command)
+            .WithSubmitter(submitter)
+            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
+        if (!string.IsNullOrEmpty(workflowId))
+        {
+            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
+        }
+
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => RelabelResult.FromCreatedContracts(tx.CreatedContracts));
+    }
+
+    /// <summary>
     /// Exercises the Relabel choice on a fetched <see cref="RichRecord"/> contract,
     /// reading every controller and observer party off the contract payload so the
     /// caller passes no parties. Delegates to the

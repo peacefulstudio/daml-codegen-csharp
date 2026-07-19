@@ -36,6 +36,21 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.4.0-preview.3] — 2026-07-19
+
+### Fixed
+
+- Generated exercise wrappers (`ContractId<T>.<Choice>Async`) can express `readAs`
+  again. When a choice's controllers resolve statically the emitter had replaced the
+  `SubmitterInfo`-accepting overload (shipped through 0.3.0-preview.1) with a single
+  ergonomic `Party` overload, so a submitter could no longer supply `readAs` parties.
+  A choice whose created contracts are visible to an observer but not to the submitter
+  then projected no created contracts for the submitter and surfaced as
+  `ExerciseOutcome.None` — a committed success that read back as a failure. The emitter
+  now emits the `SubmitterInfo` overload alongside the named-`Party` overload for every
+  create-bearing choice, restoring `readAs` on the generated surface while keeping the
+  single-`Party` ergonomics.
+
 ## [0.4.0-preview.2] — 2026-07-18
 
 ### Added
