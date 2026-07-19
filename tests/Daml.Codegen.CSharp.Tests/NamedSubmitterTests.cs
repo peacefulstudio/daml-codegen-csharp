@@ -281,12 +281,13 @@ public class NamedSubmitterTests
         var offer = files.First(f => f.RelativePath.EndsWith("Offer.cs", StringComparison.Ordinal)).Content;
 
         // The choice has a single Party-typed controller (counterparty). The
-        // wrapper signature carries one named Party parameter — no string actAs,
-        // no SubmitterInfo fallback.
+        // ergonomic wrapper carries one named Party parameter — no string actAs.
+        // A readAs-capable SubmitterInfo overload is emitted alongside it, so a
+        // submitter that must read contracts it does not act as stays expressible.
         offer.Should().Contain("public static async Task<ExerciseOutcome<AcceptResult>> AcceptAsync(");
         offer.Should().Contain("Party counterparty,");
         offer.Should().NotContain("string actAs,");
-        offer.Should().NotContain("SubmitterInfo submitter,");
+        offer.Should().Contain("SubmitterInfo submitter,");
 
         // Every emitted controller Party parameter carries a matching XML doc
         // <param> tag, or a doc-generating consumer project fails with CS1573.
@@ -829,6 +830,33 @@ public class NamedSubmitterTests
         content.Should().NotContain("readAs:");
         // The submission still uses the SubmitterInfo overload via WithSubmitter.
         content.Should().Contain(".WithSubmitter(submitter)");
+    }
+
+    [Fact]
+    public void Generate_choice_async_with_static_controllers_also_emits_readAs_capable_submitter_overload()
+    {
+        // The ergonomic named-Party overload is an addition, not a replacement.
+        // A choice whose created contracts are visible to an observer but not the
+        // submitter can only be exercised when the caller supplies a full
+        // SubmitterInfo (actAs + readAs). The static-controller wrapper must emit
+        // both a named-Party overload and a SubmitterInfo overload on the
+        // ContractId<T> receiver.
+        var module = MakeAgreementWithObservers(
+            signatories: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            templateObservers: DamlPartyAnalysis.Static([]),
+            choiceControllers: DamlPartyAnalysis.Static([new DamlPartyPayloadField("platform")]),
+            choiceObservers: DamlPartyAnalysis.Static([]));
+
+        var files = CreateGenerator().Generate(CreateDar(module));
+        var content = files.First(f => f.RelativePath.EndsWith("Agreement.cs", StringComparison.Ordinal)).Content;
+
+        content.Should().Contain("Party platform,");
+        content.Should().Contain("SubmitterInfo submitter,");
+        content.Should().Contain(".WithSubmitter(submitter)");
+
+        var contractIdOverloads =
+            content.Split("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(").Length - 1;
+        contractIdOverloads.Should().Be(2);
     }
 
     [Fact]
