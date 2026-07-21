@@ -68,6 +68,7 @@ jobs:
           fi
           DRY="${DRY_RUN_INPUT:-false}"
           CGV="${CODEGEN_CS_INPUT:-}"; [ -z "$CGV" ] && CGV="${VERSION}"
+          [ "$DRY" = "true" ] || CGV="${VERSION}"
           SPLICE="${SPLICE_INPUT:-}"; [ -z "$SPLICE" ] && SPLICE="${SPLICE_VAR:-}"
           FINANCE="${FINANCE_INPUT:-}"; [ -z "$FINANCE" ] && FINANCE="${FINANCE_VAR:-}"; [ -z "$FINANCE" ] && FINANCE="2.10.0"
           if [ -z "$SPLICE" ]; then
