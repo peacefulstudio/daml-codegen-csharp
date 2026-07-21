@@ -1,9 +1,28 @@
 name: Publish NuGet Packages
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish (no leading v). Required when called from the orchestrator.'
+        required: true
+        type: string
+      dry_run:
+        description: 'Pack + attach to the draft but skip the nuget.org push.'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      version:
+        description: 'The version that was packed/published.'
+        value: ${{ jobs.publish.outputs.version }}
+      published:
+        description: "'true' when packages were pushed to nuget.org; 'false' on dry_run or skip."
+        value: ${{ jobs.publish.outputs.published }}
+    secrets:
+      NUGET_USER:
+        description: 'nuget.org username for OIDC trusted publishing (NuGet/login).'
+        required: false
   workflow_dispatch:
     inputs:
       version_override:
@@ -18,6 +37,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      published: ${{ steps.ver.outputs.published }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -27,45 +49,78 @@ jobs:
         id: ver
         env:
           VERSION_OVERRIDE: ${{ inputs.version_override }}
+          VERSION_INPUT: ${{ inputs.version }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          if [ -n "${VERSION_OVERRIDE}" ]; then
+          if [ -n "${VERSION_OVERRIDE:-}" ]; then
             RESOLVED="${VERSION_OVERRIDE}"
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            RESOLVED="${GITHUB_REF_NAME#v}"
-            if ! [[ "${RESOLVED}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.-]+)?$ ]]; then
-              echo "::warning::tag '${GITHUB_REF_NAME}' is not a release version; skipping publish"
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+          elif [ -n "${VERSION_INPUT:-}" ]; then
+            RESOLVED="${VERSION_INPUT}"
           else
-            echo "::warning::no version_override and not a tag — skipping publish"
+            echo "::warning::no version_override and no workflow_call version — skipping publish"
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "published=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "Publishing version: ${RESOLVED}"
+          if ! [[ "${RESOLVED}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::warning::'${RESOLVED}' is not a release version; skipping publish"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Publishing version: ${RESOLVED} (dry_run=${DRY_RUN_INPUT:-false})"
           echo "version=${RESOLVED}" >> "$GITHUB_OUTPUT"
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          if [ "${DRY_RUN_INPUT:-false}" = "true" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Setup .NET (dry-run pack path only)
+        if: steps.ver.outputs.should_publish == 'true' && inputs.dry_run == true
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.0.0
+        with:
+          dotnet-version: '10.0.x'
       - name: NuGet login (OIDC -> short-lived key)
         id: login
-        if: steps.ver.outputs.should_publish == 'true'
+        if: steps.ver.outputs.should_publish == 'true' && inputs.dry_run != true
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
       - name: Build, test, pack & push
-        if: steps.ver.outputs.should_publish == 'true'
+        if: steps.ver.outputs.should_publish == 'true' && inputs.dry_run != true
         uses: peacefulstudio/github-actions/.github/actions/csharp-publish@v1
         with:
           api-key: ${{ steps.login.outputs.NUGET_API_KEY }}
           version_override: ${{ steps.ver.outputs.version }}
-      - name: Attach packages to draft release (never publish)
-        if: steps.ver.outputs.should_publish == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+      - name: Build & pack only (dry-run — no push)
+        if: steps.ver.outputs.should_publish == 'true' && inputs.dry_run == true
+        env:
+          PACKAGE_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build --configuration Release --no-restore -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
+          dotnet pack --configuration Release --no-build \
+            -p:PackageVersion="$PACKAGE_VERSION" \
+            -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg \
+            -o "$GITHUB_WORKSPACE/output/nuget"
+      - name: Attach packages to draft release (upload only; never create/publish)
+        if: steps.ver.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --prerelease --verify-tag --title "$TAG" --notes "Draft release assembled by CI. OCI bundle + NuGet packages are attached automatically; attach Splice/Daml.Finance packages, then publish manually." || true
-          shopt -s nullglob
-          files=(output/nuget/*.nupkg output/nuget/*.snupkg)
-          [ ${#files[@]} -gt 0 ] && gh release upload "$TAG" "${files[@]}" --clobber || echo "no packages to attach"
+          set -uo pipefail
+          TAG="v${{ steps.ver.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            shopt -s nullglob
+            files=(output/nuget/*.nupkg output/nuget/*.snupkg)
+            if [ ${#files[@]} -gt 0 ]; then
+              gh release upload "$TAG" "${files[@]}" --clobber || echo "upload failed for $TAG; continuing"
+            else
+              echo "no packages under output/nuget to attach"
+            fi
+          else
+            echo "no draft release $TAG; skipping attach (bootstrap creates it in the orchestrator)"
+          fi
