@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: false
+      release_tag:
+        description: 'Draft release tag to attach nupkgs to (e.g. v0.4.0-preview.4). Empty = v<codegen_cs_version>.'
+        required: false
+        type: string
+        default: ''
     secrets:
       COUNTERS_TOKEN:
         description: 'Token with Variables: read & write on this repo (used to read/persist the counter store).'
@@ -190,12 +195,12 @@ jobs:
         run: .github/scripts/persist-counters.sh
 
       - name: Attach packages to draft release (best-effort, never fails)
-        if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
           set -uo pipefail
-          TAG="v${CODEGEN_CS_VERSION}"
+          TAG="${RELEASE_TAG_INPUT:-v${CODEGEN_CS_VERSION}}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             shopt -s nullglob
             files=("$NUPKG_DIR"/*.nupkg)
