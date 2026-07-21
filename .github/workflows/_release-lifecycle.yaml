@@ -1,0 +1,84 @@
+name: Release lifecycle (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: "'bootstrap' (ensure a draft prerelease exists) or 'finalize' (flip the draft to published)."
+        required: true
+        type: string
+      tag:
+        description: 'Release tag, including the leading v (e.g. v0.4.0-preview.4).'
+        required: true
+        type: string
+      name:
+        description: 'Release title. Empty = the tag.'
+        required: false
+        type: string
+        default: ''
+      notes:
+        description: 'Draft notes used when bootstrap creates a new draft.'
+        required: false
+        type: string
+        default: 'Draft release assembled by CI. Assets are attached automatically across the release pipeline; publish manually once complete.'
+    outputs:
+      release_url:
+        description: 'HTML URL of the affected release.'
+        value: ${{ jobs.lifecycle.outputs.release_url }}
+      created:
+        description: "'true' when bootstrap created a new draft; 'false' when it already existed."
+        value: ${{ jobs.lifecycle.outputs.created }}
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_url: ${{ steps.run.outputs.release_url }}
+      created: ${{ steps.run.outputs.created }}
+    steps:
+      - name: Run ${{ inputs.action }} for ${{ inputs.tag }}
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ACTION: ${{ inputs.action }}
+          TAG: ${{ inputs.tag }}
+          NAME: ${{ inputs.name }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          TITLE="${NAME:-$TAG}"
+          case "$ACTION" in
+            bootstrap)
+              if gh release view "$TAG" >/dev/null 2>&1; then
+                echo "created=false" >> "$GITHUB_OUTPUT"
+                echo "draft $TAG already exists"
+              else
+                gh release create "$TAG" --draft --prerelease --verify-tag --title "$TITLE" --notes "$NOTES"
+                echo "created=true" >> "$GITHUB_OUTPUT"
+                echo "created draft $TAG"
+              fi
+              ;;
+            finalize)
+              if ! gh release view "$TAG" >/dev/null 2>&1; then
+                echo "::error::cannot finalize: release $TAG does not exist"
+                exit 1
+              fi
+              is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+              if [ "$is_draft" != "true" ]; then
+                echo "::warning::release $TAG is already published; nothing to finalize"
+              else
+                gh release edit "$TAG" --draft=false
+                echo "published $TAG"
+              fi
+              echo "created=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::unknown action '$ACTION' (want bootstrap|finalize)"
+              exit 1
+              ;;
+          esac
+          url="$(gh release view "$TAG" --json url --jq '.url')"
+          echo "release_url=${url}" >> "$GITHUB_OUTPUT"
