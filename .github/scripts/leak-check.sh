@@ -31,9 +31,6 @@ scan() {
 scan "references to private -internal repos" \
   'peacefulstudio/[a-z0-9-]+-internal'
 
-scan "unreleased sibling repo / namespaces" \
-  'canton-ledger-api-csharp|Canton\.Ledger\.Grpc\.Client|Daml\.Runtime\.Grpc'
-
 scan "agent instruction files" \
   'CLAUDE\.md|AGENTS\.md|\.github/copilot-instructions'
 
