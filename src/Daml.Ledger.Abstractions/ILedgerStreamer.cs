@@ -49,6 +49,8 @@ public interface ILedgerStreamer
     /// from a previously returned offset — a persisted
     /// <see cref="ContractStreamEvent{T}.Checkpoint"/> offset or a completion
     /// offset — never re-delivers the event already seen at that offset.
+    /// See <see href="https://docs.canton.network/reference/json-api-reference/post-v2updates">Canton
+    /// Ledger API — update stream offsets (begin exclusive, end inclusive)</see>.
     /// </param>
     /// <param name="toOffset">
     /// Inclusive, terminal upper bound: the event at <paramref name="toOffset"/> is
@@ -63,19 +65,53 @@ public interface ILedgerStreamer
         CancellationToken cancellationToken = default)
         where T : IDamlType;
 
+    /// <summary>
+    /// Resumes the stakeholder-based live stream from a <see cref="SubscribeActiveAsync{T}"/>
+    /// snapshot's terminal checkpoint — the typed counterpart of
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>
+    /// that guards the snapshot↔stream pairing at compile time.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation forwards to
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>
+    /// via <see cref="StakeholderResume.Offset"/>; implementations may override for a more
+    /// direct path.
+    /// </remarks>
+    /// <typeparam name="T">A Daml template or interface marker.</typeparam>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="resumeFrom">The resume ticket from a <see cref="SubscribeActiveAsync{T}"/>
+    /// snapshot's terminal <see cref="AcsSnapshotEntry{T}.Checkpoint"/>.</param>
+    /// <param name="toOffset">
+    /// Inclusive, terminal upper bound: the event at <paramref name="toOffset"/> is
+    /// delivered and then the bounded stream completes. <c>null</c> follows the live
+    /// stream, which does not complete on its own.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+        SubmitterInfo submitter,
+        StakeholderResume resumeFrom,
+        LedgerOffset? toOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : IDamlType =>
+        SubscribeAsync<T>(submitter, resumeFrom.Offset, toOffset, cancellationToken);
+
     /// <summary>Streams the active-contract-set snapshot for <typeparamref name="T"/>.</summary>
     /// <remarks>
     /// A successful snapshot stream terminates with a single terminal
     /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/> carrying the snapshot's
-    /// effective offset — emitted even when the snapshot is empty. Resume a live
-    /// <see cref="SubscribeAsync{T}"/> from that offset for a gapless,
-    /// duplicate-free handover: because <see cref="SubscribeAsync{T}"/> treats its
-    /// lower bound as exclusive, the event at the snapshot offset is not delivered
-    /// twice across the handover. A mid-snapshot transport fault surfaces in-band
-    /// as a terminal <see cref="AcsSnapshotEntry{T}.StreamError"/> in place of that
-    /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/>, so a caller draining the
+    /// effective offset as a <see cref="StakeholderResume"/> ticket — emitted even
+    /// when the snapshot is empty. Resume a live
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, StakeholderResume, LedgerOffset?, CancellationToken)"/>
+    /// from that ticket for a gapless, duplicate-free handover: because that overload
+    /// treats its lower bound as exclusive, the event at the snapshot offset is not
+    /// delivered twice across the handover. A mid-snapshot transport fault surfaces
+    /// in-band as a terminal <see cref="AcsSnapshotEntry{T}.StreamError"/> in place of
+    /// that <see cref="AcsSnapshotEntry{T}.Checkpoint"/>, so a caller draining the
     /// snapshot handles faults as values rather than exceptions — the same fault
-    /// contract as <see cref="SubscribeAsync{T}"/>.
+    /// contract as <see cref="SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>.
+    /// See <see href="https://docs.canton.network/reference/json-api-asyncapi-reference/operations/v2-state-active-contracts/details">Canton
+    /// Ledger API — active contracts snapshot and its active-at offset</see> for the snapshot→stream
+    /// handover this mirrors.
     /// </remarks>
     /// <typeparam name="T">A Daml template or interface marker.</typeparam>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
@@ -105,18 +141,18 @@ public interface ILedgerStreamer
     /// <see cref="ContractStreamEvent{T}.StreamError"/>, and
     /// <see cref="ContractStreamEvent{T}.Unclassified"/>. It never emits
     /// <see cref="ContractStreamEvent{T}.Archived"/>; that variant appears only on
-    /// the ACS-delta shape exposed by <see cref="SubscribeAsync{T}"/>. A consumer
-    /// maintaining a contract cache must therefore evict on the consuming
+    /// the ACS-delta shape exposed by
+    /// <see cref="SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>.
+    /// A consumer maintaining a contract cache must therefore evict on the consuming
     /// <see cref="ContractStreamEvent{T}.Exercised"/>, not on
     /// <see cref="ContractStreamEvent{T}.Archived"/> — waiting on the latter here
     /// leaves archived contracts cached forever.
     /// <para>
     /// This shape matches on witnesses, whereas <see cref="SubscribeActiveAsync{T}"/>
-    /// matches on stakeholders, so the two reconstruct different contract sets. Do
-    /// not hand a <see cref="SubscribeActiveAsync{T}"/> snapshot over to this stream
-    /// for a snapshot-then-resume cache rebuild — that pairing is unsound; use
-    /// <see cref="SubscribeAsync{T}"/>, whose ACS-delta shape shares the snapshot's
-    /// stakeholder visibility, for the snapshot-resume handover.
+    /// matches on stakeholders, so a snapshot's <see cref="StakeholderResume"/> ticket
+    /// only resumes <see cref="SubscribeAsync{T}(SubmitterInfo, StakeholderResume, LedgerOffset?, CancellationToken)"/>
+    /// — there is no overload of this method accepting it; use
+    /// <see cref="StakeholderResume.Offset"/> if a cross-basis resume is deliberate.
     /// </para>
     /// For an event boundary (e.g. the target contract's consuming
     /// <see cref="ContractStreamEvent{T}.Exercised"/> event), <c>break</c> out of the

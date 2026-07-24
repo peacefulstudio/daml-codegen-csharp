@@ -278,6 +278,61 @@ public class EmittedTemplateChoiceCompilesTests
     }
 
     [Fact]
+    public void Emitted_template_implementing_a_local_interface_compiles()
+    {
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = "Vault",
+                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Choices = [],
+                    Implements = [new DamlTypeRef("", "Test.Module", "Holdable")],
+                },
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Holdable",
+                    Definition = new DamlRecordDefinition([]),
+                },
+            ],
+            Interfaces = [new DamlInterface { Name = "Holdable", Choices = [], ViewType = null }],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-package-id",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [] };
+        var files = CreateGenerator().Generate(dar).ToList();
+
+        var vault = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
+        vault.Should().Contain("IImplements<IHoldable>");
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "a template implementing a local interface must emit IImplements<IHoldable> and satisfy the where TInterface : IDamlInterface constraint, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+    }
+
+    [Fact]
     public void Emitted_create_bearing_choice_with_static_controllers_compiles_both_contractid_and_contract_overloads()
     {
         var fields = new[]
@@ -469,7 +524,7 @@ public class EmittedTemplateChoiceCompilesTests
         //   - <Template>Extensions.<Choice>Async with Party params for both
         //     controllers (actAs) and non-controller observers (readAs)
         //   - SubmitterInfo built locally with both actAs and readAs
-        //   - submission.WithSubmitter(submitter) projection
+        //   - submitter passed straight to TrySubmitAndWaitForTransactionAsync
         // All three concerns compile cleanly against the real
         // Daml.Runtime + Daml.Ledger.Abstractions surface.
         var module = new DamlModule

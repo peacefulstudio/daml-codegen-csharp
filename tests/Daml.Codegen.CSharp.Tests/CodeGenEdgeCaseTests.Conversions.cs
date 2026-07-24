@@ -37,7 +37,7 @@ public partial class CodeGenEdgeCaseTests
         false,
         ".ToDamlEnum()",
         ".ToRecord()")]
-    public void generate_dispatches_same_named_token_field_by_module_qualifier(
+    public void Generate_dispatches_same_named_token_field_by_module_qualifier(
         string referencedModule,
         bool includeRecordToken,
         string expectedFragment,

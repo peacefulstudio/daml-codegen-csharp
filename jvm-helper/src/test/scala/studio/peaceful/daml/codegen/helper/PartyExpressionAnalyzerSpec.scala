@@ -88,7 +88,7 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
         )
       ),
       directDeps = Set.empty,
-      languageVersion = LanguageVersion.default,
+      languageVersion = LanguageVersion.defaultLfVersion,
       metadata = Ast.PackageMetadata(
         name = Ref.PackageName.assertFromString("party-analyzer-spec"),
         version = Ref.PackageVersion.assertFromString("0.0.0"),

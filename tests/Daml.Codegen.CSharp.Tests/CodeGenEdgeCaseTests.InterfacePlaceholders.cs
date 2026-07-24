@@ -75,7 +75,7 @@ public partial class CodeGenEdgeCaseTests
     }
 
     [Fact]
-    public void placeholder_emits_throwing_daml_type_descriptor()
+    public void Generate_emits_throwing_daml_type_descriptor_for_placeholder()
     {
         var module = new DamlModule
         {
@@ -323,7 +323,7 @@ public partial class CodeGenEdgeCaseTests
         code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord())");
         // Submission is funnelled through ILedgerWriter.TrySubmitAndWaitForTransactionAsync
         // — same submission path as concrete-template <Choice>Async.
-        code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        code.Should().Contain("await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
 
         // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
         code.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> LockAsync(");

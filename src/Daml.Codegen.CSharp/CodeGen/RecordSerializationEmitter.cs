@@ -68,30 +68,35 @@ internal sealed class RecordSerializationEmitter(
 
     /// <summary>
     /// Writes the <c>ToRecord</c> method that serializes <paramref name="fields"/> to a
-    /// DamlRecord into <paramref name="indent"/>.
+    /// DamlRecord into <paramref name="indent"/>. When <paramref name="typeParams"/> is
+    /// non-empty the method accepts one <c>Func&lt;T, DamlValue&gt;</c> converter per type
+    /// parameter, and type-variable fields serialize through the matching converter.
     /// </summary>
-    internal void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
+    internal void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields, IReadOnlyList<string> typeParams)
     {
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Converts this value to a DamlRecord.</summary>");
         }
 
+        var parameters = ConverterParameters(indent, typeParams, EmitterHelpers.SerializeConverterParameters);
+        var delegates = EmitterHelpers.ConverterNameMap(typeParams);
+
         if (fields.Count == 0)
         {
-            indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord() => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create();");
+            indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create();");
             indent.AppendLine();
             return;
         }
 
-        indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord() => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create(");
+        indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create(");
         indent.Indent();
 
         for (int i = 0; i < fields.Count; i++)
         {
             var field = fields[i];
             var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-            var conversion = mapper.ToValue(field.Type, fieldName);
+            var conversion = mapper.ToValue(field.Type, fieldName, delegates);
             var comma = i < fields.Count - 1 ? "," : "";
             StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
 
@@ -108,16 +113,20 @@ internal sealed class RecordSerializationEmitter(
     /// <paramref name="className"/> instance from a DamlRecord into
     /// <paramref name="indent"/>.
     /// </summary>
-    internal void WriteFromRecordMethod(IndentWriter indent, string className, IReadOnlyList<DamlFieldDefinition> fields)
+    internal void WriteFromRecordMethod(IndentWriter indent, string className, IReadOnlyList<DamlFieldDefinition> fields, IReadOnlyList<string> typeParams)
     {
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Creates an instance from a DamlRecord.</summary>");
         }
 
+        var converterParameters = ConverterParameters(indent, typeParams, EmitterHelpers.DeserializeConverterParameters);
+        var parameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} record{Prefixed(converterParameters)}";
+        var delegates = EmitterHelpers.ConverterNameMap(typeParams);
+
         if (fields.Count == 0)
         {
-            indent.AppendLine($"public static {className} FromRecord({context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} record) => new {className}();");
+            indent.AppendLine($"public static {className} FromRecord({parameters}) => new {className}();");
             indent.AppendLine();
             return;
         }
@@ -129,14 +138,14 @@ internal sealed class RecordSerializationEmitter(
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors)
         {
-            indent.AppendLine($"public static {className} FromRecord({context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} record) => new {className}(");
+            indent.AppendLine($"public static {className} FromRecord({parameters}) => new {className}(");
             indent.Indent();
 
             for (int i = 0; i < fields.Count; i++)
             {
                 var field = fields[i];
                 var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")");
+                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
                 var comma = i < fields.Count - 1 ? "," : "";
 
                 indent.AppendLine($"{fieldName}: {conversion}{comma}");
@@ -147,7 +156,7 @@ internal sealed class RecordSerializationEmitter(
         }
         else
         {
-            indent.AppendLine($"public static {className} FromRecord({context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} record)");
+            indent.AppendLine($"public static {className} FromRecord({parameters})");
             indent.AppendLine("{");
             indent.Indent();
 
@@ -158,7 +167,7 @@ internal sealed class RecordSerializationEmitter(
             foreach (var field in fields)
             {
                 var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")");
+                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
                 indent.AppendLine($"{fieldName} = {conversion},");
             }
 
@@ -170,6 +179,23 @@ internal sealed class RecordSerializationEmitter(
         }
         indent.AppendLine();
     }
+
+    private string ConverterParameters(
+        IndentWriter indent,
+        IReadOnlyList<string> typeParams,
+        Func<IReadOnlyList<string>, string, string> build)
+    {
+        if (typeParams.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        indent.Require("System");
+        return build(typeParams, context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace));
+    }
+
+    private static string Prefixed(string parameters) =>
+        string.IsNullOrEmpty(parameters) ? string.Empty : $", {parameters}";
 
     private string DamlFieldAttributeSyntax(string damlFieldName) =>
         $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlFieldAttribute, context.RootNamespace)}(\"{damlFieldName}\")";

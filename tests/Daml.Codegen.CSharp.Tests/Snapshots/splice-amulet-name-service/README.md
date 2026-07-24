@@ -21,14 +21,15 @@ and exercises the codegen paths the interface-only fixture cannot reach:
 - Cross-family references to the `splice-amulet` package, exercising the
   qualified-reference emission path without emitting the referenced package.
 
-It also pins a pre-existing emitter limitation: a few `<Choice>Result` records
-(e.g. `AnsRules_RejectEntryInitialPaymentResult`) reference a generic type
-applied across a package boundary (`Splice.Amulet.AmuletCreateSummary<...>`),
-for which `FromRecord` currently emits a `default(...)!` placeholder with a
-`TODO: Implement deserialization`. That is the emitter's current behaviour, not
-specific to this fixture — the larger `splice-amulet` DAR emits the same
-pattern. Pinning it here puts the path under drift detection, so the snapshot
-flags the day the emitter learns to deserialize it.
+It also exercises a parameterized generic type applied across a package
+boundary: a few `<Choice>Result` records (e.g.
+`AnsRules_RejectEntryInitialPaymentResult`) carry a
+`Splice.Amulet.AmuletCreateSummary<...>` field. `ToRecord`/`FromRecord`
+serialize and deserialize it for real, via a converter delegate per type
+argument threaded through the general parameterized-`DamlTypeApp` path in
+`DamlTypeMapper` — not specific to this fixture, the larger `splice-amulet`
+DAR exercises the same pattern. Pinning it here puts the path under drift
+detection.
 
 Together with the holding snapshot this guards the concrete-template,
 typed-choice-result, and decimal-mapping surfaces against formatting,
@@ -55,8 +56,8 @@ scripts/refresh-snapshot.sh splice-amulet-name-service
 
 `intermediate.binpb` is the canonical codegen input for the drift test;
 `splice-amulet-name-service.dar` is the upstream Splice archive it was derived
-from (the `splice-amulet-name-service-current.dar` from the Splice `0.6.9`
-`splice-node` bundle), kept alongside for provenance. Do not regenerate either
+from (`splice-amulet-name-service-0.1.23.dar` from the Splice `0.6.13`
+`splice-node` release tarball), kept alongside for provenance. Do not regenerate either
 from a local build without a clear reason. If the upstream Splice package
 genuinely needs to advance, replace the files in place, refresh the `expected/`
 snapshot per the procedure above, and call out the version bump in the pull

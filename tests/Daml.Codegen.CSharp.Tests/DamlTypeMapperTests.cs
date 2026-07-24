@@ -322,6 +322,107 @@ public class DamlTypeMapperTests
             .Should().Be("GenericStub.NotImplemented<TA>(\"a\")");
     }
 
+    private static DamlPackage PackageWithGenericType(string module, string name, DamlDataTypeDefinition definition) =>
+        new()
+        {
+            PackageId = CrossPackageId,
+            Name = "acme",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = module,
+                    Templates = [],
+                    Interfaces = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = name,
+                            TypeParams = ["a"],
+                            Definition = definition,
+                        }
+                    ],
+                }
+            ],
+            DependencyReferences = [],
+        };
+
+    private static StubResolver ResolverWith(string resolvedName, DamlPackage package) =>
+        new(resolvedName, new Dictionary<string, DamlPackage> { [CrossPackageId] = package });
+
+    private static DamlTypeApp GenericAppOfText(string module, string name) =>
+        new(new DamlTypeRef(CrossPackageId, module, name), [Prim(DamlPrimitive.Text)]);
+
+    [Fact]
+    public void to_value_serializes_a_user_generic_record_through_converter_lambdas()
+    {
+        var record = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Box", PackageWithGenericType("Acme.Boxes", "Box", record));
+
+        Mapper(resolver).ToValue(GenericAppOfText("Acme.Boxes", "Box"), "Payload")
+            .Should().Be("Payload.ToRecord(__t0 => (DamlValue)(new DamlText(__t0)))");
+    }
+
+    [Fact]
+    public void from_value_deserializes_a_user_generic_record_through_converter_lambdas()
+    {
+        var record = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Box", PackageWithGenericType("Acme.Boxes", "Box", record));
+
+        Mapper(resolver).FromValue(GenericAppOfText("Acme.Boxes", "Box"), "value")
+            .Should().Be("Acme.Box<string>.FromRecord(value.As<DamlRecord>(), __v0 => __v0.As<DamlText>().Value)");
+    }
+
+    [Fact]
+    public void to_value_serializes_a_user_generic_variant_through_converter_lambdas()
+    {
+        var variant = new DamlVariantDefinition([new DamlVariantConstructor("Wrap", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Choice", PackageWithGenericType("Acme.Choices", "Choice", variant));
+
+        Mapper(resolver).ToValue(GenericAppOfText("Acme.Choices", "Choice"), "Payload")
+            .Should().Be("Payload.ToVariant(__t0 => (DamlValue)(new DamlText(__t0)))");
+    }
+
+    [Fact]
+    public void from_value_deserializes_a_user_generic_variant_through_converter_lambdas()
+    {
+        var variant = new DamlVariantDefinition([new DamlVariantConstructor("Wrap", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Choice", PackageWithGenericType("Acme.Choices", "Choice", variant));
+
+        Mapper(resolver).FromValue(GenericAppOfText("Acme.Choices", "Choice"), "value")
+            .Should().Be("Acme.Choice<string>.FromVariant(value.As<DamlVariant>(), __v0 => __v0.As<DamlText>().Value)");
+    }
+
+    [Fact]
+    public void to_value_maps_a_type_var_field_to_its_injected_converter_delegate()
+    {
+        var delegates = new Dictionary<string, string> { ["a"] = "convertTA" };
+
+        Mapper().ToValue(new DamlTypeVar("a"), "Value", delegates)
+            .Should().Be("convertTA(Value)");
+    }
+
+    [Fact]
+    public void from_value_maps_a_type_var_field_to_its_injected_converter_delegate()
+    {
+        var delegates = new Dictionary<string, string> { ["a"] = "convertTA" };
+
+        Mapper().FromValue(new DamlTypeVar("a"), "value", delegates)
+            .Should().Be("convertTA(value)");
+    }
+
+    [Fact]
+    public void from_value_falls_back_to_the_stub_for_a_type_var_absent_from_the_delegate_map()
+    {
+        var delegates = new Dictionary<string, string> { ["b"] = "convertTB" };
+
+        Mapper().FromValue(new DamlTypeVar("a"), "value", delegates)
+            .Should().Be("GenericStub.NotImplemented<TA>(\"a\")");
+    }
+
     private static readonly IReadOnlyDictionary<Type, DamlType> SubtypeRepresentatives =
         new Dictionary<Type, DamlType>
         {

@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using AwesomeAssertions;
 using Daml.Runtime;
 using Daml.Runtime.Commands;
+using Daml.Runtime.Contracts;
+using Daml.Runtime.Outcomes;
 using Daml.Runtime.Streams;
 using Xunit;
 
@@ -19,8 +21,9 @@ namespace Daml.Ledger.Abstractions.Testing.Conformance;
 /// Adopters subclass with a concrete client factory and a probe Daml marker; the seeded
 /// client must expose the canonical scenario: at least one active contract, one
 /// unclassifiable row, a terminal checkpoint, at least one event on both the ACS-delta
-/// subscription (<see cref="ILedgerStreamer.SubscribeAsync{T}"/>, which surfaces archival
-/// as a first-class <see cref="ContractStreamEvent{T}.Archived"/> and never an
+/// subscription
+/// (<see cref="ILedgerStreamer.SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>,
+/// which surfaces archival as a first-class <see cref="ContractStreamEvent{T}.Archived"/> and never an
 /// <see cref="ContractStreamEvent{T}.Exercised"/>) and the ledger-effects subscription
 /// (<see cref="ILedgerStreamer.SubscribeLedgerEffectsAsync{T}"/>, which signals archival
 /// with a consuming <see cref="ContractStreamEvent{T}.Exercised"/> and never an
@@ -62,6 +65,15 @@ public abstract class LedgerClientConformanceTests<TProbe>
     /// the fault-path conformance check.
     /// </summary>
     protected virtual ILedgerClient? CreateFaultingSnapshotClient() => null;
+
+    /// <summary>
+    /// A write-capable client and submission proving the submitter-authority contract of
+    /// <see cref="ILedgerWriter.SubmitAndWaitAsync"/> / <see cref="ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/>,
+    /// or <c>null</c> if the adopter cannot seed a deterministic authorization boundary
+    /// (e.g. a fake with no notion of authorized/unauthorized parties). Defaults to
+    /// <c>null</c>, which skips the write-path checks below.
+    /// </summary>
+    protected virtual WriteConformanceFixture? CreateWriteFixture() => null;
 
     /// <summary>A cancelled live subscription surfaces cancellation, not an in-band error.</summary>
     [Fact]
@@ -232,6 +244,110 @@ public abstract class LedgerClientConformanceTests<TProbe>
             e => e is ContractStreamEvent<TProbe>.Exercised,
             "the ACS-delta shape surfaces archival as a first-class Archived event, never an Exercised variant");
     }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> must apply the
+    /// <c>submitter</c> parameter authoritatively via <c>CommandsSubmission.WithSubmitter</c>,
+    /// overwriting any <see cref="CommandsSubmission.ActAs"/> already set on the submission —
+    /// not dispatch whatever the caller pre-set. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateWriteFixture"/>.
+    /// </summary>
+    [Fact]
+    public async Task TrySubmitAndWaitForTransactionAsync_submitter_parameter_overrides_pre_set_ActAs()
+    {
+        var maybeFixture = CreateWriteFixture();
+        Assert.SkipWhen(maybeFixture is null, WriteFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        var submissionWithWrongActAs = fixture.Submission.WithActAs(fixture.Unauthorized);
+
+        var outcome = await fixture.Client.TrySubmitAndWaitForTransactionAsync(submissionWithWrongActAs, fixture.Authorized);
+
+        outcome.Should().BeOfType<ExerciseOutcome<TransactionResult>.One>(
+            "the submitter parameter must win over the pre-set (unauthorized) ActAs; an implementation " +
+            "that dispatches the pre-set ActAs instead of applying the submitter authoritatively would be " +
+            "rejected by the seeded client as unauthorized");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.SubmitAndWaitAsync"/> must apply the <c>submitter</c> parameter
+    /// authoritatively via <c>CommandsSubmission.WithSubmitter</c>, overwriting any
+    /// <see cref="CommandsSubmission.ActAs"/> already set on the submission — not dispatch
+    /// whatever the caller pre-set. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateWriteFixture"/>.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAndWaitAsync_submitter_parameter_overrides_pre_set_ActAs()
+    {
+        var maybeFixture = CreateWriteFixture();
+        Assert.SkipWhen(maybeFixture is null, WriteFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        var submissionWithWrongActAs = fixture.Submission.WithActAs(fixture.Unauthorized);
+
+        var act = () => fixture.Client.SubmitAndWaitAsync(submissionWithWrongActAs, fixture.Authorized);
+
+        await act.Should().NotThrowAsync(
+            "the submitter parameter must win over the pre-set (unauthorized) ActAs; an implementation " +
+            "that dispatches the pre-set ActAs instead of applying the submitter authoritatively would be " +
+            "rejected by the seeded client as unauthorized");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> must not merge the
+    /// <c>submitter</c> parameter with <see cref="CommandsSubmission.ActAs"/> already set on
+    /// the submission — an authorized pre-set <c>ActAs</c> must not leak through and rescue an
+    /// unauthorized <c>submitter</c>. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateWriteFixture"/>. Uses its own fresh <see cref="CreateWriteFixture"/>
+    /// call (a distinct seeded client/contract from the sibling override check) so a stateful
+    /// adopter's already-consumed contract from that check cannot masquerade as this one's
+    /// authorization failure.
+    /// </summary>
+    [Fact]
+    public async Task TrySubmitAndWaitForTransactionAsync_submitter_parameter_is_not_merged_with_pre_set_ActAs()
+    {
+        var maybeFixture = CreateWriteFixture();
+        Assert.SkipWhen(maybeFixture is null, WriteFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        var submissionWithAuthorizedActAs = fixture.Submission.WithActAs(fixture.Authorized);
+
+        var outcome = await fixture.Client.TrySubmitAndWaitForTransactionAsync(submissionWithAuthorizedActAs, fixture.Unauthorized);
+
+        outcome.Should().NotBeOfType<ExerciseOutcome<TransactionResult>.One>(
+            "the submitter parameter must replace, not merge with, the pre-set ActAs; an implementation " +
+            "that unions the submitter into the existing ActAs instead of overwriting it would let the " +
+            "authorized pre-set ActAs rescue an unauthorized submitter");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.SubmitAndWaitAsync"/> must not merge the <c>submitter</c>
+    /// parameter with <see cref="CommandsSubmission.ActAs"/> already set on the submission — an
+    /// authorized pre-set <c>ActAs</c> must not leak through and rescue an unauthorized
+    /// <c>submitter</c>. Opt-in: skipped unless the adopter overrides <see cref="CreateWriteFixture"/>.
+    /// Uses its own fresh <see cref="CreateWriteFixture"/> call (a distinct seeded client/contract
+    /// from the sibling override check) so a stateful adopter's already-consumed contract from
+    /// that check cannot masquerade as this one's authorization failure.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAndWaitAsync_submitter_parameter_is_not_merged_with_pre_set_ActAs()
+    {
+        var maybeFixture = CreateWriteFixture();
+        Assert.SkipWhen(maybeFixture is null, WriteFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        var submissionWithAuthorizedActAs = fixture.Submission.WithActAs(fixture.Authorized);
+
+        var act = () => fixture.Client.SubmitAndWaitAsync(submissionWithAuthorizedActAs, fixture.Unauthorized);
+
+        await act.Should().ThrowAsync<LedgerOperationException>(
+            "the submitter parameter must replace, not merge with, the pre-set ActAs; an implementation " +
+            "that unions the submitter into the existing ActAs instead of overwriting it would let the " +
+            "authorized pre-set ActAs rescue an unauthorized submitter");
+    }
+
+    private const string WriteFixtureSkipReason =
+        "adopter opted out of the submitter-authority check: CreateWriteFixture() returned null";
 
     private Task<IReadOnlyList<AcsSnapshotEntry<TProbe>>> CollectSnapshot(
         ILedgerClient client, LedgerOffset? activeAtOffset = null) =>

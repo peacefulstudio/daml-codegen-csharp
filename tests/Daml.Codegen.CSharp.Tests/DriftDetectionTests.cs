@@ -21,6 +21,12 @@ namespace Daml.Codegen.CSharp.Tests;
 /// per-family Splice NuGet packages (the drift-detection suite). When
 /// codegen output legitimately changes, refresh the snapshot by following the
 /// procedure in <c>Snapshots/&lt;name&gt;/README.md</c>.
+///
+/// A snapshot for a package that emits no C# types (a Daml helper library of
+/// functions and re-exports, for example) is pinned by placing an
+/// <c>emits-no-types</c> marker file in its snapshot directory. Such a snapshot
+/// asserts that codegen produces zero <c>.cs</c> output; the day the package
+/// starts emitting a type, the drift test fails so the change is not missed.
 /// </summary>
 public class DriftDetectionTests
 {
@@ -114,12 +120,26 @@ public class DriftDetectionTests
             $"If the change is unintentional, fix the codegen. " +
             $"Re-run only this snapshot with: dotnet test --filter \"FullyQualifiedName~DriftDetectionTests&DisplayName~{snapshotName}\"";
 
-        expectedFiles.Should().Contain(
-            f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
-            "the snapshot must contain at least one .cs file; an empty fixture would let the test pass vacuously. " + refreshHint);
-        actualFiles.Should().Contain(
-            f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
-            "codegen must emit at least one .cs file from the proto snapshot; zero .cs output indicates a regression in IntermediateDarReader.Read or Generate.");
+        var pinnedEmpty = File.Exists(Path.Combine(snapshotDir, "emits-no-types"));
+
+        if (pinnedEmpty)
+        {
+            expectedFiles.Should().NotContain(
+                f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
+                "the 'emits-no-types' marker pins this package as emitting no C# types, but the expected/ tree contains a .cs; refresh the snapshot or remove the marker. " + refreshHint);
+            actualFiles.Should().NotContain(
+                f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
+                "this package is pinned as emitting no C# types (its 'emits-no-types' marker), but codegen now produced a .cs — its emitted surface changed. If the package legitimately gained types, remove the marker and refresh the snapshot. " + refreshHint);
+        }
+        else
+        {
+            expectedFiles.Should().Contain(
+                f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
+                "the snapshot must contain at least one .cs file; an empty fixture would let the test pass vacuously (pin a genuinely type-less package with an 'emits-no-types' marker instead). " + refreshHint);
+            actualFiles.Should().Contain(
+                f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal),
+                "codegen must emit at least one .cs file from the proto snapshot; zero .cs output indicates a regression in IntermediateDarReader.Read or Generate.");
+        }
 
         actualFiles.Select(f => f.RelativePath).Should().Equal(
             expectedFiles.Select(f => f.RelativePath),

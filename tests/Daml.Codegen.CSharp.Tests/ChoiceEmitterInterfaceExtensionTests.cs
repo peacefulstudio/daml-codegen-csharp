@@ -114,12 +114,44 @@ public class ChoiceEmitterInterfaceExtensionTests
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("TimeSpan? timeout = null,");
-        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
 
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = output.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
         var idxCancellationToken = output.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
         idxCommandId.Should().BeLessThan(idxTimeout);
         idxTimeout.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void interface_choice_emits_a_command_builder_that_returns_an_exercise_command()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
+
+        output.Should().Contain("public static ExerciseCommand TransferCommand(");
+        output.Should().Contain("this ContractId<IAsset> contractId)");
+        output.Should().Contain("return ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\"), DamlUnit.Instance);");
+    }
+
+    [Fact]
+    public void interface_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
+
+        output.Should().Contain("var command = contractId.TransferCommand();");
+        output.Should().Contain("var submission = CommandsSubmission.Single(command)");
+        output.Should().NotContain("var command = ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\")");
+    }
+
+    [Fact]
+    public void interface_choice_command_builder_accepts_the_typed_argument_when_the_choice_has_one()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlTypeRef(LocalPackageId, "Main", "TransferArg"))));
+
+        output.Should().Contain("public static ExerciseCommand TransferCommand(");
+        output.Should().Contain("this ContractId<IAsset> contractId,");
+        output.Should().Contain("TransferArg argument)");
+        output.Should().Contain("return ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord());");
+        output.Should().Contain("var command = contractId.TransferCommand(argument);");
     }
 }

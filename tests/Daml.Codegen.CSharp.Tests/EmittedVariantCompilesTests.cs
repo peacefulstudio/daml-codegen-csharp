@@ -276,8 +276,10 @@ public class EmittedVariantCompilesTests
         var files = CreateGenerator().Generate(dar).ToList();
 
         var formulaSource = files.Single(f => f.RelativePath.EndsWith("Formula.cs", StringComparison.Ordinal)).Content;
-        formulaSource.Should().Contain("Value.ToVariant()",
+        formulaSource.Should().Contain("Value.ToVariant(",
             "a direct nested-variant payload must serialize via ToVariant(), not ToRecord()");
+        formulaSource.Should().NotContain("Value.ToRecord(",
+            "a nested-variant payload has no ToRecord() — serialization must use ToVariant()");
         formulaSource.Should().Contain(".FromVariant(",
             "a direct nested-variant payload must deserialize via FromVariant(), not FromRecord()");
         formulaSource.Should().NotContain(".FromRecord(",
@@ -335,8 +337,10 @@ public class EmittedVariantCompilesTests
         var files = CreateGenerator().Generate(dar).ToList();
 
         var formulaSource = files.Single(f => f.RelativePath.EndsWith("Formula.cs", StringComparison.Ordinal)).Content;
-        formulaSource.Should().Contain("x.ToVariant()",
+        formulaSource.Should().Contain("x.ToVariant(",
             "the list element serializer must convert nested-variant payloads via ToVariant(), not ToRecord()");
+        formulaSource.Should().NotContain("x.ToRecord(",
+            "a nested-variant list payload has no ToRecord() — serialization must use ToVariant()");
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();

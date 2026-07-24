@@ -46,21 +46,13 @@ public static class CreateByExercise
         where TTemplate : IDamlType
     {
         ArgumentNullException.ThrowIfNull(writer);
-        var submission = CommandsSubmission.Single(choice).WithSubmitter(submitter).WithOptionalWorkflowId(workflowId);
+        var submission = CommandsSubmission.Single(choice).WithOptionalWorkflowId(workflowId);
 
         var outcome = await writer
-            .TrySubmitAndWaitForTransactionAsync(submission, timeout, cancellationToken)
+            .TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout, cancellationToken)
             .ConfigureAwait(false);
 
-        return outcome switch
-        {
-            ExerciseOutcome<TransactionResult>.One one => ProjectSingleCreated<TTemplate>(one.Result),
-            ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<ContractId<TTemplate>>.None(),
-            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<ContractId<TTemplate>>.Many(many.Count, many.ContractIds),
-            ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<ContractId<TTemplate>>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
-            ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<ContractId<TTemplate>>.InfraError(e.StatusCode, e.Message, e.SourceException),
-            _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),
-        };
+        return RemapExerciseOutcome(outcome, ProjectSingleCreated<TTemplate>);
     }
 
     /// <summary>
@@ -103,21 +95,15 @@ public static class CreateByExercise
         where TTemplate : IDamlType
     {
         ArgumentNullException.ThrowIfNull(writer);
-        var submission = CommandsSubmission.Single(choice).WithSubmitter(submitter).WithOptionalWorkflowId(workflowId);
+        var submission = CommandsSubmission.Single(choice).WithOptionalWorkflowId(workflowId);
 
         var outcome = await writer
-            .TrySubmitAndWaitForTransactionAsync(submission, timeout, cancellationToken)
+            .TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout, cancellationToken)
             .ConfigureAwait(false);
 
-        return outcome switch
-        {
-            ExerciseOutcome<TransactionResult>.One one => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.One(one.Result.All<TTemplate>()),
-            ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.None(),
-            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.Many(many.Count, many.ContractIds),
-            ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
-            ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.InfraError(e.StatusCode, e.Message, e.SourceException),
-            _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),
-        };
+        return RemapExerciseOutcome(
+            outcome,
+            result => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.One(result.All<TTemplate>()));
     }
 
     /// <summary>
@@ -246,6 +232,21 @@ public static class CreateByExercise
     {
         SubmitterInfo submitter = actAs;
         return writer.CreateManyByExerciseAsync<TTemplate>(choice, submitter, workflowId, timeout, cancellationToken);
+    }
+
+    private static ExerciseOutcome<TCreated> RemapExerciseOutcome<TCreated>(
+        ExerciseOutcome<TransactionResult> outcome,
+        Func<TransactionResult, ExerciseOutcome<TCreated>> projectCreated)
+    {
+        return outcome switch
+        {
+            ExerciseOutcome<TransactionResult>.One one => projectCreated(one.Result),
+            ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<TCreated>.None(),
+            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TCreated>.Many(many.Count, many.ContractIds),
+            ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<TCreated>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
+            ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TCreated>.InfraError(e.StatusCode, e.Message, e.SourceException),
+            _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),
+        };
     }
 
     private static ExerciseOutcome<ContractId<TTemplate>> ProjectSingleCreated<TTemplate>(TransactionResult result)

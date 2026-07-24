@@ -57,6 +57,11 @@ public interface ILedgerWriter
     /// completion.
     /// </summary>
     /// <param name="submission">The commands submission.</param>
+    /// <param name="submitter">
+    /// The submitter authorization (act-as parties and optional read-as parties). Applied via
+    /// <see cref="CommandsSubmission.WithSubmitter(SubmitterInfo)"/> before dispatch, overwriting any
+    /// act-as/read-as parties already set on <paramref name="submission"/>.
+    /// </param>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
     /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
@@ -81,6 +86,7 @@ public interface ILedgerWriter
     /// </returns>
     Task<SubmitAndWaitResult> SubmitAndWaitAsync(
         CommandsSubmission submission,
+        SubmitterInfo submitter,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
@@ -94,6 +100,11 @@ public interface ILedgerWriter
     /// created contracts to typed <see cref="ContractId{T}"/> values.
     /// </summary>
     /// <param name="submission">The commands submission.</param>
+    /// <param name="submitter">
+    /// The submitter authorization (act-as parties and optional read-as parties). Applied via
+    /// <see cref="CommandsSubmission.WithSubmitter(SubmitterInfo)"/> before dispatch, overwriting any
+    /// act-as/read-as parties already set on <paramref name="submission"/>.
+    /// </param>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
     /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
@@ -110,6 +121,7 @@ public interface ILedgerWriter
     /// <returns>The outcome of the submission.</returns>
     Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
         CommandsSubmission submission,
+        SubmitterInfo submitter,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 

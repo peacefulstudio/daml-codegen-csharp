@@ -62,14 +62,16 @@ internal static class RuntimeTypeNames
     public const string Unit = nameof(Daml.Runtime.Stdlib.Unit);
     public const string GenericStub = nameof(Daml.Runtime.Stdlib.GenericStub);
 
-    // The next four stay string literals rather than nameof(...) because each
-    // constrains a type parameter on ITemplate, whose static-abstract members
-    // make it unusable as a nameof type argument (CS8920), and no concrete
-    // implementation is visible to the codegen project.
+    // These stay string literals rather than nameof(...) because each
+    // constrains a type parameter to a runtime interface (ITemplate or
+    // IDamlInterface) whose static-abstract members make it unusable as a
+    // nameof type argument (CS8920), and no concrete implementation is visible
+    // to the codegen project.
     public const string Contract = "Contract";
     public const string IContract = "IContract";
     public const string Choice = "Choice";
     public const string IExercises = "IExercises";
+    public const string IImplements = "IImplements";
 
     public const string ILedgerClient = nameof(Daml.Ledger.Abstractions.ILedgerClient);
     public const string ILedgerWriter = nameof(Daml.Ledger.Abstractions.ILedgerWriter);

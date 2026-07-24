@@ -9,8 +9,9 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <summary>
 /// Emits the C# for a Daml template: the sealed template record with its
 /// <see cref="Daml.Runtime.Contracts.ITemplate"/> facet (plus the optional
-/// <see cref="Daml.Runtime.Contracts.IHasKey{TKey}"/> and
-/// <c>IUpgradeable</c> facets), the static template metadata, the throwing
+/// <see cref="Daml.Runtime.Contracts.IHasKey{TKey}"/> and <c>IUpgradeable</c>
+/// facets, plus one <c>IImplements</c> per implemented interface), the static
+/// template metadata, the throwing
 /// contract-key accessor, the nested <c>ContractId</c> / <c>Contract</c> records,
 /// and the namespace-level choice / submission extension surface. The
 /// field-bearing serialization surface (constructor parameters, properties,
@@ -67,6 +68,8 @@ internal sealed class TemplateEmitter(
             interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey, context.RootNamespace)}<{keyType}>");
         if (package.UpgradedPackageId is not null)
             interfacesList.Add(context.Qualifier.Qualify(RuntimeTypeNames.IUpgradeable, context.RootNamespace));
+        foreach (var implemented in template.Implements)
+            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IImplements, context.RootNamespace)}<{resolver.Resolve(implemented, context)}>");
         var interfaces = string.Join(", ", interfacesList);
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors && fields.Count > 0)
@@ -99,8 +102,8 @@ internal sealed class TemplateEmitter(
             recordSerialization.WriteProperties(indent, fields);
         }
 
-        recordSerialization.WriteToRecordMethod(indent, fields);
-        recordSerialization.WriteFromRecordMethod(indent, className, fields);
+        recordSerialization.WriteToRecordMethod(indent, fields, []);
+        recordSerialization.WriteFromRecordMethod(indent, className, fields, []);
 
         choiceEmitter.WriteChoiceDescriptors(indent, template);
 
@@ -159,8 +162,8 @@ internal sealed class TemplateEmitter(
             indent.AppendLine("{");
             indent.Indent();
 
-            recordSerialization.WriteToRecordMethod(indent, record.Fields);
-            recordSerialization.WriteFromRecordMethod(indent, choiceTypeName, record.Fields);
+            recordSerialization.WriteToRecordMethod(indent, record.Fields, []);
+            recordSerialization.WriteFromRecordMethod(indent, choiceTypeName, record.Fields, []);
 
             indent.Dedent();
             indent.AppendLine("}");

@@ -144,7 +144,7 @@ public class DamlJsonSerializerTextInferenceTests
     }
 
     [Fact]
-    public void deserialize_record_should_preserve_canonical_numeric_text_precision_beyond_decimal_range()
+    public void DeserializeRecord_should_preserve_canonical_numeric_text_precision_beyond_decimal_range()
     {
         var thirtyEightSignificantDigits = "1.2345678901234567890123456789012345678";
         var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = thirtyEightSignificantDigits });
@@ -158,7 +158,7 @@ public class DamlJsonSerializerTextInferenceTests
     }
 
     [Fact]
-    public void deserialize_record_should_preserve_canonical_numeric_text_beyond_decimal_max_value()
+    public void DeserializeRecord_should_preserve_canonical_numeric_text_beyond_decimal_max_value()
     {
         var beyondDecimalMaxValue = "79228162514264337593543950336.0";
         var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = beyondDecimalMaxValue });
@@ -180,7 +180,7 @@ public class DamlJsonSerializerTextInferenceTests
 
     [Theory]
     [MemberData(nameof(BareIntegerText))]
-    public void deserialize_record_should_infer_damlint64_from_bare_integer_text(string text, long expected)
+    public void DeserializeRecord_should_infer_DamlInt64_from_bare_integer_text(string text, long expected)
     {
         var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = text });
 
@@ -190,7 +190,7 @@ public class DamlJsonSerializerTextInferenceTests
     }
 
     [Fact]
-    public void deserialize_record_should_keep_bare_integer_beyond_int64_range_as_damltext()
+    public void DeserializeRecord_should_keep_bare_integer_beyond_int64_range_as_DamlText()
     {
         var beyondInt64Range = "99999999999999999999";
         var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["amount"] = beyondInt64Range });

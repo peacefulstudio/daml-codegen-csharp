@@ -336,6 +336,15 @@ public class RecordEmitterTests
     [Fact]
     public void emits_a_throwing_template_stub_for_interface_placeholder_records()
     {
+        var output = EmitInterfacePlaceholder("Holding");
+
+        output.Should().Contain("public sealed record Holding : ITemplate");
+        output.Should().Contain("Phantom placeholder for the Daml interface <c>Test.Module:Holding</c>.");
+        output.Should().Contain("throw new InvalidOperationException(");
+    }
+
+    private static string EmitInterfacePlaceholder(string name)
+    {
         var package = new DamlPackage
         {
             PackageId = LocalPackageId,
@@ -348,8 +357,8 @@ public class RecordEmitterTests
                 {
                     Name = ModuleName,
                     Templates = [],
-                    DataTypes = [Record("Holding")],
-                    Interfaces = [new DamlInterface { Name = "Holding", Choices = [] }],
+                    DataTypes = [Record(name)],
+                    Interfaces = [new DamlInterface { Name = name, Choices = [] }],
                 },
             ],
             DependencyReferences = [],
@@ -361,13 +370,62 @@ public class RecordEmitterTests
         var mapper = new DamlTypeMapper(context, resolver);
         var serialization = new RecordSerializationEmitter(context, resolver, options, mapper);
         var emitter = new RecordEmitter(context, options, serialization);
-        var target = package.Modules[0].DataTypes.First(d => d.Name == "Holding");
+        var target = package.Modules[0].DataTypes.First(d => d.Name == name);
         var sb = new StringBuilder();
         emitter.WriteRecordType(new IndentWriter(sb), package.Modules[0], target, (DamlRecordDefinition)target.Definition!);
-        var output = sb.ToString();
+        return sb.ToString();
+    }
 
-        output.Should().Contain("public sealed record Holding : ITemplate");
-        output.Should().Contain("Phantom placeholder for the Daml interface <c>Test.Module:Holding</c>.");
-        output.Should().Contain("throw new InvalidOperationException(");
+    [Fact]
+    public void emits_a_remarks_block_clarifying_interface_choices_need_no_coercion()
+    {
+        var output = EmitInterfacePlaceholder("Holding");
+
+        output.Should().Contain("/// <remarks>");
+        output.Should().Contain("/// </remarks>");
+        output.Should().Contain("exercise directly on <c>ContractId&lt;Holding&gt;</c>");
+        output.Should().Contain("no supported way to recover a concrete <c>ContractId&lt;TConcrete&gt;</c>");
+
+        var summaryEnd = output.IndexOf("/// </summary>", StringComparison.Ordinal);
+        var remarksStart = output.IndexOf("/// <remarks>", StringComparison.Ordinal);
+        var remarksEnd = output.IndexOf("/// </remarks>", StringComparison.Ordinal);
+        var recordDeclaration = output.IndexOf("public sealed record Holding : ITemplate", StringComparison.Ordinal);
+
+        summaryEnd.Should().BeLessThan(remarksStart);
+        remarksStart.Should().BeLessThan(remarksEnd);
+        remarksEnd.Should().BeLessThan(recordDeclaration);
+    }
+
+    [Fact]
+    public void emits_exception_tags_on_the_five_throwing_placeholder_members_only()
+    {
+        var output = EmitInterfacePlaceholder("Holding");
+        var lines = output.Split('\n');
+
+        var identityPhraseByMember = new Dictionary<string, string>
+        {
+            ["TemplateId"] = "template identity",
+            ["PackageId"] = "package identity",
+            ["PackageName"] = "package identity",
+            ["PackageVersion"] = "package identity",
+            ["DamlTypeId"] = "Daml type identity",
+        };
+
+        foreach (var member in new[] { "TemplateId", "PackageId", "PackageName", "PackageVersion", "DamlTypeId" })
+        {
+            var declarationLineIndex = Array.FindIndex(lines, l => l.Contains($" {member} =>", StringComparison.Ordinal));
+            declarationLineIndex.Should().BeGreaterThan(1);
+            lines[declarationLineIndex - 1].Should().Contain("/// <exception cref=\"System.InvalidOperationException\">");
+            lines[declarationLineIndex - 2].Should().Contain("/// <summary>Always throws");
+            lines[declarationLineIndex - 1].Should().Contain(identityPhraseByMember[member]);
+        }
+
+        var toRecordIndex = Array.FindIndex(lines, l => l.Contains("ToRecord() =>", StringComparison.Ordinal));
+        var fromRecordIndex = Array.FindIndex(lines, l => l.Contains("FromRecord(", StringComparison.Ordinal) && l.Contains("=>", StringComparison.Ordinal));
+
+        toRecordIndex.Should().BeGreaterThan(0);
+        fromRecordIndex.Should().BeGreaterThan(0);
+        lines[toRecordIndex - 1].Should().NotContain("<exception");
+        lines[fromRecordIndex - 1].Should().NotContain("<exception");
     }
 }

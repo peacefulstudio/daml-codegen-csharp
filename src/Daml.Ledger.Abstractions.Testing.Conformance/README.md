@@ -42,6 +42,13 @@ public class MyClientConformanceTests : LedgerClientConformanceTests<MyProbeTemp
   terminate is enumerated under a time budget (`StreamTimeout`, default 30s;
   override to widen). A stream that never terminates fails loudly with a
   contract-naming message instead of hanging the run.
+- **Submitter authority (opt-in)** — `SubmitAndWaitAsync` and
+  `TrySubmitAndWaitForTransactionAsync` apply the `submitter` parameter
+  authoritatively via `CommandsSubmission.WithSubmitter`, overwriting any
+  `ActAs` already set on the submission, rather than dispatching whatever the
+  caller pre-set. Skipped unless the adopter overrides `CreateWriteFixture()`
+  to return a client that accepts a submission from one party and rejects it
+  from another.
 
 ## Seeding requirement
 
@@ -65,5 +72,10 @@ To also cover the fault path, override `CreateFaultingSnapshotClient()` to retur
 separate client whose snapshot faults mid-stream (yielding a terminal
 `AcsSnapshotEntry<T>.StreamError` and no `Checkpoint`). Leaving it at its `null` default
 skips only the fault-surfacing check.
+
+To also cover submitter authority, override `CreateWriteFixture()` to return a
+`WriteConformanceFixture`: a fresh client plus a submission it accepts from an
+`Authorized` party and rejects from an `Unauthorized` one. Leaving it at its `null`
+default skips only the submitter-authority checks.
 
 Not for production use.

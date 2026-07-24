@@ -7,7 +7,7 @@ namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
 /// Turns a <see cref="DamlType"/> into C#: <see cref="MapType(DamlType)"/> produces a C# type
-/// name, <see cref="ToValue(DamlType, string)"/> and <see cref="FromValue(DamlType, string)"/> produce the serialize and
+/// name, <c>ToValue</c> and <c>FromValue</c> produce the serialize and
 /// deserialize expressions. Constructed once per package over a
 /// <see cref="PackageEmitContext"/> and an <see cref="ICrossPackageResolver"/>, which
 /// it calls into for cross-package names — it does not own resolution. Pure functions
@@ -54,9 +54,18 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     private const string FallbackTypeName = "object";
 
     /// <summary>Produces the expression that serializes <paramref name="fieldName"/> of <paramref name="type"/> to a Daml value.</summary>
-    public string ToValue(DamlType type, string fieldName) => ToValue(type, fieldName, depth: 0);
+    /// <param name="type">The Daml type of the field being serialized.</param>
+    /// <param name="fieldName">The C# expression referencing the field value.</param>
+    /// <param name="typeVarDelegates">
+    /// Maps a Daml type-variable name to the injected converter-delegate parameter name
+    /// in scope, supplied when emitting a generic record or variant's own body so a
+    /// <see cref="DamlTypeVar"/> field resolves to its converter instead of the runtime
+    /// stub. <c>null</c> outside a generic body.
+    /// </param>
+    public string ToValue(DamlType type, string fieldName, IReadOnlyDictionary<string, string>? typeVarDelegates = null) =>
+        ToValue(type, fieldName, typeVarDelegates, depth: 0);
 
-    private string ToValue(DamlType type, string fieldName, int depth)
+    private string ToValue(DamlType type, string fieldName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth)
     {
         ThrowIfTooDeep(depth, nameof(ToValue));
 
@@ -76,24 +85,28 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
         // (`{fieldName}`) keeps its `@` escape so the original record property is
         // still addressable.
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app =>
-            $"{fieldName} is {{ }} __{fieldName.TrimStart('@')} ? new {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}({ToValue(app.Arguments[0], $"__{fieldName.TrimStart('@')}", depth + 1)}) : {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}.None",
+            $"{fieldName} is {{ }} __{fieldName.TrimStart('@')} ? new {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}({ToValue(app.Arguments[0], $"__{fieldName.TrimStart('@')}", typeVarDelegates, depth + 1)}) : {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}.None",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app =>
-            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}({fieldName}.Select(x => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "x", depth + 1)}).ToList())",
+            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}({fieldName}.Select(x => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "x", typeVarDelegates, depth + 1)}).ToList())",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app =>
-            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap, context.RootNamespace)}({fieldName}.ToDictionary(kv => kv.Key, kv => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "kv.Value", depth + 1)}))",
+            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap, context.RootNamespace)}({fieldName}.ToDictionary(kv => kv.Key, kv => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "kv.Value", typeVarDelegates, depth + 1)}))",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app =>
-            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap, context.RootNamespace)}({fieldName}.Select(kv => (({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "kv.Key", depth + 1)}, ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[1], "kv.Value", depth + 1)})).ToList())",
+            $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap, context.RootNamespace)}({fieldName}.Select(kv => (({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "kv.Key", typeVarDelegates, depth + 1)}, ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[1], "kv.Value", typeVarDelegates, depth + 1)})).ToList())",
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when StdlibPackages.IsStdlibTypeRef(resolver, typeRef, parametric: true) =>
-            EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName, depth),
+            EmitParametricStdlibToValue(typeRef, app.Arguments, fieldName, typeVarDelegates, depth),
         DamlTypeRef typeRef when IsLocalEnumTypeRef(typeRef) =>
             $"{fieldName}.ToDamlEnum()",
         DamlTypeRef typeRef when IsCrossPackageEnumTypeRef(typeRef) =>
             QualifiedEnumExtensionsCall(typeRef, "ToDamlEnum", fieldName),
-        DamlTypeApp { Base: DamlTypeRef typeRef } when IsVariantTypeRef(typeRef) =>
-            $"{fieldName}.ToVariant()",
+        DamlTypeApp { Base: DamlTypeRef typeRef } app when IsVariantTypeRef(typeRef) =>
+            $"{fieldName}.ToVariant({string.Join(", ", ToValueConverterLambdas(app.Arguments, typeVarDelegates, depth))})",
+        DamlTypeApp { Base: DamlTypeRef typeRef } app when IsRecordTypeRef(typeRef) =>
+            $"{fieldName}.ToRecord({string.Join(", ", ToValueConverterLambdas(app.Arguments, typeVarDelegates, depth))})",
         DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
             $"{fieldName}.ToVariant()",
+        DamlTypeVar typeVar when TryResolveDelegate(typeVarDelegates, typeVar, out var convert) =>
+            $"{convert}({fieldName})",
         DamlTypeVar => FallbackToValueStub(fieldName),
         _ when MapsToFallbackObject(type, depth) => FallbackToValueStub(fieldName),
         _ => $"{fieldName}.ToRecord()"
@@ -106,9 +119,18 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     private bool MapsToFallbackObject(DamlType type, int depth = 0) => MapType(type, depth) == FallbackTypeName;
 
     /// <summary>Produces the expression that deserializes <paramref name="valueName"/> back into <paramref name="type"/>.</summary>
-    public string FromValue(DamlType type, string valueName) => FromValue(type, valueName, depth: 0);
+    /// <param name="type">The Daml type to reconstruct.</param>
+    /// <param name="valueName">The C# expression referencing the Daml value.</param>
+    /// <param name="typeVarDelegates">
+    /// Maps a Daml type-variable name to the injected converter-delegate parameter name
+    /// in scope, supplied when emitting a generic record or variant's own body so a
+    /// <see cref="DamlTypeVar"/> field resolves to its converter instead of the runtime
+    /// stub. <c>null</c> outside a generic body.
+    /// </param>
+    public string FromValue(DamlType type, string valueName, IReadOnlyDictionary<string, string>? typeVarDelegates = null) =>
+        FromValue(type, valueName, typeVarDelegates, depth: 0);
 
-    private string FromValue(DamlType type, string valueName, int depth)
+    private string FromValue(DamlType type, string valueName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth)
     {
         ThrowIfTooDeep(depth, nameof(FromValue));
 
@@ -118,28 +140,47 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } =>
             $"{valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlNumeric, context.RootNamespace)}>().Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
-            $"{valueName}.AsOptional().HasValue ? {FromValue(arg, $"{valueName}.AsOptional().Value!", depth + 1)} : null",
+            $"{valueName}.AsOptional().HasValue ? {FromValue(arg, $"{valueName}.AsOptional().Value!", typeVarDelegates, depth + 1)} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"({context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{MapType(arg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}>().Values.Select(x => {FromValue(arg, "x", depth + 1)}).ToList()",
+            $"({context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{MapType(arg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}>().Values.Select(x => {FromValue(arg, "x", typeVarDelegates, depth + 1)}).ToList()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"({context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<string, {MapType(arg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap, context.RootNamespace)}>().Values.ToDictionary(kv => kv.Key, kv => {FromValue(arg, "kv.Value", depth + 1)})",
+            $"({context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<string, {MapType(arg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap, context.RootNamespace)}>().Values.ToDictionary(kv => kv.Key, kv => {FromValue(arg, "kv.Value", typeVarDelegates, depth + 1)})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"({context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<{MapType(keyArg, depth + 1)}, {MapType(valueArg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap, context.RootNamespace)}>().Entries.ToDictionary(kv => {FromValue(keyArg, "kv.Key", depth + 1)}, kv => {FromValue(valueArg, "kv.Value", depth + 1)})",
+            $"({context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<{MapType(keyArg, depth + 1)}, {MapType(valueArg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap, context.RootNamespace)}>().Entries.ToDictionary(kv => {FromValue(keyArg, "kv.Key", typeVarDelegates, depth + 1)}, kv => {FromValue(valueArg, "kv.Value", typeVarDelegates, depth + 1)})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
             $"new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{MapType(arg, depth + 1)}>({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlContractId, context.RootNamespace)}>().Value)",
         DamlTypeApp { Base: DamlTypeRef typeRef } app
             when StdlibPackages.IsStdlibTypeRef(resolver, typeRef, parametric: true) =>
-            EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, depth),
+            EmitParametricStdlibFromValue(typeRef, app.Arguments, valueName, typeVarDelegates, depth),
         DamlTypeRef typeRef when IsEnumTypeRef(typeRef) =>
             QualifiedEnumExtensionsCall(typeRef, "FromDamlEnum", $"{valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum, context.RootNamespace)}>()"),
         DamlTypeRef typeRef when IsVariantTypeRef(typeRef) =>
             $"{resolver.Resolve(typeRef, context)}.FromVariant({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}>())",
         DamlTypeRef typeRef => $"{resolver.Resolve(typeRef, context)}.FromRecord({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}>())",
         DamlTypeApp { Base: DamlTypeRef typeRef } app when IsVariantTypeRef(typeRef) =>
-            $"{resolver.Resolve(typeRef, context)}<{string.Join(", ", app.Arguments.Select(arg => MapType(arg, depth + 1)))}>.FromVariant({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}>())",
+            $"{resolver.Resolve(typeRef, context)}<{string.Join(", ", app.Arguments.Select(arg => MapType(arg, depth + 1)))}>.FromVariant({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}>(), {string.Join(", ", FromValueConverterLambdas(app.Arguments, typeVarDelegates, depth))})",
+        DamlTypeApp { Base: DamlTypeRef typeRef } app when IsRecordTypeRef(typeRef) =>
+            $"{resolver.Resolve(typeRef, context)}<{string.Join(", ", app.Arguments.Select(arg => MapType(arg, depth + 1)))}>.FromRecord({valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}>(), {string.Join(", ", FromValueConverterLambdas(app.Arguments, typeVarDelegates, depth))})",
+        DamlTypeVar typeVar when TryResolveDelegate(typeVarDelegates, typeVar, out var convert) =>
+            $"{convert}({valueName})",
         DamlTypeVar typeVar => $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{EmitterHelpers.TypeParameterName(typeVar.Name)}>(\"{typeVar.Name}\")",
         _ => $"default({MapType(type, depth)})! /* TODO: Implement deserialization for {type} */"
     };
+    }
+
+    private static bool TryResolveDelegate(
+        IReadOnlyDictionary<string, string>? typeVarDelegates,
+        DamlTypeVar typeVar,
+        out string convert)
+    {
+        if (typeVarDelegates is not null && typeVarDelegates.TryGetValue(typeVar.Name, out var resolved))
+        {
+            convert = resolved;
+            return true;
+        }
+
+        convert = string.Empty;
+        return false;
     }
 
     // CS8524 disabled (not CS8509): the no-default switch covers every named
@@ -245,26 +286,26 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     internal IReadOnlySet<(string Module, string Name)> StdlibConversionKeys =>
         StdlibConversions.Keys.ToHashSet();
 
-    private string EmitParametricStdlibToValue(DamlTypeRef typeRef, IReadOnlyList<DamlType> arguments, string fieldName, int depth)
-    {
-        var converters = arguments.Select((arg, i) =>
-            $"({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)})({ToValue(arg, $"__t{i}", depth + 1)})").ToList();
-        var lambdas = arguments.Select((_, i) =>
-            $"__t{i} => {converters[i]}").ToList();
-        return ConversionFor(typeRef).Serialize(fieldName, lambdas);
-    }
+    private string EmitParametricStdlibToValue(DamlTypeRef typeRef, IReadOnlyList<DamlType> arguments, string fieldName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth) =>
+        ConversionFor(typeRef).Serialize(fieldName, ToValueConverterLambdas(arguments, typeVarDelegates, depth));
 
-    private string EmitParametricStdlibFromValue(DamlTypeRef typeRef, IReadOnlyList<DamlType> arguments, string valueName, int depth)
+    private string EmitParametricStdlibFromValue(DamlTypeRef typeRef, IReadOnlyList<DamlType> arguments, string valueName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth)
     {
         var stdlibName = context.Qualifier.Qualify(
             StdlibPackages.MapStdlibType(typeRef.Module, typeRef.Name)
                 ?? throw new InvalidOperationException($"No stdlib mapping for {typeRef.Module}:{typeRef.Name}"),
             context.RootNamespace);
         var typeArgs = string.Join(", ", arguments.Select(arg => MapType(arg, depth + 1)));
-        var lambdas = arguments.Select((arg, i) =>
-            $"__v{i} => {FromValue(arg, $"__v{i}", depth + 1)}").ToList();
-        return ConversionFor(typeRef).Deserialize(valueName, stdlibName, typeArgs, lambdas);
+        return ConversionFor(typeRef).Deserialize(valueName, stdlibName, typeArgs, FromValueConverterLambdas(arguments, typeVarDelegates, depth));
     }
+
+    private IReadOnlyList<string> ToValueConverterLambdas(IReadOnlyList<DamlType> arguments, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth) =>
+        arguments.Select((arg, i) =>
+            $"__t{i} => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)})({ToValue(arg, $"__t{i}", typeVarDelegates, depth + 1)})").ToList();
+
+    private IReadOnlyList<string> FromValueConverterLambdas(IReadOnlyList<DamlType> arguments, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth) =>
+        arguments.Select((arg, i) =>
+            $"__v{i} => {FromValue(arg, $"__v{i}", typeVarDelegates, depth + 1)}").ToList();
 
     private StdlibConversion ConversionFor(DamlTypeRef typeRef) =>
         StdlibConversions.TryGetValue((typeRef.Module, typeRef.Name), out var conversion)
@@ -300,6 +341,22 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
 
     private bool IsVariantTypeRef(DamlTypeRef typeRef) =>
         IsLocalVariantTypeRef(typeRef) || IsCrossPackageVariantTypeRef(typeRef);
+
+    private bool IsLocalRecordTypeRef(DamlTypeRef typeRef) =>
+        context.IsLocalRef(typeRef)
+        && context.DataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var dataType)
+        && dataType.Definition is DamlRecordDefinition;
+
+    private bool IsCrossPackageRecordTypeRef(DamlTypeRef typeRef) =>
+        !context.IsLocalRef(typeRef)
+        && (resolver.LookupPackage(typeRef.PackageId)?.Modules
+            .Where(m => m.Name == typeRef.Module)
+            .SelectMany(m => m.DataTypes)
+            .Any(dt => dt.Name == typeRef.Name && dt.Definition is DamlRecordDefinition)
+            ?? false);
+
+    private bool IsRecordTypeRef(DamlTypeRef typeRef) =>
+        IsLocalRecordTypeRef(typeRef) || IsCrossPackageRecordTypeRef(typeRef);
 
     private string QualifiedEnumExtensionsCall(DamlTypeRef typeRef, string method, string argument) =>
         $"{resolver.Resolve(typeRef, context)}Extensions.{method}({argument})";

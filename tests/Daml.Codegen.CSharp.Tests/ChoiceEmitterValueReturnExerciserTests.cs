@@ -84,7 +84,7 @@ public class ChoiceEmitterValueReturnExerciserTests
         output.Should().Contain("public static async Task<ExerciseOutcome<decimal>> GetTrailingTwapAsync(");
         output.Should().Contain("this ContractId<Oracle> contractId,");
         output.Should().Contain("ILedgerWriter client,");
-        output.Should().Contain(".TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain(".TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
         output.Should().Contain("return outcome.ProjectCommitted(tx => ProjectGetTrailingTwapResult(tx, contractId.Value));");
         output.Should().NotContain("Unhandled outcome");
         output.Should().NotContain("ExerciseOutcome<TransactionResult>.DamlError");

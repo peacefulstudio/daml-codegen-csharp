@@ -420,11 +420,8 @@ public class NamedSubmitterTests
     }
 
     [Fact]
-    public void ChoiceAsync_for_archive_choice_is_not_emitted()
+    public void ChoiceAsync_for_archive_choice_is_emitted()
     {
-        // The synthetic Archive choice is excluded — consumers exercise it via
-        // the existing low-level Choice<T,A,R> property. A typed wrapper would
-        // duplicate that surface without adding value.
         var module = new DamlModule
         {
             Name = "Test",
@@ -436,12 +433,6 @@ public class NamedSubmitterTests
                     Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
-                        // Synthetic Archive matches the shape Daml-LF emits at
-                        // codegen time: argument is a DamlTypeRef pointing at
-                        // DA.Internal.Template:Archive (the empty stdlib record),
-                        // not a bare DamlPrimitive.Unit. The non-CID emitter's
-                        // IsArchiveChoice filter keys on that shape to suppress
-                        // a duplicate ArchiveAsync wrapper.
                         new DamlChoice
                         {
                             Name = "Archive",
@@ -472,10 +463,11 @@ public class NamedSubmitterTests
         var files = CreateGenerator().Generate(CreateDar(module));
         var content = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal)).Content;
 
-        // CreateAsync still emitted, but no ArchiveAsync wrapper.
         content.Should().Contain("public static class AssetSubmissionExtensions");
         content.Should().Contain("public static Task<ExerciseOutcome<ContractId<Asset>>> CreateAsync(");
-        content.Should().NotContain("ArchiveAsync(");
+        content.Should().Contain("public static class AssetNonContractExtensions");
+        content.Should().Contain("ArchiveAsync(");
+        content.Should().Contain("DamlRecord.Create()");
     }
 
     #endregion
@@ -782,8 +774,9 @@ public class NamedSubmitterTests
         // holder/issuer into readAs.
         content.Should().Contain("actAs: new HashSet<Party> { platform }");
         content.Should().Contain("readAs: new HashSet<Party> { holder, issuer }");
-        // The submission projects the SubmitterInfo via WithSubmitter.
-        content.Should().Contain(".WithSubmitter(submitter)");
+        // The submission is dispatched with the SubmitterInfo passed directly to
+        // TrySubmitAndWaitForTransactionAsync.
+        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
     }
 
     [Fact]
@@ -828,8 +821,9 @@ public class NamedSubmitterTests
         // the named Party param (no HashSet allocation, no readAs argument).
         content.Should().Contain("SubmitterInfo submitter = platform;");
         content.Should().NotContain("readAs:");
-        // The submission still uses the SubmitterInfo overload via WithSubmitter.
-        content.Should().Contain(".WithSubmitter(submitter)");
+        // The submission is still dispatched with the SubmitterInfo overload,
+        // passed directly to TrySubmitAndWaitForTransactionAsync.
+        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
     }
 
     [Fact]
@@ -852,7 +846,7 @@ public class NamedSubmitterTests
 
         content.Should().Contain("Party platform,");
         content.Should().Contain("SubmitterInfo submitter,");
-        content.Should().Contain(".WithSubmitter(submitter)");
+        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
 
         var contractIdOverloads =
             content.Split("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(").Length - 1;

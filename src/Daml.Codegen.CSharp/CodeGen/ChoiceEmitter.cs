@@ -60,10 +60,7 @@ internal sealed partial class ChoiceEmitter(
 
         if (choice.ArgumentType is DamlTypeRef externalRef)
         {
-            if (externalRef is { Name: "Archive", Module: "DA.Internal.Template" }
-                && !string.IsNullOrEmpty(externalRef.PackageId)
-                && resolver.LookupPackage(externalRef.PackageId) is { } archivePkg
-                && (IsStdlibPackage(archivePkg.Name) || IsPlaceholderPackageName(archivePkg.Name)))
+            if (IsSyntheticArchive(choice))
             {
                 return ("DamlUnit", null, false, false);
             }
@@ -127,7 +124,7 @@ internal sealed partial class ChoiceEmitter(
 
         if (argTypeName == "DamlUnit")
         {
-            indent.AppendLine($"ArgumentEncoder = _ => {context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance,");
+            indent.AppendLine($"ArgumentEncoder = _ => {EmptyArgumentExpression(choice)},");
         }
         else
         {
@@ -177,6 +174,25 @@ internal sealed partial class ChoiceEmitter(
         indent.Require(RuntimeNamespaces.Contracts);
         indent.Require(RuntimeNamespaces.Outcomes);
     }
+
+    /// <summary>
+    /// True for the built-in stdlib <c>DA.Internal.Template:Archive</c> choice, whose
+    /// argument type is the empty record <c>Archive {}</c> but is not code-generated (no
+    /// generated <c>Archive</c> record exists). Distinguishes it from a genuine
+    /// <c>Unit</c>-argument choice so the argument encodes as an empty record — Canton's
+    /// gRPC command preprocessor type-checks the argument and rejects <c>Unit</c> against
+    /// the <c>Archive</c> choice signature.
+    /// </summary>
+    private bool IsSyntheticArchive(DamlChoice choice) =>
+        choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" } archiveRef
+        && !string.IsNullOrEmpty(archiveRef.PackageId)
+        && resolver.LookupPackage(archiveRef.PackageId) is { } archivePkg
+        && (IsStdlibPackage(archivePkg.Name) || IsPlaceholderPackageName(archivePkg.Name));
+
+    private string EmptyArgumentExpression(DamlChoice choice) =>
+        IsSyntheticArchive(choice)
+            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create()"
+            : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
 
     private static bool IsStdlibPackage(string packageName) => StdlibPackages.IsStdlibPackage(packageName);
 

@@ -17,12 +17,12 @@ public sealed record AnsRules_RejectEntryInitialPaymentResult([property: DamlFie
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
-        DamlField.Create("amuletSum", AmuletSum.ToRecord())
+        DamlField.Create("amuletSum", AmuletSum.ToRecord(__t0 => (DamlValue)(__t0.ToDamlValue())))
     );
 
     /// <summary>Creates an instance from a DamlRecord.</summary>
     public static AnsRules_RejectEntryInitialPaymentResult FromRecord(DamlRecord record) => new AnsRules_RejectEntryInitialPaymentResult(
-        AmuletSum: default(Splice.Amulet.AmuletCreateSummary<ContractId<Splice.Amulet.Amulet>>)! /* TODO: Implement deserialization for DamlTypeApp { IsOptional = False, Base = DamlTypeRef { IsOptional = False, PackageId = 23f47481dab6b1ec01339d6e14494d85bb2844c25f45b26fc5c9ef4cd4942d1f, Module = Splice.Amulet, Name = AmuletCreateSummary }, Arguments = System.Collections.Generic.List`1[Daml.Codegen.CSharp.Model.DamlType] } */
+        AmuletSum: Splice.Amulet.AmuletCreateSummary<ContractId<Splice.Amulet.Amulet>>.FromRecord(record.GetRequiredField("amuletSum").As<DamlRecord>(), __v0 => new ContractId<Splice.Amulet.Amulet>(__v0.As<DamlContractId>().Value))
     );
 
 }

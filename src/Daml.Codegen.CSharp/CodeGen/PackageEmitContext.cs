@@ -37,9 +37,11 @@ internal sealed class PackageEmitContext
     /// records (they are replaced by the marker itself, so counting them would falsely
     /// self-disambiguate) and choice-argument records (they are emitted nested inside
     /// their parent template, not at the top level). The package's C# namespace is flat
-    /// across all its modules, so this is the reserved-name input
-    /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker
-    /// names against.
+    /// across all its modules, so this set has two consumers: it is the reserved-name
+    /// input <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker
+    /// names against, and it is passed to <see cref="Qualifier"/> so a package-declared
+    /// type that collides with an imported runtime/BCL name (e.g. a Daml <c>enum Unit</c>)
+    /// is qualified with <c>global::</c> instead of silently shadowing it.
     /// </summary>
     public IReadOnlySet<string> LocalReservedTypeNames { get; }
 
@@ -127,7 +129,8 @@ internal sealed class PackageEmitContext
         ArgumentNullException.ThrowIfNull(options);
 
         var rootNamespace = options.RootNamespace ?? Identifiers.DeriveNamespace(package.Name);
-        var qualifier = new TypeReferenceQualifier([rootNamespace]);
+        var localReservedTypeNames = ReservedTopLevelTypeNames(package);
+        var qualifier = new TypeReferenceQualifier([rootNamespace], localReservedTypeNames);
 
         var dataTypes = new Dictionary<string, DamlDataType>();
         var localEnumQualifiedNames = new HashSet<string>();
@@ -181,7 +184,6 @@ internal sealed class PackageEmitContext
             }
         }
 
-        var localReservedTypeNames = ReservedTopLevelTypeNames(package);
         var localInterfaceMarkerNames = InterfaceMarkerNames(package, localReservedTypeNames);
 
         return new PackageEmitContext(

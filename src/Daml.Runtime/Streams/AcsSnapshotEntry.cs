@@ -50,13 +50,14 @@ public abstract record AcsSnapshotEntry<T>
 
     /// <summary>
     /// The single terminal marker that always ends the snapshot stream — emitted
-    /// even when the snapshot is empty — carrying the snapshot's effective offset.
+    /// even when the snapshot is empty — carrying the snapshot's effective offset
+    /// as a <see cref="StakeholderResume"/> ticket.
     /// </summary>
-    /// <param name="Offset">The offset the snapshot is valid at — resume a live
-    /// <c>ILedgerStreamer.SubscribeAsync</c> from this offset for a gapless,
-    /// duplicate-free handover; that subscription's lower bound is exclusive, so
-    /// the event at this offset is not re-delivered.</param>
-    public sealed record Checkpoint(LedgerOffset Offset) : AcsSnapshotEntry<T>;
+    /// <param name="Resume">The resume ticket for the snapshot's effective offset — pass it to
+    /// <c>ILedgerStreamer.SubscribeAsync</c> for a gapless, duplicate-free handover; that
+    /// subscription's lower bound is exclusive, so the event at this offset is not re-delivered.
+    /// The raw offset is reachable via <see cref="StakeholderResume.Offset"/>.</param>
+    public sealed record Checkpoint(StakeholderResume Resume) : AcsSnapshotEntry<T>;
 
     /// <summary>
     /// The transport stream failed mid-snapshot. Surfaced in-band rather than

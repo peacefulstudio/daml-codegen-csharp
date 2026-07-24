@@ -275,6 +275,8 @@ public partial class CodeGenEdgeCaseTests
 
         holding.Should().NotBeNull();
         holding!.Content.Should().Contain("Choice<Holding, DamlUnit,");
+        holding.Content.Should().Contain("ArgumentEncoder = _ => DamlRecord.Create()");
+        holding.Content.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance");
         holding.Content.Should().NotContain("No.Package.Metadata");
 
         csproj.Should().NotBeNull();
@@ -283,7 +285,7 @@ public partial class CodeGenEdgeCaseTests
     }
 
     [Fact]
-    public void Generate_should_map_Archive_interface_choice_to_DamlUnit_when_argument_package_is_placeholder_named()
+    public void Generate_should_encode_Archive_interface_choice_argument_as_empty_record_when_argument_package_is_placeholder_named()
     {
         const string PlaceholderPackageId = "lf1x-prim-id";
 
@@ -350,7 +352,8 @@ public partial class CodeGenEdgeCaseTests
 
         iface.Should().NotBeNull();
         iface!.Content.Should().Contain("ArchiveAsync(");
-        iface.Content.Should().Contain("DamlUnit.Instance");
+        iface.Content.Should().Contain("DamlRecord.Create()");
+        iface.Content.Should().NotContain("DamlUnit.Instance");
         iface.Content.Should().NotContain("No.Package.Metadata");
 
         csproj.Should().NotBeNull();

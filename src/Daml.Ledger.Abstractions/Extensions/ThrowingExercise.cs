@@ -68,9 +68,9 @@ public static class ThrowingExercise
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(writer);
-        var submission = CommandsSubmission.Single(command, actAs).WithOptionalWorkflowId(workflowId);
+        var submission = CommandsSubmission.Single(command).WithOptionalWorkflowId(workflowId);
         var outcome = await writer
-            .TrySubmitAndWaitForTransactionAsync(submission, cancellationToken: cancellationToken)
+            .TrySubmitAndWaitForTransactionAsync(submission, actAs, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         outcome.ThrowIfError(cancellationToken);
     }
@@ -90,9 +90,9 @@ public static class ThrowingExercise
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(writer);
-        var submission = CommandsSubmission.Single(command).WithSubmitter(submitter).WithOptionalWorkflowId(workflowId);
+        var submission = CommandsSubmission.Single(command).WithOptionalWorkflowId(workflowId);
         var outcome = await writer
-            .TrySubmitAndWaitForTransactionAsync(submission, cancellationToken: cancellationToken)
+            .TrySubmitAndWaitForTransactionAsync(submission, submitter, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         outcome.ThrowIfError(cancellationToken);
     }

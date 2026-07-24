@@ -219,7 +219,7 @@ public class ChoiceCodeGenTests
     }
 
     [Fact]
-    public void Generate_should_use_DamlUnit_for_Archive_choice()
+    public void Generate_should_encode_Archive_choice_argument_as_empty_record()
     {
         // Arrange - Archive is a special external type reference
         var module = new DamlModule
@@ -265,9 +265,9 @@ public class ChoiceCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        // Archive should use DamlUnit as it's an external type
         code.Should().Contain("Choice<MyTemplate, DamlUnit, DamlUnit>");
-        code.Should().Contain("ArgumentEncoder = _ => DamlUnit.Instance");
+        code.Should().Contain("ArgumentEncoder = _ => DamlRecord.Create()");
+        code.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance");
     }
 
     [Fact]
@@ -486,7 +486,7 @@ public class ChoiceCodeGenTests
         // GetBalance - uses Unit argument
         code.Should().Contain("Choice<Holding, DamlUnit, decimal> ChoiceGetBalance");
 
-        // Archive - uses DamlUnit for external type
+        // Archive - DamlUnit type parameters, but the wire argument encodes as an empty DamlRecord
         code.Should().Contain("Choice<Holding, DamlUnit, DamlUnit> ChoiceArchive");
     }
 

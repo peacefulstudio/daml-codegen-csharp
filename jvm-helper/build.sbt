@@ -4,7 +4,7 @@ ThisBuild / version      := "0.1.0-SNAPSHOT"
 
 resolvers += "Daml" at "https://repo1.maven.org/maven2/"
 
-lazy val damlLfArchiveVersion = "3.4.11"
+lazy val damlLfArchiveVersion = "3.5.9"
 
 lazy val jvmHelper = (project in file("."))
   .settings(
@@ -14,7 +14,7 @@ lazy val jvmHelper = (project in file("."))
       scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
     ),
     libraryDependencies ++= Seq(
-      "com.daml" %% "daml-lf-archive-reader" % damlLfArchiveVersion,
+      "com.daml" %% "daml-lf-archive" % damlLfArchiveVersion,
       "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
       "org.scalatest" %% "scalatest" % "3.2.19" % Test
     ),
