@@ -36,6 +36,91 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.4.1-preview.1] — 2026-07-24
+
+### Added
+
+- Every generated `{Choice}Async` exercise method (interface choices, template
+  choices, and non-creating template choices) is now accompanied by a
+  `{Choice}Command(this ContractId<T>, ...)` extension/instance method that
+  builds the choice's `ExerciseCommand` without submitting it — useful for
+  batching several choices into a single ledger submission. `{Choice}Async`
+  now calls the builder internally; its own behavior is unchanged.
+- Splice 0.6.13 support, including the Token Standard V2 (CIP-0112) package set —
+  the six net-new V2 API packages (`holding-v2`, `transfer-instruction-v2`,
+  `transfer-events-v2`, `allocation-v2`, `allocation-instruction-v2`,
+  `allocation-request-v2`) — each generated, packed, and proven consumable from a
+  fresh C# project. The `splice-token-standard-utils` helper library emits no C#
+  types, so it is intentionally not published as a NuGet package. A new offline
+  `samples/TokenStandardV2` console app showcases the V2 surface.
+- Generated template records now declare `IImplements<TInterface>` for each Daml
+  interface a template implements via `interface instance` (previously the
+  `implements` clause was parsed but produced no interface conformance in the
+  generated C#), so consumers can treat a contract through its implemented
+  interfaces.
+- Templates now generate an `ArchiveAsync` extension on their non-contract exerciser
+  (previously only interfaces did). The wire argument for the synthetic `Archive` choice
+  encodes as the empty record `DA.Internal.Template:Archive {}`, consistent with the fix
+  in the built-in `Archive` choice below.
+- The single-`Party` convenience overloads on `ILedgerStreamer` now include
+  `SubscribeLedgerEffectsAsync(actAs, ...)`, mirroring the existing `SubscribeAsync`
+  and `SubscribeActiveAsync` party overloads (previously ledger-effects streaming
+  required constructing a `SubmitterInfo` by hand).
+- **`Daml.Runtime.StakeholderResume`**: a resume ticket wrapping `LedgerOffset` (no implicit
+  conversion), handed back by `AcsSnapshotEntry<T>.Checkpoint.Resume`. `ILedgerStreamer.SubscribeAsync`
+  gains an overload accepting it for a gapless snapshot→stream handover; `SubscribeLedgerEffectsAsync`
+  deliberately gains none, so crossing a stakeholder-based snapshot into the witness-based
+  ledger-effects stream no longer compiles. The raw offset stays reachable via `.Resume.Offset`
+  for a deliberate cross-basis resume.
+- **`Daml.Ledger.Abstractions.Testing.Conformance`**: an opt-in submitter-authority check. Override `CreateWriteFixture()` on `LedgerClientConformanceTests<TProbe>` to prove your `ILedgerClient` implementation applies the `submitter` parameter of `SubmitAndWaitAsync`/`TrySubmitAndWaitForTransactionAsync` authoritatively via `CommandsSubmission.WithSubmitter`, rather than dispatching whatever `ActAs` the caller pre-set on the submission. Leaving it at its `null` default skips the two new `[Fact]`s, matching the existing opt-in pattern for `CreateFaultingSnapshotClient()`.
+
+### Changed — BREAKING
+
+- **`AcsSnapshotEntry<T>.Checkpoint` now carries a `StakeholderResume Resume` instead of a bare
+  `LedgerOffset Offset`**. Callers reading the terminal checkpoint's offset now use
+  `checkpoint.Resume.Offset`; callers constructing one pass `new StakeholderResume(offset)`.
+- **`ILedgerWriter.SubmitAndWaitAsync` and `ILedgerWriter.TrySubmitAndWaitForTransactionAsync` now take a mandatory `SubmitterInfo submitter` parameter**, positioned right after the `CommandsSubmission submission`. Implementations must apply it via `submission.WithSubmitter(submitter)` before dispatch, which is authoritative and overwrites any `ActAs`/`ReadAs` already set on the passed-in submission. Previously, `CommandsSubmission.ActAs`/`ReadAs` were nullable and nothing stopped calling these methods with zero authorization, unlike `TryExerciseAsync`/`TryCreateAsync`, which already require a non-empty `SubmitterInfo` by construction. Callers that previously called `.WithSubmitter(submitter)` or `.WithActAs(actAs)` on the submission before dispatch now pass `submitter` directly to the method instead.
+
+### Changed
+
+- Interface-placeholder record XML docs now explain why every static accessor
+  throws by design and clarify that interface choices are exercised directly on
+  `ContractId<I>` via the generated extension methods — no coercion to a
+  concrete `ContractId<TConcrete>` is needed or supported.
+- Upgraded the DAR archive-reader to the stable `com.daml:daml-lf-archive` 3.5.9. Generated code now supports DARs targeting Daml-LF 2.1, as emitted by the Daml 3.4 and 3.5 SDK lines; generated output is byte-for-byte unchanged.
+- Rebuilt the conformance and Quickstart fixtures with the stable Daml SDK 3.5.2 compiler (was 3.4.11), keeping the `--target=2.1` LF target. The generated C# type surface is unchanged (same types, fields, and signatures); only each fixture DAR's embedded package-hash / package-id changes.
+- The Splice publish pipeline now skips DARs that emit no C# types instead of packing an empty placeholder assembly, so zero-type libraries (`Splice.Token.Standard.Utils`, `Splice.Util`) no longer produce empty NuGet packages on the feed.
+
+### Fixed
+
+- Parameterized generic Daml records and variants now round-trip through the
+  generated `ToRecord`/`FromRecord`/`ToVariant`/`FromVariant` surface instead
+  of throwing at runtime (previously any user-defined generic type outside the
+  six hardcoded stdlib parametric types — `Set`, `NonEmpty`, `Either`,
+  `Tuple2`, `Tuple3`, `Map` — hit an unimplemented-deserialization stub).
+  - Generic records/variants now emit one extra `Func<T, DamlValue>` /
+    `Func<DamlValue, T>` converter-delegate parameter per type parameter on
+    `ToRecord`/`FromRecord`/`ToVariant`/`FromVariant`, and no longer implement
+    `IDamlRecord`/`IDamlVariant` (whose members are parameterless) — a
+    generated-code shape change for any consumer using a generic record or
+    variant. Non-generic records/variants are unaffected.
+- The built-in `Archive` choice now encodes its **argument** as the empty record
+  `DA.Internal.Template:Archive {}` (`DamlRecord.Create()`) instead of `Unit`. Canton's
+  gRPC command preprocessor type-checks the choice argument against the LF choice
+  signature and rejected the `Unit` with `COMMAND_PREPROCESSING_FAILED: mismatching type:
+  DA.Internal.Template:Archive and value: Unit`, so archiving over gRPC failed (the
+  JSON/REST and in-memory fakes don't validate the argument shape, which is why it went
+  unnoticed). The fix swaps the wire encoding at every site that ships the argument: the
+  generated choice descriptor's `ArgumentEncoder`, the generated interface `ArchiveAsync`
+  helper, and the runtime `IExercises<T>.ExerciseArchive()` (`Daml.Runtime`). The generated
+  `Choice<T, DamlUnit, DamlUnit>` signature is unchanged (no source break), and the `Unit`
+  **result** type was already correct and is untouched.
+- Generated exercisers for choices returning Daml's builtin `Unit` now emit a
+  fully `global::`-qualified reference to `Daml.Runtime.Stdlib.Unit` even when
+  the target Daml package declares its own top-level type also named `Unit`
+  (e.g. `splice-wallet-payments`'s `enum Unit`); previously the bare `Unit`
+  reference bound to the package-local type and failed with `CS0117`.
+
 ## [0.4.0-preview.3] — 2026-07-19
 
 ### Fixed
