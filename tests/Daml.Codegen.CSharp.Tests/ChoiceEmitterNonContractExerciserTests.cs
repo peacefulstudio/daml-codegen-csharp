@@ -136,12 +136,39 @@ public class ChoiceEmitterNonContractExerciserTests
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
         output.Should().Contain("TimeSpan? timeout = null,");
-        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
 
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = output.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
         var idxCancellationToken = output.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
         idxCommandId.Should().BeLessThan(idxTimeout);
         idxTimeout.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void value_returning_choice_emits_a_command_builder_that_returns_an_exercise_command()
+    {
+        var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
+
+        output.Should().Contain("public static ExerciseCommand QuoteCommand(");
+        output.Should().Contain("this ContractId<Vault> contractId)");
+        output.Should().Contain("return new ExerciseCommand(");
+    }
+
+    [Fact]
+    public void value_returning_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
+    {
+        var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
+
+        output.Should().Contain("var command = contractId.QuoteCommand();");
+        output.Should().Contain("var submission = CommandsSubmission.Single(command)");
+
+        const string inlineConstructionMarker = "var command = new ExerciseCommand(";
+        output.Should().NotContain(inlineConstructionMarker);
+
+        const string commandConstructionMarker = "new ExerciseCommand(";
+        var firstConstruction = output.IndexOf(commandConstructionMarker, StringComparison.Ordinal);
+        firstConstruction.Should().BeGreaterThanOrEqualTo(0);
+        output.IndexOf(commandConstructionMarker, firstConstruction + 1, StringComparison.Ordinal).Should().Be(-1);
     }
 }

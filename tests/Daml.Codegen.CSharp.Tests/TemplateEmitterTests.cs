@@ -52,6 +52,7 @@ public class TemplateEmitterTests
     private static string EmitTemplate(
         DamlTemplate template,
         DamlDataType[]? dataTypes = null,
+        DamlInterface[]? interfaces = null,
         CodeGenOptions? options = null,
         Version? version = null,
         string? upgradedPackageId = null)
@@ -61,7 +62,7 @@ public class TemplateEmitterTests
             Name = ModuleName,
             Templates = [template],
             DataTypes = dataTypes ?? [],
-            Interfaces = [],
+            Interfaces = interfaces ?? [],
         };
         options ??= Options();
         var package = Package(module, version, upgradedPackageId);
@@ -101,6 +102,57 @@ public class TemplateEmitterTests
 
         output.Should().Contain("public sealed partial record SimpleTemplate");
         output.Should().Contain(": ITemplate");
+    }
+
+    [Fact]
+    public void adds_the_IImplements_facet_when_the_template_implements_an_interface()
+    {
+        var output = EmitTemplate(
+            new DamlTemplate
+            {
+                Name = "Vault",
+                Fields = [Field("owner", DamlPrimitive.Party)],
+                Choices = [],
+                Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
+            },
+            interfaces: [new DamlInterface { Name = "Asset", Choices = [] }]);
+
+        output.Should().Contain("IImplements<Asset>");
+    }
+
+    [Fact]
+    public void orders_IImplements_after_the_key_facet_in_the_base_list()
+    {
+        var output = EmitTemplate(
+            new DamlTemplate
+            {
+                Name = "KeyedVault",
+                Fields = [Field("owner", DamlPrimitive.Party)],
+                Choices = [],
+                Key = new DamlPrimitiveType(DamlPrimitive.Party),
+                Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
+            },
+            interfaces: [new DamlInterface { Name = "Asset", Choices = [] }]);
+
+        output.Should().Contain(": ITemplate, IHasKey<Party>, IImplements<Asset>");
+    }
+
+    [Fact]
+    public void orders_IImplements_after_the_IUpgradeable_facet_in_the_base_list()
+    {
+        var output = EmitTemplate(
+            new DamlTemplate
+            {
+                Name = "KeyedUpgradedVault",
+                Fields = [Field("owner", DamlPrimitive.Party)],
+                Choices = [],
+                Key = new DamlPrimitiveType(DamlPrimitive.Party),
+                Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
+            },
+            interfaces: [new DamlInterface { Name = "Asset", Choices = [] }],
+            upgradedPackageId: "old-package-id");
+
+        output.Should().Contain(": ITemplate, IHasKey<Party>, IUpgradeable, IImplements<Asset>");
     }
 
     [Fact]

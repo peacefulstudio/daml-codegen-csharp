@@ -141,6 +141,21 @@ public class CommandTypesTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    private sealed record ArchivableContract(ContractId<TestTemplate> ContractId) : IExercises<TestTemplate>;
+
+    [Fact]
+    public void ExerciseArchive_encodes_the_argument_as_an_empty_record_not_unit()
+    {
+        IExercises<TestTemplate> exercisable = new ArchivableContract(new ContractId<TestTemplate>("contract-id-123"));
+
+        var command = exercisable.ExerciseArchive();
+
+        command.Choice.Value.Should().Be("Archive");
+        command.ChoiceArgument.Should().BeOfType<DamlRecord>()
+            .Which.Fields.Should().BeEmpty();
+        command.ChoiceArgument.Should().NotBeOfType<DamlUnit>();
+    }
+
     [Fact]
     public void ExerciseByKeyCommand_should_have_correct_command_type()
     {

@@ -11,7 +11,7 @@ namespace Daml.Codegen.CSharp.Cli.Tests;
 public class CliExitCodeTests
 {
     [Fact]
-    public async Task only_unknown_args_returns_nonzero_exit_code()
+    public async Task Program_only_unknown_args_returns_nonzero_exit_code()
     {
         var exit = await Program.Main(["--unknown-flag"]);
         exit.Should().NotBe(0,
@@ -19,7 +19,7 @@ public class CliExitCodeTests
     }
 
     [Fact]
-    public async Task no_args_returns_exit_code_one()
+    public async Task Program_no_args_returns_exit_code_one()
     {
         var exit = await Program.Main([]);
         exit.Should().Be(1,

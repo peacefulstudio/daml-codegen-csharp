@@ -130,4 +130,24 @@ public class TypeReferenceQualifierTests
         qualifier.Qualify(simpleName, "My.Package.Module")
             .Should().Be(simpleName);
     }
+
+    [Fact]
+    public void qualify_global_qualifies_unit_when_the_package_declares_its_own_unit_type()
+    {
+        var qualifier = new TypeReferenceQualifier(
+            ["Splice.Wallet.Payments"], declaredTypeNames: ["Unit"]);
+
+        qualifier.Qualify("Unit", "Splice.Wallet.Payments")
+            .Should().Be("global::Daml.Runtime.Stdlib.Unit");
+    }
+
+    [Fact]
+    public void qualify_leaves_unit_bare_when_no_declared_type_name_matches_it()
+    {
+        var qualifier = new TypeReferenceQualifier(
+            ["Splice.Wallet.Payments"], declaredTypeNames: ["Sink"]);
+
+        qualifier.Qualify("Unit", "Splice.Wallet.Payments")
+            .Should().Be("Unit");
+    }
 }

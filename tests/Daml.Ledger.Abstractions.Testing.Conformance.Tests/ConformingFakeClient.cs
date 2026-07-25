@@ -62,7 +62,7 @@ internal sealed class ConformingFakeClient : ILedgerClient
             yield return new AcsSnapshotEntry<T>.Unclassified(LedgerOffset.At(3), "UNMAPPED");
         }
 
-        yield return new AcsSnapshotEntry<T>.Checkpoint(effective);
+        yield return new AcsSnapshotEntry<T>.Checkpoint(new StakeholderResume(effective));
     }
 
     public async IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
@@ -155,12 +155,12 @@ internal sealed class ConformingFakeClient : ILedgerClient
         throw new NotSupportedException();
 
     public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
-        CommandsSubmission submission, TimeSpan? timeout = null,
+        CommandsSubmission submission, SubmitterInfo submitter, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 
     public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
-        CommandsSubmission submission, TimeSpan? timeout = null,
+        CommandsSubmission submission, SubmitterInfo submitter, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 

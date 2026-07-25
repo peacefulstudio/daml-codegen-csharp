@@ -35,6 +35,31 @@ internal static class EmitterHelpers
         return $"<{string.Join(", ", typeParams.Select(TypeParameterName))}>";
     }
 
+    /// <summary>
+    /// Derives the injected converter-delegate parameter name for a Daml type
+    /// variable — the delegate a generic record/variant's <c>ToRecord</c>/<c>FromRecord</c>
+    /// (or <c>ToVariant</c>/<c>FromVariant</c>) accepts to bridge that type parameter's
+    /// concrete CLR argument to and from <see cref="Daml.Runtime.Data.DamlValue"/>.
+    /// </summary>
+    internal static string ConverterParameterName(string damlTypeParam) =>
+        $"convert{TypeParameterName(damlTypeParam)}";
+
+    /// <summary>
+    /// Maps each Daml type-variable name to its <see cref="ConverterParameterName"/>,
+    /// threaded into the <see cref="DamlTypeMapper"/>'s <c>ToValue</c>/<c>FromValue</c>
+    /// so a <see cref="Model.DamlTypeVar"/> field resolves to its injected converter.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ConverterNameMap(IReadOnlyList<string> typeParams) =>
+        typeParams.ToDictionary(param => param, ConverterParameterName);
+
+    internal static string SerializeConverterParameters(IReadOnlyList<string> typeParams, string qualifiedDamlValue) =>
+        string.Join(", ", typeParams.Select(param =>
+            $"Func<{TypeParameterName(param)}, {qualifiedDamlValue}> {ConverterParameterName(param)}"));
+
+    internal static string DeserializeConverterParameters(IReadOnlyList<string> typeParams, string qualifiedDamlValue) =>
+        string.Join(", ", typeParams.Select(param =>
+            $"Func<{qualifiedDamlValue}, {TypeParameterName(param)}> {ConverterParameterName(param)}"));
+
     internal static void WriteTypeParamDocs(IndentWriter indent, IReadOnlyList<string> typeParams)
     {
         foreach (var param in typeParams)

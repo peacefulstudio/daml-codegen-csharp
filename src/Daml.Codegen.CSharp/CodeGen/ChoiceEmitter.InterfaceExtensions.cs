@@ -81,15 +81,83 @@ internal sealed partial class ChoiceEmitter
         DamlChoice choice,
         string interfaceName)
     {
-        var methodName = $"{SanitizeIdentifier(choice.Name)}Async";
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var commandMethodName = $"{choiceName}Command";
+        var methodName = $"{choiceName}Async";
         var (argTypeName, hasArg) = ResolveInterfaceChoiceArgType(choice);
+        var requiresArgumentNullCheck = hasArg && choice.ArgumentType is DamlTypeRef;
+        var argExpr = hasArg
+            ? mapper.ToValue(choice.ArgumentType, "argument")
+            : EmptyArgumentExpression(choice);
 
+        WriteInterfaceChoiceCommandBuilder(indent, choice, interfaceName, commandMethodName, argTypeName, hasArg, requiresArgumentNullCheck, argExpr);
+        indent.AppendLine();
+        WriteInterfaceChoiceAsyncMethod(indent, choice, interfaceName, commandMethodName, methodName, argTypeName, hasArg);
+    }
+
+    private void WriteInterfaceChoiceCommandBuilder(
+        IndentWriter indent,
+        DamlChoice choice,
+        string interfaceName,
+        string commandMethodName,
+        string argTypeName,
+        bool hasArg,
+        bool requiresArgumentNullCheck,
+        string argExpr)
+    {
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>");
-            indent.AppendLine($"/// Exercises the <c>{choice.Name}</c> interface choice on this contract id.");
+            indent.AppendLine($"/// Builds the interface-typed <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> for the <c>{choice.Name}</c> choice on this contract id.");
             indent.AppendLine("/// The wire-level <c>template_id</c> slot carries the interface id — Canton's");
             indent.AppendLine("/// ledger API resolves the concrete implementing template at the participant.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contractId\">The interface-typed contract id to exercise on.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+        }
+
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
+        indent.Indent();
+        if (hasArg)
+        {
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{interfaceName}> contractId,");
+            indent.AppendLine($"{argTypeName} argument)");
+        }
+        else
+        {
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{interfaceName}> contractId)");
+        }
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
+        if (requiresArgumentNullCheck)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
+        indent.AppendLine($"return {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}.ForInterface<{interfaceName}>(contractId, new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"), {argExpr});");
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    private void WriteInterfaceChoiceAsyncMethod(
+        IndentWriter indent,
+        DamlChoice choice,
+        string interfaceName,
+        string commandMethodName,
+        string methodName,
+        string argTypeName,
+        bool hasArg)
+    {
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Exercises the <c>{choice.Name}</c> interface choice on this contract id, submitting the");
+            indent.AppendLine("/// resulting <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> through");
+            indent.AppendLine("/// <see cref=\"global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync\"/> and awaiting the outcome.");
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"contractId\">The interface-typed contract id to exercise on.</param>");
             indent.AppendLine("/// <param name=\"client\">The ledger client.</param>");
@@ -125,21 +193,13 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
-        if (hasArg && choice.ArgumentType is DamlTypeRef)
-        {
-            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
-        }
-
-        var argExpr = hasArg
-            ? mapper.ToValue(choice.ArgumentType, "argument")
-            : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
-        indent.AppendLine($"var command = {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}.ForInterface<{interfaceName}>(contractId, new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"), {argExpr});");
+        indent.AppendLine(hasArg
+            ? $"var command = contractId.{commandMethodName}(argument);"
+            : $"var command = contractId.{commandMethodName}();");
         indent.AppendLine();
         indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
-        indent.AppendLine(".WithActAs(actAs)");
         indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
@@ -149,7 +209,7 @@ internal sealed partial class ChoiceEmitter
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();
-        indent.AppendLine("return await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine("return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -161,10 +221,7 @@ internal sealed partial class ChoiceEmitter
         {
             return ("DamlUnit", false);
         }
-        if (choice.ArgumentType is DamlTypeRef { Name: "Archive", Module: "DA.Internal.Template" } archiveRef
-            && !string.IsNullOrEmpty(archiveRef.PackageId)
-            && resolver.LookupPackage(archiveRef.PackageId) is { } archivePkg
-            && (IsStdlibPackage(archivePkg.Name) || IsPlaceholderPackageName(archivePkg.Name)))
+        if (IsSyntheticArchive(choice))
         {
             return ("DamlUnit", false);
         }

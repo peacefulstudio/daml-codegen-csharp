@@ -36,8 +36,8 @@ public partial class ContractTypesTests
     private const string PlaceholderThrowMessage =
         "'TestInterfacePlaceholder' is the C# placeholder for the Daml interface "
         + "'Test.Module:TestInterfacePlaceholder' and carries no template metadata. "
-        + "Coerce ContractId<TestInterfacePlaceholder> to a typed ContractId<TConcrete> "
-        + "before reading template metadata or exercising commands.";
+        + "Exercise interface choices directly on ContractId<TestInterfacePlaceholder>; "
+        + "there is no supported coercion to a concrete ContractId<TConcrete>.";
 
     private sealed record TestInterfacePlaceholder : ITemplate
     {
@@ -173,7 +173,7 @@ public partial class ContractTypesTests
         var act = () => TestInterfacePlaceholder.TemplateId;
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*placeholder for the Daml interface*Coerce ContractId*");
+            .WithMessage("*placeholder for the Daml interface*Exercise interface choices directly*");
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public partial class ContractTypesTests
         var act = () => cid.ToDamlValue();
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Coerce ContractId*");
+            .WithMessage("*Exercise interface choices directly*");
     }
 
     [Fact]

@@ -54,26 +54,39 @@ internal sealed class RecordEmitter(
             EmitterHelpers.WriteTypeParamDocs(indent, dataType.TypeParams);
         }
 
+        var recordInterface = InterfaceDeclaration(dataType.TypeParams);
+
         if (options.UseRecordTypes && options.UsePrimaryConstructors && record.Fields.Count > 0)
         {
             indent.Append($"public sealed record {fullClassName}(");
             serialization.WriteRecordParameters(indent, record.Fields);
-            indent.AppendLine($") : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}");
+            indent.AppendLine($"){recordInterface}");
         }
         else
         {
-            indent.AppendLine($"public sealed record {fullClassName} : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}");
+            indent.AppendLine($"public sealed record {fullClassName}{recordInterface}");
         }
 
         indent.AppendLine("{");
         indent.Indent();
 
-        serialization.WriteToRecordMethod(indent, record.Fields);
-        serialization.WriteFromRecordMethod(indent, fullClassName, record.Fields);
+        serialization.WriteToRecordMethod(indent, record.Fields, dataType.TypeParams);
+        serialization.WriteFromRecordMethod(indent, fullClassName, record.Fields, dataType.TypeParams);
 
         indent.Dedent();
         indent.AppendLine("}");
     }
+
+    /// <summary>
+    /// Returns the record's interface clause: <c>: IDamlRecord</c> for non-generic records,
+    /// or empty for generic records, whose <c>ToRecord</c> takes one converter delegate per
+    /// type parameter and so cannot satisfy the parameterless <c>IDamlRecord.ToRecord()</c>
+    /// contract — matching the hand-written stdlib generics (Set, Tuple2, NonEmpty).
+    /// </summary>
+    private string InterfaceDeclaration(IReadOnlyList<string> typeParams) =>
+        typeParams.Count == 0
+            ? $" : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}"
+            : string.Empty;
 
     /// <summary>
     /// Emits the C# placeholder for a Daml interface declaration. The Daml-LF emits a
@@ -83,8 +96,9 @@ internal sealed class RecordEmitter(
     /// metadata: it lets <c>ContractId&lt;I&gt;</c> compile (the runtime constraint is
     /// <c>where T : ITemplate</c>) but loudly fails any code path that tries to read
     /// <c>I.TemplateId</c> directly — which would be a logic error, since interface
-    /// placeholders carry no template identity. Coerce the contract id to the
-    /// underlying template type before reading metadata or constructing commands.
+    /// placeholders carry no template identity. Interface choices remain exercisable
+    /// directly on <c>ContractId&lt;I&gt;</c>; there is no supported way to recover a
+    /// concrete <c>ContractId&lt;TConcrete&gt;</c> from this placeholder.
     /// </summary>
     private void WriteInterfacePlaceholderRecord(IndentWriter indent, DamlModule module, DamlDataType dataType)
     {
@@ -95,7 +109,7 @@ internal sealed class RecordEmitter(
         var throwMessage =
             $"'{className}' is the C# placeholder for the Daml interface "
             + $"'{qualifiedDamlName}' and carries no template metadata. "
-            + "Coerce ContractId<" + className + "> to a typed ContractId<TConcrete> before reading template metadata or exercising commands.";
+            + "Exercise interface choices directly on ContractId<" + className + ">; there is no supported coercion to a concrete ContractId<TConcrete>.";
 
         if (options.GenerateXmlDocs)
         {
@@ -105,45 +119,62 @@ internal sealed class RecordEmitter(
             indent.AppendLine("/// satisfies its <c>where T : ITemplate</c> constraint, but every static");
             indent.AppendLine("/// metadata accessor throws — interface placeholders carry no template identity.");
             indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <remarks>");
+            indent.AppendLine("/// Interface-instance choices need a concrete template to compile against, but the Daml");
+            indent.AppendLine($"/// interface <c>{qualifiedDamlName}</c> has none, so every static metadata accessor on this");
+            indent.AppendLine("/// placeholder throws by design. This does not affect interface choices, which the generated");
+            indent.AppendLine($"/// extension methods exercise directly on <c>ContractId&lt;{className}&gt;</c> — no coercion");
+            indent.AppendLine("/// needed. There is no supported way to recover a concrete <c>ContractId&lt;TConcrete&gt;</c>");
+            indent.AppendLine("/// from this placeholder; obtain one independently if concrete metadata is required.");
+            indent.AppendLine("/// </remarks>");
         }
 
         indent.AppendLine($"public sealed record {className} : {context.Qualifier.Qualify(RuntimeTypeNames.ITemplate, context.RootNamespace)}");
         indent.AppendLine("{");
         indent.Indent();
 
-        void WritePlaceholderDoc(string summary)
+        void WritePlaceholderDoc(string summary, string? identityPhrase = null)
         {
             if (options.GenerateXmlDocs)
             {
                 indent.AppendLine($"/// <summary>{summary}</summary>");
+                if (identityPhrase is not null)
+                {
+                    indent.AppendLine($"/// <exception cref=\"System.InvalidOperationException\">Thrown unconditionally — this placeholder carries no {identityPhrase} to report.</exception>");
+                }
             }
         }
 
-        WritePlaceholderDoc($"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no template identity.");
+        void WriteThrowingMemberDoc(string identityPhrase) =>
+            WritePlaceholderDoc(
+                $"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no {identityPhrase}.",
+                identityPhrase);
+
+        WriteThrowingMemberDoc("template identity");
         indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} TemplateId =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");
         indent.Dedent();
         indent.AppendLine();
-        WritePlaceholderDoc($"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no package identity.");
+        WriteThrowingMemberDoc("package identity");
         indent.AppendLine("public static string PackageId =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");
         indent.Dedent();
         indent.AppendLine();
-        WritePlaceholderDoc($"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no package identity.");
+        WriteThrowingMemberDoc("package identity");
         indent.AppendLine("public static string PackageName =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");
         indent.Dedent();
         indent.AppendLine();
-        WritePlaceholderDoc($"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no package identity.");
+        WriteThrowingMemberDoc("package identity");
         indent.AppendLine("public static Version PackageVersion =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");
         indent.Dedent();
         indent.AppendLine();
-        WritePlaceholderDoc($"Always throws — the <c>{qualifiedDamlName}</c> interface placeholder carries no Daml type identity.");
+        WriteThrowingMemberDoc("Daml type identity");
         indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeDescriptor, context.RootNamespace)} DamlTypeId =>");
         indent.Indent();
         indent.AppendLine($"throw new InvalidOperationException(\"{throwMessage}\");");

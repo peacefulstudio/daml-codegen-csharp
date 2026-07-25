@@ -13,10 +13,12 @@ namespace Daml.Runtime.Tests;
 public sealed class AcsSnapshotEntryTests
 {
     [Fact]
-    public void Checkpoint_carries_the_terminal_offset()
+    public void Checkpoint_carries_the_terminal_offset_as_a_StakeholderResume()
     {
-        var entry = new AcsSnapshotEntry<TestTemplate>.Checkpoint(LedgerOffset.At(9));
-        entry.Offset.Should().Be(LedgerOffset.At(9));
+        var resume = new StakeholderResume(LedgerOffset.At(9));
+        var entry = new AcsSnapshotEntry<TestTemplate>.Checkpoint(resume);
+        entry.Resume.Should().Be(resume);
+        entry.Resume.Offset.Should().Be(LedgerOffset.At(9));
     }
 
     [Fact]

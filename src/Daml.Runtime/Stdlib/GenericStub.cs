@@ -14,9 +14,9 @@ namespace Daml.Runtime.Stdlib;
 /// usable, while loudly failing if anyone actually tries to serialize a generic
 /// instance.
 /// <para>
-/// Call sites: see the <c>DamlTypeVar</c> arms of <c>GetToValueConversion</c> and
-/// <c>GetFromValueConversion</c> in <c>CSharpCodeGenerator</c>. Proper
-/// static-abstract dispatch for generic records is not yet implemented.
+/// Call sites: the <c>DamlTypeVar</c> fallback arms of <c>DamlTypeMapper.ToValue</c>
+/// and <c>DamlTypeMapper.FromValue</c>, reached only for a type variable outside any
+/// generic record or variant body whose converter delegates would otherwise resolve it.
 /// </para>
 /// </summary>
 public static class GenericStub
@@ -29,8 +29,8 @@ public static class GenericStub
     /// </summary>
     /// <param name="context">
     /// Identifier shown in the exception message. Codegen call sites pass either the
-    /// field name (in <c>GetToValueConversion</c>) or the Daml type-var name (in
-    /// <c>GetFromValueConversion</c>), whichever is most useful at that site.
+    /// field name (in <c>DamlTypeMapper.ToValue</c>) or the Daml type-var name (in
+    /// <c>DamlTypeMapper.FromValue</c>), whichever is most useful at that site.
     /// </param>
     [DoesNotReturn]
     public static T NotImplemented<T>(string context) =>

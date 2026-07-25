@@ -83,12 +83,12 @@ public sealed class HangingSubscriptionConformanceTests
             throw new NotSupportedException();
 
         public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
-            CommandsSubmission submission, TimeSpan? timeout = null,
+            CommandsSubmission submission, SubmitterInfo submitter, TimeSpan? timeout = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
-            CommandsSubmission submission, TimeSpan? timeout = null,
+            CommandsSubmission submission, SubmitterInfo submitter, TimeSpan? timeout = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

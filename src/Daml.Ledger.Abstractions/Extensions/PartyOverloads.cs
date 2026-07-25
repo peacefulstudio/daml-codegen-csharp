@@ -60,6 +60,24 @@ public static class PartyOverloads
         return streamer.SubscribeAsync<T>(submitter, fromOffset, toOffset, cancellationToken);
     }
 
+    /// <summary>
+    /// Subscribes to contract events acting as a single party, resuming a
+    /// <see cref="StakeholderResume"/> ticket from a prior snapshot's
+    /// <see cref="AcsSnapshotEntry{T}.Checkpoint"/>.
+    /// </summary>
+    public static IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+        this ILedgerStreamer streamer,
+        Party actAs,
+        StakeholderResume resumeFrom,
+        LedgerOffset? toOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : IDamlType
+    {
+        ArgumentNullException.ThrowIfNull(streamer);
+        SubmitterInfo submitter = actAs;
+        return streamer.SubscribeAsync<T>(submitter, resumeFrom, toOffset, cancellationToken);
+    }
+
     /// <summary>Subscribes to the ACS snapshot acting as a single party.</summary>
     public static IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         this ILedgerStreamer streamer,
@@ -71,5 +89,19 @@ public static class PartyOverloads
         ArgumentNullException.ThrowIfNull(streamer);
         SubmitterInfo submitter = actAs;
         return streamer.SubscribeActiveAsync<T>(submitter, activeAtOffset, cancellationToken);
+    }
+
+    /// <summary>Subscribes to ledger-effects events acting as a single party.</summary>
+    public static IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        this ILedgerStreamer streamer,
+        Party actAs,
+        LedgerOffset? fromOffset = null,
+        LedgerOffset? toOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : IDamlType
+    {
+        ArgumentNullException.ThrowIfNull(streamer);
+        SubmitterInfo submitter = actAs;
+        return streamer.SubscribeLedgerEffectsAsync<T>(submitter, fromOffset, toOffset, cancellationToken);
     }
 }

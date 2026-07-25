@@ -704,12 +704,14 @@ public class LedgerClientExtensionsTests
 
         public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
             CommandsSubmission submission,
+            SubmitterInfo submitter,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(new SubmitAndWaitResult(new CommandId("cmd-id"), "update-id", LedgerOffset.Begin));
 
         public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
             CommandsSubmission submission,
+            SubmitterInfo submitter,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult((ExerciseOutcome<TransactionResult>)_outcome);

@@ -143,6 +143,8 @@ internal sealed partial class ChoiceEmitter
             var controllers = party.ValidatePayloadParties(choice.Controllers, partyFields);
             var choiceObservers = party.ValidatePayloadParties(choice.Observers, partyFields);
             var effectiveReadAs = party.UnionStaticParties(templateObservers, choiceObservers);
+            WriteContractIdChoiceCommandBuilder(indent, choice, templateClassName, dataTypes);
+            indent.AppendLine();
             WriteSingleChoiceAsyncExerciser(
                 indent, choice, templateClassName, dataTypes, controllers, effectiveReadAs);
 
@@ -278,12 +280,7 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
-        if (hasArg)
-        {
-            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
-        }
 
         // When controllers are statically resolvable, build the SubmitterInfo
         // locally — actAs from the named Party params, readAs from the
@@ -385,14 +382,78 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
+
+        WriteExerciserCommandDispatchAndProject(indent, choice, templateClassName, dataTypes);
+
+        indent.Dedent();
+        indent.AppendLine("}");
+    }
+
+    /// <summary>
+    /// Emits the <c>&lt;Choice&gt;Command(this ContractId&lt;TemplateName&gt; contractId, ...)</c>
+    /// builder that constructs the choice's <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/>
+    /// without submitting it. Emitted once per choice and shared by both the named-<c>Party</c> and
+    /// <c>SubmitterInfo</c> <c>&lt;Choice&gt;Async</c> overloads (see
+    /// <see cref="WriteSingleChoiceAsyncExerciser"/> and <see cref="WriteSubmitterInfoChoiceAsyncExerciser"/>) —
+    /// they exercise the identical choice on the identical <c>ContractId&lt;T&gt;</c> type and
+    /// therefore build the identical command.
+    /// </summary>
+    private void WriteContractIdChoiceCommandBuilder(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var commandMethodName = $"{choiceName}Command";
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Builds the <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> for the {choice.Name} choice on this contract id.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+        }
+
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
+        indent.Indent();
+        if (hasArg)
+        {
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
+            indent.AppendLine($"{argParamType} argument)");
+        }
+        else
+        {
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId)");
+        }
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         if (hasArg)
         {
             indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
         }
 
-        WriteExerciserCommandDispatchAndProject(indent, choice, templateClassName, dataTypes);
+        var argExpr = hasArg ? "argument.ToRecord()" : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
+        indent.Indent();
+        indent.AppendLine($"{templateClassName}.TemplateId,");
+        indent.AppendLine("contractId,");
+        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"{argExpr});");
+        indent.Dedent();
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -410,19 +471,13 @@ internal sealed partial class ChoiceEmitter
         var hasArg = argTypeName != "DamlUnit";
 
         indent.AppendLine();
-        var argExpr = hasArg ? "argument.ToRecord()" : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
-        indent.AppendLine($"var command = new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
-        indent.Indent();
-        indent.AppendLine($"{templateClassName}.TemplateId,");
-        indent.AppendLine("contractId,");
-        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
-        indent.AppendLine($"{argExpr});");
-        indent.Dedent();
+        indent.AppendLine(hasArg
+            ? $"var command = contractId.{choiceName}Command(argument);"
+            : $"var command = contractId.{choiceName}Command();");
 
         indent.AppendLine();
         indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
-        indent.AppendLine(".WithSubmitter(submitter)");
         indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
@@ -432,7 +487,7 @@ internal sealed partial class ChoiceEmitter
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();
-        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
         indent.AppendLine($"return outcome.ProjectCommitted(tx => {resultName}.FromCreatedContracts(tx.CreatedContracts));");
     }

@@ -38,19 +38,19 @@ public class IdentifiersTests
     }
 
     [Fact]
-    public void interface_marker_name_prefixes_the_sanitized_name_with_i_when_unreserved()
+    public void InterfaceMarkerName_prefixes_the_sanitized_name_with_i_when_unreserved()
     {
         Identifiers.InterfaceMarkerName("Holding", new HashSet<string>()).Should().Be("IHolding");
     }
 
     [Fact]
-    public void interface_marker_name_appends_underscore_when_a_template_reserves_the_marker()
+    public void InterfaceMarkerName_appends_underscore_when_a_template_reserves_the_marker()
     {
         Identifiers.InterfaceMarkerName("Factory", new HashSet<string> { "IFactory" }).Should().Be("IFactory_");
     }
 
     [Fact]
-    public void interface_marker_name_keeps_appending_underscores_until_the_marker_is_unreserved()
+    public void InterfaceMarkerName_keeps_appending_underscores_until_the_marker_is_unreserved()
     {
         Identifiers.InterfaceMarkerName("Factory", new HashSet<string> { "IFactory", "IFactory_" }).Should().Be("IFactory__");
     }

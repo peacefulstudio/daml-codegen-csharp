@@ -114,14 +114,16 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_skips_synthetic_stdlib_archive_in_non_contract_wrappers()
+    public void archive_choice_emits_synthetic_stdlib_archive_in_non_contract_wrappers()
     {
         var resolver = new StubResolver(packages: Packages(StdlibPackage));
 
         var output = EmitNonContract(ItemTemplate(StdlibPackageId), resolver);
 
-        output.Should().NotContain("ItemNonContractExtensions");
-        output.Should().NotContain("ArchiveAsync(");
+        output.Should().Contain("ItemNonContractExtensions");
+        output.Should().Contain("public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(");
+        output.Should().Contain("DamlRecord.Create()");
+        output.Should().NotContain("DamlUnit.Instance");
     }
 
     [Fact]
@@ -169,5 +171,35 @@ public class ChoiceEmitterArchiveChoiceTests
         output.Should().Contain("ArchiveAsync(");
         output.Should().Contain("User.Package.Archive argument,");
         output.Should().Contain("argument.ToRecord()");
+    }
+
+    [Fact]
+    public void archive_choice_encodes_synthetic_stdlib_archive_argument_as_empty_record_in_descriptor()
+    {
+        var resolver = new StubResolver(packages: Packages(StdlibPackage));
+        var template = ItemTemplate(StdlibPackageId);
+
+        var descriptor = EmitDescriptors(template, resolver);
+
+        descriptor.Should().Contain("public static Choice<Item, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()");
+        descriptor.Should().Contain("ArgumentEncoder = _ => DamlRecord.Create(),");
+        descriptor.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance");
+    }
+
+    [Fact]
+    public void archive_choice_encodes_synthetic_stdlib_interface_archive_argument_as_empty_record()
+    {
+        var iface = new DamlInterface
+        {
+            Name = "Archivable",
+            Choices = [ArchiveChoice(StdlibPackageId)],
+            ViewType = null,
+        };
+        var resolver = new StubResolver(packages: Packages(StdlibPackage));
+
+        var output = EmitInterfaceExtensions(iface, "IArchivable", resolver);
+
+        output.Should().Contain("ExerciseCommand.ForInterface<IArchivable>(contractId, new ChoiceName(\"Archive\"), DamlRecord.Create());");
+        output.Should().NotContain("DamlUnit.Instance");
     }
 }

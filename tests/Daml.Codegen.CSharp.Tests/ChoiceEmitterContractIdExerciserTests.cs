@@ -172,13 +172,38 @@ public class ChoiceEmitterContractIdExerciserTests
         var (_, exercisers) = Emit(template);
 
         exercisers.Should().Contain("TimeSpan? timeout = null,");
-        exercisers.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken)");
+        exercisers.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
 
         var idxCommandId = exercisers.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = exercisers.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
         var idxCancellationToken = exercisers.IndexOf("CancellationToken cancellationToken = default)", StringComparison.Ordinal);
         idxCommandId.Should().BeLessThan(idxTimeout);
         idxTimeout.Should().BeLessThan(idxCancellationToken);
+    }
+
+    [Fact]
+    public void create_bearing_choice_emits_a_command_builder_shared_by_both_async_overloads()
+    {
+        var template = Template(
+            [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+            Choice("Spawn", ContractIdOf("Token"), controllers: StaticParties("owner")));
+
+        var (_, exercisers) = Emit(template);
+
+        exercisers.Should().Contain("public static ExerciseCommand SpawnCommand(");
+        exercisers.Should().Contain("this ContractId<Vault> contractId)");
+
+        const string commandConstructionMarker = "new ExerciseCommand(";
+        var firstConstruction = exercisers.IndexOf(commandConstructionMarker, StringComparison.Ordinal);
+        firstConstruction.Should().BeGreaterThanOrEqualTo(0);
+        exercisers.IndexOf(commandConstructionMarker, firstConstruction + 1, StringComparison.Ordinal).Should().Be(-1);
+
+        const string commandCallMarker = "var command = contractId.SpawnCommand();";
+        var firstCall = exercisers.IndexOf(commandCallMarker, StringComparison.Ordinal);
+        firstCall.Should().BeGreaterThanOrEqualTo(0);
+        var secondCall = exercisers.IndexOf(commandCallMarker, firstCall + 1, StringComparison.Ordinal);
+        secondCall.Should().BeGreaterThan(firstCall);
+        exercisers.IndexOf(commandCallMarker, secondCall + 1, StringComparison.Ordinal).Should().Be(-1);
     }
 
     [Fact]

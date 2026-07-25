@@ -21,7 +21,7 @@ public interface IExercises<T> where T : ITemplate
     /// Exercises the Archive choice (available on all templates).
     /// </summary>
     ExerciseCommand ExerciseArchive() =>
-        ExerciseCommand.For(ContractId, new ChoiceName("Archive"), DamlUnit.Instance);
+        ExerciseCommand.For(ContractId, new ChoiceName("Archive"), DamlRecord.Create());
 }
 
 /// <summary>

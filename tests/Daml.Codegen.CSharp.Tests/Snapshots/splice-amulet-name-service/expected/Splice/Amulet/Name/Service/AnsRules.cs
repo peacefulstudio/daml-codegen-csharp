@@ -23,16 +23,16 @@ namespace Splice.Amulet.Name.Service;
 public sealed partial record AnsRules([property: DamlFieldAttribute("dso")] Party Dso, [property: DamlFieldAttribute("config")] AnsRulesConfig Config) : ITemplate
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("b342bbbd425902283c20eb5011eeab90cc9f69b4c534b8b757fd51b8ca7be589", "Splice.Ans", "AnsRules");
+    public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans", "AnsRules");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "b342bbbd425902283c20eb5011eeab90cc9f69b4c534b8b757fd51b8ca7be589";
+    public static string PackageId => "9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "splice-amulet-name-service";
 
     /// <summary>Gets the package version.</summary>
-    public static Version PackageVersion { get; } = new(0, 1, 21);
+    public static Version PackageVersion { get; } = new(0, 1, 23);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
@@ -101,7 +101,7 @@ public sealed partial record AnsRules([property: DamlFieldAttribute("dso")] Part
     {
         Name = new ChoiceName("Archive"),
         Consuming = true,
-        ArgumentEncoder = _ => DamlUnit.Instance,
+        ArgumentEncoder = _ => DamlRecord.Create(),
         ResultDecoder = _ => DamlUnit.Instance
     };
 
@@ -167,6 +167,24 @@ public static class AnsRulesSubmissionExtensions
 public static class AnsRulesNonContractExtensions
 {
     /// <summary>
+    /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> for the AnsRules_CollectEntryRenewalPayment choice on this contract id.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="argument">The choice argument.</param>
+    public static ExerciseCommand AnsRules_CollectEntryRenewalPaymentCommand(
+        this ContractId<AnsRules> contractId,
+        AnsRules.AnsRules_CollectEntryRenewalPayment argument)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(argument);
+        return new ExerciseCommand(
+            AnsRules.TemplateId,
+            contractId,
+            new ChoiceName("AnsRules_CollectEntryRenewalPayment"),
+            argument.ToRecord());
+    }
+
+    /// <summary>
     /// Exercises the AnsRules_CollectEntryRenewalPayment choice and lifts the choice's exercise result to
     /// <see cref="ExerciseOutcome{T}"/> over <c>AnsRules_CollectEntryRenewalPaymentResult</c>. Structured Canton/Daml errors
     /// and infrastructure/transport errors pass through unchanged.
@@ -189,26 +207,38 @@ public static class AnsRulesNonContractExtensions
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
 
-        var command = new ExerciseCommand(
-            AnsRules.TemplateId,
-            contractId,
-            new ChoiceName("AnsRules_CollectEntryRenewalPayment"),
-            argument.ToRecord());
+        var command = contractId.AnsRules_CollectEntryRenewalPaymentCommand(argument);
 
         var submission = CommandsSubmission.Single(command)
-            .WithActAs(actAs)
             .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsRules_CollectEntryRenewalPaymentResult(tx, contractId.Value));
+    }
+
+    /// <summary>
+    /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> for the AnsRules_CollectInitialEntryPayment choice on this contract id.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="argument">The choice argument.</param>
+    public static ExerciseCommand AnsRules_CollectInitialEntryPaymentCommand(
+        this ContractId<AnsRules> contractId,
+        AnsRules.AnsRules_CollectInitialEntryPayment argument)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(argument);
+        return new ExerciseCommand(
+            AnsRules.TemplateId,
+            contractId,
+            new ChoiceName("AnsRules_CollectInitialEntryPayment"),
+            argument.ToRecord());
     }
 
     /// <summary>
@@ -234,26 +264,38 @@ public static class AnsRulesNonContractExtensions
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
 
-        var command = new ExerciseCommand(
-            AnsRules.TemplateId,
-            contractId,
-            new ChoiceName("AnsRules_CollectInitialEntryPayment"),
-            argument.ToRecord());
+        var command = contractId.AnsRules_CollectInitialEntryPaymentCommand(argument);
 
         var submission = CommandsSubmission.Single(command)
-            .WithActAs(actAs)
             .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsRules_CollectInitialEntryPaymentResult(tx, contractId.Value));
+    }
+
+    /// <summary>
+    /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> for the AnsRules_RejectEntryInitialPayment choice on this contract id.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="argument">The choice argument.</param>
+    public static ExerciseCommand AnsRules_RejectEntryInitialPaymentCommand(
+        this ContractId<AnsRules> contractId,
+        AnsRules.AnsRules_RejectEntryInitialPayment argument)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(argument);
+        return new ExerciseCommand(
+            AnsRules.TemplateId,
+            contractId,
+            new ChoiceName("AnsRules_RejectEntryInitialPayment"),
+            argument.ToRecord());
     }
 
     /// <summary>
@@ -279,26 +321,38 @@ public static class AnsRulesNonContractExtensions
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
 
-        var command = new ExerciseCommand(
-            AnsRules.TemplateId,
-            contractId,
-            new ChoiceName("AnsRules_RejectEntryInitialPayment"),
-            argument.ToRecord());
+        var command = contractId.AnsRules_RejectEntryInitialPaymentCommand(argument);
 
         var submission = CommandsSubmission.Single(command)
-            .WithActAs(actAs)
             .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsRules_RejectEntryInitialPaymentResult(tx, contractId.Value));
+    }
+
+    /// <summary>
+    /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> for the AnsRules_RequestEntry choice on this contract id.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="argument">The choice argument.</param>
+    public static ExerciseCommand AnsRules_RequestEntryCommand(
+        this ContractId<AnsRules> contractId,
+        AnsRules.AnsRules_RequestEntry argument)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        ArgumentNullException.ThrowIfNull(argument);
+        return new ExerciseCommand(
+            AnsRules.TemplateId,
+            contractId,
+            new ChoiceName("AnsRules_RequestEntry"),
+            argument.ToRecord());
     }
 
     /// <summary>
@@ -324,26 +378,72 @@ public static class AnsRulesNonContractExtensions
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(client);
 
-        var command = new ExerciseCommand(
-            AnsRules.TemplateId,
-            contractId,
-            new ChoiceName("AnsRules_RequestEntry"),
-            argument.ToRecord());
+        var command = contractId.AnsRules_RequestEntryCommand(argument);
 
         var submission = CommandsSubmission.Single(command)
-            .WithActAs(actAs)
             .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
         if (!string.IsNullOrEmpty(workflowId))
         {
             submission = submission.WithWorkflowId(new WorkflowId(workflowId));
         }
 
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsRules_RequestEntryResult(tx, contractId.Value));
+    }
+
+    /// <summary>
+    /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> for the Archive choice on this contract id.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    public static ExerciseCommand ArchiveCommand(
+        this ContractId<AnsRules> contractId)
+    {
+        ArgumentNullException.ThrowIfNull(contractId);
+        return new ExerciseCommand(
+            AnsRules.TemplateId,
+            contractId,
+            new ChoiceName("Archive"),
+            DamlRecord.Create());
+    }
+
+    /// <summary>
+    /// Exercises the Archive choice and lifts the choice's exercise result to
+    /// <see cref="ExerciseOutcome{T}"/> over <c>Unit</c>. Structured Canton/Daml errors
+    /// and infrastructure/transport errors pass through unchanged.
+    /// </summary>
+    /// <param name="contractId">The contract on which to exercise the choice.</param>
+    /// <param name="client">The ledger client.</param>
+    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
+        this ContractId<AnsRules> contractId,
+        ILedgerWriter client,
+        Party actAs,
+        string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        var command = contractId.ArchiveCommand();
+
+        var submission = CommandsSubmission.Single(command)
+            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
+        if (!string.IsNullOrEmpty(workflowId))
+        {
+            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
+        }
+
+        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }
 
     private static ExerciseOutcome<AnsRules_CollectEntryRenewalPaymentResult> ProjectAnsRules_CollectEntryRenewalPaymentResult(TransactionResult tx, string contractId)
@@ -428,6 +528,27 @@ public static class AnsRulesNonContractExtensions
 
         throw new InvalidOperationException(
             $"Submission succeeded but no 'AnsRules_RequestEntry' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<Unit> ProjectArchiveResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (string.Equals(exercised.ContractId, contractId, StringComparison.Ordinal)
+                && string.Equals(exercised.TemplateId.ModuleName, AnsRules.TemplateId.ModuleName, StringComparison.Ordinal)
+                && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
+            {
+                return new ExerciseOutcome<Unit>.One(Unit.Value);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Submission succeeded but no 'Archive' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
             "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
             "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
             "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +

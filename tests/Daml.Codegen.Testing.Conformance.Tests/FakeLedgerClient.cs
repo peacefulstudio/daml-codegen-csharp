@@ -27,11 +27,13 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
         CommandsSubmission submission,
+        SubmitterInfo submitter,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        LastSubmission = submission;
-        return Task.FromResult(_transaction(submission));
+        var effectiveSubmission = submission.WithSubmitter(submitter);
+        LastSubmission = effectiveSubmission;
+        return Task.FromResult(_transaction(effectiveSubmission));
     }
 
     public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
@@ -71,6 +73,7 @@ internal sealed class FakeLedgerClient : ILedgerClient
 
     public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
         CommandsSubmission submission,
+        SubmitterInfo submitter,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();

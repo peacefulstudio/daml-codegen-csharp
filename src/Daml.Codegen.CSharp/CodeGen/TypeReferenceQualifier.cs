@@ -7,11 +7,14 @@ using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
-/// Resolves whether an imported runtime/BCL simple type name is shadowed by a
-/// generated namespace segment in a given file, and qualifies it with
-/// <c>global::</c> when it is. C# binds an unqualified simple name by walking
-/// enclosing namespace scopes before consulting <c>using</c> directives, so a
-/// generated namespace segment equal to an imported type name produces CS0118.
+/// Resolves whether an imported runtime/BCL simple type name is shadowed —
+/// either by a generated namespace segment, or by a top-level type the target
+/// Daml package itself declares — and qualifies it with <c>global::</c> when it
+/// is. C# binds an unqualified simple name by walking enclosing namespace
+/// scopes and sibling type declarations before consulting <c>using</c>
+/// directives, so either a generated namespace segment or a package-declared
+/// type equal to an imported type name (e.g. a Daml <c>enum Unit</c>) produces
+/// CS0118 / CS0117 unless qualified.
 /// </summary>
 internal sealed class TypeReferenceQualifier
 {
@@ -69,6 +72,7 @@ internal sealed class TypeReferenceQualifier
             [RuntimeTypeNames.ChoiceName] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.IDamlInterface] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IHasView] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.IImplements] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.CreatedEvent] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.DamlTypeDescriptor] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.DamlTypeKind] = RuntimeNamespaces.Contracts,
@@ -93,8 +97,22 @@ internal sealed class TypeReferenceQualifier
     /// <summary>Every generated namespace plus all its ancestor prefixes, used for shadowing checks.</summary>
     public IReadOnlySet<string> AllNamespaces { get; }
 
-    /// <summary>Creates a qualifier scoped to the given generated namespaces (ancestors are derived automatically).</summary>
-    public TypeReferenceQualifier(IEnumerable<string> generatedNamespaces)
+    /// <summary>
+    /// Sanitised C# names of every top-level type the target Daml package declares (see
+    /// <see cref="PackageEmitContext.LocalReservedTypeNames"/>), used for shadowing checks
+    /// alongside <see cref="AllNamespaces"/>. Since the package's C# namespace is flat
+    /// across all its modules, any name in this set shadows the corresponding imported
+    /// runtime/BCL type everywhere in the package regardless of which module the reference
+    /// is emitted into.
+    /// </summary>
+    public IReadOnlySet<string> DeclaredTypeNames { get; }
+
+    /// <summary>
+    /// Creates a qualifier scoped to the given generated namespaces (ancestors are derived
+    /// automatically) and the package's own declared top-level type names.
+    /// </summary>
+    public TypeReferenceQualifier(
+        IEnumerable<string> generatedNamespaces, IEnumerable<string>? declaredTypeNames = null)
     {
         var all = new HashSet<string>(StringComparer.Ordinal);
         foreach (var ns in generatedNamespaces)
@@ -103,6 +121,7 @@ internal sealed class TypeReferenceQualifier
         }
 
         AllNamespaces = all;
+        DeclaredTypeNames = new HashSet<string>(declaredTypeNames ?? [], StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -137,6 +156,11 @@ internal sealed class TypeReferenceQualifier
 
     private bool IsShadowed(string simpleName, string currentNamespace)
     {
+        if (DeclaredTypeNames.Contains(simpleName))
+        {
+            return true;
+        }
+
         if (AllNamespaces.Contains(simpleName))
         {
             return true;

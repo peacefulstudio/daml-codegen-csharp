@@ -104,7 +104,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       val pkg = Ast.PackageSignature(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-iface-in-defs"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -315,7 +315,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       val pkg = Ast.PackageSignature(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-tmpl-pkg"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -432,7 +432,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       val pkg = Ast.PackageSignature(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-builtins"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -479,7 +479,7 @@ class AstToIntermediateSpec extends AnyWordSpec with Matchers with OptionValues 
       val pkg = Ast.PackageSignature(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-iface-method"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),

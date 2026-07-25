@@ -57,7 +57,7 @@ public partial class DamlTypesTests
     }
 
     [Fact]
-    public void damlnumeric_equality_should_hold_beyond_decimal_range_across_differing_scales()
+    public void DamlNumeric_equality_should_hold_beyond_decimal_range_across_differing_scales()
     {
         var padded = DamlJsonSerializer.DeserializeRecord("""{"amount":"100000000000000000000000000000.00"}""")
             .GetRequiredField("amount").As<DamlNumeric>();

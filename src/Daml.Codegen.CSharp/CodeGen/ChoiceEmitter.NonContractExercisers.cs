@@ -7,32 +7,6 @@ namespace Daml.Codegen.CSharp.CodeGen;
 
 internal sealed partial class ChoiceEmitter
 {
-    /// <summary>
-    /// Returns <c>true</c> when the choice is the synthetic <c>Archive</c>
-    /// imported from <c>DA.Internal.Template</c> in a Daml stdlib package.
-    /// Archive's choice machinery is already exposed via the existing
-    /// <c>Choice&lt;Choice&gt;</c> property; a typed exerciser would add nothing.
-    /// Gating on the stdlib package id prevents a user-defined choice named
-    /// <c>Archive</c> with the same module path from being falsely suppressed.
-    /// </summary>
-    private bool IsArchiveChoice(DamlChoice choice)
-    {
-        if (!string.Equals(choice.Name, "Archive", StringComparison.Ordinal))
-        {
-            return false;
-        }
-        if (choice.ArgumentType is not DamlTypeRef { Module: "DA.Internal.Template", Name: "Archive" } archiveTypeRef)
-        {
-            return false;
-        }
-        if (string.IsNullOrEmpty(archiveTypeRef.PackageId))
-        {
-            return false;
-        }
-        var pkg = resolver.LookupPackage(archiveTypeRef.PackageId);
-        return pkg is not null && IsStdlibPackage(pkg.Name);
-    }
-
     private string MapNonContractReturnType(DamlType returnType) => returnType switch
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit, context.RootNamespace),
@@ -104,8 +78,7 @@ internal sealed partial class ChoiceEmitter
         var emittable = template.Choices
             .Where(c =>
             {
-                if (ChoiceCreatedSlots.Extract(context, resolver, mapper, c.ReturnType).Count > 0
-                    || IsArchiveChoice(c))
+                if (ChoiceCreatedSlots.Extract(context, resolver, mapper, c.ReturnType).Count > 0)
                 {
                     return false;
                 }
@@ -142,6 +115,8 @@ internal sealed partial class ChoiceEmitter
             {
                 indent.AppendLine();
             }
+            WriteNonContractChoiceCommandBuilder(indent, emittable[i], className, dataTypes);
+            indent.AppendLine();
             WriteSingleNonContractChoiceAsyncExerciser(indent, emittable[i], className, dataTypes);
         }
 
@@ -157,6 +132,72 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("}");
 
         return true;
+    }
+
+    /// <summary>
+    /// Emits the <c>&lt;Choice&gt;Command(this ContractId&lt;TemplateName&gt; contractId, ...)</c>
+    /// builder that constructs the choice's <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/>
+    /// without submitting it. Called from <see cref="WriteSingleNonContractChoiceAsyncExerciser"/>'s
+    /// generated <c>&lt;Choice&gt;Async</c> method.
+    /// </summary>
+    private void WriteNonContractChoiceCommandBuilder(
+        IndentWriter indent,
+        DamlChoice choice,
+        string templateClassName,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+    {
+        var choiceName = SanitizeIdentifier(choice.Name);
+        var commandMethodName = $"{choiceName}Command";
+        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argTypeName != "DamlUnit";
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>");
+            indent.AppendLine($"/// Builds the <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> for the {choice.Name} choice on this contract id.");
+            indent.AppendLine("/// </summary>");
+            indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
+            if (hasArg)
+            {
+                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
+            }
+        }
+
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
+        indent.Indent();
+        if (hasArg)
+        {
+            var argParamType = isNestedTemplateArg
+                ? $"{templateClassName}.{argTypeName}"
+                : argTypeName;
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
+            indent.AppendLine($"{argParamType} argument)");
+        }
+        else
+        {
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId)");
+        }
+        indent.Dedent();
+        indent.AppendLine("{");
+        indent.Indent();
+
+        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
+        if (hasArg)
+        {
+            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
+        }
+
+        var argExpr = hasArg ? "argument.ToRecord()" : EmptyArgumentExpression(choice);
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
+        indent.Indent();
+        indent.AppendLine($"{templateClassName}.TemplateId,");
+        indent.AppendLine("contractId,");
+        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"{argExpr});");
+        indent.Dedent();
+
+        indent.Dedent();
+        indent.AppendLine("}");
     }
 
     private void WriteSingleNonContractChoiceAsyncExerciser(
@@ -212,23 +253,16 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
 
-        var argExpr = hasArg ? "argument.ToRecord()" : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
         indent.AppendLine();
-        indent.AppendLine($"var command = new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
-        indent.Indent();
-        indent.AppendLine($"{templateClassName}.TemplateId,");
-        indent.AppendLine("contractId,");
-        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
-        indent.AppendLine($"{argExpr});");
-        indent.Dedent();
+        indent.AppendLine(hasArg
+            ? $"var command = contractId.{choiceName}Command(argument);"
+            : $"var command = contractId.{choiceName}Command();");
 
         indent.AppendLine();
         indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
         indent.Indent();
-        indent.AppendLine(".WithActAs(actAs)");
         indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
         indent.Dedent();
         indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
@@ -239,7 +273,7 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("}");
 
         indent.AppendLine();
-        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
         indent.AppendLine($"return outcome.ProjectCommitted(tx => Project{choiceName}Result(tx, contractId.Value));");
 

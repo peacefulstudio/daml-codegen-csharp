@@ -81,7 +81,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val pkg = Ast.Package(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-filter"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -195,7 +195,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val pkg = Ast.Package(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-template"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -230,10 +230,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val targetPkgId    = Ref.PackageId.assertFromString("synth-target-pkg")
       val targetTplId    = Ref.Identifier(
         targetPkgId,
-        Ref.QualifiedName(
-          ModuleName.assertFromString("Target"),
-          DottedName.assertFromString("Tpl"),
-        ),
+        Ref.QualifiedName.assertFromString("Target:Tpl"),
       )
       val methodName     = Ref.Name.assertFromString("getOwner")
       val dummyExpr      = Ast.EBuiltinCon(Ast.BCTrue)
@@ -263,7 +260,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val pkg = Ast.Package(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-iface-coimpl"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),
@@ -290,10 +287,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val tplName     = DottedName.assertFromString("Tpl")
       val ifaceTplId  = Ref.Identifier(
         Ref.PackageId.assertFromString("synth-iface-pkg"),
-        Ref.QualifiedName(
-          ModuleName.assertFromString("Iface"),
-          DottedName.assertFromString("HasOwner"),
-        ),
+        Ref.QualifiedName.assertFromString("Iface:HasOwner"),
       )
       val methodName  = Ref.Name.assertFromString("getOwner")
       val dummyExpr   = Ast.EBuiltinCon(Ast.BCTrue)
@@ -331,7 +325,7 @@ class SignatureErasureSpec extends AnyWordSpec with Matchers with OptionValues w
       val pkg = Ast.Package(
         modules = Map(mod.name -> mod),
         directDeps = Set.empty,
-        languageVersion = LanguageVersion.default,
+        languageVersion = LanguageVersion.defaultLfVersion,
         metadata = Ast.PackageMetadata(
           name = Ref.PackageName.assertFromString("synth-tpl-impl"),
           version = Ref.PackageVersion.assertFromString("0.0.0"),

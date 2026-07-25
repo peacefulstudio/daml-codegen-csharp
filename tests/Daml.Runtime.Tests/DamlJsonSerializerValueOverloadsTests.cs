@@ -224,7 +224,7 @@ public class DamlJsonSerializerValueOverloadsTests
 
     [Theory]
     [MemberData(nameof(round_trippable_scalar_values))]
-    public void round_trip_value_overload_preserves_scalar_value(DamlValue original)
+    public void Serialize_value_overload_round_trips_scalar_value(DamlValue original)
     {
         var json = DamlJsonSerializer.Serialize(original);
         var deserialized = DamlJsonSerializer.Deserialize(json);
@@ -241,7 +241,7 @@ public class DamlJsonSerializerValueOverloadsTests
 
     [Theory]
     [MemberData(nameof(round_trippable_temporal_values))]
-    public void round_trip_value_overload_preserves_temporal_value_under_non_invariant_culture(DamlValue original)
+    public void Serialize_value_overload_round_trips_temporal_value_under_non_invariant_culture(DamlValue original)
     {
         var previousCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
         try

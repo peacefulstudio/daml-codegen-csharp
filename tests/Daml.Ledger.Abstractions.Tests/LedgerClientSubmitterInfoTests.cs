@@ -347,6 +347,36 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
+    public async Task SubscribeAsync_accepts_a_StakeholderResume_and_forwards_its_offset_to_the_SubmitterInfo_primitive()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+        var resume = new StakeholderResume(LedgerOffset.At(10));
+
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(
+            new SubmitterInfo(new Party("alice")), resume, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeFromOffset.Should().Be(resume.Offset);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_Party_actAs_StakeholderResume_overload_forwards_the_ticket_offset_to_the_SubmitterInfo_primitive()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+        var resume = new StakeholderResume(LedgerOffset.At(21));
+
+        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(new Party("alice"), resume, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeFromOffset.Should().Be(resume.Offset);
+    }
+
+    [Fact]
     public async Task SubscribeActiveAsync_Party_actAs_forwards_activeAtOffset_to_the_SubmitterInfo_primitive()
     {
         var fake = new RecordingLedgerClient();
@@ -373,6 +403,76 @@ public class LedgerClientSubmitterInfoTests
         fake.LastSubscribeActiveAtOffset.Should().BeNull();
     }
 
+    [Fact]
+    public async Task SubscribeLedgerEffectsAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ReadAs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SubscribeLedgerEffectsAsync_with_single_actAs_and_readAs_carries_readAs_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(SinglePartyWithReadAs, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ReadAs.Select(p => p.Id).Should().Equal("observer");
+    }
+
+    [Fact]
+    public async Task SubscribeLedgerEffectsAsync_with_multi_party_actAs_carries_all_parties_through_without_throwing()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(MultiParty, cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ActAs.Select(p => p.Id).Should().BeEquivalentTo("alice", "bob");
+        fake.LastSubscribeLedgerEffectsSubmitter!.Value.ReadAs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SubscribeLedgerEffectsAsync_Party_actAs_forwards_fromOffset_and_toOffset_to_the_SubmitterInfo_primitive()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(new Party("alice"), fromOffset: LedgerOffset.At(10), toOffset: LedgerOffset.At(42), cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeLedgerEffectsFromOffset.Should().Be(LedgerOffset.At(10));
+        fake.LastSubscribeLedgerEffectsToOffset.Should().Be(LedgerOffset.At(42));
+    }
+
+    [Fact]
+    public async Task SubscribeLedgerEffectsAsync_Party_actAs_defaults_toOffset_to_null_at_the_primitive()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        fake.LastSubscribeLedgerEffectsSubmitter.Should().NotBeNull();
+        fake.LastSubscribeLedgerEffectsToOffset.Should().BeNull();
+    }
+
     /// <summary>
     /// Records the <see cref="SubmitterInfo"/>, <c>timeout</c>, and offset bounds each
     /// primitive receives so tests can assert that the <c>Party</c>-<c>actAs</c>
@@ -388,12 +488,15 @@ public class LedgerClientSubmitterInfoTests
         public SubmitterInfo? LastTransactionSubmitter { get; private set; }
         public SubmitterInfo? LastSubscribeSubmitter { get; private set; }
         public SubmitterInfo? LastSubscribeActiveSubmitter { get; private set; }
+        public SubmitterInfo? LastSubscribeLedgerEffectsSubmitter { get; private set; }
         public TimeSpan? LastExerciseTimeout { get; private set; }
         public TimeSpan? LastCreateTimeout { get; private set; }
         public TimeSpan? LastTransactionTimeout { get; private set; }
         public LedgerOffset? LastSubscribeFromOffset { get; private set; }
         public LedgerOffset? LastSubscribeToOffset { get; private set; }
         public LedgerOffset? LastSubscribeActiveAtOffset { get; private set; }
+        public LedgerOffset? LastSubscribeLedgerEffectsFromOffset { get; private set; }
+        public LedgerOffset? LastSubscribeLedgerEffectsToOffset { get; private set; }
 
         public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
@@ -409,20 +512,22 @@ public class LedgerClientSubmitterInfoTests
 
         public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
             CommandsSubmission submission,
+            SubmitterInfo submitter,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(new SubmitAndWaitResult(new CommandId("cmd-id"), "update-id", LedgerOffset.Begin));
 
         public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
             CommandsSubmission submission,
+            SubmitterInfo submitter,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
-            var actAs = submission.ActAs ?? [];
-            var readAs = submission.ReadAs ?? [];
-            LastTransactionSubmitter = actAs.Count > 0
-                ? new SubmitterInfo(new HashSet<Party>(actAs), readAs.Count > 0 ? new HashSet<Party>(readAs) : null)
-                : null;
+            var effective = submission.WithSubmitter(submitter);
+            var actAs = effective.ActAs ?? [];
+            var readAs = effective.ReadAs ?? [];
+            LastTransactionSubmitter = new SubmitterInfo(
+                new HashSet<Party>(actAs), readAs.Count > 0 ? new HashSet<Party>(readAs) : null);
             LastTransactionTimeout = timeout;
             return Task.FromResult<ExerciseOutcome<TransactionResult>>(
                 new ExerciseOutcome<TransactionResult>.None());
@@ -461,7 +566,12 @@ public class LedgerClientSubmitterInfoTests
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
             where T : IDamlType
-            => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
+        {
+            LastSubscribeLedgerEffectsSubmitter = submitter;
+            LastSubscribeLedgerEffectsFromOffset = fromOffset;
+            LastSubscribeLedgerEffectsToOffset = toOffset;
+            return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
+        }
 
         public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
