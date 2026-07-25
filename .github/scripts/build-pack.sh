@@ -115,9 +115,10 @@ EOF
 }
 
 pass=1
+max_passes=$(( ${#families[@]} + 1 ))
 while :; do
   echo ""
-  echo "########## PASS $pass ##########"
+  echo "########## PASS $pass of at most $max_passes ##########"
   progress=0
   for fam in "${families[@]}"; do
     [ -n "${status[$fam]:-}" ] && continue
@@ -128,7 +129,7 @@ while :; do
   done
   [ "$progress" -eq 0 ] && break
   pass=$((pass + 1))
-  [ "$pass" -gt 5 ] && { echo "Hit 5-pass cap."; break; }
+  [ "$pass" -gt "$max_passes" ] && { echo "Hit ${max_passes}-pass cap."; break; }
 done
 
 ok_count=0; skip_count=0; fail_count=0
