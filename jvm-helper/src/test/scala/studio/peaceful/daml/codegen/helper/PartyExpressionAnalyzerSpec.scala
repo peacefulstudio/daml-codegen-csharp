@@ -65,6 +65,11 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
 
   private def appOf(fun: Ast.Expr, arg: Ast.Expr): Ast.Expr = Ast.EApp(fun, arg)
 
+  private val SomeLocation: Ref.Location =
+    Ref.Location(SpecPackageId, SpecModule, "dictSignatory", (1, 1), (1, 2))
+
+  private def located(expr: Ast.Expr): Ast.Expr = Ast.ELocation(SomeLocation, expr)
+
   private def app2Of(fun: Ast.Expr, arg0: Ast.Expr, arg1: Ast.Expr): Ast.Expr =
     Ast.EApp(Ast.EApp(fun, arg0), arg1)
 
@@ -96,6 +101,20 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
       ),
       imports = Ast.DeclaredImports(Set.empty),
     )
+
+  private def choiceControllerWrappedBy(
+      wrapperName: String
+  ): (Ast.Expr, PartyExpressionAnalyzer.ValueResolver) = {
+    val wrapper =
+      importedValueRef("some-imported-package-id", "DA.Internal.Template.Functions", wrapperName)
+    val resolver = resolverOver(
+      "dictController" -> absOf(
+        "this",
+        absOf("arg", appOf(wrapper, recProjOnThis("owner", binder = "this"))),
+      )
+    )
+    (app2Of(selfValueRef("dictController"), varOf(ThisBinder), varOf("arg")), resolver)
+  }
 
   "PartyExpressionAnalyzer.analyze" should {
 
@@ -306,6 +325,20 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
         PartyAnalysisResult.Static(List("owner"))
     }
 
+    "resolve a controller field through the synthesized toParties class selector to Static" in {
+      val (expr, resolver) = choiceControllerWrappedBy("$$ctoParties")
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Static(List("owner"))
+    }
+
+    Seq("$$ctoParties1", "$$ctoParties2").foreach { selectorName =>
+      s"return Dynamic when the choice indirection wraps the differently typed $selectorName selector" in {
+        val (expr, resolver) = choiceControllerWrappedBy(selectorName)
+        PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+          PartyAnalysisResult.Dynamic
+      }
+    }
+
     "return Dynamic when the choice indirection wraps a non-toParties helper" in {
       val helper = importedValueRef("some-imported-package-id", "Some.Other.Module", "resolveDelegate")
       val resolver = resolverOver(
@@ -345,7 +378,7 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
         PartyAnalysisResult.Dynamic
     }
 
-    "return Dynamic for the single-argument toParties indirection of a template signatory" in {
+    "resolve the single-argument toParties indirection of a template signatory to Static" in {
       val resolver = resolverOver(
         "dictSignatory" -> absOf(
           "this",
@@ -353,6 +386,94 @@ class PartyExpressionAnalyzerSpec extends AnyWordSpec with Matchers {
         )
       )
       val expr = Ast.EApp(selfValueRef("dictSignatory"), varOf(ThisBinder))
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Static(List("issuer"))
+    }
+
+    "resolve a controller reached through a same-package value definition to Static" in {
+      val resolver = resolverOver(
+        "dictParties" -> absOf(
+          "p",
+          letOf("ds", recProjOnThis("owner", binder = "p"), appOf(ToParties, varOf("ds"))),
+        ),
+        "dictController" -> absOf(
+          "this",
+          absOf("arg", appOf(selfValueRef("dictParties"), varOf("this"))),
+        ),
+      )
+      val expr = app2Of(selfValueRef("dictController"), varOf(ThisBinder), varOf("arg"))
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Static(List("owner"))
+    }
+
+    "return Dynamic when the same-package value definition projects the choice argument" in {
+      val resolver = resolverOver(
+        "dictParties" -> absOf(
+          "p",
+          letOf("ds", recProjOnThis("owner", binder = "p"), appOf(ToParties, varOf("ds"))),
+        ),
+        "dictController" -> absOf(
+          "this",
+          absOf("arg", appOf(selfValueRef("dictParties"), recProjOnThis("requester", binder = "arg"))),
+        ),
+      )
+      val expr = app2Of(selfValueRef("dictController"), varOf(ThisBinder), varOf("arg"))
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Dynamic
+    }
+
+    "resolve a template signatory whose reduction carries source locations" in {
+      val resolver = resolverOver(
+        "dictSignatory" -> absOf(
+          "this",
+          located(
+            letOf(
+              "ds",
+              recProjOnThis("dso", binder = "this"),
+              located(appOf(ToParties, located(varOf("ds")))),
+            )
+          ),
+        )
+      )
+      val expr = Ast.EApp(selfValueRef("dictSignatory"), varOf(ThisBinder))
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Static(List("dso"))
+    }
+
+    "resolve a located controller delegating to a located template signatory" in {
+      val resolver = resolverOver(
+        "dictSignatory" -> absOf(
+          "this",
+          located(
+            letOf(
+              "ds",
+              recProjOnThis("dso", binder = "this"),
+              located(appOf(ToParties, located(varOf("ds")))),
+            )
+          ),
+        ),
+        "dictController" -> absOf(
+          "this",
+          absOf("arg", located(appOf(selfValueRef("dictSignatory"), located(varOf("this"))))),
+        ),
+      )
+      val expr = app2Of(selfValueRef("dictController"), varOf(ThisBinder), varOf("arg"))
+      PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
+        PartyAnalysisResult.Static(List("dso"))
+    }
+
+    "return Dynamic when a located projection roots in the choice argument" in {
+      val resolver = resolverOver(
+        "dictSignatory" -> absOf(
+          "p",
+          located(letOf("ds", recProjOnThis("dso", binder = "p"), appOf(ToParties, varOf("ds")))),
+        ),
+        "dictController" -> absOf(
+          "this",
+          absOf("arg", located(appOf(selfValueRef("dictSignatory"), located(recProjOnThis("requester", binder = "arg"))))),
+        ),
+      )
+      val expr = app2Of(selfValueRef("dictController"), varOf(ThisBinder), varOf("arg"))
       PartyExpressionAnalyzer.analyze(expr, ThisBinder, resolver, SpecPackageId) shouldBe
         PartyAnalysisResult.Dynamic
     }

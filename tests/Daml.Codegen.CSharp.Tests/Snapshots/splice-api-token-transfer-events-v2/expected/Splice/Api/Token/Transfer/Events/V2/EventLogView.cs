@@ -12,7 +12,10 @@ namespace Splice.Api.Token.Transfer.Events.V2;
 /// <summary>
 /// Generated from Daml record EventLogView
 /// </summary>
-public sealed record EventLogView([property: DamlFieldAttribute("admin")] Party Admin, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record EventLogView(
+    [property: DamlFieldAttribute("admin")] Party Admin,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IEventLog, IDamlRecord<EventLogView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

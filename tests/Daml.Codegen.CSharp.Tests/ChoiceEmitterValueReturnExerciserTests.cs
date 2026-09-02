@@ -3,9 +3,10 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -55,7 +56,6 @@ public class ChoiceEmitterValueReturnExerciserTests
         new()
         {
             Name = name,
-            Fields = [],
             Choices = choices,
         };
 
@@ -72,7 +72,7 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_typed_wrapper_delegating_to_ProjectCommitted_with_filtering_projector_for_decimal_return()
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_typed_wrapper_delegating_to_ProjectCommitted_with_filtering_projector_for_decimal_return()
     {
         var template = Template(
             "Oracle",
@@ -84,7 +84,8 @@ public class ChoiceEmitterValueReturnExerciserTests
         output.Should().Contain("public static async Task<ExerciseOutcome<decimal>> GetTrailingTwapAsync(");
         output.Should().Contain("this ContractId<Oracle> contractId,");
         output.Should().Contain("ILedgerWriter client,");
-        output.Should().Contain(".TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("SubmitterInfo submitter,");
+        output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
         output.Should().Contain("return outcome.ProjectCommitted(tx => ProjectGetTrailingTwapResult(tx, contractId.Value));");
         output.Should().NotContain("Unhandled outcome");
         output.Should().NotContain("ExerciseOutcome<TransactionResult>.DamlError");
@@ -95,7 +96,7 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_async_wrapper_for_record_returning_choice()
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_async_wrapper_for_record_returning_choice()
     {
         var template = Template(
             "Reporter",
@@ -108,7 +109,7 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_async_wrapper_for_list_returning_choice()
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_async_wrapper_for_list_returning_choice()
     {
         var template = Template(
             "Oracle",
@@ -123,20 +124,19 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_skips_choice_with_fallback_argument_shape()
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_throws_for_an_unmappable_choice_argument_shape()
     {
         var template = Template(
             "Trader",
             Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Numeric)));
 
-        var output = EmitNonContract(template);
-
-        output.Should().NotContain("TraderNonContractExtensions");
-        output.Should().NotContain("QuoteAsync(");
+        FluentActions.Invoking(() => EmitNonContract(template))
+            .Should().Throw<CodegenException>()
+            .WithMessage("*Quote*");
     }
 
     [Fact]
-    public void non_contract_exerciser_throws_for_nested_optional_return_type()
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_the_wrapper_for_a_nested_optional_return_type()
     {
         var template = Template(
             "Sink",
@@ -147,9 +147,40 @@ public class ChoiceEmitterValueReturnExerciserTests
                     new DamlPrimitiveType(DamlPrimitive.Optional),
                     [new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [new DamlPrimitiveType(DamlPrimitive.Text)])])));
 
-        var act = () => EmitNonContract(template);
+        var emitted = EmitNonContract(template);
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*nested Optional*Optional (Optional t)*");
+        emitted.Should().Contain("Optional<Optional<string>>");
+        emitted.Should().NotContain("string??");
+    }
+
+    [Fact]
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_decodes_a_nested_optional_of_unit_return()
+    {
+        var template = Template(
+            "Sink",
+            Choice(
+                "MaybeMaybeUnit",
+                new DamlPrimitiveType(DamlPrimitive.Unit),
+                new DamlTypeApp(
+                    new DamlPrimitiveType(DamlPrimitive.Optional),
+                    [new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [new DamlPrimitiveType(DamlPrimitive.Unit)])])));
+
+        var emitted = EmitNonContract(template);
+
+        emitted.Should().Contain("FromChainValue(");
+        emitted.Should().NotContain(".AsOptional().Value!.AsOptional()");
+    }
+
+    [Fact]
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_the_wrapper_for_an_optional_type_variable_return()
+    {
+        var template = Template(
+            "Sink",
+            Choice(
+                "MaybeOf",
+                new DamlPrimitiveType(DamlPrimitive.Unit),
+                new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [new DamlTypeVar("a")])));
+
+        EmitNonContract(template).Should().Contain("Optional<TA>");
     }
 }

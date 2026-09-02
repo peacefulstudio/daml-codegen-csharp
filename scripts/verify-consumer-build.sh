@@ -43,7 +43,7 @@ Options:
                           read from Directory.Build.props <Version>).
   --package-license <spdx> SPDX license stamped into generated packages
                           (default: \$PACKAGE_LICENSE, else unset).
-  --helper-jar <path>     daml-codegen-jvm-helper.jar (only needed for --dar
+  --helper-jar <path>     daml-dar-to-proto.jar (only needed for --dar
                           inputs). Overriding this skips the freshness check; you
                           own the JAR's currency. Default: the repo JAR,
                           reassembled from source when stale via
@@ -111,10 +111,16 @@ NUGET_CONFIG="$OUT/NuGet.config"
 if [[ -z "$KEEP" ]]; then
   rm -rf "$OUT"
 fi
-mkdir -p "$EMIT_ROOT" "$FEED"
+export NUGET_PACKAGES="$OUT/.nuget-packages"
+rm -rf "$NUGET_PACKAGES"
+mkdir -p "$EMIT_ROOT" "$FEED" "$NUGET_PACKAGES"
 
 derive_csproj() {
   find "$1" -maxdepth 2 -name '*.csproj' | head -1
+}
+
+find_unresolved_stdlib_leaks() {
+  grep -rhoE 'No\.Package\.Metadata\.[A-Za-z0-9_]+' "$1" --include='*.cs' 2>/dev/null | sort -u | tr '\n' ' ' || true
 }
 
 EMITTED_PROJECT_DIRS=()
@@ -128,7 +134,7 @@ emit_from_intermediate() {
   "$CLI_BIN" "${cli_args[@]}"
   local cs_count leaks
   cs_count="$(find "$dest" -name '*.cs' 2>/dev/null | wc -l | tr -d ' ')"
-  leaks="$(grep -rhoE 'No\.Package\.Metadata\.[A-Za-z0-9_]+' "$dest" --include='*.cs' 2>/dev/null | sort -u | tr '\n' ' ')"
+  leaks="$(find_unresolved_stdlib_leaks "$dest")"
   echo "        cs=$cs_count leaks=[$leaks]"
   [[ -z "$leaks" ]] || { echo "verify-consumer-build.sh: unresolved-stdlib leaks emitted for $name: $leaks" >&2; exit 4; }
   EMITTED_PROJECT_DIRS+=("$dest")

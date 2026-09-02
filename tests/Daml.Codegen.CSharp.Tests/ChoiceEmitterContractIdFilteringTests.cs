@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -55,7 +55,6 @@ public class ChoiceEmitterContractIdFilteringTests
         new()
         {
             Name = "Factory",
-            Fields = [],
             Choices = choices,
         };
 
@@ -75,13 +74,13 @@ public class ChoiceEmitterContractIdFilteringTests
 
         var exercisersSb = new StringBuilder();
         var exercisersIndent = new IndentWriter(exercisersSb) { CurrentTypeName = template.Name };
-        emitter.WriteChoiceAsyncExercisersClass(exercisersIndent, template, template.Name, template.Fields, context.DataTypes);
+        emitter.WriteChoiceAsyncExercisersClass(exercisersIndent, template, template.Name, [], context.DataTypes);
 
         return (nonContractSb.ToString(), exercisersSb.ToString());
     }
 
     [Fact]
-    public void contract_id_return_routes_bare_contract_id_choice_to_slot_path_not_non_contract_path()
+    public void ChoiceEmitterContractIdFiltering_contract_id_return_routes_bare_contract_id_choice_to_slot_path_not_non_contract_path()
     {
         var (nonContract, exercisers) = Emit(Template(Choice("Mint", ContractIdOf("Coin"))));
 
@@ -92,7 +91,7 @@ public class ChoiceEmitterContractIdFilteringTests
     }
 
     [Fact]
-    public void contract_id_return_routes_optional_contract_id_choice_to_slot_path_not_non_contract_path()
+    public void ChoiceEmitterContractIdFiltering_contract_id_return_routes_optional_contract_id_choice_to_slot_path_not_non_contract_path()
     {
         var optionalCid = new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [ContractIdOf("Coin")]);
 

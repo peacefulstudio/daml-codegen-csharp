@@ -1,0 +1,121 @@
+{
+ "damlType": "WireTypes:WireRecord:Relabel \u2014 choice argument is a record; result is a ContractId",
+ "capturedBy": "POST /v2/commands/submit-and-wait-for-transaction, TRANSACTION_SHAPE_LEDGER_EFFECTS; see ExercisedEvent.choiceArgument and ExercisedEvent.exerciseResult",
+ "response": {
+  "transaction": {
+   "updateId": "1220147ae0c530b39d850f4bc41d64087fdd469cd1105a637a4749ae9e3f16fce7e4",
+   "commandId": "21df0cfc06b54d279c3f56178eb4ee9d",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:04.102423Z",
+   "events": [
+    {
+     "ExercisedEvent": {
+      "offset": 6063,
+      "nodeId": 0,
+      "contractId": "00f9c54b4cf1ac0609a616f88cbeb9a58bf38b08977edaa81c1136b96f552d118eca121220ea362ddb26f079d3438340bbe63d976a4774b3be09cc5b5c883e74c08fe8e1da",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "interfaceId": null,
+      "choice": "Relabel",
+      "choiceArgument": {
+       "newLabel": "relabelled"
+      },
+      "actingParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "consuming": false,
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "lastDescendantNodeId": 1,
+      "exerciseResult": "005397d332aa2c418bdbdef59cfa7427cf810f855ec6afb4b753d30253b374a2a7ca12122095fdfbe1332d35a094c3e917dbf8217808d3829f2c613f09820be15059ffbdcf",
+      "packageName": "wiretypes23",
+      "implementedInterfaces": [],
+      "acsDelta": false
+     }
+    },
+    {
+     "CreatedEvent": {
+      "offset": 6063,
+      "nodeId": 1,
+      "contractId": "005397d332aa2c418bdbdef59cfa7427cf810f855ec6afb4b753d30253b374a2a7ca12122095fdfbe1332d35a094c3e917dbf8217808d3829f2c613f09820be15059ffbdcf",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "count": "42",
+       "amount": "42.5000000000",
+       "label": "relabelled",
+       "active": true,
+       "asOf": "2026-07-31",
+       "observedAt": "2026-07-31T12:34:56.123456Z",
+       "note": "present",
+       "nestedNote": [
+        [
+         "deep"
+        ]
+       ],
+       "tags": [
+        "x",
+        "y"
+       ],
+       "attributes": {
+        "a": "1",
+        "b": "2"
+       },
+       "genMap": [
+        [
+         "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+         "7"
+        ]
+       ],
+       "unitField": {},
+       "marker": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+       "holdingCid": "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+       "holdingCids": [
+        "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+        "00f7f5461eca4cc8707b5e263aa771b2a1d40284b3baaca1e1f39461156fd83411ca121220d2dd2f2edf4cedfa68b26f4aac381d68f58defaaffc7a66c3f65a27902b5d724",
+        "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923"
+       ],
+       "profile": {
+        "nickname": "nick",
+        "level": "3"
+       },
+       "outcome": {
+        "tag": "Win",
+        "value": {
+         "prize": "1.25",
+         "tier": "gold"
+        }
+       },
+       "suit": "Hearts",
+       "fee": "1.25"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:04.102423Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     }
+    }
+   ],
+   "offset": 6063,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-f1c0ac2d7e2c89f9d2433ca145507165-6601e045cba4f207-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:04.114198Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 3417
+  }
+ }
+}

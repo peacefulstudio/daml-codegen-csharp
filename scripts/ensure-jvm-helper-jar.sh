@@ -8,7 +8,7 @@ usage() {
   cat <<EOF
 Usage: $0 [--check-only]
 
-Ensures jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar was assembled
+Ensures jvm-helper/target/scala-2.13/daml-dar-to-proto.jar was assembled
 from the working tree's current helper sources, then prints its path on stdout.
 
 The JAR is gitignored build output, so a working tree can hold a JAR assembled
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 HELPER_DIR="$PROJECT_ROOT/jvm-helper"
-HELPER_JAR="$HELPER_DIR/target/scala-2.13/daml-codegen-jvm-helper.jar"
+HELPER_JAR="$HELPER_DIR/target/scala-2.13/daml-dar-to-proto.jar"
 SOURCE_STAMP="$HELPER_JAR.sources.sha256"
 
 ASSEMBLY_INPUTS=(
@@ -64,12 +64,14 @@ sha256_stream() {
 
 assembly_input_hash() {
   cd "$PROJECT_ROOT"
-  find "${ASSEMBLY_INPUTS[@]}" -type f -print \
-    | LC_ALL=C sort \
-    | while IFS= read -r path; do
-        printf '%s  %s\n' "$(sha256_stream < "$path" | awk '{print $1}')" "$path"
-      done \
-    | sha256_stream | awk '{print $1}'
+  {
+    find "${ASSEMBLY_INPUTS[@]}" -type f -print \
+      | LC_ALL=C sort \
+      | while IFS= read -r path; do
+          printf '%s  %s\n' "$(sha256_stream < "$path" | awk '{print $1}')" "$path"
+        done
+    printf 'env:DAML_DAR_TO_PROTO_VERSION=%s\n' "${DAML_DAR_TO_PROTO_VERSION:-}"
+  } | sha256_stream | awk '{print $1}'
 }
 
 for input in "${ASSEMBLY_INPUTS[@]}"; do

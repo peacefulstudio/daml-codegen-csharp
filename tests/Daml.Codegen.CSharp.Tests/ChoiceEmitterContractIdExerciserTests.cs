@@ -3,9 +3,10 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -56,21 +57,25 @@ public class ChoiceEmitterContractIdExerciserTests
             Observers = DamlPartyAnalysis.Dynamic,
         };
 
-    private static DamlTemplate Template(IReadOnlyList<DamlFieldDefinition> fields, params DamlChoice[] choices) =>
-        new()
-        {
-            Name = "Vault",
-            Fields = fields,
-            Choices = choices,
-            Signatories = DamlPartyAnalysis.Dynamic,
-            Observers = DamlPartyAnalysis.Dynamic,
-        };
+    private sealed record TemplateFixture(DamlTemplate Template, IReadOnlyList<DamlFieldDefinition> Fields);
+
+    private static TemplateFixture Template(IReadOnlyList<DamlFieldDefinition> fields, params DamlChoice[] choices) =>
+        new(
+            new DamlTemplate
+            {
+                Name = "Vault",
+                Choices = choices,
+                Signatories = DamlPartyAnalysis.Dynamic,
+                Observers = DamlPartyAnalysis.Dynamic,
+            },
+            fields);
 
     private static DamlTypeApp ContractIdOf(string templateName) =>
         new(new DamlPrimitiveType(DamlPrimitive.ContractId), [new DamlTypeRef(LocalPackageId, "Main", templateName)]);
 
-    private static (string ResultStructs, string Exercisers) Emit(DamlTemplate template)
+    private static (string ResultStructs, string Exercisers) Emit(TemplateFixture fixture)
     {
+        var template = fixture.Template;
         var package = Package(template);
         var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
         var resolver = new StubResolver();
@@ -82,44 +87,44 @@ public class ChoiceEmitterContractIdExerciserTests
 
         var exerciserSb = new StringBuilder();
         var exerciserIndent = new IndentWriter(exerciserSb) { CurrentTypeName = template.Name };
-        emitter.WriteChoiceAsyncExercisersClass(exerciserIndent, template, template.Name, template.Fields, context.DataTypes);
+        emitter.WriteChoiceAsyncExercisersClass(exerciserIndent, template, template.Name, fixture.Fields, context.DataTypes);
 
         return (structsSb.ToString(), exerciserSb.ToString());
     }
 
     [Fact]
-    public void single_contract_id_choice_emits_a_single_cardinality_slot_property()
+    public void ChoiceEmitterContractIdExerciser_single_contract_id_choice_emits_a_single_cardinality_slot_property()
     {
         var template = Template([], Choice("Spawn", ContractIdOf("Token")));
 
         var (structs, _) = Emit(template);
 
-        structs.Should().Contain("public sealed record SpawnResult(ContractId<Token> Token)");
+        structs.Should().Contain("public sealed record SpawnResult(\n    ContractId<Token> Token\n)");
         structs.Should().Contain("public static ExerciseOutcome<SpawnResult> FromCreatedContracts");
     }
 
     [Fact]
-    public void optional_contract_id_choice_emits_a_nullable_slot_property()
+    public void ChoiceEmitterContractIdExerciser_optional_contract_id_choice_emits_a_nullable_slot_property()
     {
         var template = Template([], Choice("Spawn", new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [ContractIdOf("Token")])));
 
         var (structs, _) = Emit(template);
 
-        structs.Should().Contain("public sealed record SpawnResult(ContractId<Token>? Token)");
+        structs.Should().Contain("public sealed record SpawnResult(\n    ContractId<Token>? Token\n)");
     }
 
     [Fact]
-    public void list_contract_id_choice_emits_a_list_slot_property()
+    public void ChoiceEmitterContractIdExerciser_list_contract_id_choice_emits_a_list_slot_property()
     {
         var template = Template([], Choice("Spawn", new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.List), [ContractIdOf("Token")])));
 
         var (structs, _) = Emit(template);
 
-        structs.Should().Contain("public sealed record SpawnResult(IReadOnlyList<ContractId<Token>> Token)");
+        structs.Should().Contain("public sealed record SpawnResult(\n    IReadOnlyList<ContractId<Token>> Token\n)");
     }
 
     [Fact]
-    public void create_bearing_choice_emits_a_typed_async_exerciser()
+    public void ChoiceEmitterContractIdExerciser_create_bearing_choice_emits_a_typed_async_exerciser()
     {
         var template = Template(
             [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
@@ -129,11 +134,12 @@ public class ChoiceEmitterContractIdExerciserTests
 
         exercisers.Should().Contain("public static class VaultExtensions");
         exercisers.Should().Contain("public static async Task<ExerciseOutcome<SpawnResult>> SpawnAsync(");
+        exercisers.Should().Contain("public static Task<ExerciseOutcome<SpawnResult>> SpawnAsync(");
         exercisers.Should().Contain("this ContractId<Vault> contractId,");
     }
 
     [Fact]
-    public void non_creating_choice_emits_no_exerciser_class()
+    public void ChoiceEmitterContractIdExerciser_non_creating_choice_emits_no_exerciser_class()
     {
         var template = Template([], Choice("Touch", new DamlPrimitiveType(DamlPrimitive.Unit)));
 
@@ -144,7 +150,7 @@ public class ChoiceEmitterContractIdExerciserTests
     }
 
     [Fact]
-    public void create_bearing_choice_exerciser_accepts_optional_command_id_override()
+    public void ChoiceEmitterContractIdExerciser_create_bearing_choice_exerciser_accepts_optional_command_id_override()
     {
         var template = Template(
             [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
@@ -153,7 +159,7 @@ public class ChoiceEmitterContractIdExerciserTests
         var (_, exercisers) = Emit(template);
 
         exercisers.Should().Contain("CommandId? commandId = null,");
-        exercisers.Should().Contain(".WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));");
+        exercisers.Should().Contain(TrySubmitSingleArgumentOrder);
 
         var idxWorkflowId = exercisers.IndexOf("string? workflowId = null,", StringComparison.Ordinal);
         var idxCommandId = exercisers.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
@@ -163,7 +169,7 @@ public class ChoiceEmitterContractIdExerciserTests
     }
 
     [Fact]
-    public void create_bearing_choice_exerciser_forwards_optional_timeout()
+    public void ChoiceEmitterContractIdExerciser_create_bearing_choice_exerciser_forwards_optional_timeout()
     {
         var template = Template(
             [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
@@ -172,7 +178,7 @@ public class ChoiceEmitterContractIdExerciserTests
         var (_, exercisers) = Emit(template);
 
         exercisers.Should().Contain("TimeSpan? timeout = null,");
-        exercisers.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
+        exercisers.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
         var idxCommandId = exercisers.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = exercisers.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
@@ -182,7 +188,7 @@ public class ChoiceEmitterContractIdExerciserTests
     }
 
     [Fact]
-    public void create_bearing_choice_emits_a_command_builder_shared_by_both_async_overloads()
+    public void ChoiceEmitterContractIdExerciser_create_bearing_choice_emits_one_submission_body_reached_by_both_overloads()
     {
         var template = Template(
             [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
@@ -201,13 +207,14 @@ public class ChoiceEmitterContractIdExerciserTests
         const string commandCallMarker = "var command = contractId.SpawnCommand();";
         var firstCall = exercisers.IndexOf(commandCallMarker, StringComparison.Ordinal);
         firstCall.Should().BeGreaterThanOrEqualTo(0);
-        var secondCall = exercisers.IndexOf(commandCallMarker, firstCall + 1, StringComparison.Ordinal);
-        secondCall.Should().BeGreaterThan(firstCall);
-        exercisers.IndexOf(commandCallMarker, secondCall + 1, StringComparison.Ordinal).Should().Be(-1);
+        exercisers.IndexOf(commandCallMarker, firstCall + 1, StringComparison.Ordinal).Should().Be(-1);
+
+        exercisers.Should().Contain("SubmitterInfo submitter = owner;");
+        exercisers.Should().Contain("return contractId.SpawnAsync(");
     }
 
     [Fact]
-    public void contract_overload_forwards_timeout_positionally_to_the_contract_id_overload()
+    public void ChoiceEmitterContractIdExerciser_contract_overload_forwards_timeout_positionally_to_the_contract_id_overload()
     {
         var template = Template(
             [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],

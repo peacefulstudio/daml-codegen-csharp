@@ -21,7 +21,25 @@ namespace Daml.Runtime.Contracts;
 public sealed record TransactionTree(
     string UpdateId,
     LedgerOffset CompletionOffset,
-    IReadOnlyList<TreeEvent> RootEvents);
+    IReadOnlyList<TreeEvent> RootEvents)
+{
+    private readonly IReadOnlyList<TreeEvent> _rootEvents =
+        EventCollections.Borrow(RootEvents, nameof(RootEvents));
+
+    /// <summary>
+    /// The transaction's top-level events, in transaction order. Events caused by an
+    /// exercise (its sub-creates and sub-exercises) are not repeated here — they nest under
+    /// that exercise's <see cref="TreeEvent.Exercised.ChildEvents"/>. Held as the producer
+    /// supplied it, not copied — an <see cref="IReadOnlyList{T}"/> is a read-only view, so a
+    /// caller that retains its backing list must not mutate it after construction. Rejected
+    /// at construction and on <c>init</c> when <c>null</c>.
+    /// </summary>
+    public IReadOnlyList<TreeEvent> RootEvents
+    {
+        get => _rootEvents;
+        init => _rootEvents = EventCollections.Borrow(value, nameof(RootEvents));
+    }
+}
 
 /// <summary>
 /// A single node in a <see cref="TransactionTree"/>: either a contract
@@ -98,6 +116,49 @@ public abstract record TreeEvent
         ContractKey? ContractKey = null,
         DateTimeOffset? CreatedAt = null) : TreeEvent
     {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        private readonly IReadOnlyList<Party> _signatories =
+            EventCollections.Borrow(Signatories, nameof(Signatories));
+
+        private readonly IReadOnlyList<Party> _observers =
+            EventCollections.Borrow(Observers, nameof(Observers));
+
+        private readonly IReadOnlyList<Identifier> _interfaceIds = Array.Empty<Identifier>();
+
+        /// <summary>
+        /// Parties notified of this event. Held as the producer supplied it, not copied — an
+        /// <see cref="IReadOnlyList{T}"/> is a read-only view, so a caller that retains its
+        /// backing list must not mutate it after construction. Rejected at construction and
+        /// on <c>init</c> when <c>null</c>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+
+        /// <summary>
+        /// Parties that authorized the contract's creation. Held on the same terms as
+        /// <see cref="WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> Signatories
+        {
+            get => _signatories;
+            init => _signatories = EventCollections.Borrow(value, nameof(Signatories));
+        }
+
+        /// <summary>
+        /// Parties with read access to the contract. Held on the same terms as
+        /// <see cref="WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> Observers
+        {
+            get => _observers;
+            init => _observers = EventCollections.Borrow(value, nameof(Observers));
+        }
+
         /// <summary>
         /// Interface ids the participant computed for this created event
         /// (Canton gRPC <c>CreatedEvent.interface_views[].interface_id</c>).
@@ -106,8 +167,13 @@ public abstract record TreeEvent
         /// known only as an interface and must be dispatched at runtime. Flattened
         /// through to <see cref="CreatedContract.InterfaceIds"/> by
         /// <see cref="TransactionTreeExtensions.ToTransactionResult"/>.
+        /// Held on the same terms as <see cref="WitnessParties"/>.
         /// </summary>
-        public IReadOnlyList<Identifier> InterfaceIds { get; init; } = Array.Empty<Identifier>();
+        public IReadOnlyList<Identifier> InterfaceIds
+        {
+            get => _interfaceIds;
+            init => _interfaceIds = EventCollections.Borrow(value, nameof(InterfaceIds));
+        }
     }
 
     /// <summary>
@@ -144,5 +210,47 @@ public abstract record TreeEvent
         bool Consuming,
         IReadOnlyList<Party> ActingParties,
         IReadOnlyList<Party> WitnessParties,
-        IReadOnlyList<TreeEvent> ChildEvents) : TreeEvent;
+        IReadOnlyList<TreeEvent> ChildEvents) : TreeEvent
+    {
+        private readonly IReadOnlyList<Party> _actingParties =
+            EventCollections.Borrow(ActingParties, nameof(ActingParties));
+
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        private readonly IReadOnlyList<TreeEvent> _childEvents =
+            EventCollections.Borrow(ChildEvents, nameof(ChildEvents));
+
+        /// <summary>
+        /// Parties that exercised the choice. Held as the producer supplied it, not copied —
+        /// an <see cref="IReadOnlyList{T}"/> is a read-only view, so a caller that retains
+        /// its backing list must not mutate it after construction. Rejected at construction
+        /// and on <c>init</c> when <c>null</c>.
+        /// </summary>
+        public IReadOnlyList<Party> ActingParties
+        {
+            get => _actingParties;
+            init => _actingParties = EventCollections.Borrow(value, nameof(ActingParties));
+        }
+
+        /// <summary>
+        /// Parties notified of this event. Held on the same terms as
+        /// <see cref="ActingParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+
+        /// <summary>
+        /// The events this exercise directly caused — its sub-creates and sub-exercises — in
+        /// transaction order. Held on the same terms as <see cref="ActingParties"/>.
+        /// </summary>
+        public IReadOnlyList<TreeEvent> ChildEvents
+        {
+            get => _childEvents;
+            init => _childEvents = EventCollections.Borrow(value, nameof(ChildEvents));
+        }
+    }
 }

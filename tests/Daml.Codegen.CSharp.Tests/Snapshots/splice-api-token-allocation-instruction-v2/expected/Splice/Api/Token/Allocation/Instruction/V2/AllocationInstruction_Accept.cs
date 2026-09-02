@@ -14,7 +14,10 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationInstruction_Accept
 /// </summary>
-public sealed record AllocationInstruction_Accept([property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs) : IDamlRecord
+public sealed record AllocationInstruction_Accept(
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs
+) : IDamlRecord<AllocationInstruction_Accept>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

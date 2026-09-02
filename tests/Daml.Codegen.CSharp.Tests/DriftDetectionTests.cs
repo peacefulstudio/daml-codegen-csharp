@@ -1,10 +1,12 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.Intermediate;
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -27,9 +29,30 @@ namespace Daml.Codegen.CSharp.Tests;
 /// <c>emits-no-types</c> marker file in its snapshot directory. Such a snapshot
 /// asserts that codegen produces zero <c>.cs</c> output; the day the package
 /// starts emitting a type, the drift test fails so the change is not missed.
+///
+/// Each snapshot is also handed to Roslyn before its bytes are compared, so a
+/// tree cannot be pinned — or re-blessed — containing C# that does not compile.
+/// Byte equality alone only proves the emitter is deterministic; emitted files
+/// are exempt from this repository's code-analysis analyzers, so nothing else
+/// puts a compiler in front of them.
 /// </summary>
 public class DriftDetectionTests
 {
+    /// <summary>
+    /// Snapshots whose emitted C# is known not to compile, mapped to the emitter defect
+    /// that keeps them there. Each entry is asserted to still fail, so it cannot outlive
+    /// its fix: the day the emitter stops producing the defect, this test goes red until
+    /// the snapshot is removed from the list and joins the gate.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> SnapshotsWithKnownEmitterCompileDefects =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["cross-module-collision"] =
+                "two modules of one package each declare a choice named Retag, and the emitter writes both "
+                + "of their `RetagResult` created-contract projections into the same C# namespace as "
+                + "duplicate top-level records (CS0101, CS8863, CS0111, CS1739, CS0121)",
+        };
+
     /// <summary>
     /// Enumerates every sub-directory under <c>Snapshots/</c> that has an
     /// <c>intermediate.binpb</c> proto snapshot, yielding the directory name
@@ -42,8 +65,17 @@ public class DriftDetectionTests
     /// </summary>
     public static TheoryData<string> SnapshotNames()
     {
-        var snapshotsRoot = Path.Combine(AppContext.BaseDirectory, "Snapshots");
         var data = new TheoryData<string>();
+        foreach (var name in DiscoveredSnapshotNames())
+        {
+            data.Add(name);
+        }
+        return data;
+    }
+
+    private static IReadOnlyList<string> DiscoveredSnapshotNames()
+    {
+        var snapshotsRoot = Path.Combine(AppContext.BaseDirectory, "Snapshots");
 
         if (!Directory.Exists(snapshotsRoot))
             throw new DirectoryNotFoundException(
@@ -51,20 +83,27 @@ public class DriftDetectionTests
                 "Ensure the Snapshots/ directory is present in the test output; " +
                 "check that snapshot fixture content is copied to the output directory in the .csproj.");
 
-        foreach (var dir in Directory.EnumerateDirectories(snapshotsRoot)
-                     .Where(d => File.Exists(Path.Combine(d, "intermediate.binpb")))
-                     .OrderBy(d => Path.GetFileName(d), StringComparer.Ordinal))
-        {
-            data.Add(Path.GetFileName(dir)!);
-        }
+        var names = Directory.EnumerateDirectories(snapshotsRoot)
+            .Where(d => File.Exists(Path.Combine(d, "intermediate.binpb")))
+            .Select(d => Path.GetFileName(d)!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
 
-        if (data.Count == 0)
+        if (names.Count == 0)
             throw new InvalidOperationException(
                 $"No snapshot directories with an intermediate.binpb proto snapshot were found under '{snapshotsRoot}'. " +
                 "The expected/ sub-directory is validated later for each discovered snapshot. " +
                 "A zero-case theory would silently skip drift detection.");
 
-        return data;
+        return names;
+    }
+
+    [Fact]
+    public void SnapshotsWithKnownEmitterCompileDefects_names_only_snapshots_that_exist()
+    {
+        SnapshotsWithKnownEmitterCompileDefects.Keys.Should().BeSubsetOf(
+            DiscoveredSnapshotNames(),
+            "an entry naming a snapshot that no longer exists exempts nothing and hides that the list is stale");
     }
 
     [Theory]
@@ -82,7 +121,7 @@ public class DriftDetectionTests
             "the snapshot fixtures directory must ship alongside the test assembly at {0}",
             expectedDir);
 
-        var generator = new CSharpCodeGenerator(new CodeGenOptions(), new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(new CodeGenOptions());
 
         IntermediateDar proto;
         await using (var stream = File.OpenRead(protoPath))
@@ -92,20 +131,14 @@ public class DriftDetectionTests
         var dar = IntermediateDarReader.Read(proto);
         var allGenerated = generator.Generate(dar);
 
-        allGenerated.Should().ContainSingle(
-            f => f.RelativePath.EndsWith(".daml-langversion", StringComparison.Ordinal),
-            "the codegen always emits the LangVersion state file");
-
         var actualFiles = allGenerated
-            .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
-                     || f.RelativePath.EndsWith(".daml-langversion", StringComparison.Ordinal))
+            .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal))
             .Select(f => new { f.RelativePath, f.Content })
             .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
             .ToList();
 
         var expectedFiles = Directory.EnumerateFiles(expectedDir, "*", SearchOption.AllDirectories)
-            .Where(p => p.EndsWith(".cs", StringComparison.Ordinal)
-                     || p.EndsWith(".daml-langversion", StringComparison.Ordinal))
+            .Where(p => p.EndsWith(".cs", StringComparison.Ordinal))
             .Select(absPath => new
             {
                 RelativePath = Path.GetRelativePath(expectedDir, absPath).Replace('\\', '/'),
@@ -141,6 +174,40 @@ public class DriftDetectionTests
                 "codegen must emit at least one .cs file from the proto snapshot; zero .cs output indicates a regression in IntermediateDarReader.Read or Generate.");
         }
 
+        var compileInput = MainAndNonStdlibDependencySources(generator, dar, allGenerated);
+
+        if (!pinnedEmpty)
+        {
+            compileInput.Should().NotBeEmpty(
+                "compiling an empty file set asserts nothing; this snapshot is not pinned as emitting no types, so its emitted sources must reach Roslyn");
+        }
+
+        var compileErrors = EmittedCodeCompilesTestHelpers.CompileEmittedFiles(compileInput)
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .OrderBy(d => d.Location.GetLineSpan().Path, StringComparer.Ordinal)
+            .ThenBy(d => d.Location.GetLineSpan().StartLinePosition.Line)
+            .ThenBy(d => d.Location.GetLineSpan().StartLinePosition.Character)
+            .ThenBy(d => d.Id, StringComparer.Ordinal)
+            .ToList();
+
+        if (SnapshotsWithKnownEmitterCompileDefects.TryGetValue(snapshotName, out var knownDefect))
+        {
+            compileErrors.Should().NotBeEmpty(
+                "snapshot `{0}` is listed in SnapshotsWithKnownEmitterCompileDefects because {1}; its emitted C# now " +
+                "compiles, so delete that entry and let the compile gate protect this snapshot from here on",
+                snapshotName,
+                knownDefect);
+        }
+        else if (compileErrors.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"Snapshot `{snapshotName}` emits C# that does not compile: " +
+                $"{compileErrors.Count} error-severity diagnostic(s) from {compileInput.Count} emitted file(s) " +
+                "(the snapshot's own output plus its non-stdlib dependencies, so the compilation is self-contained).\n\n" +
+                string.Join("\n", compileErrors.Select(RenderDiagnostic)) +
+                "\n\nFix the emitter — do not hand-edit or re-bless the snapshot around a compile error.");
+        }
+
         actualFiles.Select(f => f.RelativePath).Should().Equal(
             expectedFiles.Select(f => f.RelativePath),
             because: "the set of generated files must match the snapshot. " + refreshHint);
@@ -159,5 +226,32 @@ public class DriftDetectionTests
                     $"{diff}\n{refreshHint}");
             }
         }
+    }
+
+    private static IReadOnlyList<GeneratedFile> MainAndNonStdlibDependencySources(
+        CSharpCodeGenerator generator,
+        DarModel dar,
+        IReadOnlyList<GeneratedFile> mainGenerated)
+    {
+        var dependencySources = dar.Dependencies
+            .Where(dep => !StdlibPackages.IsStdlibPackage(dep.Name)
+                          && !StdlibPackages.IsPlaceholderPackageName(dep.Name))
+            .SelectMany(dep => generator.Generate(
+                new DarModel { MainPackage = dep, Dependencies = dar.Dependencies }));
+
+        return mainGenerated
+            .Concat(dependencySources)
+            .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal))
+            .DistinctBy(f => f.RelativePath, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static string RenderDiagnostic(Diagnostic diagnostic)
+    {
+        var span = diagnostic.Location.GetLineSpan();
+        var origin = string.IsNullOrEmpty(span.Path)
+            ? "(no source location)"
+            : $"{span.Path}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1})";
+        return $"  {origin}: {diagnostic.Id}: {diagnostic.GetMessage(CultureInfo.InvariantCulture)}";
     }
 }

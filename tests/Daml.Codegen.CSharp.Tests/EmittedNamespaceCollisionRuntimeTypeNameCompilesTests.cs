@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -21,8 +22,8 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         // whose tail segment is `Party` (real DAR: canton-party-replication-alpha),
         // that namespace shadows the type and Roslyn reports CS0118. Every emitted
         // Party TYPE site must be global::-qualified. This exercises the field type,
-        // the contract-key type + IHasKey<> argument, the choice actAs/controller
-        // params, the signatory-derived CreateAsync, and the Observers(payload) helper.
+        // the contract-key type, the choice actAs/controller params, the
+        // signatory-derived CreateAsync, and the Observers(payload) helper.
         var module = new DamlModule
         {
             Name = "Replication",
@@ -31,12 +32,6 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Int64)),
-                    ],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party),
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
                     Observers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
@@ -94,7 +89,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .Party must global::-qualify the runtime Party type, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -108,7 +103,6 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -151,7 +145,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .ITemplate must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -199,7 +193,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .IDamlRecord must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -250,7 +244,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .IDamlValue must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -264,11 +258,6 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                    ],
                     Signatories = DamlPartyAnalysis.Static(
                     [
                         new DamlPartyPayloadField("issuer"),
@@ -325,7 +314,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .SubmitterInfo must global::-qualify the runtime SubmitterInfo type in parameter and constructor positions, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -339,7 +328,6 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -382,7 +370,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .Identifier must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -433,6 +421,6 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .DamlParty must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

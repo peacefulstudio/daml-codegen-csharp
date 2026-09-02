@@ -4,7 +4,7 @@ rem SPDX-License-Identifier: Apache-2.0
 setlocal enableextensions enabledelayedexpansion
 
 set "BUNDLE_ROOT=%~dp0"
-set "HELPER_JAR=%BUNDLE_ROOT%bin\daml-codegen-jvm-helper.jar"
+set "HELPER_JAR=%BUNDLE_ROOT%bin\daml-dar-to-proto.jar"
 set "EMITTER=%BUNDLE_ROOT%bin\Daml.Codegen.CSharp.Cli.exe"
 
 set "DAR="

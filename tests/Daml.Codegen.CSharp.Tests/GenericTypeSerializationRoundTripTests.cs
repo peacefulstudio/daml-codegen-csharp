@@ -1,9 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
@@ -14,14 +15,18 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Runtime proof that generic records and variants round-trip through the
-/// emitted converter-delegate serialization surface. The conformance corpus has
-/// no user-defined generic types, so this compiles a synthetic package containing
-/// a generic record, a generic variant, and a non-generic record that embeds both
-/// instantiated over <see cref="Party"/>, Roslyn-compiles it in memory, then
-/// reflection-invokes the emitted <c>ToRecord</c>/<c>FromRecord</c>/<c>ToVariant</c>/
-/// <c>FromVariant</c> with real converters and asserts a serialize-then-deserialize
-/// round trip preserves the object graph — including the embedding record whose
-/// fields previously deserialized to a <c>TODO</c> stub.
+/// emitted converter-delegate serialization surface, driven straight from the
+/// emitter's model rather than from a compiled DAR: this compiles a synthetic
+/// package containing a generic record, a generic variant, and a non-generic
+/// record that embeds both instantiated over <see cref="Party"/>,
+/// Roslyn-compiles it in memory, then reflection-invokes the emitted
+/// <c>ToRecord</c>/<c>FromRecord</c>/<c>ToVariant</c>/<c>FromVariant</c> with
+/// real converters and asserts a serialize-then-deserialize round trip
+/// preserves the object graph — including the embedding record whose fields
+/// previously deserialized to a <c>TODO</c> stub. The conformance corpus covers
+/// the same shapes end to end through a real DAR (<c>Box</c>, <c>Slot</c>); the
+/// synthetic package is what lets a type-parameter regression fail here without
+/// waiting on a corpus rebuild.
 /// </summary>
 public class GenericTypeSerializationRoundTripTests
 {
@@ -91,7 +96,7 @@ public class GenericTypeSerializationRoundTripTests
             UseRecordTypes = true,
             UsePrimaryConstructors = true,
         };
-        var files = new CSharpCodeGenerator(options, new ConsoleLogger(0))
+        var files = new CSharpCodeGenerator(options)
             .Generate(new DarModel { MainPackage = package, Dependencies = [] });
 
         return EmitAssembly(files);
@@ -133,7 +138,7 @@ public class GenericTypeSerializationRoundTripTests
                 "\n",
                 emit.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
-                    .Select(d => d.GetMessage() + " @ " + d.Location)));
+                    .Select(d => d.GetMessage(CultureInfo.InvariantCulture) + " @ " + d.Location)));
 
         stream.Seek(0, SeekOrigin.Begin);
         return Assembly.Load(stream.ToArray());
@@ -148,7 +153,7 @@ public class GenericTypeSerializationRoundTripTests
     private static readonly Func<DamlValue, Party> PartyFromValue = v => Party.FromDamlValue(v.As<DamlParty>());
 
     [Fact]
-    public void generic_record_round_trips_through_its_converter_delegates()
+    public void GenericTypeSerializationRoundTrip_generic_record_round_trips_through_its_converter_delegates()
     {
         var boxOfParty = EmittedType("Box`1").MakeGenericType(typeof(Party));
         var box = Activator.CreateInstance(boxOfParty, new Party("alice"))!;
@@ -161,7 +166,7 @@ public class GenericTypeSerializationRoundTripTests
     }
 
     [Fact]
-    public void generic_variant_round_trips_through_its_converter_delegates()
+    public void GenericTypeSerializationRoundTrip_generic_variant_round_trips_through_its_converter_delegates()
     {
         var wrapperOfParty = EmittedType("Wrapper`1").MakeGenericType(typeof(Party));
         var fromVariant = wrapperOfParty.GetMethod("FromVariant", BindingFlags.Public | BindingFlags.Static)!;
@@ -176,7 +181,7 @@ public class GenericTypeSerializationRoundTripTests
     }
 
     [Fact]
-    public void record_embedding_instantiated_generics_round_trips_without_a_stub()
+    public void GenericTypeSerializationRoundTrip_record_embedding_instantiated_generics_round_trips_without_a_stub()
     {
         var boxOfParty = EmittedType("Box`1").MakeGenericType(typeof(Party));
         var wrapperOfParty = EmittedType("Wrapper`1").MakeGenericType(typeof(Party));
@@ -195,7 +200,7 @@ public class GenericTypeSerializationRoundTripTests
     }
 
     [Fact]
-    public void nullary_variant_constructor_round_trips_through_the_converter_delegate()
+    public void GenericTypeSerializationRoundTrip_nullary_variant_constructor_round_trips_through_the_converter_delegate()
     {
         var wrapperOfParty = EmittedType("Wrapper`1").MakeGenericType(typeof(Party));
         var fromVariant = wrapperOfParty.GetMethod("FromVariant", BindingFlags.Public | BindingFlags.Static)!;

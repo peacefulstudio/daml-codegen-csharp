@@ -32,18 +32,22 @@ internal static class RuntimeTypeNames
     public const string DamlContractId = nameof(Daml.Runtime.Contracts.DamlContractId);
     public const string ContractId = nameof(Daml.Runtime.Contracts.ContractId);
     public const string ITemplate = nameof(Daml.Runtime.Contracts.ITemplate);
-    public const string IHasKey = nameof(Daml.Runtime.Contracts.IHasKey<object>);
+    public const string IHasKey = nameof(Daml.Runtime.Contracts.IHasKey<,>);
     public const string IUpgradeable = nameof(Daml.Runtime.Contracts.IUpgradeable);
     public const string TransactionResult = nameof(Daml.Runtime.Contracts.TransactionResult);
     public const string CreatedContract = nameof(Daml.Runtime.Contracts.CreatedContract);
     public const string IDamlInterface = nameof(Daml.Runtime.Contracts.IDamlInterface);
     public const string IHasView = nameof(Daml.Runtime.Contracts.IHasView<object>);
+    public const string ViewDescriptor = nameof(Daml.Runtime.Contracts.ViewDescriptor<,>);
+    public const string KeyDescriptor = nameof(Daml.Runtime.Contracts.KeyDescriptor<,>);
+    public const string ContractKey = nameof(Daml.Runtime.Contracts.ContractKey<>);
     public const string CreatedEvent = nameof(Daml.Runtime.Contracts.CreatedEvent);
     public const string DamlTypeDescriptor = nameof(Daml.Runtime.Contracts.DamlTypeDescriptor);
     public const string DamlTypeKind = nameof(Daml.Runtime.Contracts.DamlTypeKind);
 
     public const string SubmitterInfo = nameof(Daml.Runtime.Commands.SubmitterInfo);
     public const string ExerciseCommand = nameof(Daml.Runtime.Commands.ExerciseCommand);
+    public const string ExerciseByKeyCommand = nameof(Daml.Runtime.Commands.ExerciseByKeyCommand);
     public const string CommandsSubmission = nameof(Daml.Runtime.Commands.CommandsSubmission);
     public const string WorkflowId = nameof(Daml.Runtime.Commands.WorkflowId);
     public const string CommandId = nameof(Daml.Runtime.Commands.CommandId);
@@ -61,12 +65,13 @@ internal static class RuntimeTypeNames
     public const string DayOfWeek = nameof(Daml.Runtime.Stdlib.DayOfWeek);
     public const string Unit = nameof(Daml.Runtime.Stdlib.Unit);
     public const string GenericStub = nameof(Daml.Runtime.Stdlib.GenericStub);
+    public const string Optional = nameof(Daml.Runtime.Stdlib.Optional<object>);
 
-    // These stay string literals rather than nameof(...) because each
-    // constrains a type parameter to a runtime interface (ITemplate or
-    // IDamlInterface) whose static-abstract members make it unusable as a
-    // nameof type argument (CS8920), and no concrete implementation is visible
-    // to the codegen project.
+    /// <remarks>
+    /// These stay string literals rather than <c>nameof</c>. Each constrains a type parameter to
+    /// a runtime interface whose static abstract members make it unusable as a <c>nameof</c> type
+    /// argument (CS8920), and no concrete implementation is visible from the codegen project.
+    /// </remarks>
     public const string Contract = "Contract";
     public const string IContract = "IContract";
     public const string Choice = "Choice";

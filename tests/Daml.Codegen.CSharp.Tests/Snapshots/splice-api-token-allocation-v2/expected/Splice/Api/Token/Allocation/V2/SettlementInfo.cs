@@ -15,7 +15,12 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record SettlementInfo
 /// </summary>
-public sealed record SettlementInfo([property: DamlFieldAttribute("executors")] IReadOnlyList<Party> Executors, [property: DamlFieldAttribute("id")] string Id, [property: DamlFieldAttribute("cid")] ContractId<Splice.Api.Token.Metadata.V1.IAnyContract>? Cid, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record SettlementInfo(
+    [property: DamlFieldAttribute("executors")] IReadOnlyList<Party> Executors,
+    [property: DamlFieldAttribute("id")] string Id,
+    [property: DamlFieldAttribute("cid")] ContractId<Splice.Api.Token.Metadata.V1.IAnyContract>? Cid,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<SettlementInfo>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

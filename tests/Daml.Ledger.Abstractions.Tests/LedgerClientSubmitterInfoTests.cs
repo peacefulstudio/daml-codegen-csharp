@@ -16,10 +16,10 @@ namespace Daml.Ledger.Abstractions.Tests;
 
 /// <summary>
 /// Verifies the authorization routing of <see cref="ILedgerClient"/>: the
-/// <see cref="SubmitterInfo"/> overloads are the primitives implementations override,
-/// the <c>Party</c> <c>actAs</c> convenience overloads forward to them with a single
-/// act-as party and no read-as parties, and multi-party / read-as submissions carry
-/// every party through to the primitive instead of throwing.
+/// <see cref="SubmitterInfo"/> members are the primitives implementations override,
+/// a lone <c>Party</c> argument converts to a submitter carrying that one act-as party
+/// and no read-as parties, and multi-party / read-as submissions carry every party
+/// through to the primitive instead of throwing.
 /// </summary>
 public class LedgerClientSubmitterInfoTests
 {
@@ -61,7 +61,7 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task TryCreateAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
+    public async Task TryCreateAsync_Party_argument_converts_to_a_submitter_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
@@ -85,7 +85,7 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task SubscribeAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
+    public async Task SubscribeAsync_Party_argument_converts_to_a_submitter_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
@@ -99,7 +99,7 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task SubscribeActiveAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
+    public async Task SubscribeActiveAsync_Party_argument_converts_to_a_submitter_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
@@ -239,37 +239,37 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task TryExerciseAsync_Party_actAs_forwards_timeout_to_the_SubmitterInfo_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await client.TryExerciseAsync<int>(SampleCommand, new Party("alice"), timeout: TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
-
-        fake.LastExerciseTimeout.Should().Be(TimeSpan.FromSeconds(5));
-    }
-
-    [Fact]
-    public async Task TryExerciseAsync_Party_actAs_defaults_timeout_to_null_at_the_primitive()
+    public async Task TryExerciseAsync_Party_argument_converts_to_a_submitter_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
         await client.TryExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastExerciseSubmitter.Should().NotBeNull();
-        fake.LastExerciseTimeout.Should().BeNull();
+        fake.LastExerciseSubmitter!.Value.ActAs.Select(p => p.Id).Should().Equal("alice");
+        fake.LastExerciseSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task TryCreateAsync_Party_actAs_forwards_timeout_to_the_SubmitterInfo_primitive()
+    public async Task ExerciseAsync_with_result_Party_actAs_forwards_commandId_to_the_SubmitterInfo_primitive()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
 
-        await client.TryCreateAsync(new FakeTemplate(), new Party("alice"), timeout: TimeSpan.FromSeconds(7), cancellationToken: TestContext.Current.CancellationToken);
+        await client.ExerciseAsync<int>(SampleCommand, new Party("alice"), commandId: new CommandId("caller-supplied"), cancellationToken: TestContext.Current.CancellationToken);
 
-        fake.LastCreateTimeout.Should().Be(TimeSpan.FromSeconds(7));
+        fake.LastExerciseCommandId.Should().Be(new CommandId("caller-supplied"));
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_with_result_SubmitterInfo_forwards_commandId_to_the_primitive()
+    {
+        var fake = new RecordingLedgerClient();
+        ILedgerClient client = fake;
+
+        await client.ExerciseAsync<int>(SampleCommand, MultiParty, commandId: new CommandId("caller-supplied"), cancellationToken: TestContext.Current.CancellationToken);
+
+        fake.LastExerciseCommandId.Should().Be(new CommandId("caller-supplied"));
     }
 
     [Fact]
@@ -319,34 +319,6 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task SubscribeAsync_Party_actAs_forwards_fromOffset_and_toOffset_to_the_SubmitterInfo_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(new Party("alice"), fromOffset: LedgerOffset.At(10), toOffset: LedgerOffset.At(42), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeFromOffset.Should().Be(LedgerOffset.At(10));
-        fake.LastSubscribeToOffset.Should().Be(LedgerOffset.At(42));
-    }
-
-    [Fact]
-    public async Task SubscribeAsync_Party_actAs_defaults_toOffset_to_null_at_the_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeSubmitter.Should().NotBeNull();
-        fake.LastSubscribeToOffset.Should().BeNull();
-    }
-
-    [Fact]
     public async Task SubscribeAsync_accepts_a_StakeholderResume_and_forwards_its_offset_to_the_SubmitterInfo_primitive()
     {
         var fake = new RecordingLedgerClient();
@@ -362,7 +334,7 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task SubscribeAsync_Party_actAs_StakeholderResume_overload_forwards_the_ticket_offset_to_the_SubmitterInfo_primitive()
+    public async Task SubscribeAsync_Party_argument_converts_and_the_StakeholderResume_ticket_offset_reaches_the_primitive()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
@@ -377,34 +349,7 @@ public class LedgerClientSubmitterInfoTests
     }
 
     [Fact]
-    public async Task SubscribeActiveAsync_Party_actAs_forwards_activeAtOffset_to_the_SubmitterInfo_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(new Party("alice"), activeAtOffset: LedgerOffset.At(33), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeActiveAtOffset.Should().Be(LedgerOffset.At(33));
-    }
-
-    [Fact]
-    public async Task SubscribeActiveAsync_Party_actAs_defaults_activeAtOffset_to_null_at_the_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeActiveAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeActiveSubmitter.Should().NotBeNull();
-        fake.LastSubscribeActiveAtOffset.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task SubscribeLedgerEffectsAsync_Party_actAs_forwards_to_SubmitterInfo_primitive_with_single_actAs_no_readAs()
+    public async Task SubscribeLedgerEffectsAsync_Party_argument_converts_to_a_submitter_with_single_actAs_no_readAs()
     {
         var fake = new RecordingLedgerClient();
         ILedgerClient client = fake;
@@ -445,44 +390,18 @@ public class LedgerClientSubmitterInfoTests
         fake.LastSubscribeLedgerEffectsSubmitter!.Value.ReadAs.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task SubscribeLedgerEffectsAsync_Party_actAs_forwards_fromOffset_and_toOffset_to_the_SubmitterInfo_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(new Party("alice"), fromOffset: LedgerOffset.At(10), toOffset: LedgerOffset.At(42), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeLedgerEffectsFromOffset.Should().Be(LedgerOffset.At(10));
-        fake.LastSubscribeLedgerEffectsToOffset.Should().Be(LedgerOffset.At(42));
-    }
-
-    [Fact]
-    public async Task SubscribeLedgerEffectsAsync_Party_actAs_defaults_toOffset_to_null_at_the_primitive()
-    {
-        var fake = new RecordingLedgerClient();
-        ILedgerClient client = fake;
-
-        await foreach (var _ in client.SubscribeLedgerEffectsAsync<FakeTemplate>(new Party("alice"), cancellationToken: TestContext.Current.CancellationToken))
-        {
-        }
-
-        fake.LastSubscribeLedgerEffectsSubmitter.Should().NotBeNull();
-        fake.LastSubscribeLedgerEffectsToOffset.Should().BeNull();
-    }
-
     /// <summary>
-    /// Records the <see cref="SubmitterInfo"/>, <c>timeout</c>, and offset bounds each
-    /// primitive receives so tests can assert that the <c>Party</c>-<c>actAs</c>
-    /// convenience overloads forward every parameter to the primitive — the right
-    /// single party, read-as / multi-party submissions carrying every party through,
-    /// and the per-call <c>timeout</c> / <c>fromOffset</c> / <c>toOffset</c> /
-    /// <c>activeAtOffset</c> values (or their <c>null</c> defaults).
+    /// Records what each primitive receives, limited to the values something other than
+    /// the caller decides: the <see cref="SubmitterInfo"/> a <c>Party</c> argument or a
+    /// multi-party set resolves to, the <c>timeout</c> and <c>commandId</c> the throwing
+    /// and create-by-exercise extensions compute, and the <c>fromOffset</c> a
+    /// <see cref="StakeholderResume"/> ticket resolves to on the default interface member.
     /// </summary>
     private class RecordingLedgerClient : ILedgerClient
     {
+        private static readonly TransactionResult SampleTransaction = new(
+            "update-id", LedgerOffset.Begin, [], [], new CommandId("cmd-id"));
+
         public SubmitterInfo? LastExerciseSubmitter { get; private set; }
         public SubmitterInfo? LastCreateSubmitter { get; private set; }
         public SubmitterInfo? LastTransactionSubmitter { get; private set; }
@@ -490,23 +409,21 @@ public class LedgerClientSubmitterInfoTests
         public SubmitterInfo? LastSubscribeActiveSubmitter { get; private set; }
         public SubmitterInfo? LastSubscribeLedgerEffectsSubmitter { get; private set; }
         public TimeSpan? LastExerciseTimeout { get; private set; }
-        public TimeSpan? LastCreateTimeout { get; private set; }
         public TimeSpan? LastTransactionTimeout { get; private set; }
+        public CommandId? LastExerciseCommandId { get; private set; }
         public LedgerOffset? LastSubscribeFromOffset { get; private set; }
-        public LedgerOffset? LastSubscribeToOffset { get; private set; }
-        public LedgerOffset? LastSubscribeActiveAtOffset { get; private set; }
-        public LedgerOffset? LastSubscribeLedgerEffectsFromOffset { get; private set; }
-        public LedgerOffset? LastSubscribeLedgerEffectsToOffset { get; private set; }
 
         public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
             SubmitterInfo submitter,
             string? workflowId = null,
+            CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
             LastExerciseSubmitter = submitter;
             LastExerciseTimeout = timeout;
+            LastExerciseCommandId = commandId;
             return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
 
@@ -530,19 +447,19 @@ public class LedgerClientSubmitterInfoTests
                 new HashSet<Party>(actAs), readAs.Count > 0 ? new HashSet<Party>(readAs) : null);
             LastTransactionTimeout = timeout;
             return Task.FromResult<ExerciseOutcome<TransactionResult>>(
-                new ExerciseOutcome<TransactionResult>.None());
+                new ExerciseOutcome<TransactionResult>.One(SampleTransaction));
         }
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
             SubmitterInfo submitter,
             string? workflowId = null,
+            CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
         {
             LastCreateSubmitter = submitter;
-            LastCreateTimeout = timeout;
             return Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(
                 new ExerciseOutcome<ContractId<TTemplate>>.None());
         }
@@ -552,11 +469,10 @@ public class LedgerClientSubmitterInfoTests
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeSubmitter = submitter;
             LastSubscribeFromOffset = fromOffset;
-            LastSubscribeToOffset = toOffset;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
@@ -565,11 +481,9 @@ public class LedgerClientSubmitterInfoTests
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeLedgerEffectsSubmitter = submitter;
-            LastSubscribeLedgerEffectsFromOffset = fromOffset;
-            LastSubscribeLedgerEffectsToOffset = toOffset;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
@@ -577,10 +491,9 @@ public class LedgerClientSubmitterInfoTests
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeActiveSubmitter = submitter;
-            LastSubscribeActiveAtOffset = activeAtOffset;
             return EmptyAsync<AcsSnapshotEntry<T>>(cancellationToken);
         }
 
@@ -588,6 +501,35 @@ public class LedgerClientSubmitterInfoTests
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(LedgerOffset.Begin);
+
+        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? fromOffset = null,
+            LedgerOffset? toOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView> =>
+            throw new NotSupportedException();
+
+        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? fromOffset = null,
+            LedgerOffset? toOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView> =>
+            throw new NotSupportedException();
+
+        public IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? activeAtOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView> =>
+            throw new NotSupportedException();
 
         public void Dispose()
         {
@@ -607,7 +549,7 @@ public class LedgerClientSubmitterInfoTests
     /// the assertions here are about which submitter reaches the primitive,
     /// not about template encoding.
     /// </summary>
-    private sealed record FakeTemplate : ITemplate
+    private sealed record FakeTemplate : ITemplate, IDamlRecord<FakeTemplate>
     {
         public static Identifier TemplateId { get; } =
             new("pkg", "Module", "FakeTemplate");
@@ -618,5 +560,7 @@ public class LedgerClientSubmitterInfoTests
         public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
         public DamlRecord ToRecord() => new(TemplateId, []);
+
+        public static FakeTemplate FromRecord(DamlRecord record) => new();
     }
 }

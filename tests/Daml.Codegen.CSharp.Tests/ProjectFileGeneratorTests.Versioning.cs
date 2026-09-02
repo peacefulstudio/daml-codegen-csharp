@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 

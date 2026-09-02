@@ -115,6 +115,19 @@ public class PartyJsonTests
     }
 
     [Fact]
+    public void Party_should_name_the_offending_value_when_the_id_is_whitespace()
+    {
+        var json = "{\"operator\":\"   \",\"marketId\":\"BTC-USD\"}";
+
+        var act = () => JsonSerializer.Deserialize<TemplatePayload>(json, CaseInsensitiveOptions);
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "*'   '*",
+            "echoing the rejected value is what makes a whitespace id diagnosable in a PQS row, and the "
+            + "sibling SynchronizerId converter has always done it");
+    }
+
+    [Fact]
     public void Party_should_deserialize_null_inside_nullable_wrapper()
     {
         var json = "{\"delegate\":null,\"note\":\"none\"}";

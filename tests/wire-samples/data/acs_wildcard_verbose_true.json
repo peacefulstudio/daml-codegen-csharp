@@ -1,0 +1,328 @@
+{
+ "damlType": "Active contract set, all templates visible to the capture party",
+ "capturedBy": "POST /v2/state/active-contracts, verbose=True, activeAtOffset=6062",
+ "note": "Paired with its verbose counterpart so the reader can be checked against both.",
+ "response": [
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6042,
+      "nodeId": 0,
+      "contractId": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Marker",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:01.467878Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMImQ0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6045,
+      "nodeId": 0,
+      "contractId": "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Asset",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "issuer": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "amount": "10.0000000000"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:01.895701Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMImg0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6048,
+      "nodeId": 0,
+      "contractId": "00f7f5461eca4cc8707b5e263aa771b2a1d40284b3baaca1e1f39461156fd83411ca121220d2dd2f2edf4cedfa68b26f4aac381d68f58defaaffc7a66c3f65a27902b5d724",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Asset",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "issuer": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "amount": "20.5000000000"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:02.245698Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMImw0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6051,
+      "nodeId": 0,
+      "contractId": "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Asset",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "issuer": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "amount": "0.0000000001"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:02.598713Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMInA0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6054,
+      "nodeId": 0,
+      "contractId": "000e9d5ee703268a949c5801b054d547965fccde02a5836c235e2701bb148e1e54ca12122079f4bec1a4103c7476241b5b9348007040e29a29c060ae3dead008fa2563eac7",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Keyed",
+      "contractKey": {
+       "_1": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "_2": "alpha"
+      },
+      "contractKeyHash": "6CgQL9eNNqIjS5cB6/kK1IsqdxjcgXl/3kxSiUEkiBA=",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "label": "alpha"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:02.981209Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMInQ0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6057,
+      "nodeId": 0,
+      "contractId": "00f9c54b4cf1ac0609a616f88cbeb9a58bf38b08977edaa81c1136b96f552d118eca121220ea362ddb26f079d3438340bbe63d976a4774b3be09cc5b5c883e74c08fe8e1da",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "count": "42",
+       "amount": "42.5000000000",
+       "label": "hello",
+       "active": true,
+       "asOf": "2026-07-31",
+       "observedAt": "2026-07-31T12:34:56.123456Z",
+       "note": "present",
+       "nestedNote": [
+        [
+         "deep"
+        ]
+       ],
+       "tags": [
+        "x",
+        "y"
+       ],
+       "attributes": {
+        "a": "1",
+        "b": "2"
+       },
+       "genMap": [
+        [
+         "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+         "7"
+        ]
+       ],
+       "unitField": {},
+       "marker": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+       "holdingCid": "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+       "holdingCids": [
+        "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+        "00f7f5461eca4cc8707b5e263aa771b2a1d40284b3baaca1e1f39461156fd83411ca121220d2dd2f2edf4cedfa68b26f4aac381d68f58defaaffc7a66c3f65a27902b5d724",
+        "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923"
+       ],
+       "profile": {
+        "nickname": "nick",
+        "level": "3"
+       },
+       "outcome": {
+        "tag": "Win",
+        "value": {
+         "prize": "1.25",
+         "tier": "gold"
+        }
+       },
+       "suit": "Hearts",
+       "fee": "1.25"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:03.335103Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMIng0SBDQg2lc="
+  },
+  {
+   "workflowId": "",
+   "contractEntry": {
+    "JsActiveContract": {
+     "createdEvent": {
+      "offset": 6060,
+      "nodeId": 0,
+      "contractId": "00d9da1d84476970e611d9111d5fb9f0e4f12be1653596f1a76ff896aad63eb598ca1212206d391292e808b44d71fd515f6faf4031994c273a6a39563177aca10a6ead92b6",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "count": "-1",
+       "amount": "42.5000000000",
+       "label": "",
+       "active": true,
+       "asOf": "2026-07-31",
+       "observedAt": "2026-07-31T12:34:56Z",
+       "note": null,
+       "nestedNote": [],
+       "tags": [],
+       "attributes": {},
+       "genMap": [],
+       "unitField": {},
+       "marker": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+       "holdingCid": "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+       "holdingCids": [
+        "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+        "00f7f5461eca4cc8707b5e263aa771b2a1d40284b3baaca1e1f39461156fd83411ca121220d2dd2f2edf4cedfa68b26f4aac381d68f58defaaffc7a66c3f65a27902b5d724",
+        "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923"
+       ],
+       "profile": {
+        "nickname": "nick",
+        "level": "3"
+       },
+       "outcome": {
+        "tag": "Pending",
+        "value": {}
+       },
+       "suit": "Clubs",
+       "fee": "1.25"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:03.691889Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     },
+     "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+     "reassignmentCounter": 0
+    }
+   },
+   "streamContinuationToken": "CgMInw0SBDQg2lc="
+  }
+ ]
+}

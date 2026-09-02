@@ -70,7 +70,7 @@ public sealed partial class CSharpCodeGenerator
         return headerSb.ToString();
     }
 
-    private void RequireCommonNamespaces(IndentWriter indent)
+    private static void RequireCommonNamespaces(IndentWriter indent)
     {
         indent.Require(RuntimeNamespaces.Data);
     }

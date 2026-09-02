@@ -8,7 +8,6 @@
     <RootNamespace>Daml.Codegen.CSharp.Cli</RootNamespace>
     <AssemblyName>Daml.Codegen.CSharp.Cli</AssemblyName>
     <RollForward>Major</RollForward>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 

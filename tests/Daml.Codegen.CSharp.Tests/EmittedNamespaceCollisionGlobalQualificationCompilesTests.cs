@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -24,7 +25,6 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("custodian", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -75,7 +75,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .ContractId must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .IReadOnlyList must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -141,7 +141,6 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices =
                     [
@@ -204,7 +203,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .Choice must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -218,7 +217,6 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices = [],
                 },
@@ -261,7 +259,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .IContract must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -275,7 +273,6 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                     Choices =
                     [
@@ -329,6 +326,6 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code whose namespace ends in .ExerciseOutcome must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

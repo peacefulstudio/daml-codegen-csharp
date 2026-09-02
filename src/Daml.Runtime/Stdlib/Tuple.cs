@@ -27,7 +27,17 @@ namespace Daml.Runtime.Stdlib;
 /// </remarks>
 /// <typeparam name="T1">Type of the first component.</typeparam>
 /// <typeparam name="T2">Type of the second component.</typeparam>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1000:Do not declare static members on generic types",
+    Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Tuple2<...>.FromRecord.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming",
+    "CA1707:Identifiers should not contain underscores",
+    Justification = "_1, _2 and _3 are the field names Daml-LF gives tuple components; renaming them would break the record round-trip the wire format is keyed on.")]
 public sealed record Tuple2<T1, T2>(T1 _1, T2 _2)
+    where T1 : notnull
+    where T2 : notnull
 {
     /// <summary>
     /// Converts this tuple to its Ledger API record representation. The supplied
@@ -71,7 +81,18 @@ public sealed record Tuple2<T1, T2>(T1 _1, T2 _2)
 /// <typeparam name="T1">Type of the first component.</typeparam>
 /// <typeparam name="T2">Type of the second component.</typeparam>
 /// <typeparam name="T3">Type of the third component.</typeparam>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1000:Do not declare static members on generic types",
+    Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Tuple3<...>.FromRecord.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming",
+    "CA1707:Identifiers should not contain underscores",
+    Justification = "_1, _2 and _3 are the field names Daml-LF gives tuple components; renaming them would break the record round-trip the wire format is keyed on.")]
 public sealed record Tuple3<T1, T2, T3>(T1 _1, T2 _2, T3 _3)
+    where T1 : notnull
+    where T2 : notnull
+    where T3 : notnull
 {
     /// <summary>
     /// Converts this tuple to its Ledger API record representation.

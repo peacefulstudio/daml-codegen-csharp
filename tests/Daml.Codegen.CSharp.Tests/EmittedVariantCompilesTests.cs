@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -52,7 +53,7 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a variant whose constructor name equals its own type name would be CS0542 unless disambiguated, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -66,7 +67,6 @@ public class EmittedVariantCompilesTests
                 new DamlTemplate
                 {
                     Name = "DsoRules",
-                    Fields = [new DamlFieldDefinition("dso", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -123,7 +123,7 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a variant constructor referencing a same-package nested choice-arg type must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -137,7 +137,6 @@ public class EmittedVariantCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -178,7 +177,7 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a variant constructor whose argument type is ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -228,7 +227,7 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a variant constructor whose payload is another variant must round-trip through that variant's ToVariant/FromVariant, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -289,7 +288,7 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a recursive variant whose payload is the same variant must round-trip via ToVariant/FromVariant, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -346,6 +345,6 @@ public class EmittedVariantCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a variant carrying a list of nested-variant payloads must round-trip via ToVariant/FromVariant, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Data;
 
@@ -26,6 +27,12 @@ namespace Daml.Runtime.Data;
 /// (<c>global_sync::abc::35-0</c>) refer to the <em>same</em> synchronizer but
 /// will not compare equal as raw strings. Code that needs to bridge the
 /// transition must handle the format-aware comparison itself.
+/// </para>
+/// <para>
+/// <c>default(SynchronizerId)</c> is never a valid representation of an absent id — it
+/// throws on any access to <see cref="Id"/>, as does the explicit conversion to
+/// <see cref="string"/>; project an optional wire field through <see cref="FromWire"/>,
+/// which returns <see langword="null"/> for an absent value.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(SynchronizerIdJsonConverter))]
@@ -56,6 +63,20 @@ public readonly record struct SynchronizerId
     /// <summary>Parses a wire-format id; explicit so arbitrary strings never silently become synchronizer ids.</summary>
     public static explicit operator SynchronizerId(string id) => new(id);
 
+    /// <summary>
+    /// Projects an optional wire field: <see langword="null"/> when
+    /// <paramref name="id"/> is null, empty, or whitespace; a constructed
+    /// <see cref="SynchronizerId"/> otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The supported projection for an optional wire field — it never produces a default
+    /// instance, so the absent case is observable as <see langword="null"/> rather than
+    /// as a value that throws on <see cref="Id"/>.
+    /// </remarks>
+    /// <param name="id">The optional wire value.</param>
+    public static SynchronizerId? FromWire(string? id) =>
+        string.IsNullOrWhiteSpace(id) ? null : new SynchronizerId(id);
+
     /// <remarks>
     /// Returns a sentinel — not a throw — for <c>default(SynchronizerId)</c>: logging
     /// frameworks may invoke <c>ToString</c> on a captured value during exception
@@ -70,56 +91,11 @@ public readonly record struct SynchronizerId
 /// and the JSON Ledger API, which encode synchronizer ids as raw strings
 /// (e.g. <c>"global_sync::1220abcd...::35-0"</c>).
 /// </summary>
-internal sealed class SynchronizerIdJsonConverter : JsonConverter<SynchronizerId>
+internal sealed class SynchronizerIdJsonConverter : OpaqueStringIdJsonConverter<SynchronizerId>
 {
-    // HandleNull=true so a bare `null` on a non-nullable SynchronizerId field surfaces
-    // as a JsonException here instead of silently producing a default(SynchronizerId)
-    // that later throws InvalidOperationException on .Id access. SynchronizerId? is
-    // unaffected — STJ short-circuits null for Nullable<T> before invoking the converter.
-    public override bool HandleNull => true;
+    /// <inheritdoc/>
+    protected override SynchronizerId Parse(string id) => new(id);
 
-    public override SynchronizerId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.String)
-        {
-            throw new JsonException($"Expected string token for SynchronizerId, got {reader.TokenType}.");
-        }
-
-        var id = reader.GetString();
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            throw new JsonException(id is null
-                ? "SynchronizerId id cannot be null."
-                : $"SynchronizerId id cannot be whitespace; got '{id}'.");
-        }
-
-        // Translate any ArgumentException the constructor might grow in the future
-        // into a JsonException, so callers catching serialization errors see the right type.
-        try
-        {
-            return new SynchronizerId(id);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new JsonException($"Invalid SynchronizerId '{id}'.", ex);
-        }
-    }
-
-    public override void Write(Utf8JsonWriter writer, SynchronizerId value, JsonSerializerOptions options)
-    {
-        // Mirror Read: translate the InvalidOperationException that SynchronizerId.Id
-        // throws for default(SynchronizerId) into a JsonException so callers can catch
-        // both directions of the round-trip uniformly.
-        string id;
-        try
-        {
-            id = value.Id;
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new JsonException("Cannot serialize an uninitialized SynchronizerId.", ex);
-        }
-
-        writer.WriteStringValue(id);
-    }
+    /// <inheritdoc/>
+    protected override string Format(SynchronizerId value) => value.Id;
 }

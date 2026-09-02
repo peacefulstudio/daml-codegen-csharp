@@ -14,7 +14,7 @@ public interface ILedgerReader
     /// <summary>Gets the current end of the participant's ledger.</summary>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
-    /// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(Daml.Runtime.Commands.ExerciseCommand, Daml.Runtime.Commands.SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
+    /// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(Daml.Runtime.Commands.ExerciseCommand, Daml.Runtime.Commands.SubmitterInfo, string?, Daml.Runtime.Commands.CommandId?, TimeSpan?, CancellationToken)"/>
     /// for the deadline contract.
     /// </param>
     /// <param name="cancellationToken">Cancels the call.</param>

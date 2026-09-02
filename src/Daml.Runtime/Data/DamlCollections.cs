@@ -29,6 +29,26 @@ public sealed record DamlOptional(DamlValue? Value) : DamlValue
 }
 
 /// <summary>
+/// One level of a Daml Optional chain nested two or more levels deep —
+/// <c>Optional (Optional a)</c> and beyond. Distinct from <see cref="DamlOptional"/> because
+/// the two carry different wire encodings for the same shape: a flat optional is JSON
+/// <c>null</c> or its bare value, while every level of a nested chain is the array form,
+/// <c>[]</c> when absent and <c>[v]</c> when present. A participant rejects the flat encoding
+/// in a nested position.
+/// </summary>
+/// <param name="Value">The carried value, or <see langword="null"/> when absent.</param>
+public sealed record DamlOptionalChain(DamlValue? Value) : DamlValue
+{
+    /// <summary>The absent level, mirroring Daml's <c>None</c>.</summary>
+    public static DamlOptionalChain None => new(default(DamlValue));
+
+    /// <summary>Wraps a value as a present level, mirroring Daml's <c>Some</c>.</summary>
+    /// <param name="value">The value to carry.</param>
+    /// <returns>A present level carrying <paramref name="value"/>.</returns>
+    public static DamlOptionalChain Some(DamlValue value) => new(value);
+}
+
+/// <summary>
 /// Represents a Daml List value.
 /// </summary>
 public sealed record DamlList : DamlValue

@@ -14,7 +14,13 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record SettlementFactory_SettleBatch
 /// </summary>
-public sealed record SettlementFactory_SettleBatch([property: DamlFieldAttribute("settlement")] SettlementInfo Settlement, [property: DamlFieldAttribute("transferLegs")] IReadOnlyList<TransferLeg> TransferLegs, [property: DamlFieldAttribute("allocations")] IReadOnlyList<FinalizedAllocation> Allocations, [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs) : IDamlRecord
+public sealed record SettlementFactory_SettleBatch(
+    [property: DamlFieldAttribute("settlement")] SettlementInfo Settlement,
+    [property: DamlFieldAttribute("transferLegs")] IReadOnlyList<TransferLeg> TransferLegs,
+    [property: DamlFieldAttribute("allocations")] IReadOnlyList<FinalizedAllocation> Allocations,
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs
+) : IDamlRecord<SettlementFactory_SettleBatch>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

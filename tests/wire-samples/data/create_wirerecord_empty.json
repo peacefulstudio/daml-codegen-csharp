@@ -1,0 +1,78 @@
+{
+ "damlType": "WireTypes:WireRecord at the empty/absent end: negative Int64, empty Text, Optional None, Optional (Optional Text) = None, empty List, empty TextMap, empty GenMap, nullary variant arm (Pending), Timestamp with NO fractional digits",
+ "capturedBy": "create, ACS_DELTA",
+ "response": {
+  "transaction": {
+   "updateId": "12201fac09ab7e82d4b57073a8c8405fc843f8b44aff3e62cd53a6ad1644330988ab",
+   "commandId": "f804b25684a142cb9a671bfa633f327f",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:03.691889Z",
+   "events": [
+    {
+     "CreatedEvent": {
+      "offset": 6060,
+      "nodeId": 0,
+      "contractId": "00d9da1d84476970e611d9111d5fb9f0e4f12be1653596f1a76ff896aad63eb598ca1212206d391292e808b44d71fd515f6faf4031994c273a6a39563177aca10a6ead92b6",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "count": "-1",
+       "amount": "42.5000000000",
+       "label": "",
+       "active": true,
+       "asOf": "2026-07-31",
+       "observedAt": "2026-07-31T12:34:56Z",
+       "note": null,
+       "nestedNote": [],
+       "tags": [],
+       "attributes": {},
+       "genMap": [],
+       "unitField": {},
+       "marker": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+       "holdingCid": "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+       "holdingCids": [
+        "00c35a913ec4d5ed3d9c407da7dcaf99ecb7956c3930ebe89dd3370075d4de7c7aca121220ccb3a953e2fda3f2c353f831a26edb3ce46c5817aede6d177416de7a5e5a3770",
+        "00f7f5461eca4cc8707b5e263aa771b2a1d40284b3baaca1e1f39461156fd83411ca121220d2dd2f2edf4cedfa68b26f4aac381d68f58defaaffc7a66c3f65a27902b5d724",
+        "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923"
+       ],
+       "profile": {
+        "nickname": "nick",
+        "level": "3"
+       },
+       "outcome": {
+        "tag": "Pending",
+        "value": {}
+       },
+       "suit": "Clubs",
+       "fee": "1.25"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:03.691889Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     }
+    }
+   ],
+   "offset": 6060,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-311847efe65e79e5242da14d249b5168-af978aac51c752b7-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:03.704208Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 3125
+  }
+ }
+}

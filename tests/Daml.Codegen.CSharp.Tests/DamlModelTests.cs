@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -263,7 +263,6 @@ public class DamlModelTests
     public void DamlTemplate_should_store_all_properties()
     {
         // Arrange
-        var fields = new[] { new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)) };
         var choices = new[]
         {
             new DamlChoice
@@ -279,7 +278,6 @@ public class DamlModelTests
         var template = new DamlTemplate
         {
             Name = "MyTemplate",
-            Fields = fields,
             Choices = choices,
             Key = new DamlPrimitiveType(DamlPrimitive.Party),
             Implements =
@@ -291,7 +289,6 @@ public class DamlModelTests
 
         // Assert
         template.Name.Should().Be("MyTemplate");
-        template.Fields.Should().HaveCount(1);
         template.Choices.Should().HaveCount(1);
         template.Key.Should().NotBeNull();
         template.Implements.Should().HaveCount(2);
@@ -304,7 +301,6 @@ public class DamlModelTests
         var template = new DamlTemplate
         {
             Name = "KeylessTemplate",
-            Fields = [],
             Choices = []
         };
 
@@ -319,7 +315,6 @@ public class DamlModelTests
         var template = new DamlTemplate
         {
             Name = "SimpleTemplate",
-            Fields = [],
             Choices = []
         };
 
@@ -463,7 +458,7 @@ public class DamlModelTests
         // Arrange
         var templates = new[]
         {
-            new DamlTemplate { Name = "Template1", Fields = [], Choices = [] }
+            new DamlTemplate { Name = "Template1", Choices = [] }
         };
         var dataTypes = new[]
         {

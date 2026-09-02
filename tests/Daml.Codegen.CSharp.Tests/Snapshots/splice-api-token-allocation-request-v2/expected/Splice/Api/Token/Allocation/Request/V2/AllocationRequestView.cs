@@ -16,7 +16,15 @@ namespace Splice.Api.Token.Allocation.Request.V2;
 /// <summary>
 /// Generated from Daml record AllocationRequestView
 /// </summary>
-public sealed record AllocationRequestView([property: DamlFieldAttribute("originalRequestCid")] ContractId<IAllocationRequest>? OriginalRequestCid, [property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement, [property: DamlFieldAttribute("allocations")] IReadOnlyList<Splice.Api.Token.Allocation.V2.AllocationSpecification> Allocations, [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt, [property: DamlFieldAttribute("settleAt")] DateTimeOffset? SettleAt, [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationRequestAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationRequestView(
+    [property: DamlFieldAttribute("originalRequestCid")] ContractId<IAllocationRequest>? OriginalRequestCid,
+    [property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement,
+    [property: DamlFieldAttribute("allocations")] IReadOnlyList<Splice.Api.Token.Allocation.V2.AllocationSpecification> Allocations,
+    [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt,
+    [property: DamlFieldAttribute("settleAt")] DateTimeOffset? SettleAt,
+    [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationRequestAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IAllocationRequest, IDamlRecord<AllocationRequestView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

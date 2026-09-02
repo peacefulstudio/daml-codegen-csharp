@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -80,14 +80,13 @@ public class ChoiceEmitterDescriptorTests
         new()
         {
             Name = "Asset",
-            Fields = [],
             Choices = choices,
             Signatories = DamlPartyAnalysis.Dynamic,
             Observers = DamlPartyAnalysis.Dynamic,
         };
 
     [Fact]
-    public void emits_a_choice_descriptor_property_for_a_unit_returning_choice()
+    public void ChoiceEmitterDescriptor_emits_a_choice_descriptor_property_for_a_unit_returning_choice()
     {
         var choice = Choice("Accept", new DamlPrimitiveType(DamlPrimitive.Unit), new DamlPrimitiveType(DamlPrimitive.Unit));
 
@@ -101,46 +100,66 @@ public class ChoiceEmitterDescriptorTests
     }
 
     [Fact]
-    public void emits_a_fallback_arg_record_for_an_unresolvable_argument_type()
+    public void ChoiceEmitterDescriptor_decodes_an_optional_type_variable_return_through_the_wrapper()
     {
-        var choice = Choice("Mystery", new DamlTypeVar("a"), new DamlPrimitiveType(DamlPrimitive.Unit));
+        var choice = Choice(
+            "MaybeOf",
+            new DamlPrimitiveType(DamlPrimitive.Unit),
+            new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [new DamlTypeVar("a")]));
 
         var output = EmitDescriptors(Template(choice), Package());
 
-        output.Should().Contain("public sealed record MysteryArg");
-        output.Should().NotContain("ChoiceMystery");
+        output.Should().Contain("ResultDecoder = val => Optional<TA>.FromValue(");
+        output.Should().NotContain(".AsOptional().HasValue");
     }
 
     [Fact]
-    public void get_choice_argument_info_classifies_unit_as_non_fallback_damlunit()
+    public void WriteChoiceDescriptors_throws_instead_of_emitting_a_stub_arg_record()
+    {
+        var choice = Choice("Mystery", new DamlTypeVar("a"), new DamlPrimitiveType(DamlPrimitive.Unit));
+
+        FluentActions.Invoking(() => EmitDescriptors(Template(choice), Package()))
+            .Should().Throw<CodegenException>()
+            .WithMessage("*Mystery*");
+    }
+
+    [Fact]
+    public void GetChoiceArgumentInfo_classifies_unit_as_damlunit()
     {
         var context = Context(Package());
         var resolver = new StubResolver();
         var emitter = Emitter(context, resolver);
         var choice = Choice("Accept", new DamlPrimitiveType(DamlPrimitive.Unit), new DamlPrimitiveType(DamlPrimitive.Unit));
 
-        var (typeName, _, isFallback, _) = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
+        var argument = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
 
-        typeName.Should().Be("DamlUnit");
-        isFallback.Should().BeFalse();
+        argument.TypeName.Should().Be("DamlUnit");
     }
 
-    [Fact]
-    public void get_choice_argument_info_flags_an_unresolvable_argument_as_fallback()
+    public static TheoryData<string, DamlType> UnmappableChoiceArgumentTypes() => new()
+    {
+        { "a bare Daml type variable", new DamlTypeVar("a") },
+        { "a non-Unit primitive", new DamlPrimitiveType(DamlPrimitive.Text) },
+        { "a generic type application", new DamlTypeApp(new DamlTypeRef("", "Main", "Unresolved"), [new DamlPrimitiveType(DamlPrimitive.Int64)]) },
+    };
+
+    [Theory]
+    [MemberData(nameof(UnmappableChoiceArgumentTypes))]
+    public void GetChoiceArgumentInfo_throws_codegen_exception_for_an_unmappable_argument_type(string label, DamlType argumentType)
     {
         var context = Context(Package());
         var resolver = new StubResolver();
         var emitter = Emitter(context, resolver);
-        var choice = Choice("Mystery", new DamlTypeVar("a"), new DamlPrimitiveType(DamlPrimitive.Unit));
+        var choice = Choice("Mystery", argumentType, new DamlPrimitiveType(DamlPrimitive.Unit));
 
-        var (typeName, _, isFallback, _) = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
-
-        typeName.Should().Be("MysteryArg");
-        isFallback.Should().BeTrue();
+        emitter.Invoking(e => e.GetChoiceArgumentInfo(choice, context.DataTypes))
+            .Should().Throw<CodegenException>(
+                "{0} cannot back an exercisable choice-argument record, so generation must fail loudly", label)
+            .WithMessage("*Mystery*");
     }
 
     [Fact]
-    public void get_choice_argument_info_resolves_a_local_record_argument_to_a_nested_type()
+    public void GetChoiceArgumentInfo_resolves_a_local_record_argument_to_a_nested_type()
     {
         var argRecord = new DamlDataType
         {
@@ -153,16 +172,15 @@ public class ChoiceEmitterDescriptorTests
         var emitter = Emitter(context, resolver);
         var choice = Choice("Transfer", new DamlTypeRef(LocalPackageId, "Main", "TransferArg"), new DamlPrimitiveType(DamlPrimitive.Unit));
 
-        var (typeName, fields, isFallback, isNested) = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
+        var argument = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
 
-        typeName.Should().Be("Transfer");
-        isFallback.Should().BeFalse();
-        isNested.Should().BeTrue();
-        fields.Should().NotBeNull();
+        argument.TypeName.Should().Be("Transfer");
+        argument.IsNestedTemplateArg.Should().BeTrue();
+        argument.Fields.Should().NotBeNull();
     }
 
     [Fact]
-    public void get_choice_argument_info_resolves_the_argument_from_its_own_module_when_simple_names_collide()
+    public void GetChoiceArgumentInfo_resolves_the_argument_from_its_own_module_when_simple_names_collide()
     {
         var package = new DamlPackage
         {
@@ -183,10 +201,9 @@ public class ChoiceEmitterDescriptorTests
         var emitter = Emitter(context, new StubResolver());
         var choice = Choice("Expire", new DamlTypeRef(LocalPackageId, "Agreement", "Expire"), new DamlPrimitiveType(DamlPrimitive.Unit));
 
-        var (_, fields, isFallback, _) = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
+        var argument = emitter.GetChoiceArgumentInfo(choice, context.DataTypes);
 
-        isFallback.Should().BeFalse();
-        fields.Should().ContainSingle(field => field.Name == "actor");
+        argument.Fields.Should().ContainSingle(field => field.Name == "actor");
     }
 
     private static DamlModule ModuleWithExpireRecord(string moduleName, DamlFieldDefinition[] expireFields) =>

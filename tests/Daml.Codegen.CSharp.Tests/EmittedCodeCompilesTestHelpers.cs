@@ -1,8 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
+using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
@@ -43,8 +45,23 @@ internal static class EmittedCodeCompilesTestHelpers
                 new DamlTemplate
                 {
                     Name = "AssetWithKey",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
-                    Choices = [],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Reissue",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = ContractIdOf("AssetWithKey"),
+                        },
+                        new DamlChoice
+                        {
+                            Name = "Describe",
+                            Consuming = false,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Text),
+                        },
+                    ],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text),
                 },
             ],
@@ -80,6 +97,32 @@ internal static class EmittedCodeCompilesTestHelpers
         return CreateGenerator(options).Generate(dar);
     }
 
+    /// <summary>
+    /// Compiles the emitted sources and loads them as an in-memory assembly, for tests
+    /// that must call a generated member rather than inspect its text — reflection over
+    /// a real invocation is the only way to observe whether an emitted method throws at
+    /// the call site or on the task it returns.
+    /// </summary>
+    internal static Assembly EmitToAssembly(IReadOnlyList<GeneratedFile> files)
+    {
+        var compilation = CompileEmittedFilesToCompilation(files, DocumentationMode.Parse);
+
+        using var stream = new MemoryStream();
+        var emit = compilation.Emit(stream);
+        if (!emit.Success)
+        {
+            throw new InvalidOperationException(
+                "The emitted sources must compile before they can be invoked: "
+                + string.Join(
+                    "\n",
+                    emit.Diagnostics
+                        .Where(d => d.Severity == DiagnosticSeverity.Error)
+                        .Select(d => d.GetMessage(CultureInfo.InvariantCulture) + " @ " + d.Location)));
+        }
+
+        return Assembly.Load(stream.ToArray());
+    }
+
     internal static IReadOnlyList<Diagnostic> CompileEmittedFilesWithDocDiagnostics(IReadOnlyList<GeneratedFile> files) =>
         CompileEmittedFiles(files, DocumentationMode.Diagnose);
 
@@ -87,6 +130,17 @@ internal static class EmittedCodeCompilesTestHelpers
         CompileEmittedFiles(files, DocumentationMode.Parse);
 
     internal static IReadOnlyList<Diagnostic> CompileEmittedFiles(
+        IReadOnlyList<GeneratedFile> files,
+        DocumentationMode documentationMode) =>
+        CompileEmittedFilesToCompilation(files, documentationMode).GetDiagnostics();
+
+    /// <summary>
+    /// The compilation behind <see cref="CompileEmittedFiles(IReadOnlyList{GeneratedFile})"/>,
+    /// for tests that need the semantic model rather than the diagnostics — asking Roslyn
+    /// which member a call site bound to, rather than inferring it from the
+    /// overload-resolution rules.
+    /// </summary>
+    internal static CSharpCompilation CompileEmittedFilesToCompilation(
         IReadOnlyList<GeneratedFile> files,
         DocumentationMode documentationMode)
     {
@@ -145,6 +199,6 @@ internal static class EmittedCodeCompilesTestHelpers
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
 
-        return compilation.GetDiagnostics();
+        return compilation;
     }
 }

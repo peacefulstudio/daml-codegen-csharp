@@ -15,7 +15,9 @@ public sealed partial record AnsEntry
     /// <summary>
     /// Choice argument type for AnsEntry_Renew.
     /// </summary>
-    public sealed record AnsEntry_Renew([property: DamlFieldAttribute("extension")] RelTime Extension) : IDamlRecord
+    public sealed record AnsEntry_Renew(
+        [property: DamlFieldAttribute("extension")] RelTime Extension
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

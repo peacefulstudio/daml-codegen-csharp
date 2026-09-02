@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -49,7 +50,6 @@ public class EmittedCrossPackageCompilesTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -93,14 +93,14 @@ public class EmittedCrossPackageCompilesTests
             UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "cross-package choice arg wrappers must compile alongside the foreign package's emission, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -138,11 +138,6 @@ public class EmittedCrossPackageCompilesTests
                 new DamlTemplate
                 {
                     Name = "Alert",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("severity", new DamlTypeRef("other-pkg-id", "Other.Module", "Severity")),
-                    ],
                     Choices = [],
                 },
             ],
@@ -180,14 +175,14 @@ public class EmittedCrossPackageCompilesTests
             UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record field whose type is an enum from a dependency package must round-trip via the foreign enum's *Extensions.ToDamlEnum/FromDamlEnum, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -201,7 +196,6 @@ public class EmittedCrossPackageCompilesTests
                 new DamlTemplate
                 {
                     Name = "AmuletRules",
-                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -281,13 +275,13 @@ public class EmittedCrossPackageCompilesTests
             UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a cross-package variant constructor referencing a nested choice-arg type must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

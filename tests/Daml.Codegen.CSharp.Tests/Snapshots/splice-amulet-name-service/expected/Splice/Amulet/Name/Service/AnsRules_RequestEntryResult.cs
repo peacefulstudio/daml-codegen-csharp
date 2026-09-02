@@ -13,7 +13,10 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AnsRules_RequestEntryResult
 /// </summary>
-public sealed record AnsRules_RequestEntryResult([property: DamlFieldAttribute("entryCid")] ContractId<AnsEntryContext> EntryCid, [property: DamlFieldAttribute("requestCid")] ContractId<Splice.Wallet.Payments.SubscriptionRequest> RequestCid) : IDamlRecord
+public sealed record AnsRules_RequestEntryResult(
+    [property: DamlFieldAttribute("entryCid")] ContractId<AnsEntryContext> EntryCid,
+    [property: DamlFieldAttribute("requestCid")] ContractId<Splice.Wallet.Payments.SubscriptionRequest> RequestCid
+) : IDamlRecord<AnsRules_RequestEntryResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

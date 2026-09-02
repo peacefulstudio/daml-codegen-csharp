@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using System.Text;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -115,7 +116,7 @@ internal static class UnifiedDiff
         {
             if (emitted >= MaxHunks)
             {
-                sb.AppendLine($"... (truncated after {MaxHunks} hunks)");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"... (truncated after {MaxHunks} hunks)");
                 break;
             }
 
@@ -124,7 +125,7 @@ internal static class UnifiedDiff
             var actStart = Math.Max(0, hunk[0].ActualIndex - ContextLines);
             var actEnd = Math.Min(actual.Length - 1, hunk[^1].ActualIndex + ContextLines);
 
-            sb.AppendLine($"@@ -{expStart + 1},{expEnd - expStart + 1} +{actStart + 1},{actEnd - actStart + 1} @@");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"@@ -{expStart + 1},{expEnd - expStart + 1} +{actStart + 1},{actEnd - actStart + 1} @@");
 
             var editIdx = 0;
             var expLine = expStart;
@@ -136,19 +137,19 @@ internal static class UnifiedDiff
 
                 if (edit != null && edit.Kind == EditKind.Delete && edit.ExpectedIndex == expLine)
                 {
-                    sb.AppendLine($"-{expected[expLine]}");
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"-{expected[expLine]}");
                     expLine++;
                     editIdx++;
                 }
                 else if (edit != null && edit.Kind == EditKind.Insert && edit.ActualIndex == actLine)
                 {
-                    sb.AppendLine($"+{actual[actLine]}");
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"+{actual[actLine]}");
                     actLine++;
                     editIdx++;
                 }
                 else if (expLine <= expEnd && actLine <= actEnd)
                 {
-                    sb.AppendLine($" {expected[expLine]}");
+                    sb.AppendLine(CultureInfo.InvariantCulture, $" {expected[expLine]}");
                     expLine++;
                     actLine++;
                 }

@@ -1,3 +1,6 @@
+# Copyright 2026 Peaceful Studio OÜ
+# SPDX-License-Identifier: Apache-2.0
+
 repos:
   - repo: local
     hooks:
@@ -6,4 +9,4 @@ repos:
         entry: scripts/check-license-headers.sh
         language: script
         pass_filenames: false
-        files: \.(cs|scala)$
+        files: ^(src|tests|jvm-helper|samples|scripts|conformance|proto|CONTEXT\.md|Directory\.Build\.props|coverage\.settings\.xml|\.editorconfig|\.pre-commit-config\.yaml)(/|$)

@@ -15,7 +15,7 @@ public class TransactionTreeTests
     private static readonly RuntimeIdentifier FooTemplateId = new("test-pkg", "Acme.Foo", "FooBar");
 
     [Fact]
-    public void root_events_preserve_transaction_order()
+    public void TransactionTree_root_events_preserve_transaction_order()
     {
         var first = MakeCreated("00first");
         var second = MakeCreated("00second");
@@ -28,7 +28,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void child_events_are_reachable_from_exercised_node()
+    public void TransactionTree_child_events_are_reachable_from_exercised_node()
     {
         var child = MakeCreated("00child");
         var exercise = MakeExercised("00parent", children: [child]);
@@ -37,7 +37,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_is_empty_for_created_event()
+    public void DescendantEvents_is_empty_for_created_event()
     {
         var created = MakeCreated("00solo");
 
@@ -45,7 +45,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_is_empty_for_exercised_event_without_children()
+    public void DescendantEvents_is_empty_for_exercised_event_without_children()
     {
         var exercise = MakeExercised("00leaf", children: []);
 
@@ -53,7 +53,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_enumerates_nested_children_depth_first()
+    public void DescendantEvents_enumerates_nested_children_depth_first()
     {
         var grandchild = MakeCreated("00grandchild");
         var innerExercise = MakeExercised("00inner", children: [grandchild]);
@@ -69,7 +69,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_handles_deeply_nested_trees_without_stack_overflow()
+    public void DescendantEvents_handles_deeply_nested_trees_without_stack_overflow()
     {
         const int depth = 5000;
         var leaf = MakeCreated("leaf");
@@ -88,7 +88,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_enumerates_many_siblings_in_declared_order()
+    public void DescendantEvents_enumerates_many_siblings_in_declared_order()
     {
         var children = Enumerable.Range(0, 50)
             .Select(i => (TreeEvent)MakeCreated($"00child-{i:D2}"))
@@ -101,7 +101,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void descendant_events_preserves_pre_order_across_branching_and_depth()
+    public void DescendantEvents_preserves_pre_order_across_branching_and_depth()
     {
         const int chainLength = 200;
         TreeEvent tree = MakeCreated("leaf");
@@ -135,7 +135,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void all_events_enumerates_roots_and_descendants_in_pre_order()
+    public void AllEvents_enumerates_roots_and_descendants_in_pre_order()
     {
         var child = MakeCreated("00child");
         var rootExercise = MakeExercised("00root-exercise", children: [child]);
@@ -151,7 +151,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void all_events_throws_when_tree_is_null()
+    public void AllEvents_throws_when_tree_is_null()
     {
         TransactionTree tree = null!;
 
@@ -161,7 +161,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void to_transaction_result_flattens_created_events_with_serialized_payload()
+    public void ToTransactionResult_flattens_created_events_with_the_create_arguments_as_payload()
     {
         var created = MakeCreated("00alice");
         var tree = new TransactionTree("u1", LedgerOffset.At(5), [created]);
@@ -173,21 +173,21 @@ public class TransactionTreeTests
         result.CreatedContracts.Should().ContainSingle();
         result.CreatedContracts[0].ContractId.Should().Be("00alice");
         result.CreatedContracts[0].TemplateId.Should().Be(FooTemplateId);
-        result.CreatedContracts[0].Payload.Should().Contain("alice");
+        result.CreatedContracts[0].Payload.Should().BeSameAs(created.CreateArguments);
     }
 
     [Fact]
-    public void to_transaction_result_defaults_command_id_since_tree_carries_none()
+    public void ToTransactionResult_leaves_command_id_absent_since_tree_carries_none()
     {
         var tree = new TransactionTree("u1", LedgerOffset.At(1),[MakeCreated("00alice")]);
 
         var result = tree.ToTransactionResult();
 
-        result.CommandId.Should().Be(default(CommandId));
+        result.CommandId.Should().BeNull();
     }
 
     [Fact]
-    public void to_transaction_result_preserves_interface_ids_on_created_contracts()
+    public void ToTransactionResult_preserves_interface_ids_on_created_contracts()
     {
         var interfaceId = new RuntimeIdentifier("test-pkg", "Acme.Foo", "IAsset");
         var created = MakeCreated("00iface") with { InterfaceIds = [interfaceId] };
@@ -200,7 +200,26 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void to_transaction_result_flattens_nested_exercised_events_in_pre_order()
+    public void ToTransactionResult_forwards_every_created_field_to_the_flattened_contract()
+    {
+        var key = new ContractKey(DamlRecord.Create(DamlField.Create("owner", new DamlParty("alice"))), FooTemplateId);
+        var createdAt = new DateTimeOffset(2026, 8, 24, 9, 30, 0, TimeSpan.Zero);
+        var created = MakeCreated("00alice") with { ContractKey = key, CreatedAt = createdAt };
+        var tree = new TransactionTree("u1", LedgerOffset.At(5), [created]);
+
+        var result = tree.ToTransactionResult();
+
+        var flattened = result.CreatedContracts.Should().ContainSingle().Which;
+        flattened.EventId.Should().Be("evt-00alice");
+        flattened.WitnessParties.Should().Equal(new Party("alice"), new Party("bob"), new Party("carol"));
+        flattened.Signatories.Should().Equal(new Party("alice"));
+        flattened.Observers.Should().Equal(new Party("bob"));
+        flattened.ContractKey.Should().Be(key);
+        flattened.CreatedAt.Should().Be(createdAt);
+    }
+
+    [Fact]
+    public void ToTransactionResult_flattens_nested_exercised_events_in_pre_order()
     {
         var childCreate = MakeCreated("00child");
         var innerExercise = MakeExercised("00inner", children: [childCreate], choiceName: "Inner");
@@ -213,7 +232,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void to_transaction_result_collects_archived_contract_ids_from_consuming_exercises()
+    public void ToTransactionResult_collects_archived_contract_ids_from_consuming_exercises()
     {
         var consuming = MakeExercised("00consumed", children: [], consuming: true);
         var nonConsuming = MakeExercised("00untouched", children: [], consuming: false);
@@ -225,7 +244,7 @@ public class TransactionTreeTests
     }
 
     [Fact]
-    public void to_transaction_result_throws_when_tree_is_null()
+    public void ToTransactionResult_throws_when_tree_is_null()
     {
         TransactionTree tree = null!;
 
@@ -240,9 +259,9 @@ public class TransactionTreeTests
             ContractId: contractId,
             TemplateId: FooTemplateId,
             CreateArguments: DamlRecord.Create(DamlField.Create("owner", new DamlParty("alice"))),
-            WitnessParties: [new Party("alice")],
+            WitnessParties: [new Party("alice"), new Party("bob"), new Party("carol")],
             Signatories: [new Party("alice")],
-            Observers: []);
+            Observers: [new Party("bob")]);
 
     private static TreeEvent.Exercised MakeExercised(
         string contractId,

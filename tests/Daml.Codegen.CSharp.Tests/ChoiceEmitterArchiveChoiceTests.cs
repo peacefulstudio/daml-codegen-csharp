@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -79,7 +79,6 @@ public class ChoiceEmitterArchiveChoiceTests
         new()
         {
             Name = "Item",
-            Fields = [],
             Choices = [ArchiveChoice(archiveArgPackageId)],
         };
 
@@ -90,6 +89,16 @@ public class ChoiceEmitterArchiveChoiceTests
         var sb = new StringBuilder();
         var indent = new IndentWriter(sb) { CurrentTypeName = template.Name };
         Emitter(context, resolver).TryWriteNonContractChoiceExtensions(indent, template, context.DataTypes);
+        return sb.ToString();
+    }
+
+    private static string EmitContractIdExercisers(DamlTemplate template, StubResolver resolver)
+    {
+        var package = Package(new DamlModule { Name = "Main", Templates = [template], DataTypes = [], Interfaces = [] });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var sb = new StringBuilder();
+        var indent = new IndentWriter(sb) { CurrentTypeName = template.Name };
+        Emitter(context, resolver).WriteChoiceAsyncExercisersClass(indent, template, template.Name, [], context.DataTypes);
         return sb.ToString();
     }
 
@@ -114,7 +123,7 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_emits_synthetic_stdlib_archive_in_non_contract_wrappers()
+    public void ArchiveChoice_emits_synthetic_stdlib_archive_in_non_contract_wrappers()
     {
         var resolver = new StubResolver(packages: Packages(StdlibPackage));
 
@@ -127,7 +136,7 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_keeps_user_archive_choice_from_non_stdlib_package()
+    public void ArchiveChoice_keeps_user_archive_choice_from_non_stdlib_package()
     {
         var resolver = new StubResolver(packages: Packages(UserPackage));
 
@@ -138,7 +147,7 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_uses_actual_argument_type_not_damlunit_for_user_archive()
+    public void ArchiveChoice_uses_actual_argument_type_not_damlunit_for_user_archive()
     {
         var resolver = new StubResolver("User.Package.Archive", Packages(UserPackage));
         var template = ItemTemplate(UserPackageId);
@@ -155,7 +164,7 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_uses_actual_argument_type_not_damlunit_for_user_archive_interface_choice()
+    public void ArchiveChoice_uses_actual_argument_type_not_damlunit_for_user_archive_interface_choice()
     {
         var iface = new DamlInterface
         {
@@ -174,7 +183,7 @@ public class ChoiceEmitterArchiveChoiceTests
     }
 
     [Fact]
-    public void archive_choice_encodes_synthetic_stdlib_archive_argument_as_empty_record_in_descriptor()
+    public void ArchiveChoice_encodes_synthetic_stdlib_archive_argument_as_empty_record_in_descriptor()
     {
         var resolver = new StubResolver(packages: Packages(StdlibPackage));
         var template = ItemTemplate(StdlibPackageId);
@@ -186,8 +195,57 @@ public class ChoiceEmitterArchiveChoiceTests
         descriptor.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance");
     }
 
+    public static TheoryData<string, DamlType, string, string> ArgumentlessContractIdCommandEncodings => new()
+    {
+        {
+            "Archive",
+            new DamlTypeRef(StdlibPackageId, "DA.Internal.Template", "Archive"),
+            "DamlRecord.Create());",
+            "DamlUnit.Instance"
+        },
+        {
+            "Accept",
+            new DamlPrimitiveType(DamlPrimitive.Unit),
+            "DamlUnit.Instance);",
+            "DamlRecord.Create()"
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(ArgumentlessContractIdCommandEncodings))]
+    public void ArchiveChoice_contract_id_command_builder_encodes_argument_like_the_descriptor(
+        string choiceName,
+        DamlType argumentType,
+        string encodedArgument,
+        string rejectedArgument)
+    {
+        var resolver = new StubResolver(packages: Packages(StdlibPackage));
+        var template = new DamlTemplate
+        {
+            Name = "Item",
+            Choices =
+            [
+                new DamlChoice
+                {
+                    Name = choiceName,
+                    Consuming = true,
+                    ArgumentType = argumentType,
+                    ReturnType = new DamlTypeApp(
+                        new DamlPrimitiveType(DamlPrimitive.ContractId),
+                        [new DamlTypeRef(LocalPackageId, "Main", "Item")]),
+                }
+            ],
+        };
+
+        var output = EmitContractIdExercisers(template, resolver);
+
+        output.Should().Contain($"public static ExerciseCommand {choiceName}Command(");
+        output.Should().Contain(encodedArgument);
+        output.Should().NotContain(rejectedArgument);
+    }
+
     [Fact]
-    public void archive_choice_encodes_synthetic_stdlib_interface_archive_argument_as_empty_record()
+    public void ArchiveChoice_encodes_synthetic_stdlib_interface_archive_argument_as_empty_record()
     {
         var iface = new DamlInterface
         {

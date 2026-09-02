@@ -12,7 +12,11 @@ namespace Splice.Api.Token.Holding.V2;
 /// <summary>
 /// Generated from Daml record Account
 /// </summary>
-public sealed record Account([property: DamlFieldAttribute("owner")] Party? Owner, [property: DamlFieldAttribute("provider")] Party? Provider, [property: DamlFieldAttribute("id")] string Id) : IDamlRecord
+public sealed record Account(
+    [property: DamlFieldAttribute("owner")] Party? Owner,
+    [property: DamlFieldAttribute("provider")] Party? Provider,
+    [property: DamlFieldAttribute("id")] string Id
+) : IDamlRecord<Account>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

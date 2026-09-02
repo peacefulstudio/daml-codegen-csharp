@@ -36,6 +36,10 @@ public sealed record DamlVariant(
 /// </summary>
 /// <param name="EnumId">Optional type identifier.</param>
 /// <param name="Constructor">The enum constructor name.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming",
+    "CA1711:Identifiers should not have incorrect suffix",
+    Justification = "Daml<Kind> is the naming scheme of the whole Daml value model (DamlRecord, DamlVariant, DamlEnum); the suffix names the Daml type, not a CLR enum.")]
 public sealed record DamlEnum(Identifier? EnumId, string Constructor) : DamlValue
 {
     /// <summary>Builds an enum value without a type identifier, e.g. when the type is implied by context.</summary>

@@ -28,12 +28,12 @@ sbt test
 sbt assembly
 ```
 
-The fat JAR is written to `target/scala-2.13/daml-codegen-jvm-helper.jar`.
+The fat JAR is written to `target/scala-2.13/daml-dar-to-proto.jar`.
 
 ## Run
 
 ```bash
-java -jar target/scala-2.13/daml-codegen-jvm-helper.jar \
+java -jar target/scala-2.13/daml-dar-to-proto.jar \
   --dar path/to/contracts.dar \
   --out path/to/output.binpb
 ```

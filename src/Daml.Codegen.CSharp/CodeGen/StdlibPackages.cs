@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 
 namespace Daml.Codegen.CSharp.CodeGen;
@@ -106,30 +106,41 @@ internal static class StdlibPackages
     /// Walks <paramref name="type"/> and records on <paramref name="indent"/> every
     /// namespace the emitted code for that field type needs, classifying stdlib refs
     /// via <paramref name="resolver"/>. Shared by the choice-exercise and
-    /// data/template emit paths so both require an identical namespace set.
+    /// data/template emit paths so both require an identical namespace set. The type runs
+    /// through <see cref="OptionalRepresentation.Rewrite(DamlType, DamlPackage, ICrossPackageResolver)"/>
+    /// first, so the walk sees the same representation the emitter will, rather than
+    /// deciding a second time which Optionals need the runtime wrapper.
     /// </summary>
-    internal static void RequireForFieldType(ICrossPackageResolver resolver, IndentWriter indent, DamlType type)
+    internal static void RequireForFieldType(
+        ICrossPackageResolver resolver, DamlPackage localPackage, IndentWriter indent, DamlType type) =>
+        RequireForRewrittenType(resolver, indent, OptionalRepresentation.Rewrite(type, localPackage, resolver));
+
+    private static void RequireForRewrittenType(ICrossPackageResolver resolver, IndentWriter indent, DamlType type)
     {
         switch (type)
         {
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app:
                 indent.Require("System.Collections.Generic");
                 indent.Require("System.Linq");
-                RequireForFieldType(resolver, indent, app.Arguments[0]);
+                RequireForRewrittenType(resolver, indent, app.Arguments[0]);
                 break;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app:
-                RequireForFieldType(resolver, indent, app.Arguments[0]);
+                RequireForRewrittenType(resolver, indent, app.Arguments[0]);
+                break;
+            case DamlWrappedOptional wrapped:
+                indent.Require(RuntimeNamespaces.Stdlib);
+                RequireForRewrittenType(resolver, indent, wrapped.Argument);
                 break;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app:
                 indent.Require("System.Collections.Generic");
                 indent.Require("System.Linq");
-                RequireForFieldType(resolver, indent, app.Arguments[0]);
+                RequireForRewrittenType(resolver, indent, app.Arguments[0]);
                 break;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap } } app:
                 indent.Require("System.Collections.Generic");
                 indent.Require("System.Linq");
-                RequireForFieldType(resolver, indent, app.Arguments[0]);
-                RequireForFieldType(resolver, indent, app.Arguments[1]);
+                RequireForRewrittenType(resolver, indent, app.Arguments[0]);
+                RequireForRewrittenType(resolver, indent, app.Arguments[1]);
                 break;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } }:
                 indent.Require(RuntimeNamespaces.Contracts);
@@ -146,7 +157,7 @@ internal static class StdlibPackages
                 indent.Require(RuntimeNamespaces.Stdlib);
                 foreach (var arg in app.Arguments)
                 {
-                    RequireForFieldType(resolver, indent, arg);
+                    RequireForRewrittenType(resolver, indent, arg);
                 }
                 break;
             case DamlTypeRef typeRef when IsStdlibTypeRef(resolver, typeRef, parametric: false):
@@ -163,7 +174,7 @@ internal static class StdlibPackages
                     {
                         continue;
                     }
-                    RequireForFieldType(resolver, indent, argument);
+                    RequireForRewrittenType(resolver, indent, argument);
                 }
                 break;
             case DamlTypeApp app:
@@ -173,7 +184,7 @@ internal static class StdlibPackages
                     {
                         continue;
                     }
-                    RequireForFieldType(resolver, indent, argument);
+                    RequireForRewrittenType(resolver, indent, argument);
                 }
                 break;
         }

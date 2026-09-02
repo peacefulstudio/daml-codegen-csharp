@@ -10,7 +10,7 @@ namespace Daml.Ledger.Abstractions.Tests;
 public class LedgerOperationExceptionTests
 {
     [Fact]
-    public void message_and_inner_exception_constructor_preserves_both()
+    public void LedgerOperationException_message_and_inner_exception_constructor_preserves_both()
     {
         var inner = new TimeoutException("transport gave up");
 
@@ -25,7 +25,36 @@ public class LedgerOperationExceptionTests
     }
 
     [Fact]
-    public void daml_error_constructor_rejects_null_metadata()
+    public void LedgerOperationException_infra_error_constructor_leaves_category_null_when_omitted()
+    {
+        var exception = new LedgerOperationException("transport failed", 503);
+
+        exception.StatusCode.Should().Be(503);
+        exception.Category.Should().BeNull();
+        exception.ErrorId.Should().BeNull();
+        exception.Metadata.Should().BeNull();
+        exception.InnerException.Should().BeNull();
+    }
+
+    [Fact]
+    public void LedgerOperationException_infra_error_constructor_keeps_the_category_alongside_the_status_code()
+    {
+        var inner = new TimeoutException("transport gave up");
+
+        var exception = new LedgerOperationException(
+            "transport failed",
+            400,
+            DamlErrorCategory.InvalidIndependentOfSystemState,
+            inner);
+
+        exception.StatusCode.Should().Be(400);
+        exception.Category.Should().Be(DamlErrorCategory.InvalidIndependentOfSystemState);
+        exception.InnerException.Should().BeSameAs(inner);
+        exception.ErrorId.Should().BeNull();
+    }
+
+    [Fact]
+    public void LedgerOperationException_daml_error_constructor_rejects_null_metadata()
     {
         var act = () => new LedgerOperationException(
             "exercise failed",
@@ -37,7 +66,7 @@ public class LedgerOperationExceptionTests
     }
 
     [Fact]
-    public void daml_error_constructor_keeps_supplied_metadata()
+    public void LedgerOperationException_daml_error_constructor_keeps_supplied_metadata()
     {
         var metadata = new Dictionary<string, string> { ["key"] = "value" };
 

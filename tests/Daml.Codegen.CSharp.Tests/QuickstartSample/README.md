@@ -30,7 +30,7 @@ changes. To rebuild it, build the DAR and re-run the helper from the repo root:
 
 ```bash
 (cd samples/QuickstartExample/daml && dpm build)
-java -jar jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar \
+java -jar jvm-helper/target/scala-2.13/daml-dar-to-proto.jar \
   --dar samples/QuickstartExample/daml/.daml/dist/quickstart-0.0.1.dar \
   --out tests/Daml.Codegen.CSharp.Tests/QuickstartSample/intermediate.binpb
 cp samples/QuickstartExample/daml/.daml/dist/quickstart-0.0.1.dar \

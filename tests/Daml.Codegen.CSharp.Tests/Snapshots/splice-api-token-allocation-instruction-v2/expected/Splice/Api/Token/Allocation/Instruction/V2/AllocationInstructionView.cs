@@ -16,7 +16,16 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationInstructionView
 /// </summary>
-public sealed record AllocationInstructionView([property: DamlFieldAttribute("originalInstructionCid")] ContractId<IAllocationInstruction>? OriginalInstructionCid, [property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement, [property: DamlFieldAttribute("allocation")] Splice.Api.Token.Allocation.V2.AllocationSpecification Allocation, [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt, [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids, [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt, [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationInstructionAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationInstructionView(
+    [property: DamlFieldAttribute("originalInstructionCid")] ContractId<IAllocationInstruction>? OriginalInstructionCid,
+    [property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement,
+    [property: DamlFieldAttribute("allocation")] Splice.Api.Token.Allocation.V2.AllocationSpecification Allocation,
+    [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt,
+    [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids,
+    [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt,
+    [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationInstructionAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IAllocationInstruction, IDamlRecord<AllocationInstructionView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

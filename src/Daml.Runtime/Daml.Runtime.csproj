@@ -5,7 +5,6 @@
     <Description>Runtime library for Daml-generated C# code. Provides base types and serialization support for Daml contracts.</Description>
     <PackageTags>daml;canton;blockchain;smart-contracts;ledger</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

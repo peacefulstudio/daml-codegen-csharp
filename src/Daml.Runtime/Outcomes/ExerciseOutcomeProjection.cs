@@ -53,7 +53,7 @@ public static class ExerciseOutcomeProjection
             ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<TProjected>.None(),
             ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TProjected>.Many(many.Count, many.ContractIds),
             ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<TProjected>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
-            ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TProjected>.InfraError(e.StatusCode, e.Message, e.SourceException),
+            ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TProjected>.InfraError(e.StatusCode, e.Message, e.Category, e.SourceException),
             _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),
         };
     }

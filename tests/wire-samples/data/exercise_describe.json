@@ -1,0 +1,54 @@
+{
+ "damlType": "WireTypes:WireRecord:Describe \u2014 choice argument holds an Optional Int64; result is a variant",
+ "capturedBy": "POST /v2/commands/submit-and-wait-for-transaction, TRANSACTION_SHAPE_LEDGER_EFFECTS; see ExercisedEvent.choiceArgument and ExercisedEvent.exerciseResult",
+ "response": {
+  "transaction": {
+   "updateId": "1220c518ca39871684078db25d1d57531711ad0ad948a81a15b53c6fe720ccfa6e18",
+   "commandId": "a3b26d83fbd44bbf9fd2cbfd987a7ee2",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:04.401572Z",
+   "events": [
+    {
+     "ExercisedEvent": {
+      "offset": 6066,
+      "nodeId": 0,
+      "contractId": "00f9c54b4cf1ac0609a616f88cbeb9a58bf38b08977edaa81c1136b96f552d118eca121220ea362ddb26f079d3438340bbe63d976a4774b3be09cc5b5c883e74c08fe8e1da",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "interfaceId": null,
+      "choice": "Describe",
+      "choiceArgument": {
+       "probe": "9"
+      },
+      "actingParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "consuming": false,
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "lastDescendantNodeId": 0,
+      "exerciseResult": {
+       "tag": "Win",
+       "value": {
+        "prize": "1.25",
+        "tier": "gold"
+       }
+      },
+      "packageName": "wiretypes23",
+      "implementedInterfaces": [],
+      "acsDelta": false
+     }
+    }
+   ],
+   "offset": 6066,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-be3eb73a70aec6d827fa6bf0374fbda4-654f6528b9cf9c0d-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:04.414235Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 3238
+  }
+ }
+}

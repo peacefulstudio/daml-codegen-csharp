@@ -12,7 +12,10 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record ExpectedPayment
 /// </summary>
-public sealed record ExpectedPayment([property: DamlFieldAttribute("dso")] Party Dso, [property: DamlFieldAttribute("sender")] Party Sender) : IDamlRecord
+public sealed record ExpectedPayment(
+    [property: DamlFieldAttribute("dso")] Party Dso,
+    [property: DamlFieldAttribute("sender")] Party Sender
+) : IDamlRecord<ExpectedPayment>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

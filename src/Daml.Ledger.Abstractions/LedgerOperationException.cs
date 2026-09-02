@@ -10,7 +10,8 @@ namespace Daml.Ledger.Abstractions;
 /// when the underlying <c>Try*</c> method yields a non-success outcome. Carries the
 /// structured data of a <see cref="ExerciseOutcome{T}.DamlError"/> /
 /// <see cref="ExerciseOutcome{T}.InfraError"/> outcome so catch sites keep access to
-/// the detail the structured API exposes. Derives from
+/// the detail the structured API exposes; a classified infrastructure failure carries its
+/// <see cref="Category"/> alongside its <see cref="StatusCode"/>. Derives from
 /// <see cref="InvalidOperationException"/> because the convenience wrappers
 /// previously threw <see cref="InvalidOperationException"/> directly; the base
 /// type preserves that catch contract.
@@ -19,7 +20,9 @@ public sealed class LedgerOperationException : InvalidOperationException
 {
     /// <summary>
     /// Canton error category when the failed outcome was a
-    /// <see cref="ExerciseOutcome{T}.DamlError"/>; otherwise <c>null</c>.
+    /// <see cref="ExerciseOutcome{T}.DamlError"/>, or when it was an
+    /// <see cref="ExerciseOutcome{T}.InfraError"/> the transport classified without a
+    /// structured Canton error attached; <c>null</c> when neither applies.
     /// </summary>
     public DamlErrorCategory? Category { get; }
 
@@ -76,21 +79,18 @@ public sealed class LedgerOperationException : InvalidOperationException
     }
 
     /// <summary>
-    /// Creates an exception carrying an <see cref="ExerciseOutcome{T}.InfraError"/> outcome.
+    /// Creates an exception carrying an <see cref="ExerciseOutcome{T}.InfraError"/> outcome,
+    /// its classification when the transport determined one, and the transport exception that
+    /// caused it when available.
     /// </summary>
-    public LedgerOperationException(string message, int statusCode)
-        : base(message)
-    {
-        StatusCode = statusCode;
-    }
-
-    /// <summary>
-    /// Creates an exception carrying an <see cref="ExerciseOutcome{T}.InfraError"/> outcome
-    /// and preserving the transport exception that caused it.
-    /// </summary>
-    public LedgerOperationException(string message, int statusCode, Exception? innerException)
+    public LedgerOperationException(
+        string message,
+        int statusCode,
+        DamlErrorCategory? category = null,
+        Exception? innerException = null)
         : base(message, innerException)
     {
         StatusCode = statusCode;
+        Category = category;
     }
 }

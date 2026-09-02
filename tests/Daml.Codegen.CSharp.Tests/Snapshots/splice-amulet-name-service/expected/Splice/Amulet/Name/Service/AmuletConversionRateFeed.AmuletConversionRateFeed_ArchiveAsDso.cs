@@ -14,7 +14,9 @@ public sealed partial record AmuletConversionRateFeed
     /// <summary>
     /// Choice argument type for AmuletConversionRateFeed_ArchiveAsDso.
     /// </summary>
-    public sealed record AmuletConversionRateFeed_ArchiveAsDso([property: DamlFieldAttribute("reason")] string Reason) : IDamlRecord
+    public sealed record AmuletConversionRateFeed_ArchiveAsDso(
+        [property: DamlFieldAttribute("reason")] string Reason
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

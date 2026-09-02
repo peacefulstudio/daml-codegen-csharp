@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -55,7 +56,6 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "Reference",
-                    Fields = [new DamlFieldDefinition("cid", ContractIdOf(moduleName, interfaceName))],
                     Choices =
                     [
                         new DamlChoice
@@ -109,11 +109,11 @@ public class InterfaceChoiceResultCs0117RegressionTests
     {
         var files = CreateGenerator().Generate(dar);
         var errors = CompileEmittedFiles(files).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-        errors.Should().BeEmpty(because + ", but got: {0}", string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+        errors.Should().BeEmpty(because + ", but got: {0}", string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
-    public void finance_holding_reference_choice_returning_local_factory_interface_cid_compiles()
+    public void InterfaceChoiceResultCs0117Regression_finance_holding_reference_choice_returning_local_factory_interface_cid_compiles()
     {
         var dar = ReferenceHoldingLocalInterface(
             "daml-finance-interface-holding-v4",
@@ -125,7 +125,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void finance_instrument_base_reference_choice_returning_local_instrument_interface_cid_compiles()
+    public void InterfaceChoiceResultCs0117Regression_finance_instrument_base_reference_choice_returning_local_instrument_interface_cid_compiles()
     {
         var dar = ReferenceHoldingLocalInterface(
             "daml-finance-interface-instrument-base-v4",
@@ -137,7 +137,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void template_choice_returning_optional_local_interface_cid_compiles()
+    public void InterfaceChoiceResultCs0117Regression_template_choice_returning_optional_local_interface_cid_compiles()
     {
         var module = "Daml.Finance.Interface.Holding.V4.Factory";
         var dar = ReferenceHoldingLocalInterface(
@@ -150,7 +150,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void template_choice_returning_list_of_local_interface_cid_compiles()
+    public void InterfaceChoiceResultCs0117Regression_template_choice_returning_list_of_local_interface_cid_compiles()
     {
         var module = "Daml.Finance.Interface.Holding.V4.Factory";
         var dar = ReferenceHoldingLocalInterface(
@@ -163,7 +163,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void template_choice_returning_foreign_package_interface_cid_compiles()
+    public void InterfaceChoiceResultCs0117Regression_template_choice_returning_foreign_package_interface_cid_compiles()
     {
         const string foreignPackageId = "foreign-holding-pkg-id";
         var foreignModule = new DamlModule
@@ -191,7 +191,6 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -239,11 +238,11 @@ public class InterfaceChoiceResultCs0117RegressionTests
         var errors = CompileEmittedFiles(files).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a choice returning ContractId of a foreign-package interface must project via the foreign marker's generated InterfaceId symbol, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
-    public void template_choice_returning_template_and_interface_cid_tuple_compiles()
+    public void InterfaceChoiceResultCs0117Regression_template_choice_returning_template_and_interface_cid_tuple_compiles()
     {
         var module = new DamlModule
         {
@@ -253,13 +252,11 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "Widget",
-                    Fields = [],
                     Choices = [],
                 },
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -310,13 +307,11 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "IFactory",
-                    Fields = [],
                     Choices = [],
                 },
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -356,13 +351,13 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void disambiguates_template_colliding_with_interface_marker_name()
+    public void InterfaceChoiceResultCs0117Regression_disambiguates_template_colliding_with_interface_marker_name()
     {
         CompilesCleanly(TemplateMarkerCollisionDar(), "a template literally named IFactory and an interface Factory (whose generated marker is also IFactory) must not both declare a public IFactory type in the same namespace");
     }
 
     [Fact]
-    public void writes_the_disambiguated_marker_file_for_a_template_colliding_with_it()
+    public void InterfaceChoiceResultCs0117Regression_writes_the_disambiguated_marker_file_for_a_template_colliding_with_it()
     {
         var files = CreateGenerator().Generate(TemplateMarkerCollisionDar()).ToList();
 
@@ -379,7 +374,6 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -419,13 +413,13 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void disambiguates_record_colliding_with_interface_marker_name()
+    public void InterfaceChoiceResultCs0117Regression_disambiguates_record_colliding_with_interface_marker_name()
     {
         CompilesCleanly(RecordMarkerCollisionDar(), "a record literally named IFactory and an interface Factory (whose generated marker is also IFactory) must not both declare a public IFactory type in the same namespace");
     }
 
     [Fact]
-    public void writes_the_disambiguated_marker_file_for_a_record_colliding_with_it()
+    public void InterfaceChoiceResultCs0117Regression_writes_the_disambiguated_marker_file_for_a_record_colliding_with_it()
     {
         var files = CreateGenerator().Generate(RecordMarkerCollisionDar()).ToList();
 
@@ -442,13 +436,11 @@ public class InterfaceChoiceResultCs0117RegressionTests
                 new DamlTemplate
                 {
                     Name = "IFactory",
-                    Fields = [],
                     Choices = [],
                 },
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -491,7 +483,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void disambiguates_record_colliding_with_the_first_round_disambiguated_marker()
+    public void InterfaceChoiceResultCs0117Regression_disambiguates_record_colliding_with_the_first_round_disambiguated_marker()
     {
         CompilesCleanly(
             RecordMarkerCollisionWithFirstRoundDisambiguatedTemplateDar(),
@@ -499,7 +491,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void writes_the_second_round_disambiguated_marker_file_when_both_rounds_collide()
+    public void InterfaceChoiceResultCs0117Regression_writes_the_second_round_disambiguated_marker_file_when_both_rounds_collide()
     {
         var files = CreateGenerator().Generate(RecordMarkerCollisionWithFirstRoundDisambiguatedTemplateDar()).ToList();
 
@@ -535,7 +527,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void two_same_named_interfaces_in_different_modules_compile_cleanly_with_distinct_markers()
+    public void InterfaceChoiceResultCs0117Regression_two_same_named_interfaces_in_different_modules_compile_cleanly_with_distinct_markers()
     {
         CompilesCleanly(
             TwoModuleInterfaceMarkerCollisionDar("Alpha.Module", "Beta.Module"),
@@ -543,7 +535,7 @@ public class InterfaceChoiceResultCs0117RegressionTests
     }
 
     [Fact]
-    public void two_same_named_interfaces_in_different_modules_deterministically_assign_the_same_winner_regardless_of_module_order()
+    public void InterfaceChoiceResultCs0117Regression_two_same_named_interfaces_in_different_modules_deterministically_assign_the_same_winner_regardless_of_module_order()
     {
         string WinnerModuleName(string firstModuleName, string secondModuleName)
         {

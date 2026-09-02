@@ -27,6 +27,27 @@ public interface IDamlRecord : IDamlValue
 }
 
 /// <summary>
+/// A Daml value whose Ledger API representation is a record and whose concrete type
+/// <typeparamref name="TSelf"/> can be reconstructed from that representation.
+/// </summary>
+/// <remarks>
+/// The factory is a static abstract, so it is called through a type parameter constrained
+/// to this interface — <c>static T Materialize&lt;T&gt;(DamlRecord record)
+/// where T : IDamlRecord&lt;T&gt; =&gt; T.FromRecord(record);</c> — never on an instance.
+/// </remarks>
+/// <typeparam name="TSelf">The implementing type itself; the self-referential constraint
+/// lets the factory return the concrete type rather than this interface.</typeparam>
+public interface IDamlRecord<TSelf> : IDamlRecord
+    where TSelf : IDamlRecord<TSelf>
+{
+    /// <summary>
+    /// Creates a <typeparamref name="TSelf"/> instance from its Ledger API record
+    /// representation. Implementations throw when a required field is missing.
+    /// </summary>
+    static abstract TSelf FromRecord(DamlRecord record);
+}
+
+/// <summary>
 /// A Daml value whose Ledger API representation is a variant.
 /// </summary>
 public interface IDamlVariant : IDamlValue

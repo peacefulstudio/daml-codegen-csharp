@@ -15,7 +15,11 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationInstructionResult
 /// </summary>
-public sealed record AllocationInstructionResult([property: DamlFieldAttribute("output")] AllocationInstructionResult_Output Output, [property: DamlFieldAttribute("authorizerChangeCids")] IReadOnlyDictionary<string, IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>>> AuthorizerChangeCids, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationInstructionResult(
+    [property: DamlFieldAttribute("output")] AllocationInstructionResult_Output Output,
+    [property: DamlFieldAttribute("authorizerChangeCids")] IReadOnlyDictionary<string, IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>>> AuthorizerChangeCids,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<AllocationInstructionResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

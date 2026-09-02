@@ -10,4 +10,7 @@ public static class LedgerNamespaces
 {
     /// <summary>The <c>Daml.Ledger.Abstractions</c> namespace.</summary>
     public const string Abstractions = "Daml.Ledger.Abstractions";
+
+    /// <summary>The <c>Daml.Ledger.Abstractions.Extensions</c> namespace.</summary>
+    public const string AbstractionsExtensions = "Daml.Ledger.Abstractions.Extensions";
 }

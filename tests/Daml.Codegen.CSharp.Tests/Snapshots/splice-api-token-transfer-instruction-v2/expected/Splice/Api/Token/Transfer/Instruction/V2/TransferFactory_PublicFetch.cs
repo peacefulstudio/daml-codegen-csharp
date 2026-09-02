@@ -14,7 +14,9 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferFactory_PublicFetch
 /// </summary>
-public sealed record TransferFactory_PublicFetch([property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors) : IDamlRecord
+public sealed record TransferFactory_PublicFetch(
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors
+) : IDamlRecord<TransferFactory_PublicFetch>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

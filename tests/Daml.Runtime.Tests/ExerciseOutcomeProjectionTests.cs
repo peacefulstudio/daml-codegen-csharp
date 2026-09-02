@@ -98,7 +98,7 @@ public class ExerciseOutcomeProjectionTests
     public void ProjectCommitted_maps_InfraError_preserving_status_code_message_and_source_exception()
     {
         var sourceException = new InvalidOperationException("transport failed");
-        var outcome = new ExerciseOutcome<TransactionResult>.InfraError(14, "network down", sourceException);
+        var outcome = new ExerciseOutcome<TransactionResult>.InfraError(14, "network down", SourceException: sourceException);
 
         var result = outcome.ProjectCommitted<int>(_ => new ExerciseOutcome<int>.One(0));
 
@@ -106,6 +106,21 @@ public class ExerciseOutcomeProjectionTests
         infraError.StatusCode.Should().Be(14);
         infraError.Message.Should().Be("network down");
         infraError.SourceException.Should().BeSameAs(sourceException);
+    }
+
+    [Fact]
+    public void ProjectCommitted_carries_the_InfraError_category_across_the_projection()
+    {
+        var outcome = new ExerciseOutcome<TransactionResult>.InfraError(
+            400, "bad request", DamlErrorCategory.InvalidIndependentOfSystemState);
+
+        var result = outcome.ProjectCommitted<int>(_ => new ExerciseOutcome<int>.One(0));
+
+        result.Should().BeOfType<ExerciseOutcome<int>.InfraError>()
+            .Which.Category.Should().Be(
+                DamlErrorCategory.InvalidIndependentOfSystemState,
+                "a projection that re-wraps the outcome without forwarding the category silently discards a " +
+                "classification the transport determined without a structured Canton error to carry it");
     }
 
     [Fact]

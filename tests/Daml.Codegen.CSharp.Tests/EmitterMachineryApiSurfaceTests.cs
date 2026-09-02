@@ -29,7 +29,7 @@ public class EmitterMachineryApiSurfaceTests
 
     [Theory]
     [MemberData(nameof(EmitterMachineryTypes))]
-    public void emitter_machinery_type_is_internal(Type emitterType)
+    public void EmitterMachineryApiSurface_emitter_machinery_type_is_internal(Type emitterType)
     {
         emitterType.IsPublic.Should().BeFalse(
             "{0} is codegen implementation detail used only within CodeGen/, and a public " +

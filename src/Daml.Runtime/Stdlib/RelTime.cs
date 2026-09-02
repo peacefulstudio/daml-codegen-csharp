@@ -10,7 +10,7 @@ namespace Daml.Runtime.Stdlib;
 /// Hand-coded into Daml.Runtime since daml-stdlib-DA-Time-Types 1.0.0 is a frozen
 /// stdlib package (no NuGet equivalent) referenced by many Splice DARs.
 /// </summary>
-public sealed record RelTime(long Microseconds) : IDamlRecord
+public sealed record RelTime(long Microseconds) : IDamlRecord<RelTime>
 {
     /// <summary>Encodes this RelTime as the single-field <c>microseconds</c> wire record.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

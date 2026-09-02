@@ -1,6 +1,8 @@
+// Copyright 2026 Peaceful Studio OÜ
+// SPDX-License-Identifier: Apache-2.0
 ThisBuild / scalaVersion := "2.13.16"
 ThisBuild / organization := "studio.peaceful.daml.codegen"
-ThisBuild / version      := "0.1.0-SNAPSHOT"
+ThisBuild / version      := sys.env.get("DAML_DAR_TO_PROTO_VERSION").map(_.trim).filter(_.nonEmpty).getOrElse("0.0.0-dev")
 
 resolvers += "Daml" at "https://repo1.maven.org/maven2/"
 
@@ -8,7 +10,12 @@ lazy val damlLfArchiveVersion = "3.5.9"
 
 lazy val jvmHelper = (project in file("."))
   .settings(
-    name := "daml-codegen-jvm-helper",
+    name := "daml-dar-to-proto",
+    Compile / resourceGenerators += Def.task {
+      val versionFile = (Compile / resourceManaged).value / "daml-dar-to-proto-version.txt"
+      IO.write(versionFile, version.value)
+      Seq(versionFile)
+    }.taskValue,
     Compile / PB.protoSources := Seq((ThisBuild / baseDirectory).value / ".." / "proto"),
     Compile / PB.targets := Seq(
       scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
@@ -19,7 +26,7 @@ lazy val jvmHelper = (project in file("."))
       "org.scalatest" %% "scalatest" % "3.2.19" % Test
     ),
     assembly / mainClass := Some("studio.peaceful.daml.codegen.helper.Decode"),
-    assembly / assemblyJarName := "daml-codegen-jvm-helper.jar",
+    assembly / assemblyJarName := "daml-dar-to-proto.jar",
     assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "MANIFEST.MF")              => MergeStrategy.discard
       case PathList("META-INF", "versions", _, "module-info.class") => MergeStrategy.discard

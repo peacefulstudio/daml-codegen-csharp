@@ -110,6 +110,33 @@ public partial class DamlTypesTests
             "29 fractional digits exceed decimal's 28-digit limit and must not silently round");
     }
 
+    [Fact]
+    public void Value_narrows_a_scale_padded_value_that_fits_decimal()
+    {
+        const string paddedToScale37 = "1.5000000000000000000000000000000000000";
+
+        DamlNumeric.TryParseCanonical(paddedToScale37, out var value).Should().BeTrue();
+        value.Value.Should().Be(1.5m,
+            "a participant pads every Numeric 37 field out to its declared scale, so the padding must not decide representability");
+    }
+
+    [Fact]
+    public void Value_narrows_a_scale_padded_zero()
+    {
+        const string paddedZero = "0.0000000000000000000000000000000000000";
+
+        DamlNumeric.TryParseCanonical(paddedZero, out var value).Should().BeTrue();
+        value.Value.Should().Be(0m);
+    }
+
+    [Fact]
+    public void Value_keeps_the_trailing_zeros_of_a_mantissa_decimal_already_holds()
+    {
+        DamlNumeric.TryParseCanonical("1.50", out var value).Should().BeTrue();
+        value.Value.Scale.Should().Be(2,
+            "stripping is a fallback for mantissas decimal cannot otherwise hold, not a normalisation of every value");
+    }
+
     [Theory]
     [InlineData("nope")]
     [InlineData("1e5")]

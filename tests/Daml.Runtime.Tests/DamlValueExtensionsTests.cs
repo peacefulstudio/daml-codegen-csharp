@@ -195,6 +195,14 @@ public class DamlValueExtensionsTests
     }
 
     [Fact]
+    public void AsOptional_rejects_a_DamlOptionalChain_instead_of_wrapping_it_as_Some()
+    {
+        var act = () => DamlOptionalChain.Some(new DamlText("deep")).AsOptional();
+
+        act.Should().Throw<InvalidCastException>().WithMessage("*DamlOptionalChain*");
+    }
+
+    [Fact]
     public void FromDamlValue_should_convert_DamlParty_to_nullable_Party()
     {
         var result = new DamlParty("party::alice").FromDamlValue<Party?>();

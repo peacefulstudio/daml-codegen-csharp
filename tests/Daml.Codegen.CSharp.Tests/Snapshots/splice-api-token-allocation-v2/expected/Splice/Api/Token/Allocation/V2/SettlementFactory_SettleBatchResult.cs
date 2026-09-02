@@ -14,7 +14,10 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record SettlementFactory_SettleBatchResult
 /// </summary>
-public sealed record SettlementFactory_SettleBatchResult([property: DamlFieldAttribute("allocationSettleResults")] IReadOnlyList<AllocationResult> AllocationSettleResults, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record SettlementFactory_SettleBatchResult(
+    [property: DamlFieldAttribute("allocationSettleResults")] IReadOnlyList<AllocationResult> AllocationSettleResults,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<SettlementFactory_SettleBatchResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

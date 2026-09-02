@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -73,7 +74,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = fields,
                     Choices = [],
                     Signatories = signatories,
                 }
@@ -231,11 +231,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Offer",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -310,12 +305,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("initiator", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -385,7 +374,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -430,7 +418,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -550,10 +537,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Offer",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("counterparty", new DamlPrimitiveType(DamlPrimitive.Party)),
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -654,7 +637,6 @@ public class NamedSubmitterTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = fields,
                     Choices =
                     [
                         new DamlChoice
@@ -774,9 +756,7 @@ public class NamedSubmitterTests
         // holder/issuer into readAs.
         content.Should().Contain("actAs: new HashSet<Party> { platform }");
         content.Should().Contain("readAs: new HashSet<Party> { holder, issuer }");
-        // The submission is dispatched with the SubmitterInfo passed directly to
-        // TrySubmitAndWaitForTransactionAsync.
-        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
+        content.Should().Contain("client." + TrySubmitSingleArgumentOrder);
     }
 
     [Fact]
@@ -821,9 +801,7 @@ public class NamedSubmitterTests
         // the named Party param (no HashSet allocation, no readAs argument).
         content.Should().Contain("SubmitterInfo submitter = platform;");
         content.Should().NotContain("readAs:");
-        // The submission is still dispatched with the SubmitterInfo overload,
-        // passed directly to TrySubmitAndWaitForTransactionAsync.
-        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
+        content.Should().Contain("client." + TrySubmitSingleArgumentOrder);
     }
 
     [Fact]
@@ -846,11 +824,14 @@ public class NamedSubmitterTests
 
         content.Should().Contain("Party platform,");
         content.Should().Contain("SubmitterInfo submitter,");
-        content.Should().Contain("TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
+        content.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
-        var contractIdOverloads =
-            content.Split("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(").Length - 1;
+        var contractIdOverloads = content
+            .Split("RenewAsync(\n        this ContractId<Agreement> contractId,")
+            .Length - 1;
         contractIdOverloads.Should().Be(2);
+        content.Should().Contain("public static Task<ExerciseOutcome<RenewResult>> RenewAsync(");
+        content.Should().Contain("public static async Task<ExerciseOutcome<RenewResult>> RenewAsync(");
     }
 
     [Fact]

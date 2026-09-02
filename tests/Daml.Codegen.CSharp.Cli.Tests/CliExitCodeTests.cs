@@ -26,6 +26,18 @@ public class CliExitCodeTests
             "--intermediate is a required option, so a no-args invocation must fail at parse time; an exact-value assertion catches SetAction overload misbinding (Task<int> -> Task) that the looser !=0 check would miss if the int got coerced to 0");
     }
 
+    [Theory]
+    [InlineData("--target-framework", "", "--target-framework rejects empty/whitespace-only strings at the CLI boundary; an empty TFM produces a broken .csproj that fails late with a confusing dotnet error")]
+    [InlineData("--target-framework", "   ", "--target-framework rejects whitespace-only values at the CLI boundary")]
+    [InlineData("--runtime-version", "", "--runtime-version rejects empty/whitespace-only strings when explicitly supplied; an empty version string breaks the generated PackageReference attribute")]
+    [InlineData("--runtime-version", "   ", "--runtime-version rejects whitespace-only values when explicitly supplied")]
+    public async Task Program_blank_option_value_returns_nonzero_exit_code(
+        string option, string value, string because)
+    {
+        var exit = await Program.Main([option, value]);
+        exit.Should().NotBe(0, because);
+    }
+
     [Fact]
     public void Program_is_not_part_of_the_public_API_surface()
     {

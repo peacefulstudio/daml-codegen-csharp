@@ -78,6 +78,49 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
       Decode.runCli(List("--help")) shouldBe 0
     }
 
+    "recognise --version as a distinct request, not an error" in {
+      Decode.parseArgs(List("--version")) shouldBe Right(Decode.CliCommand.Version)
+    }
+
+    "exit with code 0 and print exactly the build version on --version" in {
+      val expectedVersion = Decode.readBuildVersion().value
+      val out = new java.io.ByteArrayOutputStream()
+      Console.withOut(out) { Decode.runCli(List("--version")) } shouldBe 0
+      out.toString("UTF-8") shouldBe expectedVersion + System.lineSeparator()
+      expectedVersion shouldBe expectedVersion.trim
+      expectedVersion should not be empty
+    }
+
+    "exit with code 0 on --version even when mixed with other arguments" in {
+      val expectedVersion = Decode.readBuildVersion().value
+      val out = new java.io.ByteArrayOutputStream()
+      Console.withOut(out) { Decode.runCli(List("--dar", "a.dar", "--version")) } shouldBe 0
+      out.toString("UTF-8") shouldBe expectedVersion + System.lineSeparator()
+    }
+
+    "prefer --help over --version when both are present" in {
+      Decode.parseArgs(List("--version", "--help")) shouldBe Right(Decode.CliCommand.Help)
+      val out = new java.io.ByteArrayOutputStream()
+      Console.withOut(out) { Decode.runCli(List("--version", "--help")) } shouldBe 0
+      out.toString("UTF-8") should include("Usage: daml-dar-to-proto")
+    }
+
+    "mention --version in the usage text printed on --help" in {
+      val out = new java.io.ByteArrayOutputStream()
+      Console.withOut(out) { Decode.runCli(List("--help")) } shouldBe 0
+      out.toString("UTF-8") should include("--version")
+    }
+
+    "report a Left when the version resource is absent from the classpath" in {
+      val missing = "nonexistent-version-resource.txt"
+      Decode.readBuildVersion(missing).left.toOption.value should include(missing)
+    }
+
+    "report a Left when the version resource is blank" in {
+      val blank = "blank-build-version.txt"
+      Decode.readBuildVersion(blank).left.toOption.value should include(blank)
+    }
+
     "exit with code 2 on parse error" in {
       Decode.runCli(List("--bogus")) shouldBe 2
     }
@@ -97,7 +140,7 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
       }
     }
 
-    "default decode threads real PartyAnalyses.compute output into the proto: every template's built-in Archive choice gets a genuine Static([]) observers verdict" in {
+    "default decode threads real PartyAnalyses.compute output into the proto: every template's built-in Archive choice gets a genuine Static([]) observers verdict, and AnsRules resolves its signatories and its Archive controllers to Static([dso])" in {
       Files.exists(TemplatesFixtureDar) shouldBe true
       val outPath = Files.createTempFile("intermediate-dar-default-static-", ".binpb")
       try {
@@ -106,13 +149,23 @@ class DecodeSpec extends AnyWordSpec with Matchers with EitherValues with Option
         val allTemplates = (proto.main.toSeq ++ proto.dependencies).flatMap(_.modules).flatMap(_.templates)
         allTemplates should not be empty
         forAll(allTemplates) { tmpl =>
-          tmpl.signatories.value.shape.isDynamic shouldBe true
           val archive = tmpl.choices
             .find(_.name == "Archive")
             .getOrElse(fail(s"built-in Archive choice not found on template ${tmpl.name}"))
           archive.observers.value.shape.isStatic shouldBe true
           archive.observers.value.getStatic.payloadFields shouldBe empty
         }
+        val ansRules = allTemplates
+          .find(_.name == "AnsRules")
+          .getOrElse(fail("AnsRules template not found in the fixture DAR"))
+        ansRules.signatories.value.getStatic.payloadFields shouldBe Seq("dso")
+        ansRules.choices
+          .find(_.name == "Archive")
+          .getOrElse(fail("Archive choice not found on AnsRules"))
+          .controllers
+          .value
+          .getStatic
+          .payloadFields shouldBe Seq("dso")
       } finally {
         Files.deleteIfExists(outPath)
       }

@@ -18,14 +18,14 @@ namespace Daml.Codegen.CSharp.Tests;
 public partial class IntermediateDarReaderTests
 {
     [Fact]
-    public void intermediate_dar_proto_types_are_available()
+    public void IntermediateDar_proto_types_are_available()
     {
         var dar = new IntermediateDar();
         dar.Should().NotBeNull();
     }
 
     [Fact]
-    public void upgraded_package_id_round_trips_from_proto()
+    public void IntermediateDarReader_upgraded_package_id_round_trips_from_proto()
     {
         var proto = new IntermediateDar
         {
@@ -44,7 +44,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void empty_upgraded_package_id_round_trips_as_null()
+    public void IntermediateDarReader_empty_upgraded_package_id_round_trips_as_null()
     {
         var proto = new IntermediateDar
         {
@@ -62,7 +62,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void empty_intermediate_dar_round_trips_to_empty_model()
+    public void IntermediateDarReader_empty_intermediate_dar_round_trips_to_empty_model()
     {
         var proto = new IntermediateDar
         {
@@ -86,14 +86,14 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void null_proto_throws_argument_null_exception()
+    public void IntermediateDarReader_null_proto_throws_argument_null_exception()
     {
         var act = () => IntermediateDarReader.Read(null!);
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void proto_without_main_throws_invalid_data_exception()
+    public void IntermediateDarReader_proto_without_main_throws_invalid_data_exception()
     {
         var proto = new IntermediateDar();
         var act = () => IntermediateDarReader.Read(proto);
@@ -102,7 +102,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void dependencies_round_trip_in_order()
+    public void IntermediateDarReader_dependencies_round_trip_in_order()
     {
         var proto = new IntermediateDar
         {
@@ -135,7 +135,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void module_name_segments_join_with_dot()
+    public void IntermediateDarReader_module_name_segments_join_with_dot()
     {
         var proto = MakePackageWith(module =>
         {
@@ -150,7 +150,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void invalid_version_falls_back_to_three_part_zero()
+    public void IntermediateDarReader_invalid_version_falls_back_to_three_part_zero()
     {
         var proto = new IntermediateDar
         {
@@ -168,7 +168,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void unit_typed_variant_constructor_emits_noarg_record()
+    public void IntermediateDarReader_unit_typed_variant_constructor_emits_noarg_record()
     {
         var proto = MakePackageWith(module =>
         {
@@ -188,7 +188,7 @@ public partial class IntermediateDarReaderTests
         var model = IntermediateDarReader.Read(proto);
 
         var options = new CodeGen.CodeGenOptions();
-        var generator = new CodeGen.CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CodeGen.CSharpCodeGenerator(options);
 
         var files = generator.Generate(model);
 
@@ -199,7 +199,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void generator_accepts_dar_model_from_intermediate_reader()
+    public void IntermediateDarReader_generator_accepts_dar_model_from_intermediate_reader()
     {
         var proto = MakePackageWith(module =>
         {
@@ -213,8 +213,7 @@ public partial class IntermediateDarReaderTests
         var model = IntermediateDarReader.Read(proto);
 
         var options = new CodeGen.CodeGenOptions();
-        var logger = new ConsoleLogger(0);
-        var generator = new CodeGen.CSharpCodeGenerator(options, logger);
+        var generator = new CodeGen.CSharpCodeGenerator(options);
 
         var files = generator.Generate(model);
 

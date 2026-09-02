@@ -12,7 +12,7 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 public class RichRecordChoiceTests
 {
     [Fact]
-    public void relabel_argument_round_trips_through_its_record()
+    public void Relabel_argument_round_trips_through_its_record()
     {
         var argument = new RichRecord.Relabel("renamed");
 
@@ -23,21 +23,21 @@ public class RichRecordChoiceTests
     }
 
     [Fact]
-    public void relabel_choice_is_non_consuming_and_named_relabel()
+    public void Relabel_choice_is_non_consuming_and_named_relabel()
     {
         RichRecord.ChoiceRelabel.Name.Value.Should().Be("Relabel");
         RichRecord.ChoiceRelabel.Consuming.Should().BeFalse();
     }
 
     [Fact]
-    public void archive_choice_is_consuming_and_named_archive()
+    public void RichRecordChoice_archive_choice_is_consuming_and_named_archive()
     {
         RichRecord.ChoiceArchive.Name.Value.Should().Be("Archive");
         RichRecord.ChoiceArchive.Consuming.Should().BeTrue();
     }
 
     [Fact]
-    public void contract_from_created_event_pairs_typed_id_with_decoded_payload()
+    public void RichRecordChoice_contract_from_created_event_pairs_typed_id_with_decoded_payload()
     {
         var payload = new RichRecord(
             Owner: new Party("alice"),
@@ -64,7 +64,8 @@ public class RichRecordChoiceTests
             CreateArguments: payload.ToRecord(),
             WitnessParties: Array.Empty<Party>(),
             Signatories: Array.Empty<Party>(),
-            Observers: Array.Empty<Party>());
+            Observers: Array.Empty<Party>(),
+            ContractKey: null);
 
         var contract = RichRecord.Contract.FromCreatedEvent(@event);
 
@@ -73,7 +74,7 @@ public class RichRecordChoiceTests
     }
 
     [Fact]
-    public void contract_identifiers_expose_template_ids_for_pqs_queries()
+    public void RichRecordChoice_contract_identifiers_expose_template_ids_for_pqs_queries()
     {
         ContractIdentifiers.Marker.Should().Contain("RichTypes:Marker");
         ContractIdentifiers.RichRecord.Should().Contain("RichTypes:RichRecord");

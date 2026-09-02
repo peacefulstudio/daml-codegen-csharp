@@ -41,7 +41,7 @@ public class RuntimeTypeNameDriftGuardTests
     [InlineData(nameof(RuntimeTypeNames.Choice))]
     [InlineData(nameof(RuntimeTypeNames.IExercises))]
     [InlineData(nameof(RuntimeTypeNames.IImplements))]
-    public void the_cs8920_blocked_template_generic_literals_name_a_real_runtime_type(string constantFieldName)
+    public void RuntimeTypeNameDriftGuard_the_cs8920_blocked_template_generic_literals_name_a_real_runtime_type(string constantFieldName)
     {
         var literal = RuntimeTypeNamesConstant(constantFieldName);
 
@@ -59,7 +59,7 @@ public class RuntimeTypeNameDriftGuardTests
     [InlineData("DA.NonEmpty.Types", "NonEmpty")]
     [InlineData("DA.Map.Types", "Map")]
     [InlineData("DA.Internal.Map", "Map")]
-    public void every_mapped_stdlib_type_names_a_real_runtime_type(string module, string damlTypeName)
+    public void RuntimeTypeNameDriftGuard_every_mapped_stdlib_type_names_a_real_runtime_type(string module, string damlTypeName)
     {
         var mapped = StdlibPackages.MapStdlibType(module, damlTypeName);
 
@@ -69,7 +69,7 @@ public class RuntimeTypeNameDriftGuardTests
     }
 
     [Fact]
-    public void a_type_name_absent_from_daml_runtime_would_fail_the_drift_guard()
+    public void RuntimeTypeNameDriftGuard_a_type_name_absent_from_daml_runtime_would_fail_the_drift_guard()
     {
         RuntimeTypeSimpleNames.Should().NotContain("ThisTypeDoesNotExistInDamlRuntime");
     }

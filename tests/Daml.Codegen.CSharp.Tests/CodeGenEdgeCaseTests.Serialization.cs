@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -207,7 +207,7 @@ public partial class CodeGenEdgeCaseTests
         var code = emptyFile!.Content;
 
         // Record with no primary constructor parameters
-        code.Should().Contain("public sealed record EmptyRecord : IDamlRecord");
+        code.Should().Contain("public sealed record EmptyRecord : IDamlRecord<EmptyRecord>");
         code.Should().Contain("DamlRecord.Create(");
     }
 

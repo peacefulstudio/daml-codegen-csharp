@@ -41,7 +41,7 @@ public class CliReleaseCountersTests : IDisposable
         Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName, "intermediate.binpb");
 
     [Fact]
-    public async Task release_counters_flag_stamps_generation_ordinal_into_generated_csproj()
+    public async Task CliReleaseCounters_release_counters_flag_stamps_generation_ordinal_into_generated_csproj()
     {
         var intermediate = FixtureIntermediate();
         File.Exists(intermediate).Should().BeTrue($"fixture proto must ship at {intermediate}");
@@ -70,7 +70,7 @@ public class CliReleaseCountersTests : IDisposable
     }
 
     [Fact]
-    public async Task release_counters_flag_holds_generation_ordinal_steady_on_re_emission_of_the_same_codegen_version()
+    public async Task CliReleaseCounters_release_counters_flag_holds_generation_ordinal_steady_on_re_emission_of_the_same_codegen_version()
     {
         var intermediate = FixtureIntermediate();
         var counters = Path.Combine(_workspace, "release-counters.json");
@@ -105,7 +105,7 @@ public class CliReleaseCountersTests : IDisposable
     }
 
     [Fact]
-    public async Task codegen_version_flag_drives_the_generation_key()
+    public async Task CliReleaseCounters_codegen_version_flag_drives_the_generation_key()
     {
         var intermediate = FixtureIntermediate();
         var counters = Path.Combine(_workspace, "release-counters.json");
@@ -140,7 +140,7 @@ public class CliReleaseCountersTests : IDisposable
     }
 
     [Fact]
-    public async Task release_counters_flag_defaults_the_generation_key_to_the_emitter_version_when_codegen_version_is_omitted()
+    public async Task CliReleaseCounters_release_counters_flag_defaults_the_generation_key_to_the_emitter_version_when_codegen_version_is_omitted()
     {
         var intermediate = FixtureIntermediate();
         var counters = Path.Combine(_workspace, "release-counters.json");
@@ -167,7 +167,7 @@ public class CliReleaseCountersTests : IDisposable
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task codegen_version_flag_fails_loudly_when_blank(string blankCodegenVersion)
+    public async Task CliReleaseCounters_codegen_version_flag_fails_loudly_when_blank(string blankCodegenVersion)
     {
         var intermediate = FixtureIntermediate();
         var counters = Path.Combine(_workspace, "release-counters.json");
@@ -185,7 +185,7 @@ public class CliReleaseCountersTests : IDisposable
     }
 
     [Fact]
-    public async Task release_counters_flag_fails_loudly_when_intermediate_is_not_provided()
+    public async Task CliReleaseCounters_release_counters_flag_fails_loudly_when_intermediate_is_not_provided()
     {
         var counters = Path.Combine(_workspace, "release-counters.json");
 
@@ -200,7 +200,7 @@ public class CliReleaseCountersTests : IDisposable
     }
 
     [Fact]
-    public async Task codegen_version_flag_fails_loudly_when_release_counters_is_not_provided()
+    public async Task CliReleaseCounters_codegen_version_flag_fails_loudly_when_release_counters_is_not_provided()
     {
         var intermediate = FixtureIntermediate();
 
@@ -213,6 +213,51 @@ public class CliReleaseCountersTests : IDisposable
 
         exit.Should().NotBe(0,
             "--codegen-version only keys the release-counter store, so supplying it without --release-counters fails loudly rather than being silently ignored");
+    }
+
+    [Fact]
+    public async Task CliReleaseCounters_release_counters_flag_pins_dependency_references_to_the_co_produced_version()
+    {
+        var intermediate = FixtureIntermediate();
+        var counters = Path.Combine(_workspace, "release-counters.json");
+
+        (await Program.Main(
+        [
+            "--intermediate", intermediate,
+            "-o", _workspace,
+            "--release-counters", counters,
+            "--codegen-version", "0.2.0-preview.3",
+            "--generate-project"
+        ])).Should().Be(0);
+
+        DependencyReferenceVersion(_workspace, "Splice.Api.Token.Metadata.V1").Should().Be("1.0.0.0",
+            "--release-counters keys one generation ordinal across a family the release publishes together, so the dependency is co-produced by this run at a version it knows exactly");
+    }
+
+    [Fact]
+    public async Task CliReleaseCounters_omitting_release_counters_floats_dependency_references_over_published_generations()
+    {
+        var intermediate = FixtureIntermediate();
+
+        (await Program.Main(
+        [
+            "--intermediate", intermediate,
+            "-o", _workspace,
+            "--generate-project"
+        ])).Should().Be(0);
+
+        DependencyReferenceVersion(_workspace, "Splice.Api.Token.Metadata.V1").Should().Be("1.0.0.*-*",
+            "without --release-counters this run publishes nothing, so it cannot know the dependency's generation ordinal or prerelease tag; pinning the default 1.0.0.0 named a version nobody published and failed restore with NU1103");
+    }
+
+    private static string DependencyReferenceVersion(string workspace, string packageId)
+    {
+        var csproj = Directory.GetFiles(workspace, "*.csproj", SearchOption.TopDirectoryOnly).Single();
+        return XDocument.Load(csproj)
+            .Descendants("PackageReference")
+            .Single(reference => reference.Attribute("Include")?.Value == packageId)
+            .Attribute("Version")!
+            .Value;
     }
 
     private static string FourthSegmentOfGeneratedVersion(string workspace)

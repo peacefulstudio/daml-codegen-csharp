@@ -15,7 +15,13 @@ public sealed partial record AnsRules
     /// <summary>
     /// Choice argument type for AnsRules_CollectEntryRenewalPayment.
     /// </summary>
-    public sealed record AnsRules_CollectEntryRenewalPayment([property: DamlFieldAttribute("user")] Party User, [property: DamlFieldAttribute("entryContext")] ContractId<AnsEntryContext> EntryContext, [property: DamlFieldAttribute("paymentCid")] ContractId<Splice.Wallet.Payments.SubscriptionPayment> PaymentCid, [property: DamlFieldAttribute("entryCid")] ContractId<AnsEntry> EntryCid, [property: DamlFieldAttribute("transferContext")] Splice.Amulet.AppTransferContext TransferContext) : IDamlRecord
+    public sealed record AnsRules_CollectEntryRenewalPayment(
+        [property: DamlFieldAttribute("user")] Party User,
+        [property: DamlFieldAttribute("entryContext")] ContractId<AnsEntryContext> EntryContext,
+        [property: DamlFieldAttribute("paymentCid")] ContractId<Splice.Wallet.Payments.SubscriptionPayment> PaymentCid,
+        [property: DamlFieldAttribute("entryCid")] ContractId<AnsEntry> EntryCid,
+        [property: DamlFieldAttribute("transferContext")] Splice.Amulet.AppTransferContext TransferContext
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

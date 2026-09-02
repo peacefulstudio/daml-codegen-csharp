@@ -12,14 +12,20 @@ namespace Splice.Api.Token.Holding.V1;
 /// <summary>
 /// Generated from Daml record HoldingView
 /// </summary>
-public sealed record HoldingView([property: DamlFieldAttribute("owner")] Party Owner, [property: DamlFieldAttribute("instrumentId")] InstrumentId InstrumentId, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("lock")] Lock? @lock, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record HoldingView(
+    [property: DamlFieldAttribute("owner")] Party Owner,
+    [property: DamlFieldAttribute("instrumentId")] InstrumentId InstrumentId,
+    [property: DamlFieldAttribute("amount")] decimal Amount,
+    [property: DamlFieldAttribute("lock")] Lock? Lock,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IHolding, IDamlRecord<HoldingView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(
         DamlField.Create("owner", Owner.ToDamlValue()),
         DamlField.Create("instrumentId", InstrumentId.ToRecord()),
         DamlField.Create("amount", new DamlNumeric(Amount)),
-        DamlField.Create("lock", @lock is { } __lock ? new DamlOptional(__lock.ToRecord()) : DamlOptional.None),
+        DamlField.Create("lock", Lock is { } __Lock ? new DamlOptional(__Lock.ToRecord()) : DamlOptional.None),
         DamlField.Create("meta", Meta.ToRecord())
     );
 
@@ -28,7 +34,7 @@ public sealed record HoldingView([property: DamlFieldAttribute("owner")] Party O
         Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
         InstrumentId: InstrumentId.FromRecord(record.GetRequiredField("instrumentId").As<DamlRecord>()),
         Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value,
-        @lock: record.GetRequiredField("lock").AsOptional().HasValue ? Lock.FromRecord(record.GetRequiredField("lock").AsOptional().Value!.As<DamlRecord>()) : null,
+        Lock: record.GetRequiredField("lock").AsOptional().HasValue ? Lock.FromRecord(record.GetRequiredField("lock").AsOptional().Value!.As<DamlRecord>()) : null,
         Meta: Splice.Api.Token.Metadata.V1.Metadata.FromRecord(record.GetRequiredField("meta").As<DamlRecord>())
     );
 

@@ -22,7 +22,8 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Created(
             new ContractId<TestTemplate>("c1"),
-            DamlRecord.Create(),
+            new TestTemplate("alice"),
+            null,
             LedgerOffset.At(1),
             Domain,
             [Alice]);
@@ -63,7 +64,8 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
-            DamlRecord.Create(),
+            new TestTemplate("alice"),
+            null,
             LedgerOffset.At(4),
             Source,
             Target,
@@ -79,7 +81,8 @@ public class SynchronizerIdFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
-            DamlRecord.Create(),
+            new TestTemplate("alice"),
+            null,
             LedgerOffset.At(4),
             Source,
             Target,
@@ -120,7 +123,7 @@ public class SynchronizerIdFieldTypingTests
         ev.Target.Should().BeOfType<SynchronizerId>().And.Be(Target);
     }
 
-    private sealed record TestTemplate(string Owner) : ITemplate
+    private sealed record TestTemplate(string Owner) : ITemplate, IDamlRecord<TestTemplate>
     {
         public static Identifier TemplateId { get; } = new("pkg", "M", "TestTemplate");
         public static string PackageId => "pkg";
@@ -128,6 +131,9 @@ public class SynchronizerIdFieldTypingTests
         public static Version PackageVersion { get; } = new(0, 1, 0);
         public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
-        public DamlRecord ToRecord() => DamlRecord.Create();
+        public DamlRecord ToRecord() => DamlRecord.Create(new DamlField("owner", new DamlText(Owner)));
+
+        public static TestTemplate FromRecord(DamlRecord record) =>
+            new((record.GetField("owner") as DamlText)?.Value ?? string.Empty);
     }
 }

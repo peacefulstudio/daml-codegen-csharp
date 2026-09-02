@@ -6,11 +6,14 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,6 +22,13 @@ namespace Splice.Api.Token.Allocation.Request.V2;
 /// <summary>
 /// Generated from Daml interface Splice.Api.Token.AllocationRequestV2:AllocationRequest
 /// </summary>
+/// <remarks>
+/// Instance properties mirror the fields of the interface view <see cref="AllocationRequestView"/>,
+/// which implements this marker, so a view can be read through a marker-typed variable.
+/// <c>==</c> between marker-typed variables compares by reference equality; view payloads
+/// materialize as concrete <see cref="AllocationRequestView"/> values, whose record value equality
+/// applies once concretely typed.
+/// </remarks>
 public interface IAllocationRequest : IDamlInterface, IHasView<AllocationRequestView>
 {
     /// <summary>Gets the interface identifier.</summary>
@@ -39,14 +49,30 @@ public interface IAllocationRequest : IDamlInterface, IHasView<AllocationRequest
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier("adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c", "Splice.Api.Token.AllocationRequestV2", "AllocationRequest"), DamlTypeKind.Interface, "splice-api-token-allocation-request-v2");
 
-    // Interface method AllocationRequest_Accept.
-    // Choice AllocationRequest_Accept(AllocationRequest_Accept) -> AllocationRequest_AcceptResult
-    // Interface method AllocationRequest_Reject.
-    // Choice AllocationRequest_Reject(AllocationRequest_Reject) -> AllocationRequest_RejectResult
-    // Interface method AllocationRequest_Withdraw.
-    // Choice AllocationRequest_Withdraw(AllocationRequest_Withdraw) -> AllocationRequest_WithdrawResult
-    // Interface method Archive.
-    // Choice Archive() -> DamlUnit
+    /// <summary>Gets the pure type witness pairing this marker with its view record <see cref="AllocationRequestView"/>; passing it to a generic method infers both type parameters from one argument.</summary>
+    public static ViewDescriptor<IAllocationRequest, AllocationRequestView> View { get; } = new();
+
+    /// <summary>Gets the originalRequestCid field of the interface view.</summary>
+    ContractId<IAllocationRequest>? OriginalRequestCid { get; }
+
+    /// <summary>Gets the settlement field of the interface view.</summary>
+    Splice.Api.Token.Allocation.V2.SettlementInfo Settlement { get; }
+
+    /// <summary>Gets the allocations field of the interface view.</summary>
+    IReadOnlyList<Splice.Api.Token.Allocation.V2.AllocationSpecification> Allocations { get; }
+
+    /// <summary>Gets the requestedAt field of the interface view.</summary>
+    DateTimeOffset RequestedAt { get; }
+
+    /// <summary>Gets the settleAt field of the interface view.</summary>
+    DateTimeOffset? SettleAt { get; }
+
+    /// <summary>Gets the availableActions field of the interface view.</summary>
+    IReadOnlyDictionary<AllocationRequestAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions { get; }
+
+    /// <summary>Gets the meta field of the interface view.</summary>
+    Splice.Api.Token.Metadata.V1.Metadata Meta { get; }
+
 }
 
 /// <summary>
@@ -54,7 +80,7 @@ public interface IAllocationRequest : IDamlInterface, IHasView<AllocationRequest
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
-/// through <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/>
+/// through <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
 /// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
 /// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
 /// implementing template (and therefore the produced contracts' shapes) is unknown
@@ -81,37 +107,31 @@ public static class IAllocationRequestExtensions
     /// <summary>
     /// Exercises the <c>AllocationRequest_Accept</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> AllocationRequest_AcceptAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> AllocationRequest_AcceptAsync(
         this ContractId<IAllocationRequest> contractId,
         ILedgerWriter client,
         AllocationRequest_Accept argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.AllocationRequest_AcceptCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 
     /// <summary>
@@ -133,37 +153,31 @@ public static class IAllocationRequestExtensions
     /// <summary>
     /// Exercises the <c>AllocationRequest_Reject</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> AllocationRequest_RejectAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> AllocationRequest_RejectAsync(
         this ContractId<IAllocationRequest> contractId,
         ILedgerWriter client,
         AllocationRequest_Reject argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.AllocationRequest_RejectCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 
     /// <summary>
@@ -185,37 +199,31 @@ public static class IAllocationRequestExtensions
     /// <summary>
     /// Exercises the <c>AllocationRequest_Withdraw</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> AllocationRequest_WithdrawAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> AllocationRequest_WithdrawAsync(
         this ContractId<IAllocationRequest> contractId,
         ILedgerWriter client,
         AllocationRequest_Withdraw argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.AllocationRequest_WithdrawCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 
     /// <summary>
@@ -234,34 +242,28 @@ public static class IAllocationRequestExtensions
     /// <summary>
     /// Exercises the <c>Archive</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
         this ContractId<IAllocationRequest> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 }

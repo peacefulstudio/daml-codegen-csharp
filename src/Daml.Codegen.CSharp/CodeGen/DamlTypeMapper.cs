@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -18,7 +18,8 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     private const int MaxTypeDepth = 256;
 
     /// <summary>Maps <paramref name="type"/> to its C# type name.</summary>
-    public string MapType(DamlType type) => MapType(type, depth: 0);
+    public string MapType(DamlType type) =>
+        MapType(OptionalRepresentation.Rewrite(type, context.Package, resolver), depth: 0);
 
     private string MapType(DamlType type, int depth)
     {
@@ -30,11 +31,10 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric } } => "decimal",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] } =>
             $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{MapType(arg, depth + 1)}>",
-        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
-                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
-            throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapType(arg, depth + 1)}?",
+        DamlWrappedOptional wrapped =>
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.Optional, context.RootNamespace)}<{MapType(wrapped.Argument, depth + 1)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
             $"{context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{MapType(arg, depth + 1)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
@@ -63,8 +63,16 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     /// stub. <c>null</c> outside a generic body.
     /// </param>
     public string ToValue(DamlType type, string fieldName, IReadOnlyDictionary<string, string>? typeVarDelegates = null) =>
-        ToValue(type, fieldName, typeVarDelegates, depth: 0);
+        ToValue(OptionalRepresentation.Rewrite(type, context.Package, resolver), fieldName, typeVarDelegates, depth: 0);
 
+    /// <remarks>
+    /// The optional arm strips a leading <c>@</c> from the field name when deriving its local
+    /// variable. Identifier sanitization escapes a field whose name is a C# keyword — <c>lock</c>,
+    /// <c>class</c>, <c>event</c> — by prepending <c>@</c>, which is legal on a property but not
+    /// on the local bound by the <c>is { } __name</c> pattern, so an <c>Optional</c> field called
+    /// <c>lock</c> would emit the unparsable <c>__@lock</c>. Only the local is stripped; the
+    /// property reference keeps its escape so the record property stays addressable.
+    /// </remarks>
     private string ToValue(DamlType type, string fieldName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth)
     {
         ThrowIfTooDeep(depth, nameof(ToValue));
@@ -76,16 +84,10 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
             $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlNumeric, context.RootNamespace)}({fieldName})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId } } =>
             $"{fieldName}.ToDamlValue()",
-        // The TrimStart('@') here protects against an Optional field whose name is a
-        // C# keyword (e.g. `lock`, `class`, `event`). Identifiers.Sanitize escapes those
-        // by prepending '@', which is valid as a property name but invalid as the
-        // local-variable name produced by `is { } __<name>` below. Without the trim,
-        // a Daml `Optional <something>` field called `lock` produces `__@lock`, which
-        // does not parse. The trim is local-variable-only — the property reference
-        // (`{fieldName}`) keeps its `@` escape so the original record property is
-        // still addressable.
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } app =>
             $"{fieldName} is {{ }} __{fieldName.TrimStart('@')} ? new {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}({ToValue(app.Arguments[0], $"__{fieldName.TrimStart('@')}", typeVarDelegates, depth + 1)}) : {context.Qualifier.Qualify(RuntimeTypeNames.DamlOptional, context.RootNamespace)}.None",
+        DamlWrappedOptional wrapped =>
+            $"{fieldName}.{WrappedOptionalSerializer(wrapped.Encoding)}(__optional{depth} => {ToValue(wrapped.Argument, $"__optional{depth}", typeVarDelegates, depth + 1)})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List } } app =>
             $"new {context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}({fieldName}.Select(x => ({context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}){ToValue(app.Arguments[0], "x", typeVarDelegates, depth + 1)}).ToList())",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap } } app =>
@@ -116,7 +118,37 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     private string FallbackToValueStub(string fieldName) =>
         $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace)}>(\"{fieldName}\")";
 
+    private string FallbackFromValueStub(string valueName) =>
+        $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{FallbackTypeName}>(\"{valueName.Replace("\"", "\\\"", StringComparison.Ordinal)}\")";
+
     private bool MapsToFallbackObject(DamlType type, int depth = 0) => MapType(type, depth) == FallbackTypeName;
+
+    /// <summary>
+    /// True when <see cref="MapType(DamlType)"/> renders <paramref name="type"/> as a C#
+    /// reference type, so a parameter of that type can carry an
+    /// <c>ArgumentNullException.ThrowIfNull</c> guard. Answers <c>false</c> for anything it
+    /// cannot place with certainty, which costs a missing guard rather than a boxed
+    /// value-type argument or a guard on an already-nullable parameter.
+    /// </summary>
+    /// <remarks>
+    /// Answers over the same representation pre-pass <see cref="MapType(DamlType)"/> runs, so an
+    /// Optional the pre-pass moves off C# nullable syntax and onto the wrapper is placed as the
+    /// non-nullable reference type it becomes rather than as the nullable one it would have been.
+    /// </remarks>
+    public bool MapsToReferenceType(DamlType type) =>
+        MapsToRewrittenReferenceType(OptionalRepresentation.Rewrite(type, context.Package, resolver));
+
+    private bool MapsToRewrittenReferenceType(DamlType type) => type switch
+    {
+        DamlPrimitiveType { Primitive: DamlPrimitive.Text } => true,
+        DamlPrimitiveType => false,
+        DamlWrappedOptional => true,
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Numeric or DamlPrimitive.Optional } } => false,
+        DamlTypeApp { Base: DamlPrimitiveType } => true,
+        DamlTypeApp { Base: DamlTypeRef typeRef } => !IsEnumTypeRef(typeRef),
+        DamlTypeRef typeRef => !IsEnumTypeRef(typeRef),
+        _ => false,
+    };
 
     /// <summary>Produces the expression that deserializes <paramref name="valueName"/> back into <paramref name="type"/>.</summary>
     /// <param name="type">The Daml type to reconstruct.</param>
@@ -128,7 +160,7 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     /// stub. <c>null</c> outside a generic body.
     /// </param>
     public string FromValue(DamlType type, string valueName, IReadOnlyDictionary<string, string>? typeVarDelegates = null) =>
-        FromValue(type, valueName, typeVarDelegates, depth: 0);
+        FromValue(OptionalRepresentation.Rewrite(type, context.Package, resolver), valueName, typeVarDelegates, depth: 0);
 
     private string FromValue(DamlType type, string valueName, IReadOnlyDictionary<string, string>? typeVarDelegates, int depth)
     {
@@ -141,6 +173,8 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
             $"{valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlNumeric, context.RootNamespace)}>().Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{valueName}.AsOptional().HasValue ? {FromValue(arg, $"{valueName}.AsOptional().Value!", typeVarDelegates, depth + 1)} : null",
+        DamlWrappedOptional wrapped =>
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.Optional, context.RootNamespace)}<{MapType(wrapped.Argument, depth + 1)}>.{WrappedOptionalDeserializer(wrapped.Encoding)}({valueName}, __optional{depth} => {FromValue(wrapped.Argument, $"__optional{depth}", typeVarDelegates, depth + 1)})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
             $"({context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{MapType(arg, depth + 1)}>){valueName}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}>().Values.Select(x => {FromValue(arg, "x", typeVarDelegates, depth + 1)}).ToList()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
@@ -164,7 +198,11 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
         DamlTypeVar typeVar when TryResolveDelegate(typeVarDelegates, typeVar, out var convert) =>
             $"{convert}({valueName})",
         DamlTypeVar typeVar => $"{context.Qualifier.Qualify(RuntimeTypeNames.GenericStub, context.RootNamespace)}.NotImplemented<{EmitterHelpers.TypeParameterName(typeVar.Name)}>(\"{typeVar.Name}\")",
-        _ => $"default({MapType(type, depth)})! /* TODO: Implement deserialization for {type} */"
+        _ when MapsToFallbackObject(type, depth) => FallbackFromValueStub(valueName),
+        _ => throw new CodegenException(
+            $"Cannot emit a deserialization expression for Daml type '{type}'. "
+            + "The C# code generator does not support this type shape, so generation fails "
+            + "here instead of emitting a silent 'default!' fallback into generated code.")
     };
     }
 
@@ -183,10 +221,34 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
         return false;
     }
 
-    // CS8524 disabled (not CS8509): the no-default switch covers every named
-    // DamlPrimitive so an out-of-range cast is the only uncovered input. CS8509
-    // (a newly-added named member left unhandled) stays an error — that is the
-    // compiler-enforced checklist for adding a Daml primitive.
+    /// <remarks>
+    /// A switch, not a ternary, for the reason given on <see cref="MapBarePrimitiveToCSharp"/>: a
+    /// ternary would emit a newly added <see cref="OptionalEncoding"/> in the wrong wire form, in
+    /// code that still compiles. Only CS8524 is suppressed.
+    /// </remarks>
+#pragma warning disable CS8524
+    private static string WrappedOptionalSerializer(OptionalEncoding encoding) => encoding switch
+    {
+        OptionalEncoding.Flat => "ToValue",
+        OptionalEncoding.NestedChain => "ToChainValue",
+    };
+#pragma warning restore CS8524
+
+    /// <remarks>Suppresses CS8524 for the reason given on <see cref="WrappedOptionalSerializer"/>.</remarks>
+#pragma warning disable CS8524
+    private static string WrappedOptionalDeserializer(OptionalEncoding encoding) => encoding switch
+    {
+        OptionalEncoding.Flat => "FromValue",
+        OptionalEncoding.NestedChain => "FromChainValue",
+    };
+#pragma warning restore CS8524
+
+    /// <remarks>
+    /// Only CS8524 is suppressed, never CS8509. The switch has no default arm and covers every
+    /// named <see cref="DamlPrimitive"/>, so the sole uncovered input is an out-of-range cast.
+    /// CS8509 — a newly added named member left unhandled — stays an error, because that warning
+    /// is the compiler-enforced checklist for adding a Daml primitive.
+    /// </remarks>
 #pragma warning disable CS8524
     private string MapBarePrimitiveToCSharp(DamlPrimitive primitive) => primitive switch
     {
@@ -208,7 +270,7 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     };
 #pragma warning restore CS8524
 
-    // See MapBarePrimitiveToCSharp for the CS8524-vs-CS8509 rationale.
+    /// <remarks>Suppresses CS8524 for the reason given on <see cref="MapBarePrimitiveToCSharp"/>.</remarks>
 #pragma warning disable CS8524
     private string GetBarePrimitiveToValueConversion(DamlPrimitive primitive, string fieldName) => primitive switch
     {
@@ -230,7 +292,7 @@ internal sealed class DamlTypeMapper(PackageEmitContext context, ICrossPackageRe
     };
 #pragma warning restore CS8524
 
-    // See MapBarePrimitiveToCSharp for the CS8524-vs-CS8509 rationale.
+    /// <remarks>Suppresses CS8524 for the reason given on <see cref="MapBarePrimitiveToCSharp"/>.</remarks>
 #pragma warning disable CS8524
     private string GetBarePrimitiveFromValueConversion(DamlPrimitive primitive, string valueName) => primitive switch
     {

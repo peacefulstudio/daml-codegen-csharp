@@ -1,9 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
@@ -51,7 +52,6 @@ public class NonContractChoiceProjectorTests
                 new DamlTemplate
                 {
                     Name = EntityName,
-                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -93,7 +93,7 @@ public class NonContractChoiceProjectorTests
             UseRecordTypes = true,
             UsePrimaryConstructors = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(new DarModel { MainPackage = package, Dependencies = [] });
 
         return EmitAssembly(files);
@@ -139,7 +139,7 @@ public class NonContractChoiceProjectorTests
                 "\n",
                 emit.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
-                    .Select(d => d.GetMessage() + " @ " + d.Location)));
+                    .Select(d => d.GetMessage(CultureInfo.InvariantCulture) + " @ " + d.Location)));
 
         stream.Seek(0, SeekOrigin.Begin);
         return Assembly.Load(stream.ToArray());
@@ -192,7 +192,7 @@ public class NonContractChoiceProjectorTests
     private static readonly Assembly WrapperAssembly = CompileWrapperAssembly();
 
     [Fact]
-    public void projector_returns_One_when_matching_exercise_event_present()
+    public void NonContractChoiceProjector_projector_returns_One_when_matching_exercise_event_present()
     {
         var tx = TransactionWith(ExercisedGetCount("contract-1", 42));
 
@@ -203,7 +203,7 @@ public class NonContractChoiceProjectorTests
     }
 
     [Fact]
-    public void projector_ignores_same_choice_exercised_on_a_different_contract()
+    public void NonContractChoiceProjector_projector_ignores_same_choice_exercised_on_a_different_contract()
     {
         var tx = TransactionWith(
             ExercisedGetCount("other-contract", 99),
@@ -216,7 +216,7 @@ public class NonContractChoiceProjectorTests
     }
 
     [Fact]
-    public void projector_matches_through_template_package_id_drift()
+    public void NonContractChoiceProjector_projector_matches_through_template_package_id_drift()
     {
         var driftedTemplateId = new Identifier("upgraded-package-id", ModuleName, EntityName);
         var tx = TransactionWith(ExercisedGetCount("contract-1", 42, driftedTemplateId));
@@ -228,7 +228,7 @@ public class NonContractChoiceProjectorTests
     }
 
     [Fact]
-    public void projector_throws_self_contained_ExercisedEvents_diagnostic_when_no_exercise_event_present()
+    public void NonContractChoiceProjector_projector_throws_self_contained_ExercisedEvents_diagnostic_when_no_exercise_event_present()
     {
         var tx = TransactionWith();
 
@@ -241,7 +241,7 @@ public class NonContractChoiceProjectorTests
     }
 
     [Fact]
-    public void projector_throws_when_no_matching_contract_in_non_empty_events()
+    public void NonContractChoiceProjector_projector_throws_when_no_matching_contract_in_non_empty_events()
     {
         var tx = TransactionWith(ExercisedGetCount("other-contract", 99));
 

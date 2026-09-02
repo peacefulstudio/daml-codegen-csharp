@@ -15,7 +15,11 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record FinalizedAllocation
 /// </summary>
-public sealed record FinalizedAllocation([property: DamlFieldAttribute("allocationCid")] ContractId<IAllocation> AllocationCid, [property: DamlFieldAttribute("extraTransferLegSides")] IReadOnlyList<TransferLegSide> ExtraTransferLegSides, [property: DamlFieldAttribute("nextIterationFunding")] IReadOnlyDictionary<string, decimal>? NextIterationFunding) : IDamlRecord
+public sealed record FinalizedAllocation(
+    [property: DamlFieldAttribute("allocationCid")] ContractId<IAllocation> AllocationCid,
+    [property: DamlFieldAttribute("extraTransferLegSides")] IReadOnlyList<TransferLegSide> ExtraTransferLegSides,
+    [property: DamlFieldAttribute("nextIterationFunding")] IReadOnlyDictionary<string, decimal>? NextIterationFunding
+) : IDamlRecord<FinalizedAllocation>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

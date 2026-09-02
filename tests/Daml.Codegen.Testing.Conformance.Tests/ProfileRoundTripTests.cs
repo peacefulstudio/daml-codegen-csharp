@@ -11,7 +11,7 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 public class ProfileRoundTripTests
 {
     [Fact]
-    public void to_record_emits_fields_in_declaration_order_with_typed_values()
+    public void ToRecord_emits_fields_in_declaration_order_with_typed_values()
     {
         var profile = new Profile("ace", 7);
 
@@ -23,7 +23,7 @@ public class ProfileRoundTripTests
     }
 
     [Fact]
-    public void from_record_reconstructs_the_original_value()
+    public void FromRecord_reconstructs_the_original_value()
     {
         var original = new Profile("ace", 7);
 

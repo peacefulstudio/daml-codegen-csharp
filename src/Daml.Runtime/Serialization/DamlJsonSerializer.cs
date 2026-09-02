@@ -27,16 +27,19 @@ public static class DamlJsonSerializer
 {
     private const string VariantTagKey = "tag";
     private const string VariantValueKey = "value";
-    private const string CanonicalDateFormat = "yyyy-MM-dd";
+    internal const string CanonicalDateFormat = "yyyy-MM-dd";
     private const string CanonicalTimestampEmitFormat = "yyyy-MM-dd'T'HH:mm:ss.FFFFFF'Z'";
-    private const string CanonicalTimestampParseFormat = "yyyy-MM-dd'T'HH':'mm':'ss.FFFFFFFK";
-    private const int MaximumNestingDepth = 128;
+    internal const string CanonicalTimestampParseFormat = "yyyy-MM-dd'T'HH':'mm':'ss.FFFFFFFK";
+    internal const DateTimeStyles UtcNormalizingTimestampParseStyles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+    internal const int MaximumNestingDepth = 128;
     private const int JsonReaderWriterMaxDepth = 4 * MaximumNestingDepth;
-    // Values mirror the defaults on DamlJsonDeserializationLimits' primary constructor.
-    // `new()` cannot be used here: for a readonly record struct the parameterless
-    // constructor zeroes all fields rather than applying the primary-constructor
-    // default arguments, and CA1805 correctly flags it.
-    private static readonly DamlJsonDeserializationLimits DefaultDeserializationLimits = new(
+    /// <remarks>
+    /// The values repeat the defaults on <see cref="DamlJsonDeserializationLimits"/>' primary
+    /// constructor. <c>new()</c> cannot stand in: for a readonly record struct the parameterless
+    /// constructor zeroes every field instead of applying the primary constructor's default
+    /// arguments, which CA1805 correctly flags.
+    /// </remarks>
+    internal static readonly DamlJsonDeserializationLimits DefaultDeserializationLimits = new(
         16 * 1024 * 1024,
         100_000);
 
@@ -50,7 +53,7 @@ public static class DamlJsonSerializer
         Converters = { new DamlValueJsonConverter() }
     };
 
-    private static readonly JsonDocumentOptions DocumentOptions = new()
+    internal static readonly JsonDocumentOptions DocumentOptions = new()
     {
         MaxDepth = JsonReaderWriterMaxDepth,
         AllowDuplicateProperties = false
@@ -127,7 +130,10 @@ public static class DamlJsonSerializer
     /// <item><description>An explicit JSON <c>null</c> record field deserializes to
     /// <see cref="DamlOptional.None"/>; a Some value is flattened to its inner value on
     /// write, so schema-aware readers recover the wrapper via
-    /// <see cref="DamlValueExtensions.AsOptional"/>.</description></item>
+    /// <see cref="DamlValueExtensions.AsOptional"/>. That flattening is specific to
+    /// <see cref="DamlOptional"/>: a <see cref="DamlOptionalChain"/> level writes the array
+    /// form instead, <c>[]</c> or <c>[v]</c>, and comes back as a <see cref="DamlList"/> on
+    /// an untyped round-trip.</description></item>
     /// <item><description>A two-property JSON object whose properties are exactly
     /// <c>tag</c> (a string) and <c>value</c> is reconstructed as a
     /// <see cref="DamlVariant"/>, so a genuine two-field record with those labels is
@@ -202,7 +208,7 @@ public static class DamlJsonSerializer
         return JsonObjectToRecord(obj, limits, depth: 0);
     }
 
-    private static void EnsureWithinInputLimit(string json, DamlJsonDeserializationLimits limits)
+    internal static void ValidateLimits(DamlJsonDeserializationLimits limits)
     {
         if (limits.MaxInputCharacters < 1)
         {
@@ -212,6 +218,11 @@ public static class DamlJsonSerializer
         {
             throw new ArgumentOutOfRangeException(nameof(limits), "MaxArrayElements must be non-negative.");
         }
+    }
+
+    internal static void EnsureWithinInputLimit(string json, DamlJsonDeserializationLimits limits)
+    {
+        ValidateLimits(limits);
         if (json.Length > limits.MaxInputCharacters)
         {
             throw new JsonException(
@@ -243,7 +254,7 @@ public static class DamlJsonSerializer
     private static JsonNode? ValueToJsonNode(DamlValue value, int depth) => value switch
     {
         _ when depth > MaximumNestingDepth => throw DepthBoundExceeded(),
-        DamlInt64 i => JsonValue.Create(i.Value),
+        DamlInt64 i => JsonValue.Create(i.Value.ToString(CultureInfo.InvariantCulture)),
         DamlNumeric n => JsonValue.Create(n.ToCanonicalString()),
         DamlText t => JsonValue.Create(t.Value),
         DamlBool b => JsonValue.Create(b.Value),
@@ -253,6 +264,9 @@ public static class DamlJsonSerializer
         DamlParty p => JsonValue.Create(p.Value),
         DamlContractId c => JsonValue.Create(c.Value),
         DamlOptional opt => opt.Value is null ? null : ValueToJsonNode(opt.Value, depth + 1),
+        DamlOptionalChain chain => chain.Value is null
+            ? new JsonArray()
+            : new JsonArray(ValueToJsonNode(chain.Value, depth + 1)),
         DamlList list => new JsonArray(list.Values.Select(v => ValueToJsonNode(v, depth + 1)).ToArray()),
         DamlTextMap map => MapToJsonObject(map, depth),
         DamlGenMap map => GenMapToJsonArray(map, depth),
@@ -262,7 +276,7 @@ public static class DamlJsonSerializer
         _ => throw new JsonException($"Cannot serialize {value.GetType().Name} to JSON")
     };
 
-    private static JsonException DepthBoundExceeded() =>
+    internal static JsonException DepthBoundExceeded() =>
         new($"Value nesting exceeds the maximum supported depth of {MaximumNestingDepth}");
 
     private static JsonObject MapToJsonObject(DamlTextMap map, int depth)
@@ -325,7 +339,7 @@ public static class DamlJsonSerializer
         _ => throw new JsonException($"Cannot deserialize {node.GetType().Name}")
     };
 
-    private static JsonException ArrayBreadthExceeded(int count, int maxArrayElements) =>
+    internal static JsonException ArrayBreadthExceeded(int count, int maxArrayElements) =>
         new($"JSON array length {count} exceeds the maximum supported JSON array length of {maxArrayElements}");
 
     private static bool IsVariantShape(JsonObject obj) =>
@@ -404,7 +418,7 @@ public static class DamlJsonSerializer
             return new DamlDate(date);
         }
 
-        if (DateTimeOffset.TryParseExact(s, CanonicalTimestampParseFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var ts))
+        if (DateTimeOffset.TryParseExact(s, CanonicalTimestampParseFormat, CultureInfo.InvariantCulture, UtcNormalizingTimestampParseStyles, out var ts))
         {
             return new DamlTimestamp(ts);
         }
@@ -424,7 +438,7 @@ public static class DamlJsonSerializer
         return new DamlText(s);
     }
 
-    private static bool MatchesCanonicalIntegerGrammar(string s)
+    internal static bool MatchesCanonicalIntegerGrammar(string s)
     {
         var digitsStart = s.StartsWith('-') ? 1 : 0;
         if (digitsStart == s.Length)

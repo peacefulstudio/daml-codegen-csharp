@@ -17,25 +17,26 @@ data-type table by module-qualified name; this snapshot pins that the two
 makes one record inherit the other's fields — a silent field-drop that
 compiles but sends the wrong argument to the ledger — and this snapshot fails.
 
-## The vendored input
+## The vendored inputs
 
 `intermediate.binpb` is the canonical codegen input for the drift test. It is
-derived from `conformance/crossmodulecollision/crossmodulecollision.dar`, whose
-Daml source lives in `conformance/crossmodulecollision`. To regenerate the
-proto after a corpus change, rebuild the DAR (`cd
-conformance/crossmodulecollision && dpm build && cp
-.daml/dist/crossmodulecollision-*.dar ./crossmodulecollision.dar`), then rerun
-the JVM helper (`java -jar
-jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar --dar
-conformance/crossmodulecollision/crossmodulecollision.dar --out
-tests/Daml.Codegen.CSharp.Tests/Snapshots/cross-module-collision/intermediate.binpb`),
-and refresh the `expected/` snapshot below.
+generated from the vendored `cross-module-collision.dar`, which is maintained
+as a copy of `conformance/crossmodulecollision/crossmodulecollision.dar` (Daml
+source in `conformance/crossmodulecollision`). Nothing enforces that the two
+stay equal, so keeping them in step is a maintenance obligation: after a corpus
+change, rebuild the DAR (`cd conformance/crossmodulecollision && dpm build && cp
+.daml/dist/crossmodulecollision-*.dar ./crossmodulecollision.dar`), copy it
+over the vendored `cross-module-collision.dar`, and run the refresh below. Skip
+the copy and the snapshot keeps regenerating cleanly from the stale vendored
+DAR, which is exactly the staleness this snapshot's gate cannot see.
 
-## Refreshing the `expected/` snapshot
+## Refreshing the snapshot
 
-The `expected/` tree is the emitter's output for the vendored
-`intermediate.binpb`. To refresh it after an intentional codegen change, run
-from the repo root (POSIX shell; on Windows, use WSL or Git Bash):
+`scripts/refresh-snapshot.sh` regenerates `intermediate.binpb` from the
+vendored DAR with a JVM helper assembled from the working tree's sources, then
+regenerates the `expected/` tree from that proto with the current codegen
+source. Run it from the repo root (POSIX shell; on Windows, use WSL or Git
+Bash):
 
 ```bash
 scripts/refresh-snapshot.sh cross-module-collision

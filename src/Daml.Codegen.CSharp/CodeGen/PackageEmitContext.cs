@@ -1,18 +1,19 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
+using Microsoft.Extensions.Logging;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
 /// Immutable per-package value the C# emitter threads through its emit methods: the
 /// root namespace, the <see cref="TypeReferenceQualifier"/>, the per-package
-/// data-type lookup, and the local enum / variant / interface-placeholder /
-/// choice-argument name sets. Built once per package by
+/// data-type lookup, and the local enum / variant / interface / choice-argument
+/// name sets. Built once per package by
 /// <see cref="ForPackage"/>; read-only during emission.
 /// </summary>
-internal sealed class PackageEmitContext
+internal sealed partial class PackageEmitContext
 {
     /// <summary>The Daml package this context was built for.</summary>
     public DamlPackage Package { get; }
@@ -33,9 +34,9 @@ internal sealed class PackageEmitContext
 
     /// <summary>
     /// Sanitised C# names of every top-level type declared anywhere in the package —
-    /// every template plus every record/enum/variant, excluding interface-placeholder
-    /// records (they are replaced by the marker itself, so counting them would falsely
-    /// self-disambiguate) and choice-argument records (they are emitted nested inside
+    /// every template plus every record/enum/variant, excluding the records LF declares
+    /// alongside a same-named interface (they are replaced by the marker itself, so counting
+    /// them would falsely self-disambiguate) and choice-argument records (they are emitted nested inside
     /// their parent template, not at the top level). The package's C# namespace is flat
     /// across all its modules, so this set has two consumers: it is the reserved-name
     /// input <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker
@@ -66,10 +67,16 @@ internal sealed class PackageEmitContext
     public IReadOnlySet<string> LocalVariantQualifiedNames { get; }
 
     /// <summary>
-    /// Module-qualified names of records that exist purely as the C# placeholder for a
-    /// Daml interface declaration.
+    /// Module-qualified (<c>Module:Name</c>) names of the records LF declares alongside an
+    /// interface of the same name in the same module. They are not emitted: the marker
+    /// carries the interface's identity, and <c>ContractId&lt;IMarker&gt;</c> serves the
+    /// contract-id fields and choice extensions that would otherwise need a record. The set
+    /// is therefore the emitter's "this local name is an interface, not a record" oracle —
+    /// read by the record emitter to skip the declaration, by the cross-package resolver and
+    /// the choice-created-slot walker to resolve a local ref to its marker, and by
+    /// <see cref="LocalViewRecord(DamlTypeRef)"/> to reject a view naming an interface.
     /// </summary>
-    public IReadOnlySet<string> InterfacePlaceholderQualifiedNames { get; }
+    public IReadOnlySet<string> LocalInterfaceQualifiedNames { get; }
 
     /// <summary>
     /// Maps a choice-argument type's module-qualified (<c>Module:Name</c>) name to its
@@ -81,12 +88,69 @@ internal sealed class PackageEmitContext
     public IReadOnlyDictionary<string, string> LocalChoiceArgToTemplate { get; }
 
     /// <summary>
+    /// Maps a record's module-qualified (<c>Module:Name</c>) name to the C# marker name
+    /// of the single local interface declaring that record as its view type. Only
+    /// package-local, non-generic record views with exactly one viewing interface and no
+    /// field that mirrors onto the marker under a different name or over a member the
+    /// marker already declares are mapped: a dependency package is emitted without
+    /// knowledge of its dependents, so a foreign view record cannot be stamped with this
+    /// package's markers; a record stamped with two markers would inherit two explicit
+    /// implementations of the same identity statics — no most specific implementation, a
+    /// compile error; and a field whose two mirror names disagree would leave the marker
+    /// declaring a member the record never implements. The record emitter stamps the
+    /// marker into the view record's base list, and the interface emitter mirrors the
+    /// view's fields onto the marker for the same set, so both degrade together.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> LocalViewRecordMarkerNames { get; }
+
+    /// <summary>
     /// Returns true when <paramref name="typeRef"/> points at a type declared in this
     /// package — either an empty package id (self-reference) or a matching package id.
     /// </summary>
     public bool IsLocalRef(DamlTypeRef typeRef) =>
         string.IsNullOrEmpty(typeRef.PackageId)
         || typeRef.PackageId == Package.PackageId;
+
+    /// <summary>
+    /// Returns true when <paramref name="iface"/>'s view type can stand as the
+    /// <c>TView</c> of a <see cref="Daml.Runtime.Contracts.ViewDescriptor{TInterface, TView}"/>,
+    /// whose <c>TView : IDamlRecord&lt;TView&gt;</c> constraint admits only a non-generic
+    /// record. A local view reference must resolve to one here; a foreign reference is
+    /// taken as such, since a dependency package emits its own non-generic records with
+    /// that facet. A view naming a variant, an enum, a generic record, an interface, or a
+    /// type this package does not declare therefore degrades to the
+    /// bare <see cref="Daml.Runtime.Contracts.IHasView{TView}"/> facet rather than an
+    /// uncompilable witness.
+    /// </summary>
+    public bool HasWitnessableViewRecord(DamlInterface iface) =>
+        iface.ViewType is DamlTypeRef viewRef
+        && (!IsLocalRef(viewRef) || LocalViewRecord(viewRef) is not null);
+
+    /// <summary>
+    /// Returns the non-generic record definition <paramref name="viewRef"/> names in this
+    /// package, or <c>null</c> when it names an interface, a generic record, a non-record
+    /// definition, or a type this package does not declare. Callers that also
+    /// care about locality must test <see cref="IsLocalRef"/> first — the lookup key
+    /// carries no package id, so a foreign reference can otherwise collide with a
+    /// same-named local declaration.
+    /// </summary>
+    public DamlRecordDefinition? LocalViewRecord(DamlTypeRef viewRef) =>
+        LocalViewRecord(viewRef, DataTypes, LocalInterfaceQualifiedNames);
+
+    private static DamlRecordDefinition? LocalViewRecord(
+        DamlTypeRef viewRef,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        IReadOnlySet<string> localInterfaceQualifiedNames)
+    {
+        ArgumentNullException.ThrowIfNull(viewRef);
+        var viewKey = $"{viewRef.Module}:{viewRef.Name}";
+        return !localInterfaceQualifiedNames.Contains(viewKey)
+            && dataTypes.TryGetValue(viewKey, out var viewDataType)
+            && viewDataType.TypeParams.Count == 0
+            && viewDataType.Definition is DamlRecordDefinition viewRecord
+                ? viewRecord
+                : null;
+    }
 
     private PackageEmitContext(
         DamlPackage package,
@@ -97,8 +161,9 @@ internal sealed class PackageEmitContext
         IReadOnlyDictionary<string, string> localInterfaceMarkerNames,
         IReadOnlySet<string> localEnumQualifiedNames,
         IReadOnlySet<string> localVariantQualifiedNames,
-        IReadOnlySet<string> interfacePlaceholderQualifiedNames,
-        IReadOnlyDictionary<string, string> localChoiceArgToTemplate)
+        IReadOnlySet<string> localInterfaceQualifiedNames,
+        IReadOnlyDictionary<string, string> localChoiceArgToTemplate,
+        IReadOnlyDictionary<string, string> localViewRecordMarkerNames)
     {
         Package = package;
         RootNamespace = rootNamespace;
@@ -108,22 +173,23 @@ internal sealed class PackageEmitContext
         LocalInterfaceMarkerNames = localInterfaceMarkerNames;
         LocalEnumQualifiedNames = localEnumQualifiedNames;
         LocalVariantQualifiedNames = localVariantQualifiedNames;
-        InterfacePlaceholderQualifiedNames = interfacePlaceholderQualifiedNames;
+        LocalInterfaceQualifiedNames = localInterfaceQualifiedNames;
         LocalChoiceArgToTemplate = localChoiceArgToTemplate;
+        LocalViewRecordMarkerNames = localViewRecordMarkerNames;
     }
 
     /// <summary>
     /// Scans <paramref name="package"/> and returns a fully-populated immutable context:
     /// derives the root namespace (honouring <see cref="CodeGenOptions.RootNamespace"/>),
     /// builds the global data-type lookup, and populates the local enum / variant /
-    /// interface-placeholder / choice-argument name sets. When two templates in the
+    /// interface / choice-argument name sets. When two templates in the
     /// package map the same module-qualified choice-argument type, <paramref name="logger"/>
     /// (when supplied) receives a warning and the first-seen mapping is kept.
     /// </summary>
     public static PackageEmitContext ForPackage(
         DamlPackage package,
         CodeGenOptions options,
-        ICodegenLogger? logger = null)
+        ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(options);
@@ -135,7 +201,7 @@ internal sealed class PackageEmitContext
         var dataTypes = new Dictionary<string, DamlDataType>();
         var localEnumQualifiedNames = new HashSet<string>();
         var localVariantQualifiedNames = new HashSet<string>();
-        var interfacePlaceholderQualifiedNames = new HashSet<string>();
+        var localInterfaceQualifiedNames = new HashSet<string>();
         foreach (var module in package.Modules)
         {
             var interfaceNames = module.Interfaces.Select(i => i.Name).ToHashSet();
@@ -153,7 +219,7 @@ internal sealed class PackageEmitContext
                 }
                 if (interfaceNames.Contains(dataType.Name))
                 {
-                    interfacePlaceholderQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                    localInterfaceQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
             }
         }
@@ -173,8 +239,10 @@ internal sealed class PackageEmitContext
                             if (localChoiceArgToTemplate.TryGetValue(key, out var existingTemplate)
                                 && existingTemplate != template.Name)
                             {
-                                logger?.Warning(
-                                    $"Choice-argument type {key} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
+                                if (logger is not null)
+                                {
+                                    LogAmbiguousLocalChoiceArgument(logger, key, existingTemplate, template.Name);
+                                }
                                 continue;
                             }
                             localChoiceArgToTemplate[key] = template.Name;
@@ -185,6 +253,8 @@ internal sealed class PackageEmitContext
         }
 
         var localInterfaceMarkerNames = InterfaceMarkerNames(package, localReservedTypeNames);
+        var localViewRecordMarkerNames = ViewRecordMarkerNames(
+            package, dataTypes, localInterfaceQualifiedNames, localInterfaceMarkerNames);
 
         return new PackageEmitContext(
             package,
@@ -195,23 +265,107 @@ internal sealed class PackageEmitContext
             localInterfaceMarkerNames,
             localEnumQualifiedNames,
             localVariantQualifiedNames,
-            interfacePlaceholderQualifiedNames,
-            localChoiceArgToTemplate);
+            localInterfaceQualifiedNames,
+            localChoiceArgToTemplate,
+            localViewRecordMarkerNames);
+    }
+
+    /// <summary>
+    /// Maps every package-local, non-generic view record with exactly one viewing
+    /// interface and a clean field mirror to that interface's marker name — the source of
+    /// <see cref="LocalViewRecordMarkerNames"/>. Foreign view references, references to
+    /// types this package does not declare, generic records, non-record definitions, and
+    /// the records LF declares alongside a same-named interface are all excluded (only a
+    /// record this package emits itself can be stamped with a marker); a record viewed by more than one interface is
+    /// excluded because the stamp would inherit two explicit implementations of the same
+    /// identity statics — no most specific implementation, a compile error; and a record
+    /// failing <see cref="ViewFieldsMirrorCleanly"/> is excluded because the marker would
+    /// declare a member the stamped record does not implement.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> ViewRecordMarkerNames(
+        DamlPackage package,
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        IReadOnlySet<string> localInterfaceQualifiedNames,
+        IReadOnlyDictionary<string, string> localInterfaceMarkerNames)
+    {
+        var markersByViewRecord = new Dictionary<string, SortedSet<string>>();
+        foreach (var module in package.Modules)
+        {
+            foreach (var iface in module.Interfaces)
+            {
+                if (iface.ViewType is not DamlTypeRef viewRef
+                    || (!string.IsNullOrEmpty(viewRef.PackageId) && viewRef.PackageId != package.PackageId)
+                    || LocalViewRecord(viewRef, dataTypes, localInterfaceQualifiedNames) is null)
+                {
+                    continue;
+                }
+
+                var viewKey = $"{viewRef.Module}:{viewRef.Name}";
+                if (!markersByViewRecord.TryGetValue(viewKey, out var markers))
+                {
+                    markers = new SortedSet<string>(StringComparer.Ordinal);
+                    markersByViewRecord[viewKey] = markers;
+                }
+                markers.Add(localInterfaceMarkerNames[$"{module.Name}:{iface.Name}"]);
+            }
+        }
+
+        return markersByViewRecord
+            .Where(entry => entry.Value.Count == 1)
+            .Select(entry => (ViewKey: entry.Key, Marker: entry.Value.Single()))
+            .Where(pair => ViewFieldsMirrorCleanly(dataTypes[pair.ViewKey], pair.Marker))
+            .ToDictionary(pair => pair.ViewKey, pair => pair.Marker);
+    }
+
+    /// <summary>
+    /// Members a generated interface marker declares in its own right, which a mirrored
+    /// view field must not shadow: the <c>View</c> witness and the <c>InterfaceId</c>
+    /// identity re-declaration (CS0102).
+    /// </summary>
+    private static readonly IReadOnlySet<string> MarkerDeclaredMemberNames =
+        new HashSet<string>(StringComparer.Ordinal) { "View", "InterfaceId" };
+
+    /// <summary>
+    /// Returns true when every field of <paramref name="viewRecord"/> mirrors onto
+    /// <paramref name="markerName"/> under the same C# member name the record itself emits
+    /// for it, and under no name the marker already declares. The two sides derive their
+    /// member names independently, each disambiguating only against its own enclosing type
+    /// (CS0542), so a field PascalCasing to the record's name is emitted as <c>Name_</c>
+    /// there and <c>Name</c> on the marker — and vice versa for a field PascalCasing to the
+    /// marker's name — leaving the record short of a marker member (CS0535). A field
+    /// PascalCasing to <c>View</c> or <c>InterfaceId</c> would instead redeclare a member
+    /// the marker already owns (CS0102). Either way the pair is ineligible and the record
+    /// stays un-stamped beside an un-enriched marker.
+    /// </summary>
+    private static bool ViewFieldsMirrorCleanly(DamlDataType viewRecord, string markerName)
+    {
+        if (viewRecord.Definition is not DamlRecordDefinition record)
+        {
+            return false;
+        }
+
+        var recordClassName = Identifiers.Sanitize(viewRecord.Name);
+        return record.Fields.All(field =>
+        {
+            var markerMemberName = Identifiers.MemberName(field.Name, markerName);
+            return markerMemberName == Identifiers.MemberName(field.Name, recordClassName)
+                && !MarkerDeclaredMemberNames.Contains(markerMemberName);
+        });
     }
 
     /// <summary>
     /// Computes the sanitised C# name of every top-level type declared anywhere in
     /// <paramref name="package"/> — every template plus every record/enum/variant,
-    /// excluding interface-placeholder records (replaced by the marker itself) and
-    /// choice-argument records (emitted nested inside their parent template, not at the
-    /// top level) — the single source of the reserved-name set
+    /// excluding the records LF declares alongside a same-named interface (replaced by the
+    /// marker itself) and choice-argument records (emitted nested inside their parent
+    /// template, not at the top level) — the single source of the reserved-name set
     /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates against, shared by
     /// <see cref="ForPackage"/> (for the emitting package) and the cross-package
     /// resolver (for foreign packages) so both sides derive the same marker name.
     /// </summary>
     internal static IReadOnlySet<string> ReservedTopLevelTypeNames(DamlPackage package)
     {
-        var interfacePlaceholderQualifiedNames = new HashSet<string>();
+        var localInterfaceQualifiedNames = new HashSet<string>();
         var dataTypeNames = new HashSet<string>();
         foreach (var module in package.Modules)
         {
@@ -221,7 +375,7 @@ internal sealed class PackageEmitContext
                 dataTypeNames.Add(dataType.Name);
                 if (interfaceNames.Contains(dataType.Name))
                 {
-                    interfacePlaceholderQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                    localInterfaceQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
             }
         }
@@ -251,7 +405,7 @@ internal sealed class PackageEmitContext
             foreach (var dataType in module.DataTypes)
             {
                 var qualifiedName = $"{module.Name}:{dataType.Name}";
-                if (interfacePlaceholderQualifiedNames.Contains(qualifiedName)
+                if (localInterfaceQualifiedNames.Contains(qualifiedName)
                     || choiceArgumentQualifiedNames.Contains(qualifiedName))
                 {
                     continue;
@@ -294,4 +448,10 @@ internal sealed class PackageEmitContext
 
         return markers;
     }
+
+    [LoggerMessage(
+        EventId = 1200,
+        Level = LogLevel.Warning,
+        Message = "Choice-argument type {ChoiceArgumentKey} is used by both templates {KeptTemplate} and {IgnoredTemplate} in the same package; keeping {KeptTemplate} and ignoring {IgnoredTemplate}. Rename one choice-argument type to disambiguate.")]
+    private static partial void LogAmbiguousLocalChoiceArgument(ILogger logger, string choiceArgumentKey, string keptTemplate, string ignoredTemplate);
 }

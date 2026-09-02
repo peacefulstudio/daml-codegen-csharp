@@ -12,7 +12,9 @@ namespace Splice.Api.Token.Allocation.Request.V2;
 /// <summary>
 /// Generated from Daml record AllocationRequestAction.ARA_Custom
 /// </summary>
-public sealed record AllocationRequestAction_ARA_Custom([property: DamlFieldAttribute("id")] string Id) : IDamlRecord
+public sealed record AllocationRequestAction_ARA_Custom(
+    [property: DamlFieldAttribute("id")] string Id
+) : IDamlRecord<AllocationRequestAction_ARA_Custom>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

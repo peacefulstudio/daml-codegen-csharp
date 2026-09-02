@@ -13,7 +13,9 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AnsEntry_RenewResult
 /// </summary>
-public sealed record AnsEntry_RenewResult([property: DamlFieldAttribute("entryCid")] ContractId<AnsEntry> EntryCid) : IDamlRecord
+public sealed record AnsEntry_RenewResult(
+    [property: DamlFieldAttribute("entryCid")] ContractId<AnsEntry> EntryCid
+) : IDamlRecord<AnsEntry_RenewResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

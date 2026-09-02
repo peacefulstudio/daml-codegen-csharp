@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.CSharp.Tests.TestHelpers;
 using AwesomeAssertions;
 using Xunit;
@@ -63,7 +63,6 @@ public class ChoiceResultStructTests
         new()
         {
             Name = name,
-            Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
             Choices =
             [
                 new DamlChoice
@@ -103,7 +102,6 @@ public class ChoiceResultStructTests
             templates.Add(new DamlTemplate
             {
                 Name = sibling,
-                Fields = [],
                 Choices = []
             });
         }
@@ -140,7 +138,7 @@ public class ChoiceResultStructTests
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("public sealed record ExecuteSwapResult(ContractId<Agreement> Agreement, ContractId<SwapRecord> SwapRecord)");
+        code.Should().Contain("public sealed record ExecuteSwapResult(\n    ContractId<Agreement> Agreement,\n    ContractId<SwapRecord> SwapRecord\n)");
         code.Should().Contain("public static ExerciseOutcome<ExecuteSwapResult> FromCreatedContracts(IEnumerable<CreatedContract> created)");
     }
 
@@ -157,7 +155,7 @@ public class ChoiceResultStructTests
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("public sealed record ExecuteSwapResult(ContractId<Agreement> Agreement, ContractId<AgreementRecord>? AgreementRecord)");
+        code.Should().Contain("public sealed record ExecuteSwapResult(\n    ContractId<Agreement> Agreement,\n    ContractId<AgreementRecord>? AgreementRecord\n)");
     }
 
     [Fact]
@@ -170,7 +168,7 @@ public class ChoiceResultStructTests
 
         var code = GenerateAndReadTemplate(module, "Factory");
 
-        code.Should().Contain("public sealed record BulkCreateResult(IReadOnlyList<ContractId<Item>> Item)");
+        code.Should().Contain("public sealed record BulkCreateResult(\n    IReadOnlyList<ContractId<Item>> Item\n)");
     }
 
     [Fact]
@@ -183,7 +181,7 @@ public class ChoiceResultStructTests
 
         var code = GenerateAndReadTemplate(module, "Parent");
 
-        code.Should().Contain("public sealed record CreateChildResult(ContractId<Child> Child)");
+        code.Should().Contain("public sealed record CreateChildResult(\n    ContractId<Child> Child\n)");
         code.Should().Contain("public static ExerciseOutcome<CreateChildResult> FromCreatedContracts(IEnumerable<CreatedContract> created)");
     }
 
@@ -231,7 +229,7 @@ public class ChoiceResultStructTests
         var code = GenerateAndReadTemplate(module, "Splitter");
 
         // First slot keeps the bare name; second gets a numeric suffix.
-        code.Should().Contain("public sealed record SplitResult(ContractId<Half> Half, ContractId<Half> Half2)");
+        code.Should().Contain("public sealed record SplitResult(\n    ContractId<Half> Half,\n    ContractId<Half> Half2\n)");
     }
 
     [Fact]
@@ -250,10 +248,11 @@ public class ChoiceResultStructTests
         var code = GenerateAndReadTemplate(module, "Agreement");
 
         code.Should().Contain(
-            "public sealed record ExecuteSwapResult("
-            + "ContractId<Agreement> Agreement, "
-            + "ContractId<SwapRecord> SwapRecord, "
-            + "ContractId<AgreementRecord>? AgreementRecord)");
+            "public sealed record ExecuteSwapResult(\n"
+            + "    ContractId<Agreement> Agreement,\n"
+            + "    ContractId<SwapRecord> SwapRecord,\n"
+            + "    ContractId<AgreementRecord>? AgreementRecord\n"
+            + ")");
     }
 
     [Fact]
@@ -368,13 +367,11 @@ public class ChoiceResultStructTests
                 new DamlTemplate
                 {
                     Name = "IFactory",
-                    Fields = [],
                     Choices = [],
                 },
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -395,8 +392,8 @@ public class ChoiceResultStructTests
                     Name = "Vault",
                     Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
-                // Interface marker `Factory` also surfaces as a serializable placeholder
-                // record of the same name — this is what flags the type as an interface.
+                // The LF record LF emits beside interface `Factory` — this is what flags
+                // the type as an interface, even though no C# is emitted for it.
                 new DamlDataType { Name = "Factory", Definition = new DamlRecordDefinition([]) },
             ],
             Interfaces = [new DamlInterface { Name = "Factory", Choices = [], ViewType = null }],
@@ -412,24 +409,18 @@ public class ChoiceResultStructTests
 
         // One branch matches the template by TemplateId, the other matches the
         // interface by InterfaceIds — neither slot silently inherits the other's branch.
-        // `Factory` is a local interface ref, so RecordEmitter's throwing placeholder
-        // stub (not a fully-emitted marker) backs it — the interface branch must match
-        // via string literals, not a generated InterfaceId symbol.
         code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
-        code.Should().Contain("string.Equals(interfaceId.ModuleName, \"Test.Module\", StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(interfaceId.EntityName, \"Factory\", StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Package.IFactory_.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Package.IFactory_.InterfaceId.EntityName, StringComparison.Ordinal)");
         code.Should().Contain("string.Equals(item.TemplateId.ModuleName, global::Test.Package.IFactory.TemplateId.ModuleName, StringComparison.Ordinal)");
-        code.Should().NotContain("InterfaceId.ModuleName");
-        code.Should().NotContain("InterfaceId.EntityName");
     }
 
     [Fact]
     public void Generate_should_match_a_foreign_interface_typed_slot_via_its_generated_InterfaceId_symbol()
     {
-        // Unlike a local interface (matched via string literals, see the test above —
-        // RecordEmitter's placeholder stub for local interfaces has no InterfaceId
-        // member), a foreign interface's marker is a fully-emitted symbol carrying a
-        // public InterfaceId. The projector must match on that symbol, not literals.
+        // A foreign interface's marker is emitted by its own package and carries a
+        // public InterfaceId, exactly as a local one does. The projector must match on
+        // that symbol, qualified into the foreign namespace.
         const string ForeignPackageId = "foreign-pkg-id";
         var foreignModule = new DamlModule
         {

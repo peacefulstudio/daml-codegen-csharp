@@ -38,9 +38,11 @@ namespace Daml.Runtime.Commands;
 /// </remarks>
 public readonly record struct SubmitterInfo
 {
-    // FrozenSet.Empty is genuinely immutable — there is no underlying mutable
-    // collection a consumer could cast back to and mutate, unlike a HashSet
-    // typed as IReadOnlySet.
+    /// <remarks>
+    /// A frozen set is genuinely immutable: unlike a <c>HashSet</c> exposed as
+    /// <see cref="IReadOnlySet{T}"/>, there is no underlying mutable collection a consumer can
+    /// cast back to and mutate.
+    /// </remarks>
     private static readonly IReadOnlySet<Party> EmptyParties = FrozenSet<Party>.Empty;
 
     private readonly IReadOnlySet<Party>? _actAs;
@@ -76,9 +78,6 @@ public readonly record struct SubmitterInfo
                 "SubmitterInfo.ActAs must contain at least one party.", nameof(actAs));
         }
 
-        // Snapshot into a FrozenSet so the stored backing collection is genuinely
-        // immutable. Callers that cast ActAs/ReadAs back to a concrete type still
-        // can't mutate, and SubmitterInfo's value semantics survive any such cast.
         _actAs = ValidatedFrozenSet(actAs, nameof(actAs));
         _readAs = readAs is null || readAs.Count == 0
             ? null
@@ -94,9 +93,6 @@ public readonly record struct SubmitterInfo
     /// </exception>
     public SubmitterInfo(Party singleActAs, IReadOnlySet<Party>? readAs = null)
     {
-        // Touch Id so a default(Party) submitter fails at construction rather
-        // than later, when ToDamlValue / serialization would surface the
-        // uninitialized state with a much harder-to-trace stack.
         _ = singleActAs.Id;
         _actAs = FrozenSet.Create(singleActAs);
         _readAs = readAs is null || readAs.Count == 0
@@ -108,8 +104,6 @@ public readonly record struct SubmitterInfo
     {
         foreach (var party in source)
         {
-            // Touch Id on each party so default(Party) entries fail loudly at
-            // construction. Mirrors the single-party ctor's invariant.
             try
             {
                 _ = party.Id;
@@ -158,7 +152,6 @@ public readonly record struct SubmitterInfo
         {
             return true;
         }
-        // Both non-empty and same count — set-equal iff every element of `a` is in `b`.
         foreach (var p in a!)
         {
             if (!b!.Contains(p))
@@ -175,8 +168,6 @@ public readonly record struct SubmitterInfo
         {
             return 0;
         }
-        // Order-independent: XOR each element's hash so set equality implies
-        // hash equality regardless of enumeration order.
         var h = 0;
         foreach (var p in set)
         {

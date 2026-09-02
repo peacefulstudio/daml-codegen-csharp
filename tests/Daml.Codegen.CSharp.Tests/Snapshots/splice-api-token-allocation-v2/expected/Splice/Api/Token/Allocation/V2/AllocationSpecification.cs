@@ -15,7 +15,15 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record AllocationSpecification
 /// </summary>
-public sealed record AllocationSpecification([property: DamlFieldAttribute("admin")] Party Admin, [property: DamlFieldAttribute("authorizer")] Splice.Api.Token.Holding.V2.Account Authorizer, [property: DamlFieldAttribute("transferLegSides")] IReadOnlyList<TransferLegSide> TransferLegSides, [property: DamlFieldAttribute("settlementDeadline")] DateTimeOffset? SettlementDeadline, [property: DamlFieldAttribute("nextIterationFunding")] IReadOnlyDictionary<string, decimal>? NextIterationFunding, [property: DamlFieldAttribute("committed")] bool Committed, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationSpecification(
+    [property: DamlFieldAttribute("admin")] Party Admin,
+    [property: DamlFieldAttribute("authorizer")] Splice.Api.Token.Holding.V2.Account Authorizer,
+    [property: DamlFieldAttribute("transferLegSides")] IReadOnlyList<TransferLegSide> TransferLegSides,
+    [property: DamlFieldAttribute("settlementDeadline")] DateTimeOffset? SettlementDeadline,
+    [property: DamlFieldAttribute("nextIterationFunding")] IReadOnlyDictionary<string, decimal>? NextIterationFunding,
+    [property: DamlFieldAttribute("committed")] bool Committed,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<AllocationSpecification>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.Intermediate;
 using AwesomeAssertions;
 using Xunit;
@@ -22,7 +22,7 @@ namespace Daml.Codegen.CSharp.Tests;
 public partial class IntermediateDarReaderTests
 {
     [Fact]
-    public void record_data_type_round_trips_with_field_types()
+    public void IntermediateDarReader_record_data_type_round_trips_with_field_types()
     {
         var proto = MakePackageWith(module =>
         {
@@ -55,7 +55,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void variant_data_type_round_trips_constructors()
+    public void IntermediateDarReader_variant_data_type_round_trips_constructors()
     {
         var proto = MakePackageWith(module =>
         {
@@ -87,7 +87,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void enum_data_type_round_trips_constructors()
+    public void IntermediateDarReader_enum_data_type_round_trips_constructors()
     {
         var proto = MakePackageWith(module =>
         {
@@ -109,7 +109,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void type_app_round_trips_with_function_and_arguments()
+    public void IntermediateDarReader_type_app_round_trips_with_function_and_arguments()
     {
         var proto = MakePackageWith(module =>
         {
@@ -148,7 +148,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void type_con_round_trips_to_daml_type_ref()
+    public void IntermediateDarReader_type_con_round_trips_to_daml_type_ref()
     {
         var proto = MakePackageWith(module =>
         {
@@ -186,7 +186,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void unspecified_builtin_throws_invalid_data()
+    public void IntermediateDarReader_unspecified_builtin_throws_invalid_data()
     {
         var proto = MakePackageWith(module =>
         {
@@ -209,7 +209,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void unmapped_builtin_throws_not_supported()
+    public void IntermediateDarReader_unmapped_builtin_throws_not_supported()
     {
         var proto = MakePackageWith(module =>
         {
@@ -232,7 +232,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void type_with_no_sort_set_throws_invalid_data()
+    public void IntermediateDarReader_type_with_no_sort_set_throws_invalid_data()
     {
         var proto = MakePackageWith(module =>
         {
@@ -252,7 +252,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void nat_type_round_trips_as_type_var()
+    public void IntermediateDarReader_nat_type_round_trips_as_type_var()
     {
         var proto = MakePackageWith(module =>
         {
@@ -273,7 +273,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void field_with_null_type_throws()
+    public void IntermediateDarReader_field_with_null_type_throws()
     {
         var proto = new IntermediateDar
         {
@@ -311,7 +311,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void variant_constructor_with_null_type_throws()
+    public void IntermediateDarReader_variant_constructor_with_null_type_throws()
     {
         var proto = new IntermediateDar
         {
@@ -349,7 +349,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void data_type_with_no_shape_throws()
+    public void IntermediateDarReader_data_type_with_no_shape_throws()
     {
         var proto = new IntermediateDar
         {

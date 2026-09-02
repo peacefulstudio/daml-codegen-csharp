@@ -18,9 +18,24 @@ public static class DamlValueExtensions
     /// schema-aware readers use this to recover the Optional wrapper that
     /// <see cref="DamlValue.As{T}"/> would reject.
     /// </summary>
+    /// <param name="value">The value to normalize.</param>
+    /// <returns>The value as a <see cref="DamlOptional"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is a
+    /// <see cref="DamlOptionalChain"/>. A chain level is already an Optional, in the array
+    /// encoding rather than the flat one, so wrapping it as Some would add a level that
+    /// neither the ledger nor <see cref="Stdlib.Optional{T}.FromChainValue"/> expects.
+    /// Decode a chain through <see cref="Stdlib.Optional{T}.FromChainValue"/> instead.</exception>
     public static DamlOptional AsOptional(this DamlValue value)
     {
         ArgumentNullException.ThrowIfNull(value);
+        if (value is DamlOptionalChain)
+        {
+            throw new InvalidCastException(
+                "Cannot normalize a DamlOptionalChain to DamlOptional. A chain level is already an "
+                + "Optional in the array wire encoding; wrapping it as Some would add a level. "
+                + "Decode a nested Optional chain through Optional<T>.FromChainValue.");
+        }
         return value as DamlOptional ?? DamlOptional.Some(value);
     }
 
@@ -45,24 +60,27 @@ public static class DamlValueExtensions
     /// <item><see cref="DamlContractId"/> → <see cref="ContractId{T}"/> via reflection.</item>
     /// </list>
     /// Any other combination throws <see cref="NotSupportedException"/>.
+    /// <para>
+    /// The assignability check runs before any unwrapping so that asking for
+    /// <see cref="DamlUnit"/> or <see cref="DamlValue"/> itself returns the instance rather than
+    /// <c>default</c>. Beyond that check a <see cref="Nullable{T}"/> target is treated as its
+    /// underlying type — unboxing a boxed <c>T</c> to <c>T?</c> is a well-defined CLR conversion
+    /// — and a nullable value type is a valid destination for <see cref="DamlUnit"/> because it
+    /// can represent "no value".
+    /// </para>
     /// </remarks>
     [return: MaybeNull]
     public static TResult FromDamlValue<TResult>(this DamlValue value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        // Assignable check runs first so that FromDamlValue<DamlUnit>(DamlUnit.Instance)
-        // and FromDamlValue<DamlValue>(DamlUnit.Instance) return the instance rather than default.
         if (typeof(TResult).IsAssignableFrom(value.GetType()))
             return (TResult)(object)value;
 
-        // Treat Nullable<T> the same as T for the primitive-unwrapping branches.
-        // Unboxing a boxed T to Nullable<T> is a well-defined CLR conversion.
         var targetType = Nullable.GetUnderlyingType(typeof(TResult)) ?? typeof(TResult);
 
         if (value is DamlUnit)
         {
-            // Nullable<T> is a struct but can represent null, so default(T?) is a valid "no value".
             if (typeof(TResult).IsValueType && Nullable.GetUnderlyingType(typeof(TResult)) is null)
                 throw new NotSupportedException(
                     $"Cannot convert DamlUnit to value type {typeof(TResult)}. " +

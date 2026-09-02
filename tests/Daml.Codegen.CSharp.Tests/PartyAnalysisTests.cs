@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -27,7 +27,7 @@ public class PartyAnalysisTests
             StringComparer.Ordinal);
 
     [Fact]
-    public void union_of_two_static_sets_merges_payload_fields_in_declaration_order()
+    public void PartyAnalysis_union_of_two_static_sets_merges_payload_fields_in_declaration_order()
     {
         var result = _party.UnionStaticParties(Static("platform", "initiator"), Static("counterparty"));
 
@@ -39,7 +39,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void union_dedups_a_field_named_on_both_sides_keeping_first_occurrence()
+    public void PartyAnalysis_union_dedups_a_field_named_on_both_sides_keeping_first_occurrence()
     {
         var result = _party.UnionStaticParties(Static("platform", "initiator"), Static("initiator", "counterparty"));
 
@@ -50,7 +50,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void union_is_dynamic_when_the_left_side_is_dynamic()
+    public void PartyAnalysis_union_is_dynamic_when_the_left_side_is_dynamic()
     {
         var result = _party.UnionStaticParties(DamlPartyAnalysis.Dynamic, Static("counterparty"));
 
@@ -58,7 +58,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void union_is_dynamic_when_the_right_side_is_dynamic()
+    public void PartyAnalysis_union_is_dynamic_when_the_right_side_is_dynamic()
     {
         var result = _party.UnionStaticParties(Static("platform"), DamlPartyAnalysis.Dynamic);
 
@@ -66,7 +66,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_camel_cases_controllers_and_omits_readas_when_no_observers()
+    public void PartyAnalysis_partition_camel_cases_controllers_and_omits_readas_when_no_observers()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("Platform", "initiator"), DamlPartyAnalysis.Dynamic);
@@ -76,7 +76,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_routes_observer_only_parties_into_readas()
+    public void PartyAnalysis_partition_routes_observer_only_parties_into_readas()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("platform"), Static("regulator", "auditor"));
@@ -86,7 +86,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_does_not_duplicate_an_observer_that_is_also_a_controller()
+    public void PartyAnalysis_partition_does_not_duplicate_an_observer_that_is_also_a_controller()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("platform", "counterparty"), Static("platform", "regulator"));
@@ -96,7 +96,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_dedups_a_controller_field_named_twice()
+    public void PartyAnalysis_partition_dedups_a_controller_field_named_twice()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("platform", "platform"), DamlPartyAnalysis.Dynamic);
@@ -106,7 +106,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_field_names_preserves_the_raw_daml_field_names()
+    public void PartyAnalysis_partition_field_names_preserves_the_raw_daml_field_names()
     {
         var (controllers, readAs) = _party.PartitionControllerAndObserverFieldNames(
             Static("Platform", "initiator"), Static("regulator"));
@@ -116,7 +116,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_field_names_dedups_an_observer_that_is_also_a_controller()
+    public void PartyAnalysis_partition_field_names_dedups_an_observer_that_is_also_a_controller()
     {
         var (controllers, readAs) = _party.PartitionControllerAndObserverFieldNames(
             Static("platform", "counterparty"), Static("platform", "regulator"));
@@ -126,7 +126,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_emits_no_readas_when_observers_are_dynamic()
+    public void PartyAnalysis_partition_emits_no_readas_when_observers_are_dynamic()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("platform"), DamlPartyAnalysis.Dynamic);
@@ -136,7 +136,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_emits_no_readas_when_observers_are_static_empty()
+    public void PartyAnalysis_partition_emits_no_readas_when_observers_are_static_empty()
     {
         var (controllers, readAs) = _party.PartitionControllersAndObservers(
             Static("platform"), DamlPartyAnalysis.Static([]));
@@ -146,7 +146,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void validate_keeps_a_static_analysis_when_every_field_is_a_party_field()
+    public void PartyAnalysis_validate_keeps_a_static_analysis_when_every_field_is_a_party_field()
     {
         var analysis = Static("platform", "counterparty");
 
@@ -156,7 +156,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void validate_demotes_to_dynamic_when_a_named_field_is_absent()
+    public void PartyAnalysis_validate_demotes_to_dynamic_when_a_named_field_is_absent()
     {
         var result = _party.ValidatePayloadParties(
             Static("platform", "ghost"), PartyFields("platform", "counterparty"));
@@ -165,7 +165,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void validate_leaves_a_dynamic_analysis_untouched()
+    public void PartyAnalysis_validate_leaves_a_dynamic_analysis_untouched()
     {
         var result = _party.ValidatePayloadParties(DamlPartyAnalysis.Dynamic, PartyFields("platform"));
 
@@ -173,7 +173,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void validate_keeps_a_static_empty_analysis()
+    public void PartyAnalysis_validate_keeps_a_static_empty_analysis()
     {
         var analysis = DamlPartyAnalysis.Static([]);
 
@@ -183,7 +183,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void union_demotes_to_dynamic_when_the_left_side_holds_an_unknown_subtype()
+    public void PartyAnalysis_union_demotes_to_dynamic_when_the_left_side_holds_an_unknown_subtype()
     {
         var result = _party.UnionStaticParties(
             StaticWith(new DamlPartyPayloadField("platform"), new UnknownPartyReference()),
@@ -193,7 +193,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void union_demotes_to_dynamic_when_the_right_side_holds_an_unknown_subtype()
+    public void PartyAnalysis_union_demotes_to_dynamic_when_the_right_side_holds_an_unknown_subtype()
     {
         var result = _party.UnionStaticParties(
             Static("platform"),
@@ -203,7 +203,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void validate_demotes_to_dynamic_when_an_unknown_subtype_is_present()
+    public void PartyAnalysis_validate_demotes_to_dynamic_when_an_unknown_subtype_is_present()
     {
         var result = _party.ValidatePayloadParties(
             StaticWith(new DamlPartyPayloadField("platform"), new UnknownPartyReference()),
@@ -213,7 +213,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_throws_when_static_controllers_carry_an_unknown_subtype()
+    public void PartyAnalysis_partition_throws_when_static_controllers_carry_an_unknown_subtype()
     {
         var act = () => _party.PartitionControllersAndObservers(
             StaticWith(new DamlPartyPayloadField("platform"), new UnknownPartyReference()),
@@ -223,7 +223,7 @@ public class PartyAnalysisTests
     }
 
     [Fact]
-    public void partition_throws_when_static_observers_carry_an_unknown_subtype()
+    public void PartyAnalysis_partition_throws_when_static_observers_carry_an_unknown_subtype()
     {
         var act = () => _party.PartitionControllersAndObservers(
             Static("platform"),

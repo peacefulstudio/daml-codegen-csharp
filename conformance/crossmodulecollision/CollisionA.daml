@@ -1,0 +1,15 @@
+-- Copyright 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module CollisionA where
+
+template Agreement
+  with
+    operator : Party
+  where
+    signatory operator
+
+    choice Retag : ContractId Agreement
+      with
+        newOperator : Party
+      controller operator
+      do create this with operator = newOperator

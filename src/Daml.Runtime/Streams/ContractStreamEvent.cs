@@ -3,6 +3,7 @@
 
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Outcomes;
 
 namespace Daml.Runtime.Streams;
 
@@ -14,8 +15,10 @@ namespace Daml.Runtime.Streams;
 /// these without dragging the consumer into a specific transport dependency.
 /// </summary>
 /// <typeparam name="T">
-/// The Daml marker the stream is filtered to: a template (matched by
-/// <c>TemplateId</c>) or a Daml interface marker (matched by interface id).
+/// The Daml template the stream is filtered to, matched by <c>TemplateId</c>. A
+/// subscription filtered to a Daml interface marker yields
+/// <see cref="InterfaceStreamEvent{TInterface, TView}"/> instead, whose payload is the
+/// interface's view record.
 /// </typeparam>
 /// <remarks>
 /// <list type="bullet">
@@ -41,7 +44,13 @@ namespace Daml.Runtime.Streams;
 ///   consumers persist via <see cref="Checkpoint.Offset"/> to advance the
 ///   resume offset during quiet periods (no template-matching transactions
 ///   arriving), avoiding the re-process-from-stale-offset failure mode after
-///   a crash. Active-contract-set snapshots stream
+///   a crash. Not every variant's offset is safe to persist: an
+///   <see cref="Unclassified"/> event carries a nullable
+///   <see cref="Unclassified.Offset"/>, and <c>null</c> there means the event
+///   has no ledger position at all. Skip it and keep the last offset that was
+///   real — substituting <see cref="LedgerOffset.Begin"/> checkpoints at the
+///   beginning of the ledger and re-reads the entire stream.
+///   Active-contract-set snapshots stream
 ///   <see cref="AcsSnapshotEntry{T}"/> instead of this type; their terminal
 ///   marker is <see cref="AcsSnapshotEntry{T}.Checkpoint"/>.</item>
 ///   <item><see cref="StreamError"/> — the transport stream failed mid-flight.
@@ -89,7 +98,7 @@ namespace Daml.Runtime.Streams;
 /// </list>
 /// </remarks>
 public abstract record ContractStreamEvent<T>
-    where T : IDamlType
+    where T : ITemplate, IDamlRecord<T>
 {
     /// <summary>Sealed; new variants live alongside the existing ones.</summary>
     private protected ContractStreamEvent() { }
@@ -98,7 +107,11 @@ public abstract record ContractStreamEvent<T>
     /// A contract of type <typeparamref name="T"/> was created.
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID.</param>
-    /// <param name="Payload">The deserialized create-arguments record.</param>
+    /// <param name="Payload">The create-arguments, decoded into <typeparamref name="T"/>.</param>
+    /// <param name="Key">The contract key read off the created event, or <c>null</c> when the
+    /// event carried none. Separate from <paramref name="Payload"/> because the key is its own
+    /// wire field, not a projection of the create-arguments, and its type is the template's key
+    /// type rather than <typeparamref name="T"/>.</param>
     /// <param name="Offset">The ledger offset at which the contract was
     /// created. Strictly increasing per synchronizer; suitable for use as
     /// the resume offset on a subsequent subscription (exclusive).</param>
@@ -106,10 +119,27 @@ public abstract record ContractStreamEvent<T>
     /// <param name="WitnessParties">Parties that witnessed the create event.</param>
     public sealed record Created(
         ContractId<T> ContractId,
-        DamlRecord Payload,
+        T Payload,
+        ContractKey? Key,
         LedgerOffset Offset,
         SynchronizerId SynchronizerId,
-        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>
+    {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        /// <summary>
+        /// Parties that witnessed the create event. Held as the producer supplied it, not
+        /// copied — an <see cref="IReadOnlyList{T}"/> is a read-only view, so a caller that
+        /// retains its backing list must not mutate it after construction. Rejected at
+        /// construction and on <c>init</c> when <c>null</c>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+    }
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was archived. Emitted only on
@@ -127,7 +157,21 @@ public abstract record ContractStreamEvent<T>
         ContractId<T> ContractId,
         LedgerOffset Offset,
         SynchronizerId SynchronizerId,
-        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>
+    {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        /// <summary>
+        /// Parties that witnessed the archive event. Held on the same terms as
+        /// <see cref="Created.WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+    }
 
     /// <summary>
     /// A choice was exercised on a contract of type <typeparamref name="T"/>.
@@ -154,7 +198,21 @@ public abstract record ContractStreamEvent<T>
         bool Consuming,
         LedgerOffset Offset,
         SynchronizerId SynchronizerId,
-        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>
+    {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        /// <summary>
+        /// Parties that witnessed the exercise event. Held on the same terms as
+        /// <see cref="Created.WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+    }
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was assigned to a
@@ -164,7 +222,12 @@ public abstract record ContractStreamEvent<T>
     /// rebuilding state from a single stream stay correct.
     /// </summary>
     /// <param name="ContractId">The on-ledger contract ID.</param>
-    /// <param name="Payload">The contract's create-arguments, re-emitted on assignment.</param>
+    /// <param name="Payload">The contract's create-arguments, re-emitted on assignment and
+    /// decoded into <typeparamref name="T"/>.</param>
+    /// <param name="Key">The contract key read off the assigned event's created contract, or
+    /// <c>null</c> when it carried none. Canton's assignment wraps the whole created contract,
+    /// so the key is on the wire here exactly as it is on a create; a consumer rebuilding
+    /// state from one stream would otherwise lose the key at every reassignment.</param>
     /// <param name="Offset">The ledger offset of the assignment.</param>
     /// <param name="Source">The synchronizer the contract was reassigned from.</param>
     /// <param name="Target">The synchronizer the contract was reassigned to.</param>
@@ -176,13 +239,28 @@ public abstract record ContractStreamEvent<T>
     /// <param name="WitnessParties">Parties that witnessed the assignment.</param>
     public sealed record Assigned(
         ContractId<T> ContractId,
-        DamlRecord Payload,
+        T Payload,
+        ContractKey? Key,
         LedgerOffset Offset,
         SynchronizerId Source,
         SynchronizerId Target,
         string ReassignmentId,
         long ReassignmentCounter,
-        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>
+    {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        /// <summary>
+        /// Parties that witnessed the assignment. Held on the same terms as
+        /// <see cref="Created.WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+    }
 
     /// <summary>
     /// A contract of type <typeparamref name="T"/> was unassigned from a
@@ -205,7 +283,21 @@ public abstract record ContractStreamEvent<T>
         SynchronizerId Target,
         string ReassignmentId,
         long ReassignmentCounter,
-        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>;
+        IReadOnlyList<Party> WitnessParties) : ContractStreamEvent<T>
+    {
+        private readonly IReadOnlyList<Party> _witnessParties =
+            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
+
+        /// <summary>
+        /// Parties that witnessed the unassignment. Held on the same terms as
+        /// <see cref="Created.WitnessParties"/>.
+        /// </summary>
+        public IReadOnlyList<Party> WitnessParties
+        {
+            get => _witnessParties;
+            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
+        }
+    }
 
     /// <summary>
     /// An offset checkpoint with no contract payload: on a live update
@@ -247,9 +339,14 @@ public abstract record ContractStreamEvent<T>
     /// that want the typed enum cast back. Held as <c>int</c> so this type
     /// stays free of any transport-library dep.</param>
     /// <param name="Message">Status detail / message from the participant or transport.</param>
+    /// <param name="Category">Classification of the transport failure when the transport could determine
+    /// one without a structured Canton error attached; <c>null</c> when the failure was not classified.</param>
+    /// <param name="SourceException">Transport exception that caused the stream failure, when available.</param>
     public sealed record StreamError(
         int StatusCode,
-        string Message) : ContractStreamEvent<T>;
+        string Message,
+        DamlErrorCategory? Category = null,
+        Exception? SourceException = null) : ContractStreamEvent<T>;
 
     /// <summary>
     /// An event the transport delivered but this layer could not map to any
@@ -258,7 +355,13 @@ public abstract record ContractStreamEvent<T>
     /// transport-agnostic <c>Daml.Runtime</c> layer, so no raw wire bytes
     /// are available to attach here.
     /// </summary>
-    /// <param name="Offset">The ledger offset at which the unrecognized event occurred.</param>
+    /// <param name="Offset">The ledger offset at which the unrecognized event occurred, or
+    /// <c>null</c> when the event could not be placed on the ledger at all — typically because
+    /// the wire offset itself was absent or unparseable. A consumer persisting resume state
+    /// must not checkpoint a <c>null</c> offset: <see cref="LedgerOffset"/> has no absent value
+    /// and its <c>default</c> is <see cref="LedgerOffset.Begin"/>, a genuine ledger position,
+    /// so substituting one resumes from the beginning of the ledger and re-reads the whole
+    /// stream. Skip the event and keep the last offset that was real.</param>
     /// <param name="Kind">Why the event could not be mapped to a typed variant, as a
     /// strongly-typed discriminator consumers <c>switch</c> on. <see cref="UnclassifiedKind.Unknown"/>
     /// means the transport delivered a variant this layer does not recognise; the raw
@@ -274,7 +377,7 @@ public abstract record ContractStreamEvent<T>
     /// <see cref="UnclassifiedKind.Unknown"/> with a <c>null</c> <paramref name="RawKind"/>, or an
     /// enumerated <paramref name="Kind"/> with a non-<c>null</c> <paramref name="RawKind"/>.</exception>
     public sealed record Unclassified(
-        LedgerOffset Offset,
+        LedgerOffset? Offset,
         UnclassifiedKind Kind,
         string? RawKind = null) : ContractStreamEvent<T>
     {

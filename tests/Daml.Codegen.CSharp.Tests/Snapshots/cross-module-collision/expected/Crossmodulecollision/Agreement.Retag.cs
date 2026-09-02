@@ -14,7 +14,9 @@ public sealed partial record Agreement
     /// <summary>
     /// Choice argument type for Retag.
     /// </summary>
-    public sealed record Retag([property: DamlFieldAttribute("newOperator")] Party NewOperator) : IDamlRecord
+    public sealed record Retag(
+        [property: DamlFieldAttribute("newOperator")] Party NewOperator
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

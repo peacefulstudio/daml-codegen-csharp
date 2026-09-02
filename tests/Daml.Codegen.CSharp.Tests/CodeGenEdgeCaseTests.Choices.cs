@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -14,58 +14,6 @@ public partial class CodeGenEdgeCaseTests
     #region Choice with Various Argument Types
 
     [Fact]
-    public void Generate_should_handle_choice_with_nested_argument_fallback()
-    {
-        // Arrange - A choice with an argument type that's not found in data types
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "Contract",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
-                    Choices =
-                    [
-                        new DamlChoice
-                        {
-                            Name = "Process",
-                            Consuming = false,
-                            // Primitive type that's not Unit - fallback to nested type
-                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Text),
-                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
-                        }
-                    ]
-                }
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "Contract",
-                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
-                }
-            ],
-            Interfaces = []
-        };
-
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
-
-        // Act
-        var files = generator.Generate(dar);
-        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Contract.cs", StringComparison.Ordinal));
-
-        // Assert
-        contractFile.Should().NotBeNull();
-        var code = contractFile!.Content;
-
-        // Should generate a fallback nested argument type
-        code.Should().Contain("ProcessArg");
-    }
-
-    [Fact]
     public void Generate_should_handle_choice_with_party_return_type()
     {
         // Arrange
@@ -76,8 +24,7 @@ public partial class CodeGenEdgeCaseTests
             [
                 new DamlTemplate
                 {
-                    Name = "Contract",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Name = "Asset",
                     Choices =
                     [
                         new DamlChoice
@@ -94,7 +41,7 @@ public partial class CodeGenEdgeCaseTests
             [
                 new DamlDataType
                 {
-                    Name = "Contract",
+                    Name = "Asset",
                     Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
@@ -106,13 +53,13 @@ public partial class CodeGenEdgeCaseTests
 
         // Act
         var files = generator.Generate(dar);
-        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Contract.cs", StringComparison.Ordinal));
+        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
 
         // Assert
         contractFile.Should().NotBeNull();
         var code = contractFile!.Content;
 
-        code.Should().Contain("Choice<Contract, DamlUnit, Party> ChoiceGetOwner");
+        code.Should().Contain("Choice<Asset, DamlUnit, Party> ChoiceGetOwner");
         code.Should().Contain("ResultDecoder = val => Party.FromDamlValue(val.As<DamlParty>())");
     }
 
@@ -127,8 +74,7 @@ public partial class CodeGenEdgeCaseTests
             [
                 new DamlTemplate
                 {
-                    Name = "Contract",
-                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
+                    Name = "Asset",
                     Choices =
                     [
                         new DamlChoice
@@ -148,7 +94,7 @@ public partial class CodeGenEdgeCaseTests
             [
                 new DamlDataType
                 {
-                    Name = "Contract",
+                    Name = "Asset",
                     Definition = new DamlRecordDefinition([new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))])
                 }
             ],
@@ -160,7 +106,7 @@ public partial class CodeGenEdgeCaseTests
 
         // Act
         var files = generator.Generate(dar);
-        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Contract.cs", StringComparison.Ordinal));
+        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
 
         // Assert
         contractFile.Should().NotBeNull();
@@ -169,7 +115,7 @@ public partial class CodeGenEdgeCaseTests
         // Complex types decode element-by-element through the field-conversion helper.
         // The previous expectation `IReadOnlyList<string>.FromRecord(...)` was a known
         // codegen bug — IReadOnlyList<T> has no FromRecord, so it never compiled.
-        code.Should().Contain("Choice<Contract, DamlUnit, IReadOnlyList<string>>");
+        code.Should().Contain("Choice<Asset, DamlUnit, IReadOnlyList<string>>");
         code.Should().Contain("ResultDecoder = val => (IReadOnlyList<string>)val.As<DamlList>().Values.Select(x => x.As<DamlText>().Value).ToList()");
     }
 
@@ -178,9 +124,9 @@ public partial class CodeGenEdgeCaseTests
     #region Template Gets Fields from Data Type
 
     [Fact]
-    public void Generate_should_get_fields_from_data_type_when_template_has_none()
+    public void Generate_should_get_fields_from_the_same_named_data_type()
     {
-        // Arrange - Template with no fields, fields come from corresponding data type
+        // Arrange - fields come from the corresponding data type
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -189,7 +135,6 @@ public partial class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [], // Empty fields
                     Choices = []
                 }
             ],
@@ -240,7 +185,6 @@ public partial class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Token",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -276,7 +220,7 @@ public partial class CodeGenEdgeCaseTests
         // OtherType should exist as a data type
         var otherTypeFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("OtherType.cs", StringComparison.Ordinal));
         otherTypeFile.Should().NotBeNull();
-        otherTypeFile!.Content.Should().Contain(": IDamlRecord");
+        otherTypeFile!.Content.Should().Contain(": IDamlRecord<OtherType>");
     }
 
     #endregion

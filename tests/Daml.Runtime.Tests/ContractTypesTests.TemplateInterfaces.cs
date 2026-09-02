@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
@@ -45,14 +46,19 @@ public partial class ContractTypesTests
         template.Amount.Should().Be(750);
     }
 
-    private sealed record KeyedTemplate(Party Owner, string AssetId) : ITemplate, IHasKey<string>
+    private sealed record KeyedTemplate(Party Owner, string AssetId) : ITemplate, IHasKey<KeyedTemplate, string>
     {
         public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(KeyedTemplate));
         public static string PackageId => TestPackageId;
         public static string PackageName => TestPackageName;
         public static Version PackageVersion => TestPackageV1;
         public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
-        public string Key => AssetId;
+
+        public static KeyDescriptor<KeyedTemplate, string> Key { get; } = new()
+        {
+            KeyEncoder = static key => new DamlText(key),
+            KeyDecoder = static value => value.As<DamlText>().Value,
+        };
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", Owner.ToDamlValue()),
@@ -63,24 +69,171 @@ public partial class ContractTypesTests
                 record.GetRequiredField("assetId").As<DamlText>().Value);
     }
 
-    [Fact]
-    public void IHasKey_should_return_contract_key()
+    private sealed record PartyKeyedTemplate(Party Steward) : ITemplate, IHasKey<PartyKeyedTemplate, Party>
     {
-        var template = new KeyedTemplate(new Party("Alice"), "asset-123");
+        public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(PartyKeyedTemplate));
+        public static string PackageId => TestPackageId;
+        public static string PackageName => TestPackageName;
+        public static Version PackageVersion => TestPackageV1;
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
-        var key = template.Key;
+        public static KeyDescriptor<PartyKeyedTemplate, Party> Key { get; } = new()
+        {
+            KeyEncoder = static key => key.ToDamlValue(),
+            KeyDecoder = static value => Party.FromDamlValue(value.As<DamlParty>()),
+        };
+
+        public DamlRecord ToRecord() => DamlRecord.Create(
+            DamlField.Create("steward", Steward.ToDamlValue()));
+
+        public static PartyKeyedTemplate FromRecord(DamlRecord record) =>
+            new(Party.FromDamlValue(record.GetRequiredField("steward").As<DamlParty>()));
+    }
+
+    private sealed record KeyFieldTemplate(Party Owner, string Key)
+        : ITemplate, IHasKey<KeyFieldTemplate, string>
+    {
+        public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(KeyFieldTemplate));
+        public static string PackageId => TestPackageId;
+        public static string PackageName => TestPackageName;
+        public static Version PackageVersion => TestPackageV1;
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
+
+        static KeyDescriptor<KeyFieldTemplate, string> IHasKey<KeyFieldTemplate, string>.Key { get; } = new()
+        {
+            KeyEncoder = static key => new DamlText(key),
+            KeyDecoder = static value => value.As<DamlText>().Value,
+        };
+
+        public DamlRecord ToRecord() => DamlRecord.Create(
+            DamlField.Create("owner", Owner.ToDamlValue()),
+            DamlField.Create("key", new DamlText(Key)));
+
+        public static KeyFieldTemplate FromRecord(DamlRecord record) =>
+            new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
+                record.GetRequiredField("key").As<DamlText>().Value);
+    }
+
+    private sealed record AccountKey(Party Owner, string Number);
+
+    private sealed record RecordKeyedTemplate(Party Owner, string Number, long Balance)
+        : ITemplate, IHasKey<RecordKeyedTemplate, AccountKey>
+    {
+        public static Identifier TemplateId => new(TestPackageId, TestModuleName, nameof(RecordKeyedTemplate));
+        public static string PackageId => TestPackageId;
+        public static string PackageName => TestPackageName;
+        public static Version PackageVersion => TestPackageV1;
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
+
+        public static KeyDescriptor<RecordKeyedTemplate, AccountKey> Key { get; } = new()
+        {
+            KeyEncoder = static key => DamlRecord.Create(
+                DamlField.Create("owner", key.Owner.ToDamlValue()),
+                DamlField.Create("number", new DamlText(key.Number))),
+            KeyDecoder = static value => new AccountKey(
+                Party.FromDamlValue(value.As<DamlRecord>().GetRequiredField("owner").As<DamlParty>()),
+                value.As<DamlRecord>().GetRequiredField("number").As<DamlText>().Value),
+        };
+
+        public DamlRecord ToRecord() => DamlRecord.Create(
+            DamlField.Create("owner", Owner.ToDamlValue()),
+            DamlField.Create("number", new DamlText(Number)),
+            DamlField.Create("balance", new DamlInt64(Balance)));
+
+        public static RecordKeyedTemplate FromRecord(DamlRecord record) =>
+            new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()),
+                record.GetRequiredField("number").As<DamlText>().Value,
+                record.GetRequiredField("balance").As<DamlInt64>().Value);
+    }
+
+    private static TKey DecodeKey<TTemplate, TKey>(DamlValue value)
+        where TTemplate : ITemplate, IHasKey<TTemplate, TKey>
+    {
+        return TTemplate.Key.KeyDecoder(value);
+    }
+
+    private static TKey RoundTripKey<TTemplate, TKey>(TKey key)
+        where TTemplate : ITemplate, IHasKey<TTemplate, TKey>
+    {
+        return TTemplate.Key.KeyDecoder(TTemplate.Key.KeyEncoder(key));
+    }
+
+    private static ExerciseByKeyCommand ExerciseByKey<TTemplate, TKey>(TKey key, ChoiceName choice)
+        where TTemplate : ITemplate, IHasKey<TTemplate, TKey>
+    {
+        return new(TTemplate.TemplateId, TTemplate.Key.KeyEncoder(key), choice, DamlRecord.Create());
+    }
+
+    [Fact]
+    public void IHasKey_should_reach_the_key_descriptor_through_a_generic_constraint()
+    {
+        var key = DecodeKey<KeyedTemplate, string>(new DamlText("asset-123"));
 
         key.Should().Be("asset-123");
     }
 
     [Fact]
-    public void IHasKey_should_be_covariant_with_key_type()
+    public void IHasKey_should_admit_a_key_type_that_is_not_a_record()
     {
-        IHasKey<string> keyedContract = new KeyedTemplate(new Party("Bob"), "asset-456");
+        var key = DecodeKey<PartyKeyedTemplate, Party>(new DamlParty("Alice"));
 
-        var key = keyedContract.Key;
+        key.Should().Be(new Party("Alice"));
+    }
 
-        key.Should().Be("asset-456");
+    [Fact]
+    public void IHasKey_should_reach_an_explicitly_implemented_descriptor_when_the_payload_names_a_field_Key()
+    {
+        var template = new KeyFieldTemplate(new Party("Bob"), "asset-456");
+
+        template.Key.Should().Be("asset-456");
+        DecodeKey<KeyFieldTemplate, string>(new DamlText("asset-789")).Should().Be("asset-789");
+    }
+
+    [Fact]
+    public void KeyDescriptor_should_round_trip_a_key_through_the_encoder_and_the_decoder()
+    {
+        KeyedTemplate.Key.KeyEncoder("asset-123").Should().BeOfType<DamlText>()
+            .Which.Value.Should().Be("asset-123");
+        RoundTripKey<KeyedTemplate, string>("asset-123").Should().Be("asset-123");
+    }
+
+    [Fact]
+    public void KeyDescriptor_should_round_trip_a_record_key_through_the_encoder_and_the_decoder()
+    {
+        var key = new AccountKey(new Party("Alice"), "acc-001");
+
+        RecordKeyedTemplate.Key.KeyEncoder(key).As<DamlRecord>()
+            .GetRequiredField("number").As<DamlText>().Value.Should().Be("acc-001");
+        RoundTripKey<RecordKeyedTemplate, AccountKey>(key).Should().Be(key);
+    }
+
+    [Fact]
+    public void KeyDescriptor_should_round_trip_a_bare_Party_key_through_the_encoder_and_the_decoder()
+    {
+        var key = new Party("Steward");
+
+        PartyKeyedTemplate.Key.KeyEncoder(key).Should().BeOfType<DamlParty>()
+            .Which.Value.Should().Be("Steward");
+        RoundTripKey<PartyKeyedTemplate, Party>(key).Should().Be(key);
+    }
+
+    [Fact]
+    public void KeyDescriptor_should_round_trip_an_explicitly_implemented_key_through_the_encoder_and_the_decoder()
+    {
+        RoundTripKey<KeyFieldTemplate, string>("asset-456").Should().Be("asset-456");
+    }
+
+    [Fact]
+    public void KeyEncoder_should_give_generic_code_holding_only_a_key_a_route_to_ExerciseByKeyCommand()
+    {
+        var command = ExerciseByKey<RecordKeyedTemplate, AccountKey>(
+            new AccountKey(new Party("Alice"), "acc-001"),
+            new ChoiceName("Transfer"));
+
+        command.TemplateId.Should().Be(RecordKeyedTemplate.TemplateId);
+        command.ContractKey.As<DamlRecord>()
+            .GetRequiredField("owner").As<DamlParty>().Value.Should().Be("Alice");
+        RecordKeyedTemplate.Key.KeyDecoder(command.ContractKey).Number.Should().Be("acc-001");
     }
 
     private interface ITestInterface : IDamlInterface
@@ -116,7 +269,6 @@ public partial class ContractTypesTests
         public static string PackageName => TestPackageName;
         public static Version PackageVersion => TestPackageV1;
         public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
-        public AssetView View => new(Owner, Amount);
 
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("owner", Owner.ToDamlValue()),
@@ -128,25 +280,17 @@ public partial class ContractTypesTests
     }
 
     [Fact]
-    public void IHasView_should_return_interface_view()
+    public void IHasView_carries_no_members()
     {
-        var template = new ViewedTemplate(new Party("Charlie"), 1000.50m);
-
-        var view = template.View;
-
-        view.Owner.Should().Be(new Party("Charlie"));
-        view.Amount.Should().Be(1000.50m);
+        typeof(IHasView<>).GetMembers().Should().BeEmpty();
     }
 
     [Fact]
-    public void IHasView_should_be_covariant_with_view_type()
+    public void IHasView_links_the_implementing_type_to_its_view_type()
     {
-        IHasView<AssetView> viewable = new ViewedTemplate(new Party("Diana"), 2500.00m);
+        var template = new ViewedTemplate(new Party("Diana"), 2500.00m);
 
-        var view = viewable.View;
-
-        view.Owner.Should().Be(new Party("Diana"));
-        view.Amount.Should().Be(2500.00m);
+        template.Should().BeAssignableTo<IHasView<AssetView>>();
     }
 
     private const string UpgradedPkgId = "upgraded-package";

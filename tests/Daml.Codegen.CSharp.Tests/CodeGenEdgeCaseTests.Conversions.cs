@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -113,11 +113,8 @@ public partial class CodeGenEdgeCaseTests
     #region Optional Field With C-Sharp Keyword Name
 
     [Fact]
-    public void Generate_should_strip_at_prefix_in_Optional_temporary_when_field_name_is_csharp_keyword()
+    public void Generate_should_pascal_case_an_Optional_field_named_after_a_csharp_keyword()
     {
-        // Arrange — `lock` is a C# keyword. The sanitizer escapes the field name to
-        // `@lock`, but the local-variable binding `__@lock` is invalid; the codegen
-        // must trim the `@` for the local name only.
         var module = new DamlModule
         {
             Name = "App.Module",
@@ -141,14 +138,19 @@ public partial class CodeGenEdgeCaseTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
         var locked = files.FirstOrDefault(f => f.RelativePath.EndsWith("Locked.cs", StringComparison.Ordinal));
 
-        // Assert — local variable in the `is { } __X` pattern is `__lock`, not `__@lock`.
         locked.Should().NotBeNull();
-        locked!.Content.Should().Contain("@lock is { } __lock ?");
-        locked.Content.Should().NotContain("__@lock");
+        locked!.Content.Should().Contain(
+            "Lock is { } __Lock ?",
+            "the member and the local it binds both PascalCase, so neither carries an escape");
+        locked.Content.Should().NotContain(
+            "@lock",
+            "PascalCasing lifts the name clear of the keyword before the escape is considered");
+        locked.Content.Should().Contain(
+            "DamlFieldAttribute(\"lock\")",
+            "the Daml wire name keeps the keyword spelling the ledger uses");
     }
 
     #endregion

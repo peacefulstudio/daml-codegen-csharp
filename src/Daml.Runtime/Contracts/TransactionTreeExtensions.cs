@@ -3,7 +3,6 @@
 
 using System.Diagnostics;
 using Daml.Runtime.Data;
-using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Contracts;
 
@@ -39,23 +38,36 @@ public static class TransactionTreeExtensions
     /// Projects this <see cref="TransactionTree"/> to the flattened
     /// <see cref="TransactionResult"/> shape, for callers that don't need
     /// hierarchy. <see cref="TreeEvent.Created"/> nodes become
-    /// <see cref="CreatedContract"/> entries (with a JSON-serialized payload);
+    /// <see cref="CreatedContract"/> entries carrying
+    /// <see cref="TreeEvent.Created.CreateArguments"/> as their payload;
     /// <see cref="TreeEvent.Exercised"/> nodes become
     /// <see cref="TransactionResult.ExercisedEvents"/> entries, and consuming
     /// exercises additionally contribute their target contract id to
     /// <see cref="TransactionResult.ArchivedContractIds"/>.
     /// </summary>
     /// <remarks>
-    /// This projection is lossy: <see cref="CreatedContract"/> has no slot for
-    /// <see cref="TreeEvent.Created.EventId"/>, <see cref="TreeEvent.Created.WitnessParties"/>,
-    /// <see cref="TreeEvent.Created.Signatories"/>, <see cref="TreeEvent.Created.Observers"/>,
-    /// <see cref="TreeEvent.Created.ContractKey"/>, or <see cref="TreeEvent.Created.CreatedAt"/>,
-    /// and <see cref="ExercisedEvent"/> has no slot for <see cref="TreeEvent.Exercised.EventId"/>;
-    /// its <see cref="ExercisedEvent.CaughtExceptions"/> is always empty here, since
-    /// <see cref="TreeEvent.Exercised"/> doesn't carry that data. Callers that need those
-    /// fields must walk <see cref="TransactionTree.RootEvents"/> directly instead.
-    /// <see cref="TransactionResult.CommandId"/> is <c>default</c> here because
+    /// <para>
+    /// <see cref="TreeEvent.Created"/> nodes project losslessly:
+    /// <see cref="CreatedContract"/> mirrors that node field for field.
+    /// </para>
+    /// <para>
+    /// Exercise nodes do not. <see cref="ExercisedEvent"/> has no slot for
+    /// <see cref="TreeEvent.Exercised.EventId"/> or <see cref="TreeEvent.Exercised.ChildEvents"/>;
+    /// a caller that needs either walks
+    /// <see cref="TransactionTree.RootEvents"/> directly instead. Its
+    /// <see cref="ExercisedEvent.CaughtExceptions"/> is always empty here and walking the
+    /// tree does not recover it, because <see cref="TreeEvent.Exercised"/> carries no such
+    /// data at all — that field is populated only by a transport reading a ledger-effects
+    /// transaction.
+    /// </para>
+    /// <para>
+    /// Hierarchy is flattened either way: the parent/child structure of the tree is not
+    /// recoverable from the projected lists.
+    /// </para>
+    /// <para>
+    /// <see cref="TransactionResult.CommandId"/> is <c>null</c> here because
     /// <see cref="TransactionTree"/> carries no command id to project.
+    /// </para>
     /// </remarks>
     public static TransactionResult ToTransactionResult(this TransactionTree tree)
     {
@@ -71,9 +83,15 @@ public static class TransactionTreeExtensions
             {
                 case TreeEvent.Created created:
                     createdContracts.Add(new CreatedContract(
+                        created.EventId,
                         created.ContractId,
                         created.TemplateId,
-                        DamlJsonSerializer.Serialize(created.CreateArguments))
+                        created.CreateArguments,
+                        created.WitnessParties,
+                        created.Signatories,
+                        created.Observers,
+                        created.ContractKey,
+                        created.CreatedAt)
                     {
                         InterfaceIds = created.InterfaceIds,
                     });
@@ -105,7 +123,7 @@ public static class TransactionTreeExtensions
             tree.CompletionOffset,
             createdContracts,
             archivedContractIds,
-            default)
+            null)
         {
             ExercisedEvents = exercisedEvents,
         };

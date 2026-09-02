@@ -31,7 +31,7 @@ Options:
   --runtime-version <ver>  Daml.Runtime NuGet version for the generated .csproj.
                            Recommended when --publish-nuget is set; omitting it
                            leaves a wildcard (*) dependency.
-  --helper-jar             Path to daml-codegen-jvm-helper.jar. Overriding this
+  --helper-jar             Path to daml-dar-to-proto.jar. Overriding this
                            skips the freshness check; you own the JAR's currency.
                            (default: the repo JAR, reassembled from source when
                            stale via scripts/ensure-jvm-helper-jar.sh)

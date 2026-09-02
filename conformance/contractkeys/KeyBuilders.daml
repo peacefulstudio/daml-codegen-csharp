@@ -1,0 +1,20 @@
+-- Copyright 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module KeyBuilders where
+
+data ScheduleView = ScheduleView
+  with
+    issuer : Party
+    reference : Text
+  deriving (Eq, Show)
+
+data ScheduleKey = ScheduleKey
+  with
+    custodian : Party
+    id : Text
+  deriving (Eq, Show)
+
+toScheduleKey : ScheduleView -> ScheduleKey
+toScheduleKey view = ScheduleKey with
+  custodian = view.issuer
+  id = view.reference

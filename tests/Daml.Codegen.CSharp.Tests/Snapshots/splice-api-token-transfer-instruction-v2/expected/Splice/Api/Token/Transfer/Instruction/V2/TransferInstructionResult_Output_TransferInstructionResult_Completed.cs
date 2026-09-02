@@ -15,7 +15,9 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferInstructionResult_Output.TransferInstructionResult_Completed
 /// </summary>
-public sealed record TransferInstructionResult_Output_TransferInstructionResult_Completed([property: DamlFieldAttribute("receiverHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> ReceiverHoldingCids) : IDamlRecord
+public sealed record TransferInstructionResult_Output_TransferInstructionResult_Completed(
+    [property: DamlFieldAttribute("receiverHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> ReceiverHoldingCids
+) : IDamlRecord<TransferInstructionResult_Output_TransferInstructionResult_Completed>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

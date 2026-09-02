@@ -1,7 +1,6 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
 using Daml.Codegen.CSharp.Versioning;
 using AwesomeAssertions;
 using Xunit;
@@ -26,7 +25,7 @@ public class NuGetVersionResolverTests : IDisposable
     }
 
     [Fact]
-    public void compute_stamps_generation_ordinal_from_store()
+    public void Compute_stamps_generation_ordinal_from_store()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
@@ -40,7 +39,7 @@ public class NuGetVersionResolverTests : IDisposable
     }
 
     [Fact]
-    public void compute_yields_same_ordinal_for_different_packages_under_one_codegen_version()
+    public void Compute_yields_same_ordinal_for_different_packages_under_one_codegen_version()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 
@@ -52,7 +51,7 @@ public class NuGetVersionResolverTests : IDisposable
     }
 
     [Fact]
-    public void compute_increments_ordinal_when_codegen_version_changes()
+    public void Compute_increments_ordinal_when_codegen_version_changes()
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(_storePath);
 

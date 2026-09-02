@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -58,7 +58,7 @@ public class ChoiceCreatedSlotsTests
         new(new DamlTypeRef(LocalPackageId, "DA.Types", $"Tuple{components.Length}"), components);
 
     [Fact]
-    public void single_contract_id_yields_one_single_slot()
+    public void ChoiceCreatedSlots_single_contract_id_yields_one_single_slot()
     {
         var slots = Extract(ContractIdOf(Ref("Agreement")));
 
@@ -68,7 +68,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void template_typed_contract_id_has_no_interface_matcher()
+    public void ChoiceCreatedSlots_template_typed_contract_id_has_no_interface_matcher()
     {
         var slots = Extract(ContractIdOf(Ref("Agreement")));
 
@@ -76,7 +76,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void interface_typed_contract_id_yields_an_interface_matcher_with_the_interface_module_and_entity()
+    public void ChoiceCreatedSlots_interface_typed_contract_id_yields_an_interface_matcher_with_the_interface_module_and_entity()
     {
         var module = new DamlModule
         {
@@ -101,11 +101,11 @@ public class ChoiceCreatedSlotsTests
         var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, ContractIdOf(Ref("Holdable")));
 
         slots.Should().ContainSingle();
-        slots[0].Interface.Should().Be(new InterfaceMatcher("Main", "Holdable", IsPlaceholder: true));
+        slots[0].Interface.Should().Be(new InterfaceMatcher("Main", "Holdable"));
     }
 
     [Fact]
-    public void interface_typed_contract_id_from_a_foreign_package_yields_an_interface_matcher()
+    public void ChoiceCreatedSlots_interface_typed_contract_id_from_a_foreign_package_yields_an_interface_matcher()
     {
         const string ForeignPackageId = "foreign-pkg-id";
         var foreignModule = new DamlModule
@@ -132,11 +132,11 @@ public class ChoiceCreatedSlotsTests
         var slots = ChoiceCreatedSlots.Extract(context, resolver, mapper, ContractIdOf(foreignRef));
 
         slots.Should().ContainSingle();
-        slots[0].Interface.Should().Be(new InterfaceMatcher("Foreign.Module", "Holdable", IsPlaceholder: false));
+        slots[0].Interface.Should().Be(new InterfaceMatcher("Foreign.Module", "Holdable"));
     }
 
     [Fact]
-    public void optional_contract_id_yields_an_optional_slot()
+    public void ChoiceCreatedSlots_optional_contract_id_yields_an_optional_slot()
     {
         var slots = Extract(OptionalOf(ContractIdOf(Ref("Agreement"))));
 
@@ -145,7 +145,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void list_of_contract_id_yields_a_list_slot()
+    public void ChoiceCreatedSlots_list_of_contract_id_yields_a_list_slot()
     {
         var slots = Extract(ListOf(ContractIdOf(Ref("Agreement"))));
 
@@ -154,7 +154,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void tuple_is_flattened_across_components()
+    public void ChoiceCreatedSlots_tuple_is_flattened_across_components()
     {
         var slots = Extract(Tuple(ContractIdOf(Ref("Buyer")), ContractIdOf(Ref("Seller"))));
 
@@ -164,7 +164,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void same_template_twice_disambiguates_field_names()
+    public void ChoiceCreatedSlots_same_template_twice_disambiguates_field_names()
     {
         var slots = Extract(Tuple(ContractIdOf(Ref("Half")), ContractIdOf(Ref("Half"))));
 
@@ -174,7 +174,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void base_name_ending_in_digit_is_left_untouched_when_unique()
+    public void ChoiceCreatedSlots_base_name_ending_in_digit_is_left_untouched_when_unique()
     {
         var slots = Extract(Tuple(ContractIdOf(Ref("Half2")), ContractIdOf(Ref("Whole"))));
 
@@ -184,7 +184,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void synthesized_suffix_does_not_steal_a_later_real_name()
+    public void ChoiceCreatedSlots_synthesized_suffix_does_not_steal_a_later_real_name()
     {
         var slots = Extract(Tuple(
             ContractIdOf(Ref("Half")),
@@ -195,7 +195,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void cascading_collisions_each_get_a_distinct_free_suffix()
+    public void ChoiceCreatedSlots_cascading_collisions_each_get_a_distinct_free_suffix()
     {
         var slots = Extract(Tuple(
             ContractIdOf(Ref("Half")),
@@ -208,7 +208,7 @@ public class ChoiceCreatedSlotsTests
     }
 
     [Fact]
-    public void non_contract_return_yields_no_slots()
+    public void ChoiceCreatedSlots_non_contract_return_yields_no_slots()
     {
         Extract(new DamlPrimitiveType(DamlPrimitive.Int64)).Should().BeEmpty();
         Extract(new DamlPrimitiveType(DamlPrimitive.Unit)).Should().BeEmpty();

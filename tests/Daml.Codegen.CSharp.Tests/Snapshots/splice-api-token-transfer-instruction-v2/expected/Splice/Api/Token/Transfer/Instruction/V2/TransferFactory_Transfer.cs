@@ -14,7 +14,11 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferFactory_Transfer
 /// </summary>
-public sealed record TransferFactory_Transfer([property: DamlFieldAttribute("transfer")] Transfer Transfer, [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs) : IDamlRecord
+public sealed record TransferFactory_Transfer(
+    [property: DamlFieldAttribute("transfer")] Transfer Transfer,
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs
+) : IDamlRecord<TransferFactory_Transfer>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

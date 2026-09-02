@@ -5,7 +5,6 @@
     <Description>C# code generator library for Daml smart contracts. Consumes an IntermediateDar protobuf (see Daml.Codegen.Intermediate) and emits strongly-typed C# bindings.</Description>
     <PackageTags>daml;canton;blockchain;smart-contracts;codegen</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,17 +22,13 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
-    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Daml.Codegen.Intermediate\Daml.Codegen.Intermediate.csproj" />
     <ProjectReference Include="..\Daml.Runtime\Daml.Runtime.csproj" />
     <ProjectReference Include="..\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Protobuf Include="..\..\proto\intermediate_dar.proto" ProtoRoot="..\..\proto" GrpcServices="None" Link="Proto\intermediate_dar.proto" />
   </ItemGroup>
 
 </Project>

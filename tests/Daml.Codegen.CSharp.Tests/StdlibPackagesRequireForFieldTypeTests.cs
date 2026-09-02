@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -51,7 +51,7 @@ public class StdlibPackagesRequireForFieldTypeTests
     private static IReadOnlyCollection<string> RequiredFor(ICrossPackageResolver resolver, DamlType type)
     {
         var indent = new IndentWriter(new StringBuilder());
-        StdlibPackages.RequireForFieldType(resolver, indent, type);
+        StdlibPackages.RequireForFieldType(resolver, NamedPackage("local-pkg", "local"), indent, type);
         return indent.RequiredUsings;
     }
 
@@ -102,5 +102,25 @@ public class StdlibPackagesRequireForFieldTypeTests
         var type = new DamlTypeApp(Ref(UserPackageId, "MyModule", "MyRecord"), [new DamlTypeVar("a"), Prim(DamlPrimitive.Date)]);
 
         RequiredFor(resolver, type).Should().BeEquivalentTo("System");
+    }
+
+    [Fact]
+    public void RequireForFieldType_requires_stdlib_for_an_optional_argument_to_an_emitted_generic()
+    {
+        var resolver = Resolver(NamedPackage(UserPackageId, "my-app"));
+        var type = new DamlTypeApp(
+            Ref(UserPackageId, "MyModule", "Box"),
+            [App(DamlPrimitive.Optional, Prim(DamlPrimitive.Text))]);
+
+        RequiredFor(resolver, type).Should().BeEquivalentTo("Daml.Runtime.Stdlib");
+    }
+
+    [Fact]
+    public void RequireForFieldType_requires_stdlib_for_an_optional_over_a_type_variable()
+    {
+        var resolver = Resolver(NamedPackage(UserPackageId, "my-app"));
+
+        RequiredFor(resolver, App(DamlPrimitive.Optional, new DamlTypeVar("a")))
+            .Should().BeEquivalentTo("Daml.Runtime.Stdlib");
     }
 }

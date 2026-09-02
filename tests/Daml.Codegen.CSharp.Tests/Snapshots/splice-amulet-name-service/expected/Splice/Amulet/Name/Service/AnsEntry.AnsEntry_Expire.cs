@@ -14,7 +14,9 @@ public sealed partial record AnsEntry
     /// <summary>
     /// Choice argument type for AnsEntry_Expire.
     /// </summary>
-    public sealed record AnsEntry_Expire([property: DamlFieldAttribute("actor")] Party Actor) : IDamlRecord
+    public sealed record AnsEntry_Expire(
+        [property: DamlFieldAttribute("actor")] Party Actor
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

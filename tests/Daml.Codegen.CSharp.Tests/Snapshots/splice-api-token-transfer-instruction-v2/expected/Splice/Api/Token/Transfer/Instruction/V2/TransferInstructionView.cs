@@ -16,7 +16,13 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferInstructionView
 /// </summary>
-public sealed record TransferInstructionView([property: DamlFieldAttribute("originalInstructionCid")] ContractId<ITransferInstruction>? OriginalInstructionCid, [property: DamlFieldAttribute("transfer")] Transfer Transfer, [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt, [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<TransferInstructionAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record TransferInstructionView(
+    [property: DamlFieldAttribute("originalInstructionCid")] ContractId<ITransferInstruction>? OriginalInstructionCid,
+    [property: DamlFieldAttribute("transfer")] Transfer Transfer,
+    [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt,
+    [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<TransferInstructionAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : ITransferInstruction, IDamlRecord<TransferInstructionView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

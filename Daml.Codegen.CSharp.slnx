@@ -10,6 +10,7 @@
   <Folder Name="/src/">
     <Project Path="src/Daml.Codegen.CSharp.Cli/Daml.Codegen.CSharp.Cli.csproj" />
     <Project Path="src/Daml.Codegen.CSharp/Daml.Codegen.CSharp.csproj" />
+    <Project Path="src/Daml.Codegen.Intermediate/Daml.Codegen.Intermediate.csproj" />
     <Project Path="src/Daml.Codegen.Testing.Conformance/Daml.Codegen.Testing.Conformance.csproj" />
     <Project Path="src/Daml.Ledger.Abstractions.Testing.Conformance/Daml.Ledger.Abstractions.Testing.Conformance.csproj" />
     <Project Path="src/Daml.Ledger.Abstractions/Daml.Ledger.Abstractions.csproj" />

@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.Intermediate;
 using AwesomeAssertions;
 using Xunit;
@@ -22,7 +22,7 @@ namespace Daml.Codegen.CSharp.Tests;
 public partial class IntermediateDarReaderTests
 {
     [Fact]
-    public void template_signatories_default_to_dynamic()
+    public void IntermediateDarReader_template_signatories_default_to_dynamic()
     {
         var proto = MakePackageWith(module =>
         {
@@ -41,7 +41,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void template_with_unset_signatories_defaults_to_dynamic()
+    public void IntermediateDarReader_template_with_unset_signatories_defaults_to_dynamic()
     {
         var proto = MakeProtoWithSingleTemplate(new PbTemplate
         {
@@ -56,7 +56,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void template_with_static_signatories_reads_payload_field_references()
+    public void IntermediateDarReader_template_with_static_signatories_reads_payload_field_references()
     {
         var proto = MakeProtoWithSingleTemplate(new PbTemplate
         {
@@ -82,7 +82,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void choice_party_analysis_round_trips_static_and_dynamic()
+    public void IntermediateDarReader_choice_party_analysis_round_trips_static_and_dynamic()
     {
         var proto = MakeProtoWithSingleTemplate(new PbTemplate
         {

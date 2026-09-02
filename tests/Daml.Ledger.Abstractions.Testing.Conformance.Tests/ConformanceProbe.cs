@@ -8,7 +8,7 @@ using Daml.Runtime.Data;
 
 namespace Daml.Ledger.Abstractions.Testing.Conformance.Tests;
 
-public sealed record ConformanceProbe(string Owner) : ITemplate
+public sealed record ConformanceProbe(string Owner) : ITemplate, IDamlRecord<ConformanceProbe>
 {
     public static Identifier TemplateId { get; } = new("pkg", "M", "ConformanceProbe");
     public static string PackageId => "pkg";
@@ -16,5 +16,8 @@ public sealed record ConformanceProbe(string Owner) : ITemplate
     public static Version PackageVersion { get; } = new(0, 1, 0);
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
-    public DamlRecord ToRecord() => DamlRecord.Create();
+    public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("owner", new DamlText(Owner)));
+
+    public static ConformanceProbe FromRecord(DamlRecord record) =>
+        new((record.GetField("owner") as DamlText)?.Value ?? string.Empty);
 }

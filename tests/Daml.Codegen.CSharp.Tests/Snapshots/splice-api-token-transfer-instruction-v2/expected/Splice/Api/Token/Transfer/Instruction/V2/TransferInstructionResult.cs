@@ -15,7 +15,11 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferInstructionResult
 /// </summary>
-public sealed record TransferInstructionResult([property: DamlFieldAttribute("output")] TransferInstructionResult_Output Output, [property: DamlFieldAttribute("senderChangeCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> SenderChangeCids, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record TransferInstructionResult(
+    [property: DamlFieldAttribute("output")] TransferInstructionResult_Output Output,
+    [property: DamlFieldAttribute("senderChangeCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> SenderChangeCids,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<TransferInstructionResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

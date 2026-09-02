@@ -19,9 +19,18 @@ float on the release-time counter segment.
 
 To build it, populate `local-feed/` with the packed V2 `.nupkg` files and the
 packed `Daml.Runtime` / `Daml.Ledger.Abstractions`, then `dotnet build`. CI does
-this automatically in the Splice publish pipeline via
-`.github/scripts/verify-sample-tokenstandard-v2.sh`, which builds the sample
-against the freshly packed feed as a focused V2 compile-gate before publishing.
+this automatically in the Splice publish pipeline, building the sample against
+the freshly packed feed as a focused V2 compile-gate before publishing.
+
+## Isolated package cache
+
+`NuGet.config` pins `globalPackagesFolder` to `.nuget-packages/`, so restores
+here never write to the machine-wide `~/.nuget/packages`. `local-feed/` carries
+locally packed builds of versions that also exist on nuget.org, and NuGet never
+re-fetches a version whose folder already exists — without that pin, one sample
+build would leave local packs permanently shadowing the real published packages
+for every other project on the machine. Keep the pin, and keep
+`.nuget-packages/` out of the feed.
 
 ## Package version floats
 

@@ -12,7 +12,7 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AnsEntryContext_TerminateResult
 /// </summary>
-public sealed record AnsEntryContext_TerminateResult : IDamlRecord
+public sealed record AnsEntryContext_TerminateResult : IDamlRecord<AnsEntryContext_TerminateResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create();

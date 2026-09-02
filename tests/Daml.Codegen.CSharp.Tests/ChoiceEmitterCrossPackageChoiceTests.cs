@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
@@ -62,12 +62,11 @@ public class ChoiceEmitterCrossPackageChoiceTests
         new([new DamlFieldDefinition(fieldName, new DamlPrimitiveType(DamlPrimitive.Text))]);
 
     [Fact]
-    public void non_contract_exerciser_resolves_cross_package_argument_type()
+    public void ChoiceEmitterCrossPackageChoice_non_contract_exerciser_resolves_cross_package_argument_type()
     {
         var template = new DamlTemplate
         {
             Name = "Trader",
-            Fields = [],
             Choices =
             [
                 new DamlChoice
@@ -89,12 +88,11 @@ public class ChoiceEmitterCrossPackageChoiceTests
     }
 
     [Fact]
-    public void non_contract_exerciser_resolves_cross_package_argument_when_simple_name_collides_with_local_record()
+    public void ChoiceEmitterCrossPackageChoice_non_contract_exerciser_resolves_cross_package_argument_when_simple_name_collides_with_local_record()
     {
         var template = new DamlTemplate
         {
             Name = "Trader",
-            Fields = [],
             Choices =
             [
                 new DamlChoice
@@ -115,7 +113,7 @@ public class ChoiceEmitterCrossPackageChoiceTests
     }
 
     [Fact]
-    public void interface_choice_resolves_cross_package_argument_type()
+    public void ChoiceEmitterCrossPackageChoice_interface_choice_resolves_cross_package_argument_type()
     {
         var iface = new DamlInterface
         {
@@ -136,13 +134,13 @@ public class ChoiceEmitterCrossPackageChoiceTests
         var output = EmitInterfaceExtensions(iface, "ITransferable", new StubResolver("Other.Pkg.TransferRequest"));
 
         output.Should().Contain("public static class ITransferableExtensions");
-        output.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
         output.Should().Contain("Other.Pkg.TransferRequest argument,");
         output.Should().Contain("argument.ToRecord()");
     }
 
     [Fact]
-    public void interface_choice_emits_primitive_argument_without_fallback_arg_type()
+    public void ChoiceEmitterCrossPackageChoice_interface_choice_emits_primitive_argument_without_fallback_arg_type()
     {
         var iface = new DamlInterface
         {
@@ -163,7 +161,7 @@ public class ChoiceEmitterCrossPackageChoiceTests
         var output = EmitInterfaceExtensions(iface, "IQuotable", new StubResolver());
 
         output.Should().Contain("public static class IQuotableExtensions");
-        output.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> QuoteAsync(");
+        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> QuoteAsync(");
         output.Should().Contain("string argument,");
         output.Should().NotContain("QuoteArg argument,");
     }
@@ -194,7 +192,7 @@ public class ChoiceEmitterCrossPackageChoiceTests
         };
 
     [Fact]
-    public void generate_throws_at_codegen_time_for_unresolvable_cross_package_ref()
+    public void Generate_throws_at_codegen_time_for_unresolvable_cross_package_ref()
     {
         var module = new DamlModule
         {
@@ -204,7 +202,6 @@ public class ChoiceEmitterCrossPackageChoiceTests
                 new DamlTemplate
                 {
                     Name = "Trader",
-                    Fields = [new DamlFieldDefinition("operator", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice

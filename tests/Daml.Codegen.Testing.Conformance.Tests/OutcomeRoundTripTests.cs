@@ -12,7 +12,7 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 public class OutcomeRoundTripTests
 {
     [Fact]
-    public void win_constructor_round_trips_through_DamlVariant()
+    public void Win_constructor_round_trips_through_DamlVariant()
     {
         Outcome original = new Outcome.Win(new Outcome_Win(Prize: 12.34m, Tier: "gold"));
 
@@ -22,7 +22,7 @@ public class OutcomeRoundTripTests
     }
 
     [Fact]
-    public void pending_constructor_round_trips_through_DamlVariant()
+    public void Pending_constructor_round_trips_through_DamlVariant()
     {
         Outcome original = new Outcome.Pending();
 
@@ -32,7 +32,7 @@ public class OutcomeRoundTripTests
     }
 
     [Fact]
-    public void win_variant_serializes_to_tag_value_wire_shape()
+    public void Win_variant_serializes_to_tag_value_wire_shape()
     {
         Outcome outcome = new Outcome.Win(new Outcome_Win(Prize: 1.5m, Tier: "gold"));
 
@@ -42,7 +42,7 @@ public class OutcomeRoundTripTests
     }
 
     [Fact]
-    public void pending_variant_serializes_to_tag_value_wire_shape()
+    public void Pending_variant_serializes_to_tag_value_wire_shape()
     {
         Outcome outcome = new Outcome.Pending();
 
@@ -52,7 +52,7 @@ public class OutcomeRoundTripTests
     }
 
     [Fact]
-    public void pending_round_trips_through_json_deserialization()
+    public void Pending_round_trips_through_json_deserialization()
     {
         Outcome original = new Outcome.Pending();
 

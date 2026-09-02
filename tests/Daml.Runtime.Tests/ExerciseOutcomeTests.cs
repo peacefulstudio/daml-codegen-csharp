@@ -24,7 +24,7 @@ public class ExerciseOutcomeTests
     [Fact]
     public void One_carries_transaction_result_payload()
     {
-        var result = new TransactionResult("u1", LedgerOffset.At(1), [], [], default);
+        var result = new TransactionResult("u1", LedgerOffset.At(1), [], [], null);
         var outcome = new ExerciseOutcome<TransactionResult>.One(result);
 
         outcome.Result.Should().BeSameAs(result);
@@ -107,11 +107,30 @@ public class ExerciseOutcomeTests
         // StatusCode is `int` (cast `(int)Grpc.Core.StatusCode.DeadlineExceeded` at the
         // gRPC client construction site) so this type stays free of any transport-library dep.
         var sourceException = new InvalidOperationException("transport failed");
-        var outcome = new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.DeadlineExceeded, "deadline", sourceException);
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.DeadlineExceeded, "deadline", SourceException: sourceException);
 
         outcome.StatusCode.Should().Be(StatusCodes.DeadlineExceeded);
         outcome.Message.Should().Be("deadline");
         outcome.SourceException.Should().BeSameAs(sourceException);
+    }
+
+    [Fact]
+    public void InfraError_leaves_the_category_null_when_it_is_not_supplied()
+    {
+        var outcome = new ExerciseOutcome<TransactionResult>.InfraError(StatusCodes.Unavailable, "network down");
+
+        outcome.Category.Should().BeNull();
+    }
+
+    [Fact]
+    public void InfraError_carries_a_category_determined_without_a_structured_error()
+    {
+        var outcome = new ExerciseOutcome<TransactionResult>.InfraError(
+            StatusCodes.PermissionDenied, "permission denied", DamlErrorCategory.AuthorizationChecksFailed);
+
+        outcome.Category.Should().Be(DamlErrorCategory.AuthorizationChecksFailed);
+        outcome.StatusCode.Should().Be(StatusCodes.PermissionDenied);
+        outcome.SourceException.Should().BeNull();
     }
 
     [Fact]
@@ -157,6 +176,7 @@ public class ExerciseOutcomeTests
     {
         public const int Unavailable = 14;
         public const int DeadlineExceeded = 4;
+        public const int PermissionDenied = 7;
     }
 
     private sealed record SwapChoiceResult(

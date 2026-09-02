@@ -316,6 +316,60 @@ public class CommandTypesTests
         result.Commands.Should().BeEquivalentTo(submission.Commands);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t\n")]
+    public void CommandsSubmission_WithOptionalWorkflowId_should_leave_the_submission_unchanged(string? workflowId)
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        // Act
+        var result = submission.WithOptionalWorkflowId(workflowId);
+
+        // Assert
+        result.WorkflowId.Should().BeNull();
+        result.Should().Be(submission);
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithOptionalWorkflowId_should_set_workflow_id_when_supplied()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        // Act
+        var result = submission.WithOptionalWorkflowId("workflow-123");
+
+        // Assert
+        result.WorkflowId.Should().Be(new WorkflowId("workflow-123"));
+        result.Commands.Should().BeEquivalentTo(submission.Commands);
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithWorkflowId_should_still_store_an_explicit_blank_workflow_id()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        // Act
+        var result = submission.WithWorkflowId(new WorkflowId(" "));
+
+        // Assert
+        result.WorkflowId.Should().Be(new WorkflowId(" "));
+    }
+
     [Fact]
     public void CommandsSubmission_WithCommandId_should_set_command_id()
     {
@@ -456,6 +510,52 @@ public class CommandTypesTests
     }
 
     [Fact]
+    public void DisclosedContract_should_not_observe_mutation_of_the_source_blob_array()
+    {
+        var blob = "created-event-blob"u8.ToArray();
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1", new Identifier("pkg", "Module", "Template"), blob);
+        var hashCodeBeforeMutation = disclosedContract.GetHashCode();
+
+        blob[0] ^= 0xFF;
+
+        disclosedContract.CreatedEventBlob.ToArray().Should().Equal("created-event-blob"u8.ToArray());
+        disclosedContract.GetHashCode().Should().Be(hashCodeBeforeMutation);
+    }
+
+    [Fact]
+    public void DisclosedContract_should_stay_findable_in_a_hash_set_after_the_source_blob_array_mutates()
+    {
+        var blob = "created-event-blob"u8.ToArray();
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1", new Identifier("pkg", "Module", "Template"), blob);
+        var disclosedContracts = new HashSet<DisclosedContract> { disclosedContract };
+
+        blob[0] ^= 0xFF;
+
+        disclosedContracts.Contains(disclosedContract).Should().BeTrue();
+        disclosedContracts.Contains(new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray())).Should().BeTrue();
+    }
+
+    [Fact]
+    public void DisclosedContract_with_expression_should_copy_the_replacement_blob_array()
+    {
+        var original = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var replacementBlob = "replacement-event-blob"u8.ToArray();
+
+        var replaced = original with { CreatedEventBlob = replacementBlob };
+        replacementBlob[0] ^= 0xFF;
+
+        replaced.CreatedEventBlob.ToArray().Should().Equal("replacement-event-blob"u8.ToArray());
+    }
+
+    [Fact]
     public void CommandsSubmission_WithSubmitter_should_preserve_disclosed_contracts()
     {
         // Arrange
@@ -474,6 +574,157 @@ public class CommandTypesTests
 
         // Assert
         result.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_leave_min_ledger_time_null_when_omitted()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+
+        // Act
+        var submission = CommandsSubmission.Single(command);
+
+        // Assert
+        submission.MinLedgerTime.Should().BeNull();
+        CommandsSubmission.Multiple(command).MinLedgerTime.Should().BeNull();
+        new CommandsSubmission([command]).MinLedgerTime.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithMinLedgerTime_should_set_an_absolute_bound()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var instant = new DateTimeOffset(2026, 8, 15, 9, 30, 0, TimeSpan.Zero);
+        var submission = CommandsSubmission.Single(command);
+
+        // Act
+        var result = submission.WithMinLedgerTime(new MinLedgerTime.Absolute(instant));
+
+        // Assert
+        result.MinLedgerTime.Should().Be(new MinLedgerTime.Absolute(instant));
+        result.MinLedgerTime.Should().BeOfType<MinLedgerTime.Absolute>()
+            .Which.Value.Should().Be(instant);
+        submission.MinLedgerTime.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithMinLedgerTime_should_set_a_relative_bound()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command);
+
+        // Act
+        var result = submission.WithMinLedgerTime(
+            new MinLedgerTime.Relative(TimeSpan.FromSeconds(30)));
+
+        // Assert
+        result.MinLedgerTime.Should().BeOfType<MinLedgerTime.Relative>()
+            .Which.Value.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithMinLedgerTime_should_round_trip_both_arms()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var instant = new DateTimeOffset(2026, 8, 15, 9, 30, 0, TimeSpan.Zero);
+        MinLedgerTime[] bounds =
+        [
+            new MinLedgerTime.Absolute(instant),
+            new MinLedgerTime.Relative(TimeSpan.FromSeconds(30)),
+        ];
+
+        // Act
+        var readBack = bounds
+            .Select(bound => CommandsSubmission.Single(command).WithMinLedgerTime(bound))
+            .Select(submission => submission.MinLedgerTime?.Match(
+                absolute => $"abs:{absolute:O}",
+                relative => $"rel:{relative}") ?? "none")
+            .ToArray();
+
+        // Assert
+        readBack.Should().Equal("abs:2026-08-15T09:30:00.0000000+00:00", "rel:00:00:30");
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithMinLedgerTime_with_null_should_clear_the_bound()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command)
+            .WithMinLedgerTime(new MinLedgerTime.Relative(TimeSpan.FromSeconds(30)));
+
+        // Act
+        var result = submission.WithMinLedgerTime(null);
+
+        // Assert
+        result.MinLedgerTime.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithMinLedgerTime_should_preserve_the_other_fields()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var submission = CommandsSubmission.Single(command)
+            .WithWorkflowId(new WorkflowId("workflow-1"))
+            .WithCommandId(new CommandId("cmd-1"))
+            .WithActAs(new Party("Alice"))
+            .WithReadAs(new Party("Bob"))
+            .WithSynchronizerId(new SynchronizerId("sync-1"))
+            .WithDisclosedContracts(disclosedContract);
+
+        // Act
+        var result = submission.WithMinLedgerTime(
+            new MinLedgerTime.Relative(TimeSpan.FromSeconds(30)));
+
+        // Assert
+        result.Commands.Should().ContainSingle().Which.Should().Be(command);
+        result.WorkflowId.Should().Be(new WorkflowId("workflow-1"));
+        result.CommandId.Should().Be(new CommandId("cmd-1"));
+        result.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
+        result.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
+        result.SynchronizerId.Should().Be(new SynchronizerId("sync-1"));
+        result.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+        result.MinLedgerTime.Should().BeOfType<MinLedgerTime.Relative>()
+            .Which.Value.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithSubmitter_should_preserve_min_ledger_time()
+    {
+        // Arrange
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var submission = CommandsSubmission.Single(command)
+            .WithMinLedgerTime(new MinLedgerTime.Relative(TimeSpan.FromSeconds(30)));
+
+        // Act
+        var result = submission.WithSubmitter(new Party("Alice"));
+
+        // Assert
+        result.MinLedgerTime.Should().BeOfType<MinLedgerTime.Relative>()
+            .Which.Value.Should().Be(TimeSpan.FromSeconds(30));
     }
 
     [Fact]

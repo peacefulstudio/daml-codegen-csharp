@@ -3,9 +3,10 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -67,20 +68,36 @@ public class ChoiceEmitterInterfaceExtensionTests
         };
 
     [Fact]
-    public void emits_an_extensions_class_with_one_async_method_per_interface_choice()
+    public void ChoiceEmitterInterfaceExtension_emits_an_extensions_class_with_one_async_method_per_interface_choice()
     {
         var output = EmitExtensions(Interface(
             Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit)),
             Choice("Freeze", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("public static class IAssetExtensions");
-        output.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
-        output.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> FreezeAsync(");
+        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> FreezeAsync(");
         output.Should().Contain("this ContractId<IAsset> contractId,");
     }
 
     [Fact]
-    public void interface_exerciser_builds_an_interface_typed_exercise_command()
+    public void ChoiceEmitterInterfaceExtension_returns_the_submission_task_without_awaiting_it()
+    {
+        var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
+
+        output.Should().Contain(
+            "public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(\n"
+            + "        this ContractId<IAsset> contractId,\n"
+            + "        ILedgerWriter client,\n"
+            + "        SubmitterInfo submitter,");
+        output.Should().Contain("return client." + TrySubmitSingleArgumentOrder + ";");
+        output.Should().NotContain(
+            "public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(",
+            "awaiting the submission would force the exerciser to be declared async, and scoping the check to that declaration keeps an unrelated emitted member — or the word appearing in a doc comment — from failing this test");
+    }
+
+    [Fact]
+    public void ChoiceEmitterInterfaceExtension_interface_exerciser_builds_an_interface_typed_exercise_command()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
@@ -88,18 +105,18 @@ public class ChoiceEmitterInterfaceExtensionTests
     }
 
     [Fact]
-    public void interface_with_no_choices_emits_no_extensions_class()
+    public void ChoiceEmitterInterfaceExtension_interface_with_no_choices_emits_no_extensions_class()
     {
         EmitExtensions(Interface()).Should().NotContain("public static class");
     }
 
     [Fact]
-    public void interface_exerciser_accepts_optional_command_id_override()
+    public void ChoiceEmitterInterfaceExtension_interface_exerciser_accepts_optional_command_id_override()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("CommandId? commandId = null,");
-        output.Should().Contain(".WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));");
+        output.Should().Contain(TrySubmitSingleArgumentOrder);
 
         var idxWorkflowId = output.IndexOf("string? workflowId = null,", StringComparison.Ordinal);
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
@@ -109,12 +126,12 @@ public class ChoiceEmitterInterfaceExtensionTests
     }
 
     [Fact]
-    public void interface_exerciser_forwards_optional_timeout()
+    public void ChoiceEmitterInterfaceExtension_interface_exerciser_forwards_optional_timeout()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("TimeSpan? timeout = null,");
-        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = output.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
@@ -124,7 +141,7 @@ public class ChoiceEmitterInterfaceExtensionTests
     }
 
     [Fact]
-    public void interface_choice_emits_a_command_builder_that_returns_an_exercise_command()
+    public void ChoiceEmitterInterfaceExtension_interface_choice_emits_a_command_builder_that_returns_an_exercise_command()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
@@ -134,17 +151,17 @@ public class ChoiceEmitterInterfaceExtensionTests
     }
 
     [Fact]
-    public void interface_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
+    public void ChoiceEmitterInterfaceExtension_interface_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("var command = contractId.TransferCommand();");
-        output.Should().Contain("var submission = CommandsSubmission.Single(command)");
+        output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
         output.Should().NotContain("var command = ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\")");
     }
 
     [Fact]
-    public void interface_choice_command_builder_accepts_the_typed_argument_when_the_choice_has_one()
+    public void ChoiceEmitterInterfaceExtension_interface_choice_command_builder_accepts_the_typed_argument_when_the_choice_has_one()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlTypeRef(LocalPackageId, "Main", "TransferArg"))));
 

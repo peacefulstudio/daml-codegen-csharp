@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -21,19 +21,22 @@ public class SubmissionExtensionsEmitterTests
     private static DamlPartyAnalysis StaticParties(params string[] fieldNames) =>
         DamlPartyAnalysis.Static(fieldNames.Select(n => (DamlPartyReference)new DamlPartyPayloadField(n)).ToList());
 
-    private static DamlTemplate Template(
+    private sealed record TemplateFixture(DamlTemplate Template, IReadOnlyList<DamlFieldDefinition> Fields);
+
+    private static TemplateFixture Template(
         string name,
         IReadOnlyList<DamlFieldDefinition> fields,
         DamlPartyAnalysis? signatories = null,
         DamlPartyAnalysis? observers = null) =>
-        new()
-        {
-            Name = name,
-            Fields = fields,
-            Choices = [],
-            Signatories = signatories ?? DamlPartyAnalysis.Dynamic,
-            Observers = observers ?? DamlPartyAnalysis.Dynamic,
-        };
+        new(
+            new DamlTemplate
+            {
+                Name = name,
+                Choices = [],
+                Signatories = signatories ?? DamlPartyAnalysis.Dynamic,
+                Observers = observers ?? DamlPartyAnalysis.Dynamic,
+            },
+            fields);
 
     private static PackageEmitContext Context(DamlTemplate template)
     {
@@ -58,18 +61,18 @@ public class SubmissionExtensionsEmitterTests
         return PackageEmitContext.ForPackage(package, new CodeGenOptions());
     }
 
-    private string Emit(DamlTemplate template, CodeGenOptions? options = null)
+    private string Emit(TemplateFixture fixture, CodeGenOptions? options = null)
     {
-        var context = Context(template);
+        var context = Context(fixture.Template);
         var emitter = new SubmissionExtensionsEmitter(context, options ?? new CodeGenOptions(), _party);
         var sb = new StringBuilder();
         var indent = new IndentWriter(sb);
-        emitter.TryWriteSubmissionExtensions(indent, template, template.Fields);
+        emitter.TryWriteSubmissionExtensions(indent, fixture.Template, fixture.Fields);
         return sb.ToString();
     }
 
     [Fact]
-    public void emits_the_submission_extensions_class_for_a_template()
+    public void SubmissionExtensionsEmitter_emits_the_submission_extensions_class_for_a_template()
     {
         var template = Template(
             "Asset",
@@ -82,7 +85,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void emits_the_submission_extensions_class_even_when_signatories_are_dynamic()
+    public void SubmissionExtensionsEmitter_emits_the_submission_extensions_class_even_when_signatories_are_dynamic()
     {
         var template = Template(
             "Vault",
@@ -95,7 +98,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void static_single_signatory_create_derives_submitter_from_the_payload_and_omits_the_parameter()
+    public void SubmissionExtensionsEmitter_static_single_signatory_create_derives_submitter_from_the_payload_and_omits_the_parameter()
     {
         var template = Template(
             "Asset",
@@ -109,7 +112,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void static_multiple_signatory_create_builds_a_submitter_set_from_the_payload_fields()
+    public void SubmissionExtensionsEmitter_static_multiple_signatory_create_builds_a_submitter_set_from_the_payload_fields()
     {
         var template = Template(
             "Trade",
@@ -125,7 +128,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void dynamic_signatory_create_takes_an_explicit_submitter_parameter()
+    public void SubmissionExtensionsEmitter_dynamic_signatory_create_takes_an_explicit_submitter_parameter()
     {
         var template = Template(
             "Keyed",
@@ -140,7 +143,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void static_non_empty_observers_emit_the_observers_helper()
+    public void SubmissionExtensionsEmitter_static_non_empty_observers_emit_the_observers_helper()
     {
         var template = Template(
             "Note",
@@ -155,7 +158,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void static_empty_observers_skip_the_observers_helper()
+    public void SubmissionExtensionsEmitter_static_empty_observers_skip_the_observers_helper()
     {
         var template = Template(
             "Note",
@@ -169,7 +172,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void dynamic_observers_skip_the_observers_helper()
+    public void SubmissionExtensionsEmitter_dynamic_observers_skip_the_observers_helper()
     {
         var template = Template(
             "Note",
@@ -183,7 +186,7 @@ public class SubmissionExtensionsEmitterTests
     }
 
     [Fact]
-    public void unknown_signatory_subtype_falls_back_to_an_explicit_submitter_parameter()
+    public void SubmissionExtensionsEmitter_unknown_signatory_subtype_falls_back_to_an_explicit_submitter_parameter()
     {
         var template = Template(
             "Asset",

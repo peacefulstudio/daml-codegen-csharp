@@ -14,7 +14,9 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record SettlementFactory_PublicFetch
 /// </summary>
-public sealed record SettlementFactory_PublicFetch([property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors) : IDamlRecord
+public sealed record SettlementFactory_PublicFetch(
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors
+) : IDamlRecord<SettlementFactory_PublicFetch>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

@@ -57,6 +57,36 @@ var submission = CommandsSubmission.Single(createCmd)
     .WithCommandId(new CommandId(Guid.NewGuid().ToString()));
 ```
 
+### Projecting Transaction Results
+
+A committed submission yields a `TransactionResult` (for example as the
+success payload of `ILedgerWriter.TrySubmitAndWaitForTransactionAsync`),
+whose `CreatedContracts` list is untyped wire data. Don't re-implement the
+projection back to typed contract ids — `TransactionResultExtensions` in
+`Daml.Runtime.Contracts` ships it:
+
+```csharp
+using Daml.Runtime.Contracts;
+using Quickstart;
+
+// tx is a TransactionResult from a committed submission.
+
+// Every created Iou, in transaction order:
+IReadOnlyList<ContractId<Iou>> all = tx.All<Iou>();
+
+// Exactly-one-or-null: null when none was created,
+// throws InvalidOperationException when more than one was:
+ContractId<Iou>? maybe = tx.TrySingle<Iou>();
+
+// Exactly one: throws InvalidOperationException on zero or many:
+ContractId<Iou> single = tx.Single<Iou>();
+```
+
+Matching is by qualified name (module + entity), deliberately ignoring the
+package id, so a template upgrade that changes the package hash still
+resolves. When `T` is a generated Daml *interface* marker, a created
+contract matches on its `InterfaceIds` instead of its `TemplateId`.
+
 ### Manual Serialization
 
 If you need to work with Daml values directly:
@@ -75,6 +105,58 @@ var json = DamlJsonSerializer.Serialize(record);
 var parsed = DamlJsonSerializer.DeserializeRecord(json);
 ```
 
+`DeserializeRecord` and `Deserialize` are **untyped**: with no schema to consult they
+fold shapes that share a JSON form onto one Daml node. A `TextMap` comes back as a
+`DamlRecord`, a `Party` as a `DamlText`, and a nested `Optional` chain — written `[]` or
+`[v]` at every level — as a `DamlList`. Their output is therefore not interchangeable with
+a generated `FromRecord`'s input: a record carrying a nested `Optional` field throws
+`InvalidCastException: Cannot cast DamlList to DamlOptionalChain`, where every other field
+type would have decoded.
+
+Read against the type when the distinction matters — `DamlLfJsonReader` has the schema
+and produces the right node for each slot:
+
+```csharp
+using Daml.Runtime.Serialization;
+using Quickstart;
+
+var iou = Iou.FromRecord(DamlLfJsonReader.ReadRecord<Iou>(json));
+```
+
+### System.Text.Json Converters
+
+`Party`, `ContractId<T>` and `SynchronizerId` each travel as a bare JSON string in PQS
+rows and JSON Ledger API payloads, and each carries its converter as a `[JsonConverter]`
+attribute — so plain `System.Text.Json` needs no setup:
+
+```csharp
+var iou = JsonSerializer.Deserialize<Iou>(pqsRowJson);
+```
+
+`System.Text.Json` reads `[JsonConverter]` off the declared type and does not walk its
+base chain, so a derived contract id needs the attribute of its own. The emitted
+`T.ContractId` — including `T.Contract.Id` — is given it by the codegen, so it converts
+with no setup either. A hand-written type deriving from `ContractId<T>` is not, and still
+writes `{"Value":"..."}` until it is registered.
+
+Register explicitly for that case, and whenever a host builds its own
+`JsonSerializerOptions` and wants the Daml conversions listed explicitly rather than
+inherited from attributes:
+
+```csharp
+using Daml.Runtime.Serialization;
+
+var options = new JsonSerializerOptions().AddDamlConverters();
+```
+
+`AddDamlConverters` also sets `RespectNullableAnnotations`, which is what makes the three
+identity types agree on what a JSON `null` means: rejected wherever the declared type
+forbids one, read as absent wherever it permits one. `Party` and `SynchronizerId` are
+structs and enforce that themselves; `ContractId<T>` is a reference type, so it and
+`ContractId<T>?` — the C# rendering of `Optional (ContractId T)` — are the same type at
+runtime and only the annotation separates a required contract id from an optional one.
+The flag is serializer-wide, so it applies to a host's own types in the same options too.
+
 ## Type Mappings
 
 | Daml Type | Generated C# Type | Runtime backing |
@@ -88,8 +170,28 @@ var parsed = DamlJsonSerializer.DeserializeRecord(json);
 | `Time` | `DateTimeOffset` | `DamlTimestamp` |
 | `ContractId T` | `ContractId<T>` | `DamlContractId` |
 | `Optional a` | `T?` | `DamlOptional` |
+| `Optional a`, where nullable syntax cannot carry it | `Optional<T>` (`Daml.Runtime.Stdlib`) | `DamlOptional` |
+| `Optional (Optional a)` | `Optional<Optional<T>>` | `DamlOptionalChain`, one level per `Optional` |
 | `List a` | `IReadOnlyList<T>` | `DamlList` |
 | `TextMap a` | `IReadOnlyDictionary<string, T>` | `DamlTextMap` |
+
+`T?` is the default and covers almost every Optional field. The `Optional<T>` wrapper
+appears only where C# nullable syntax provably cannot carry the value: over a type
+parameter, where the compiler erases the `?`; as a type argument to a
+generated generic; and nested inside another Optional, where `T??` does not exist and
+`Some None` would collapse into `None`. A chain is uniform — every level rides the
+wrapper, none of it rides C# nullability — which is why `Optional (Optional Text)` is
+`Optional<Optional<string>>` rather than `Optional<string>?`.
+
+The type-argument case has one exception, and it fails the run rather than emitting: where
+the generic's own declaration already wraps that type parameter in an `Optional`, as
+`data Crate a = Crate with item : Optional a` does, passing an `Optional` for `a` is
+refused by codegen. A generic's body is emitted once from its declaration, so it cannot
+also account for a level the use site substitutes in.
+
+The two wire nodes are not interchangeable. A flat `DamlOptional` writes JSON `null` or
+its bare value; each `DamlOptionalChain` level writes the array form, `[]` when absent and
+`[v]` when present, which is what a participant accepts in a nested position.
 
 ## License
 

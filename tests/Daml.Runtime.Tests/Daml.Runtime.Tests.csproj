@@ -9,4 +9,8 @@
     <ProjectReference Include="..\..\src\Daml.Runtime\Daml.Runtime.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\wire-samples\data\*.json" LinkBase="wire-samples\data" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

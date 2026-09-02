@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.Intermediate;
 using AwesomeAssertions;
 using Xunit;
@@ -21,7 +21,7 @@ namespace Daml.Codegen.CSharp.Tests;
 public partial class IntermediateDarReaderTests
 {
     [Fact]
-    public void template_round_trips_with_choices_and_fields_from_record()
+    public void IntermediateDarReader_template_round_trips_with_choices_and_payload_record()
     {
         var proto = MakePackageWith(module =>
         {
@@ -50,17 +50,19 @@ public partial class IntermediateDarReaderTests
         });
 
         var model = IntermediateDarReader.Read(proto);
-        var template = model.MainPackage.Modules[0].Templates.Single();
+        var module = model.MainPackage.Modules[0];
+        var template = module.Templates.Single();
         template.Name.Should().Be("Iou");
-        template.Fields.Should().HaveCount(2);
-        template.Fields[0].Name.Should().Be("issuer");
         template.Choices.Should().HaveCount(1);
         template.Choices[0].Name.Should().Be("Transfer");
         template.Choices[0].Consuming.Should().BeTrue();
+        var payload = module.DataTypes.Single(dt => dt.Name == "Iou");
+        payload.Definition.Should().BeOfType<DamlRecordDefinition>()
+            .Which.Fields.Select(f => f.Name).Should().Equal("issuer", "currency");
     }
 
     [Fact]
-    public void interface_round_trips_with_view_type_and_choices()
+    public void IntermediateDarReader_interface_round_trips_with_view_type_and_choices()
     {
         var proto = MakePackageWith(module =>
         {
@@ -99,7 +101,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void template_with_no_key_type_yields_null_key()
+    public void IntermediateDarReader_template_with_no_key_type_yields_null_key()
     {
         var proto = MakePackageWith(module =>
         {
@@ -116,7 +118,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void template_with_key_type_round_trips()
+    public void IntermediateDarReader_template_with_key_type_round_trips()
     {
         var proto = MakePackageWith(module =>
         {
@@ -139,7 +141,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void interface_with_no_view_type_yields_null_view()
+    public void IntermediateDarReader_interface_with_no_view_type_yields_null_view()
     {
         var proto = MakePackageWith(module =>
         {
@@ -151,7 +153,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void duplicate_template_and_data_type_name_collision_does_not_throw()
+    public void IntermediateDarReader_duplicate_template_and_data_type_name_collision_does_not_throw()
     {
         var proto = MakePackageWith(module =>
         {
@@ -164,13 +166,14 @@ public partial class IntermediateDarReaderTests
         });
 
         var model = IntermediateDarReader.Read(proto);
-        var template = model.MainPackage.Modules[0].Templates.Single();
-        template.Fields.Should().HaveCount(1);
-        template.Fields[0].Name.Should().Be("issuer");
+        var module = model.MainPackage.Modules[0];
+        module.Templates.Single().Name.Should().Be("Iou");
+        module.DataTypes.Single().Definition.Should().BeOfType<DamlRecordDefinition>()
+            .Which.Fields.Single().Name.Should().Be("issuer");
     }
 
     [Fact]
-    public void choice_with_null_argument_type_throws()
+    public void IntermediateDarReader_choice_with_null_argument_type_throws()
     {
         var proto = new IntermediateDar
         {
@@ -222,7 +225,7 @@ public partial class IntermediateDarReaderTests
     }
 
     [Fact]
-    public void choice_with_null_return_type_throws()
+    public void IntermediateDarReader_choice_with_null_return_type_throws()
     {
         var proto = new IntermediateDar
         {
