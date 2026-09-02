@@ -3,9 +3,9 @@
 
 using Daml.Codegen.CSharp;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
+using Daml.Codegen.CSharp.Tests.TestHelpers;
 using AwesomeAssertions;
-using NSubstitute;
 using Xunit;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -49,7 +49,7 @@ public class PackageEmitContextTests
         new() { RootNamespace = rootNamespace };
 
     [Fact]
-    public void for_package_derives_root_namespace_from_package_name()
+    public void ForPackage_derives_root_namespace_from_package_name()
     {
         var context = PackageEmitContext.ForPackage(Package("cats-markets"), Options());
 
@@ -57,7 +57,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_honours_the_root_namespace_override()
+    public void ForPackage_honours_the_root_namespace_override()
     {
         var context = PackageEmitContext.ForPackage(Package("cats-markets"), Options("My.Override"));
 
@@ -65,7 +65,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_scopes_the_qualifier_to_the_root_namespace()
+    public void ForPackage_scopes_the_qualifier_to_the_root_namespace()
     {
         var context = PackageEmitContext.ForPackage(Package("canton-party-replication"), Options());
 
@@ -74,7 +74,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_collects_data_types_across_all_modules()
+    public void ForPackage_collects_data_types_across_all_modules()
     {
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -87,7 +87,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_keeps_same_named_data_types_from_different_modules_distinct()
+    public void ForPackage_keeps_same_named_data_types_from_different_modules_distinct()
     {
         var first = Record("Amulet", new DamlFieldDefinition("a", new DamlPrimitiveType(DamlPrimitive.Text)));
         var second = Enum("Amulet", "X");
@@ -103,7 +103,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_records_local_enums_module_qualified()
+    public void ForPackage_records_local_enums_module_qualified()
     {
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("Splice.AmuletConfig", dataTypes: [Enum("Amulet", "Free", "Paid")])),
@@ -113,7 +113,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_records_local_variants_module_qualified()
+    public void ForPackage_records_local_variants_module_qualified()
     {
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("M", dataTypes:
@@ -126,7 +126,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_flags_interface_placeholder_records_module_local()
+    public void ForPackage_flags_interface_shadowed_records_module_local()
     {
         var holdingRecord = Record("Holding");
         var unrelatedHolding = Record("Holding");
@@ -138,11 +138,288 @@ public class PackageEmitContextTests
                 Module("Other", dataTypes: [unrelatedHolding])),
             Options());
 
-        context.InterfacePlaceholderQualifiedNames.Should().BeEquivalentTo("Splice.Holding:Holding");
+        context.LocalInterfaceQualifiedNames.Should().BeEquivalentTo("Splice.Holding:Holding");
     }
 
     [Fact]
-    public void for_package_widens_reserved_names_to_a_record_colliding_with_an_interface_marker()
+    public void ForPackage_maps_a_local_view_record_to_its_interface_marker()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("AssetView")],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Asset",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "AssetView"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().Contain("M:AssetView", "IAsset");
+    }
+
+    [Fact]
+    public void ForPackage_excludes_a_view_record_shared_by_two_interfaces_from_the_view_record_map()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("SharedView")],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Bond",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "SharedView"),
+                        },
+                        new DamlInterface
+                        {
+                            Name = "Asset",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "SharedView"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ForPackage_excludes_foreign_missing_and_generic_view_types_from_the_view_record_map()
+    {
+        var genericView = new DamlDataType
+        {
+            Name = "GenericView",
+            TypeParams = ["a"],
+            Definition = new DamlRecordDefinition([]),
+        };
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [genericView],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Foreign",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("other-pkg", "M", "ForeignView"),
+                        },
+                        new DamlInterface
+                        {
+                            Name = "Dangling",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "NoSuchView"),
+                        },
+                        new DamlInterface
+                        {
+                            Name = "Generic",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "GenericView"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ForPackage_excludes_a_view_record_that_is_an_interface_placeholder_from_the_view_record_map()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("Placeholder")],
+                    interfaces:
+                    [
+                        new DamlInterface { Name = "Placeholder", Choices = [] },
+                        new DamlInterface
+                        {
+                            Name = "Asset",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "Placeholder"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ForPackage_excludes_a_non_record_view_type_from_the_view_record_map()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Enum("Colour", "Red"), Variant("Shape", new DamlVariantConstructor("Circle", null))],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Coloured",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "Colour"),
+                        },
+                        new DamlInterface
+                        {
+                            Name = "Shaped",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "Shape"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("view")]
+    [InlineData("interfaceId")]
+    [InlineData("assetView")]
+    [InlineData("iAsset")]
+    public void ForPackage_excludes_a_view_record_whose_field_does_not_mirror_cleanly(string fieldName)
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("AssetView", new DamlFieldDefinition(fieldName, new DamlPrimitiveType(DamlPrimitive.Party)))],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Asset",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "AssetView"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ForPackage_keeps_a_view_record_whose_fields_mirror_cleanly()
+    {
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Record("AssetView", new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)))],
+                    interfaces:
+                    [
+                        new DamlInterface
+                        {
+                            Name = "Asset",
+                            Choices = [],
+                            ViewType = new DamlTypeRef("", "M", "AssetView"),
+                        },
+                    ])),
+            Options());
+
+        context.LocalViewRecordMarkerNames.Should().Contain("M:AssetView", "IAsset");
+    }
+
+    [Fact]
+    public void HasWitnessableViewRecord_admits_a_local_record_and_any_foreign_reference()
+    {
+        var localRecordView = new DamlInterface
+        {
+            Name = "Asset",
+            Choices = [],
+            ViewType = new DamlTypeRef("", "M", "AssetView"),
+        };
+        var foreignView = new DamlInterface
+        {
+            Name = "Foreign",
+            Choices = [],
+            ViewType = new DamlTypeRef("other-pkg", "Other", "ForeignView"),
+        };
+        var context = PackageEmitContext.ForPackage(
+            Package("p", Module("M", dataTypes: [Record("AssetView")], interfaces: [localRecordView, foreignView])),
+            Options());
+
+        context.HasWitnessableViewRecord(localRecordView).Should().BeTrue();
+        context.HasWitnessableViewRecord(foreignView).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasWitnessableViewRecord_rejects_a_view_type_that_is_not_a_local_non_generic_record()
+    {
+        var genericView = new DamlDataType
+        {
+            Name = "GenericView",
+            TypeParams = ["a"],
+            Definition = new DamlRecordDefinition([]),
+        };
+        var viewless = new DamlInterface { Name = "Lockable", Choices = [] };
+        var enumView = new DamlInterface
+        {
+            Name = "Coloured",
+            Choices = [],
+            ViewType = new DamlTypeRef("", "M", "Colour"),
+        };
+        var genericViewInterface = new DamlInterface
+        {
+            Name = "Generic",
+            Choices = [],
+            ViewType = new DamlTypeRef("", "M", "GenericView"),
+        };
+        var placeholderView = new DamlInterface
+        {
+            Name = "Placeheld",
+            Choices = [],
+            ViewType = new DamlTypeRef("", "M", "Placeholder"),
+        };
+        var danglingView = new DamlInterface
+        {
+            Name = "Dangling",
+            Choices = [],
+            ViewType = new DamlTypeRef("", "M", "NoSuchView"),
+        };
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module(
+                    "M",
+                    dataTypes: [Enum("Colour", "Red"), genericView, Record("Placeholder")],
+                    interfaces:
+                    [
+                        new DamlInterface { Name = "Placeholder", Choices = [] },
+                        viewless,
+                        enumView,
+                        genericViewInterface,
+                        placeholderView,
+                        danglingView,
+                    ])),
+            Options());
+
+        context.HasWitnessableViewRecord(viewless).Should().BeFalse();
+        context.HasWitnessableViewRecord(enumView).Should().BeFalse();
+        context.HasWitnessableViewRecord(genericViewInterface).Should().BeFalse();
+        context.HasWitnessableViewRecord(placeholderView).Should().BeFalse();
+        context.HasWitnessableViewRecord(danglingView).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ForPackage_widens_reserved_names_to_a_record_colliding_with_an_interface_marker()
     {
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -158,7 +435,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_widens_reserved_names_to_a_record_colliding_with_the_first_round_disambiguated_marker()
+    public void ForPackage_widens_reserved_names_to_a_record_colliding_with_the_first_round_disambiguated_marker()
     {
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -168,7 +445,7 @@ public class PackageEmitContextTests
                     dataTypes: [Record("IFactory_")],
                     templates:
                     [
-                        new DamlTemplate { Name = "IFactory", Fields = [], Choices = [] },
+                        new DamlTemplate { Name = "IFactory", Choices = [] },
                     ],
                     interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
             Options());
@@ -178,7 +455,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_excludes_interface_placeholder_records_from_the_reserved_set()
+    public void ForPackage_excludes_interface_placeholder_records_from_the_reserved_set()
     {
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -194,7 +471,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_deterministically_assigns_the_same_marker_winner_across_modules_regardless_of_declaration_order()
+    public void ForPackage_deterministically_assigns_the_same_marker_winner_across_modules_regardless_of_declaration_order()
     {
         DamlInterface Factory() => new() { Name = "Factory", Choices = [] };
 
@@ -218,7 +495,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_excludes_nested_choice_argument_types_from_the_reserved_set()
+    public void ForPackage_excludes_nested_choice_argument_types_from_the_reserved_set()
     {
         var argType = Record("IFactory", new DamlFieldDefinition("to", new DamlPrimitiveType(DamlPrimitive.Party)));
         var choice = new DamlChoice
@@ -228,7 +505,7 @@ public class PackageEmitContextTests
             ArgumentType = new DamlTypeRef("", "M", "IFactory"),
             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
         };
-        var template = new DamlTemplate { Name = "Account", Fields = [], Choices = [choice] };
+        var template = new DamlTemplate { Name = "Account", Choices = [choice] };
 
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -245,7 +522,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_maps_nested_choice_argument_types_to_their_parent_template()
+    public void ForPackage_maps_nested_choice_argument_types_to_their_parent_template()
     {
         var argType = Record("TransferArg", new DamlFieldDefinition("to", new DamlPrimitiveType(DamlPrimitive.Party)));
         var choice = new DamlChoice
@@ -258,7 +535,6 @@ public class PackageEmitContextTests
         var template = new DamlTemplate
         {
             Name = "Account",
-            Fields = [],
             Choices = [choice]
         };
         var context = PackageEmitContext.ForPackage(
@@ -270,7 +546,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_does_not_map_choice_args_that_are_not_local_data_types()
+    public void ForPackage_does_not_map_choice_args_that_are_not_local_data_types()
     {
         var choice = new DamlChoice
         {
@@ -282,7 +558,6 @@ public class PackageEmitContextTests
         var template = new DamlTemplate
         {
             Name = "Account",
-            Fields = [],
             Choices = [choice]
         };
         var context = PackageEmitContext.ForPackage(
@@ -293,7 +568,7 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_disambiguates_same_named_choice_arg_types_across_modules()
+    public void ForPackage_disambiguates_same_named_choice_arg_types_across_modules()
     {
         DamlModule ModuleWithTransferChoice(string moduleName, string templateName) => Module(
             moduleName,
@@ -303,7 +578,6 @@ public class PackageEmitContextTests
                 new DamlTemplate
                 {
                     Name = templateName,
-                    Fields = [],
                     Choices =
                     [
                         new DamlChoice
@@ -329,12 +603,11 @@ public class PackageEmitContextTests
     }
 
     [Fact]
-    public void for_package_warns_and_keeps_first_on_same_module_choice_arg_name_clash()
+    public void ForPackage_warns_and_keeps_first_on_same_module_choice_arg_name_clash()
     {
         DamlTemplate TemplateWithTransferChoice(string templateName) => new()
         {
             Name = templateName,
-            Fields = [],
             Choices =
             [
                 new DamlChoice
@@ -346,7 +619,7 @@ public class PackageEmitContextTests
                 }
             ]
         };
-        var logger = Substitute.For<ICodegenLogger>();
+        var logger = new CapturingLogger();
 
         var context = PackageEmitContext.ForPackage(
             Package(
@@ -359,6 +632,7 @@ public class PackageEmitContextTests
             logger);
 
         context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be("Account");
-        logger.Received(1).Warning(Arg.Is<string>(m => m != null && m.Contains("M:Transfer") && m.Contains("Account") && m.Contains("Vault") && m.Contains("in the same package")));
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("M:Transfer").And.Contain("Account").And.Contain("Vault").And.Contain("in the same package");
     }
 }

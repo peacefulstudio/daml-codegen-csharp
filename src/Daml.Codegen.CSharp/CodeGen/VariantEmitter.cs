@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -30,6 +30,7 @@ internal sealed class VariantEmitter(
         indent.Require("System");
         var className = EmitterHelpers.SanitizeIdentifier(dataType.Name);
         var typeParams = EmitterHelpers.GetTypeParametersDeclaration(dataType.TypeParams);
+        var typeParamConstraints = EmitterHelpers.GetTypeParameterConstraints(dataType.TypeParams);
         var fullClassName = $"{className}{typeParams}";
 
         if (options.GenerateXmlDocs)
@@ -51,7 +52,7 @@ internal sealed class VariantEmitter(
         var delegates = EmitterHelpers.ConverterNameMap(dataType.TypeParams);
 
         var variantInterface = InterfaceDeclaration(dataType.TypeParams);
-        indent.AppendLine($"public abstract record {fullClassName}{variantInterface}");
+        indent.AppendLine($"public abstract record {fullClassName}{variantInterface}{typeParamConstraints}");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -104,7 +105,7 @@ internal sealed class VariantEmitter(
 
             if (argType is not null)
             {
-                StdlibPackages.RequireForFieldType(resolver, indent, ctor.ArgumentType!);
+                StdlibPackages.RequireForFieldType(resolver, context.Package, indent, ctor.ArgumentType!);
                 if (options.GenerateXmlDocs)
                 {
                     indent.AppendLine($"/// <summary>{ctor.Name} constructor.</summary>");

@@ -13,7 +13,12 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AnsRulesConfig
 /// </summary>
-public sealed record AnsRulesConfig([property: DamlFieldAttribute("renewalDuration")] RelTime RenewalDuration, [property: DamlFieldAttribute("entryLifetime")] RelTime EntryLifetime, [property: DamlFieldAttribute("entryFee")] decimal EntryFee, [property: DamlFieldAttribute("descriptionPrefix")] string DescriptionPrefix) : IDamlRecord
+public sealed record AnsRulesConfig(
+    [property: DamlFieldAttribute("renewalDuration")] RelTime RenewalDuration,
+    [property: DamlFieldAttribute("entryLifetime")] RelTime EntryLifetime,
+    [property: DamlFieldAttribute("entryFee")] decimal EntryFee,
+    [property: DamlFieldAttribute("descriptionPrefix")] string DescriptionPrefix
+) : IDamlRecord<AnsRulesConfig>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

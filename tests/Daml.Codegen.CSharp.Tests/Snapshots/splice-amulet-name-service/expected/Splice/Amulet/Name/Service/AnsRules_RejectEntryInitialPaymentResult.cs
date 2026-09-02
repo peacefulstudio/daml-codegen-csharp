@@ -13,7 +13,9 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AnsRules_RejectEntryInitialPaymentResult
 /// </summary>
-public sealed record AnsRules_RejectEntryInitialPaymentResult([property: DamlFieldAttribute("amuletSum")] Splice.Amulet.AmuletCreateSummary<ContractId<Splice.Amulet.Amulet>> AmuletSum) : IDamlRecord
+public sealed record AnsRules_RejectEntryInitialPaymentResult(
+    [property: DamlFieldAttribute("amuletSum")] Splice.Amulet.AmuletCreateSummary<ContractId<Splice.Amulet.Amulet>> AmuletSum
+) : IDamlRecord<AnsRules_RejectEntryInitialPaymentResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

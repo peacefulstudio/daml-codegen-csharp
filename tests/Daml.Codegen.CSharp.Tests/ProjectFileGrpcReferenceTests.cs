@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -11,7 +11,7 @@ namespace Daml.Codegen.CSharp.Tests;
 public class ProjectFileGrpcReferenceTests
 {
     [Fact]
-    public void project_file_should_not_reference_grpc_transport_client()
+    public void ProjectFileGrpcReference_project_file_should_not_reference_grpc_transport_client()
     {
         var options = new CodeGenOptions
         {

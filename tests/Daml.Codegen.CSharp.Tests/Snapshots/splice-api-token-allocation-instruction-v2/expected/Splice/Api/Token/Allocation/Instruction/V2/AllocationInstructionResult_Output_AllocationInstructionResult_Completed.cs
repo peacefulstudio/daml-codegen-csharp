@@ -13,7 +13,9 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationInstructionResult_Output.AllocationInstructionResult_Completed
 /// </summary>
-public sealed record AllocationInstructionResult_Output_AllocationInstructionResult_Completed([property: DamlFieldAttribute("allocationCid")] ContractId<Splice.Api.Token.Allocation.V2.IAllocation> AllocationCid) : IDamlRecord
+public sealed record AllocationInstructionResult_Output_AllocationInstructionResult_Completed(
+    [property: DamlFieldAttribute("allocationCid")] ContractId<Splice.Api.Token.Allocation.V2.IAllocation> AllocationCid
+) : IDamlRecord<AllocationInstructionResult_Output_AllocationInstructionResult_Completed>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

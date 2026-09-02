@@ -12,7 +12,9 @@ namespace Splice.Api.Token.Allocation.Request.V2;
 /// <summary>
 /// Generated from Daml record AllocationRequest_AcceptResult
 /// </summary>
-public sealed record AllocationRequest_AcceptResult([property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationRequest_AcceptResult(
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<AllocationRequest_AcceptResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

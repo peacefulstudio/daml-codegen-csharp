@@ -17,6 +17,14 @@ public class StdlibTests
     #region RelTime
 
     [Fact]
+    public void RelTime_satisfies_the_generic_IDamlRecord_facet()
+    {
+        var original = new RelTime(60_000_000);
+
+        DamlRecordFacet.Materialize<RelTime>(original.ToRecord()).Should().Be(original);
+    }
+
+    [Fact]
     public void RelTime_should_round_trip_through_ToRecord_FromRecord()
     {
         // Arrange
@@ -208,7 +216,35 @@ public class StdlibTests
         var record = original.ToRecord(s => new DamlText(s));
         var recovered = Set<string>.FromRecord(record, v => v.As<DamlText>().Value);
 
-        recovered.Elements.Should().BeEquivalentTo(original.Elements);
+        recovered.Should().Be(original);
+    }
+
+    [Fact]
+    public void Set_should_not_observe_mutations_to_the_source_collection()
+    {
+        var source = new HashSet<string> { "a", "b" };
+        var set = new Set<string>(source);
+        var hashBeforeMutation = set.GetHashCode();
+
+        source.Add("c");
+
+        set.Count.Should().Be(2);
+        set.Contains("c").Should().BeFalse();
+        set.GetHashCode().Should().Be(hashBeforeMutation);
+        set.Should().Be(new Set<string>(["a", "b"]));
+    }
+
+    [Fact]
+    public void Set_with_expression_should_keep_the_defensive_copy()
+    {
+        var source = new HashSet<string> { "a" };
+        var set = new Set<string>(source);
+
+        var copied = set with { };
+        source.Add("b");
+
+        copied.Count.Should().Be(1);
+        copied.Should().Be(new Set<string>(["a"]));
     }
 
     [Fact]
@@ -275,10 +311,7 @@ public class StdlibTests
         var record = original.ToRecord(i => new DamlInt64(i));
         var recovered = NonEmpty<long>.FromRecord(record, v => v.As<DamlInt64>().Value);
 
-        // Record equality on the wrapping IReadOnlyList<T> is reference-based, so
-        // we compare the structural contents instead.
-        recovered.Hd.Should().Be(42L);
-        recovered.Tl.Should().BeEmpty();
+        recovered.Should().Be(original);
     }
 
     [Fact]
@@ -289,9 +322,34 @@ public class StdlibTests
         var record = original.ToRecord(i => new DamlInt64(i));
         var recovered = NonEmpty<long>.FromRecord(record, v => v.As<DamlInt64>().Value);
 
-        recovered.Hd.Should().Be(original.Hd);
-        recovered.Tl.Should().Equal(original.Tl);
+        recovered.Should().Be(original);
         recovered.All.Should().Equal(1L, 2L, 3L, 4L);
+    }
+
+    [Fact]
+    public void NonEmpty_should_not_observe_mutations_to_the_source_tail()
+    {
+        var tail = new List<long> { 2L };
+        var nonEmpty = new NonEmpty<long>(1L, tail);
+        var hashBeforeMutation = nonEmpty.GetHashCode();
+
+        tail.Add(3L);
+
+        nonEmpty.Tl.Should().Equal(2L);
+        nonEmpty.All.Should().Equal(1L, 2L);
+        nonEmpty.GetHashCode().Should().Be(hashBeforeMutation);
+        nonEmpty.Should().Be(new NonEmpty<long>(1L, [2L]));
+    }
+
+    [Fact]
+    public void NonEmpty_with_expression_should_copy_the_replacement_tail()
+    {
+        var replacement = new List<long> { 2L };
+        var nonEmpty = new NonEmpty<long>(1L, []) with { Tl = replacement };
+
+        replacement.Add(3L);
+
+        nonEmpty.Tl.Should().Equal(2L);
     }
 
     [Fact]
@@ -335,9 +393,33 @@ public class StdlibTests
             v => v.As<DamlText>().Value,
             v => v.As<DamlInt64>().Value);
 
-        // Record equality on IReadOnlyList<KeyValuePair<...>> is reference-based,
-        // so we compare contents.
-        recovered.Entries.Should().Equal(original.Entries);
+        recovered.Should().Be(original);
+    }
+
+    [Fact]
+    public void Map_should_not_observe_mutations_to_the_source_entries()
+    {
+        var source = new List<KeyValuePair<string, long>> { new("alice", 1L) };
+        var map = new Map<string, long>(source);
+        var hashBeforeMutation = map.GetHashCode();
+
+        source.Add(new KeyValuePair<string, long>("bob", 2L));
+
+        map.Count.Should().Be(1);
+        map.GetHashCode().Should().Be(hashBeforeMutation);
+        map.Should().Be(new Map<string, long>([new KeyValuePair<string, long>("alice", 1L)]));
+    }
+
+    [Fact]
+    public void Map_with_expression_should_copy_the_replacement_entries()
+    {
+        var replacement = new List<KeyValuePair<string, long>> { new("alice", 1L) };
+        var map = new Map<string, long>([]) with { Entries = replacement };
+
+        replacement.Add(new KeyValuePair<string, long>("bob", 2L));
+
+        map.Count.Should().Be(1);
+        map.Entries.Should().Equal(new List<KeyValuePair<string, long>> { new("alice", 1L) });
     }
 
     [Fact]
@@ -496,6 +578,149 @@ public class StdlibTests
             original.ToValue(Either_ToText, Either_ToInt), Either_FromText, Either_FromInt);
 
         restored.Should().Be(original);
+    }
+
+    #endregion
+
+    #region Optional
+
+    private static DamlValue Optional_ToText(string value) => new DamlText(value);
+
+    private static string Optional_FromText(DamlValue value) => ((DamlText)value).Value;
+
+    [Fact]
+    public void Optional_Some_should_report_a_value_and_carry_it()
+    {
+        Optional<string> optional = new Optional<string>.Some("deep");
+
+        optional.HasValue.Should().BeTrue();
+        optional.GetValueOrDefault().Should().Be("deep");
+        optional.GetValueOrThrow().Should().Be("deep");
+        optional.TryGetValue(out var carried).Should().BeTrue();
+        carried.Should().Be("deep");
+    }
+
+    [Fact]
+    public void Optional_None_should_report_no_value_and_throw_on_demand()
+    {
+        Optional<string> optional = new Optional<string>.None();
+
+        optional.HasValue.Should().BeFalse();
+        optional.GetValueOrDefault().Should().BeNull();
+        optional.TryGetValue(out var carried).Should().BeFalse();
+        carried.Should().BeNull();
+        optional.Invoking(o => o.GetValueOrThrow()).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Optional_Match_should_select_the_arm_and_return_its_projection()
+    {
+        Optional<string> some = new Optional<string>.Some("deep");
+        Optional<string> none = new Optional<string>.None();
+
+        some.Match(value => $"some:{value}", () => "none").Should().Be("some:deep");
+        none.Match(value => $"some:{value}", () => "none").Should().Be("none");
+    }
+
+    [Fact]
+    public void Optional_Match_should_reject_a_null_handler_on_either_arm()
+    {
+        Optional<string> some = new Optional<string>.Some("deep");
+        Optional<string> none = new Optional<string>.None();
+
+        some.Invoking(o => o.Match(null!, () => "none")).Should().Throw<ArgumentNullException>();
+        some.Invoking(o => o.Match(value => value, null!)).Should().Throw<ArgumentNullException>();
+        none.Invoking(o => o.Match(null!, () => "none")).Should().Throw<ArgumentNullException>();
+        none.Invoking(o => o.Match(value => value, null!)).Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void Optional_should_compare_by_value_and_distinguish_the_arms()
+    {
+        new Optional<string>.Some("deep").Should().Be(new Optional<string>.Some("deep"));
+        new Optional<string>.Some("deep").Should().NotBe(new Optional<string>.Some("other"));
+        new Optional<string>.None().Should().Be(new Optional<string>.None());
+        ((Optional<string>)new Optional<string>.None()).Should().NotBe(new Optional<string>.Some("deep"));
+    }
+
+    [Fact]
+    public void Optional_should_be_usable_as_a_dictionary_key()
+    {
+        var byOptional = new Dictionary<Optional<string>, long>
+        {
+            [new Optional<string>.Some("deep")] = 1,
+            [new Optional<string>.None()] = 2,
+        };
+
+        byOptional[new Optional<string>.Some("deep")].Should().Be(1);
+        byOptional[new Optional<string>.None()].Should().Be(2);
+    }
+
+    [Fact]
+    public void Optional_should_round_trip_both_arms_through_the_flat_wire_form()
+    {
+        Optional<string> some = new Optional<string>.Some("deep");
+        Optional<string> none = new Optional<string>.None();
+
+        some.ToValue(Optional_ToText).Should().Be(DamlOptional.Some(new DamlText("deep")));
+        none.ToValue(Optional_ToText).Should().Be(DamlOptional.None);
+        Optional<string>.FromValue(some.ToValue(Optional_ToText), Optional_FromText).Should().Be(some);
+        Optional<string>.FromValue(none.ToValue(Optional_ToText), Optional_FromText).Should().Be(none);
+    }
+
+    [Fact]
+    public void Optional_FromValue_should_reject_a_value_that_is_not_a_daml_optional()
+    {
+        var act = () => Optional<string>.FromValue(new DamlText("deep"), Optional_FromText);
+
+        act.Should().Throw<InvalidCastException>();
+    }
+
+    [Fact]
+    public void Optional_ToChainValue_should_produce_the_chain_node_and_leave_ToValue_flat()
+    {
+        Optional<string> some = new Optional<string>.Some("deep");
+        Optional<string> none = new Optional<string>.None();
+
+        some.ToChainValue(Optional_ToText).Should().Be(DamlOptionalChain.Some(new DamlText("deep")));
+        none.ToChainValue(Optional_ToText).Should().Be(DamlOptionalChain.None);
+        some.ToValue(Optional_ToText).Should().Be(DamlOptional.Some(new DamlText("deep")));
+    }
+
+    [Fact]
+    public void Optional_should_round_trip_both_arms_through_the_chain_wire_form()
+    {
+        Optional<string> some = new Optional<string>.Some("deep");
+        Optional<string> none = new Optional<string>.None();
+
+        Optional<string>.FromChainValue(some.ToChainValue(Optional_ToText), Optional_FromText).Should().Be(some);
+        Optional<string>.FromChainValue(none.ToChainValue(Optional_ToText), Optional_FromText).Should().Be(none);
+    }
+
+    [Fact]
+    public void Optional_FromChainValue_should_reject_a_flat_DamlOptional()
+    {
+        var act = () => Optional<string>.FromChainValue(DamlOptional.Some(new DamlText("deep")), Optional_FromText);
+
+        act.Should().Throw<InvalidCastException>().WithMessage("*Cannot cast DamlOptional to DamlOptionalChain*");
+    }
+
+    [Fact]
+    public void Optional_FromValue_should_reject_a_chain_node()
+    {
+        var act = () => Optional<string>.FromValue(DamlOptionalChain.Some(new DamlText("deep")), Optional_FromText);
+
+        act.Should().Throw<InvalidCastException>().WithMessage("*Cannot cast DamlOptionalChain to DamlOptional*");
+    }
+
+    [Fact]
+    public void Optional_should_nest_without_collapsing_the_inner_arm()
+    {
+        Optional<Optional<string>> someNone = new Optional<Optional<string>>.Some(new Optional<string>.None());
+        Optional<Optional<string>> none = new Optional<Optional<string>>.None();
+
+        someNone.Should().NotBe(none);
+        someNone.GetValueOrThrow().HasValue.Should().BeFalse();
     }
 
     #endregion

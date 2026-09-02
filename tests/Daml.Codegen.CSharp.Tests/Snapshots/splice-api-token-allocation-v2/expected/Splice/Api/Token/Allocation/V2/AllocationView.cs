@@ -16,7 +16,17 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record AllocationView
 /// </summary>
-public sealed record AllocationView([property: DamlFieldAttribute("originalAllocationCid")] ContractId<IAllocation>? OriginalAllocationCid, [property: DamlFieldAttribute("settlement")] SettlementInfo Settlement, [property: DamlFieldAttribute("allocation")] AllocationSpecification Allocation, [property: DamlFieldAttribute("holdingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> HoldingCids, [property: DamlFieldAttribute("createdAt")] DateTimeOffset CreatedAt, [property: DamlFieldAttribute("numIterations")] long NumIterations, [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt, [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record AllocationView(
+    [property: DamlFieldAttribute("originalAllocationCid")] ContractId<IAllocation>? OriginalAllocationCid,
+    [property: DamlFieldAttribute("settlement")] SettlementInfo Settlement,
+    [property: DamlFieldAttribute("allocation")] AllocationSpecification Allocation,
+    [property: DamlFieldAttribute("holdingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> HoldingCids,
+    [property: DamlFieldAttribute("createdAt")] DateTimeOffset CreatedAt,
+    [property: DamlFieldAttribute("numIterations")] long NumIterations,
+    [property: DamlFieldAttribute("expiresAt")] DateTimeOffset? ExpiresAt,
+    [property: DamlFieldAttribute("availableActions")] IReadOnlyDictionary<AllocationAction, IReadOnlyList<IReadOnlyList<Party>>> AvailableActions,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IAllocation, IDamlRecord<AllocationView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

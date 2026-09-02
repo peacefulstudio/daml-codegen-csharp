@@ -6,6 +6,7 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -20,7 +21,9 @@ namespace Splice.Test.Token.V1;
 /// <summary>
 /// Generated from Daml template Splice.Testing.Tokens.TestTokenV1:Token
 /// </summary>
-public sealed partial record Token([property: DamlFieldAttribute("holding")] Splice.Api.Token.Holding.V1.HoldingView Holding) : ITemplate, IImplements<Splice.Api.Token.Holding.V1.IHolding>
+public sealed partial record Token(
+    [property: DamlFieldAttribute("holding")] Splice.Api.Token.Holding.V1.HoldingView Holding
+) : ITemplate, IImplements<Splice.Api.Token.Holding.V1.IHolding>, IDamlRecord<Token>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("aaa0b576b5a3db49b3a4f7a4710fe6f8ae462aabbde4da89f639eb87fd62e90c", "Splice.Testing.Tokens.TestTokenV1", "Token");
@@ -60,6 +63,7 @@ public sealed partial record Token([property: DamlFieldAttribute("holding")] Spl
     };
 
     /// <summary>Contract ID for Token.</summary>
+    [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
     public sealed record ContractId(string Value) : ContractId<Token>(Value), IExercises<Token>
     {
         ContractId<Token> IExercises<Token>.ContractId => this;
@@ -70,7 +74,7 @@ public sealed partial record Token([property: DamlFieldAttribute("holding")] Spl
     {
         /// <summary>Creates a Contract from a CreatedEvent.</summary>
         public static Contract FromCreatedEvent(CreatedEvent @event) =>
-            new(new ContractId(@event.ContractId), Token.FromRecord(@event.CreateArguments));
+            new(new ContractId(@event.ContractId), global::Splice.Test.Token.V1.Token.FromRecord(@event.CreateArguments));
     }
 }
 
@@ -115,7 +119,7 @@ public static class TokenSubmissionExtensions
 /// Async exerciser extensions for <see cref="Token"/> contract IDs whose choices
 /// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).
 /// Each method submits the choice via
-/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
+/// <c>SingleCommandExtensions.TrySubmitSingleAsync</c> and lifts the typed result
 /// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.
 /// </summary>
 public static class TokenNonContractExtensions
@@ -142,15 +146,15 @@ public static class TokenNonContractExtensions
     /// </summary>
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<Token> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -160,14 +164,7 @@ public static class TokenNonContractExtensions
 
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -60,11 +60,18 @@ public class DamlFieldAttributeEmitterTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Vault",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 

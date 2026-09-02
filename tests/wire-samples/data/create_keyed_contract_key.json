@@ -1,0 +1,53 @@
+{
+ "damlType": "WireTypes:Keyed { owner : Party, label : Text } with key (Party, Text) \u2014 requires LF >= 2.3",
+ "capturedBy": "create, ACS_DELTA; see CreatedEvent.contractKey and .contractKeyHash",
+ "response": {
+  "transaction": {
+   "updateId": "12207e960f872fec3ddd7ae00983df6f6b530131e928207bf018039fe9e99dcc611f",
+   "commandId": "1bea30ffaa454d20b5bfcbbad6dbfa52",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:02.981209Z",
+   "events": [
+    {
+     "CreatedEvent": {
+      "offset": 6054,
+      "nodeId": 0,
+      "contractId": "000e9d5ee703268a949c5801b054d547965fccde02a5836c235e2701bb148e1e54ca12122079f4bec1a4103c7476241b5b9348007040e29a29c060ae3dead008fa2563eac7",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Keyed",
+      "contractKey": {
+       "_1": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "_2": "alpha"
+      },
+      "contractKeyHash": "6CgQL9eNNqIjS5cB6/kK1IsqdxjcgXl/3kxSiUEkiBA=",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "label": "alpha"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:02.981209Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     }
+    }
+   ],
+   "offset": 6054,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-e9554caa94d6c6ddd725a8502c8e7f1f-865497fee5a9394c-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:02.995431Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 2774
+  }
+ }
+}

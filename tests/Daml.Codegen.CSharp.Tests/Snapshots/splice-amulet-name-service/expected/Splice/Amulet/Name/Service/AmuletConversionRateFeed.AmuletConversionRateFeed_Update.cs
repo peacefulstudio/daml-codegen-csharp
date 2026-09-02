@@ -16,7 +16,12 @@ public sealed partial record AmuletConversionRateFeed
     /// <summary>
     /// Choice argument type for AmuletConversionRateFeed_Update.
     /// </summary>
-    public sealed record AmuletConversionRateFeed_Update([property: DamlFieldAttribute("amuletConversionRate")] decimal AmuletConversionRate, [property: DamlFieldAttribute("amuletRulesCid")] ContractId<Splice.Amulet.AmuletRules> AmuletRulesCid, [property: DamlFieldAttribute("markerContextO")] MarkerContext? MarkerContextO, [property: DamlFieldAttribute("newNextUpdateAfter")] DateTimeOffset NewNextUpdateAfter) : IDamlRecord
+    public sealed record AmuletConversionRateFeed_Update(
+        [property: DamlFieldAttribute("amuletConversionRate")] decimal AmuletConversionRate,
+        [property: DamlFieldAttribute("amuletRulesCid")] ContractId<Splice.Amulet.AmuletRules> AmuletRulesCid,
+        [property: DamlFieldAttribute("markerContextO")] MarkerContext? MarkerContextO,
+        [property: DamlFieldAttribute("newNextUpdateAfter")] DateTimeOffset NewNextUpdateAfter
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

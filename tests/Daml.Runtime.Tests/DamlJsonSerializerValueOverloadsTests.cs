@@ -15,7 +15,7 @@ public class DamlJsonSerializerValueOverloadsTests
     public static TheoryData<string, DamlValue, string> Serialize_value_overload_cases() => new()
     {
         { "DamlText", new DamlText("hello"), "\"hello\"" },
-        { "DamlInt64", new DamlInt64(42), "42" },
+        { "DamlInt64", new DamlInt64(42), "\"42\"" },
         { "DamlBool_true", new DamlBool(true), "true" },
         { "DamlBool_false", new DamlBool(false), "false" },
         { "DamlParty", new DamlParty("Alice::12345"), "\"Alice::12345\"" },
@@ -23,8 +23,8 @@ public class DamlJsonSerializerValueOverloadsTests
         { "DamlUnit", DamlUnit.Instance, "{}" },
         { "DamlGenMap", DamlGenMap.Create(
             (new DamlText("k1"), new DamlInt64(1)),
-            (new DamlText("k2"), new DamlInt64(2))), "[[\"k1\",1],[\"k2\",2]]" },
-        { "DamlOptional_Some", DamlOptional.Some(new DamlInt64(42)), "42" },
+            (new DamlText("k2"), new DamlInt64(2))), "[[\"k1\",\"1\"],[\"k2\",\"2\"]]" },
+        { "DamlOptional_Some", DamlOptional.Some(new DamlInt64(42)), "\"42\"" },
         { "DamlOptional_None", DamlOptional.None, "null" },
     };
 
@@ -111,7 +111,7 @@ public class DamlJsonSerializerValueOverloadsTests
         var valueJson = DamlJsonSerializer.Serialize((DamlValue)inner);
         var recordJson = DamlJsonSerializer.Serialize(inner);
 
-        valueJson.Should().Be("{\"x\":1}");
+        valueJson.Should().Be("{\"x\":\"1\"}");
         recordJson.Should().Be(valueJson);
     }
 
@@ -150,7 +150,7 @@ public class DamlJsonSerializerValueOverloadsTests
         var recordJson = DamlJsonSerializer.Serialize(
             DamlRecord.Create(DamlField.Create("m", textMap)));
 
-        valueJson.Should().Be("{\"k\":7}");
+        valueJson.Should().Be("{\"k\":\"7\"}");
         recordJson.Should().Be($"{{\"m\":{valueJson}}}");
     }
 
@@ -163,7 +163,7 @@ public class DamlJsonSerializerValueOverloadsTests
         var recordJson = DamlJsonSerializer.Serialize(
             DamlRecord.Create(DamlField.Create("l", list)));
 
-        valueJson.Should().Be("[1,2,3]");
+        valueJson.Should().Be("[\"1\",\"2\",\"3\"]");
         recordJson.Should().Be($"{{\"l\":{valueJson}}}");
     }
 

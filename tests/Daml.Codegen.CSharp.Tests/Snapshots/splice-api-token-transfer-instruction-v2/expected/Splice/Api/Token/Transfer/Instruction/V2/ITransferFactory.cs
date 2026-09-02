@@ -6,6 +6,7 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -19,6 +20,13 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml interface Splice.Api.Token.TransferInstructionV2:TransferFactory
 /// </summary>
+/// <remarks>
+/// Instance properties mirror the fields of the interface view <see cref="TransferFactoryView"/>,
+/// which implements this marker, so a view can be read through a marker-typed variable.
+/// <c>==</c> between marker-typed variables compares by reference equality; view payloads
+/// materialize as concrete <see cref="TransferFactoryView"/> values, whose record value equality
+/// applies once concretely typed.
+/// </remarks>
 public interface ITransferFactory : IDamlInterface, IHasView<TransferFactoryView>
 {
     /// <summary>Gets the interface identifier.</summary>
@@ -39,12 +47,15 @@ public interface ITransferFactory : IDamlInterface, IHasView<TransferFactoryView
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier("29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099", "Splice.Api.Token.TransferInstructionV2", "TransferFactory"), DamlTypeKind.Interface, "splice-api-token-transfer-instruction-v2");
 
-    // Interface method Archive.
-    // Choice Archive() -> DamlUnit
-    // Interface method TransferFactory_PublicFetch.
-    // Choice TransferFactory_PublicFetch(TransferFactory_PublicFetch) -> TransferFactoryView
-    // Interface method TransferFactory_Transfer.
-    // Choice TransferFactory_Transfer(TransferFactory_Transfer) -> TransferInstructionResult
+    /// <summary>Gets the pure type witness pairing this marker with its view record <see cref="TransferFactoryView"/>; passing it to a generic method infers both type parameters from one argument.</summary>
+    public static ViewDescriptor<ITransferFactory, TransferFactoryView> View { get; } = new();
+
+    /// <summary>Gets the admin field of the interface view.</summary>
+    Party Admin { get; }
+
+    /// <summary>Gets the meta field of the interface view.</summary>
+    Splice.Api.Token.Metadata.V1.Metadata Meta { get; }
+
 }
 
 /// <summary>
@@ -52,7 +63,7 @@ public interface ITransferFactory : IDamlInterface, IHasView<TransferFactoryView
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
-/// through <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/>
+/// through <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
 /// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
 /// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
 /// implementing template (and therefore the produced contracts' shapes) is unknown
@@ -76,35 +87,29 @@ public static class ITransferFactoryExtensions
     /// <summary>
     /// Exercises the <c>Archive</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
         this ContractId<ITransferFactory> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 
     /// <summary>
@@ -126,37 +131,31 @@ public static class ITransferFactoryExtensions
     /// <summary>
     /// Exercises the <c>TransferFactory_PublicFetch</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> TransferFactory_PublicFetchAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> TransferFactory_PublicFetchAsync(
         this ContractId<ITransferFactory> contractId,
         ILedgerWriter client,
         TransferFactory_PublicFetch argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.TransferFactory_PublicFetchCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 
     /// <summary>
@@ -178,36 +177,30 @@ public static class ITransferFactoryExtensions
     /// <summary>
     /// Exercises the <c>TransferFactory_Transfer</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/> and awaiting the outcome.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransactionResult>> TransferFactory_TransferAsync(
+    public static Task<ExerciseOutcome<TransactionResult>> TransferFactory_TransferAsync(
         this ContractId<ITransferFactory> contractId,
         ILedgerWriter client,
         TransferFactory_Transfer argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
+
         var command = contractId.TransferFactory_TransferCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        return await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
     }
 }

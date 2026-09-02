@@ -2,10 +2,26 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Test assemblies publish no API, so they opt out of the repo-wide
+         documentation file rather than suppressing CS1591 over it. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Residual analyzer suppressions, scoped to test projects only.
+         CA1707 — test method names follow the repo-wide Subject_scenario_expectation
+                  convention; the underscores are the convention.
+         CA1822 — xUnit fixture and builder members are reached through the injected
+                  fixture instance, so marking them static would break the call sites
+                  that make the fixture idiom work. -->
+    <!-- NU1603 — Microsoft.CodeAnalysis.CSharp 5.9.0 depends on
+         Microsoft.CodeAnalysis.Analyzers >= 5.9.0-1.26328.17 (a private daily build not on
+         the public feed); NuGet resolves 5.9.0 stable, which satisfies the constraint, and
+         emits NU1603 anyway. Suppress rather than pin the pre-release transitive dep. -->
+    <NoWarn>$(NoWarn);CA1707;CA1822;NU1603</NoWarn>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <TestingPlatformCommandLineArguments>--coverage --coverage-output-format cobertura --coverage-output $(MSBuildProjectName).cobertura.xml --coverage-settings $(MSBuildThisFileDirectory)../coverage.settings.xml</TestingPlatformCommandLineArguments>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Shared\TestNamingConventionTests.cs" Link="Shared\TestNamingConventionTests.cs" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3.mtp-v2" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />

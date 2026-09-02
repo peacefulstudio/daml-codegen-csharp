@@ -1,0 +1,46 @@
+{
+ "damlType": "WireTypes:WireRecord:Ping \u2014 no-argument choice; result is Unit",
+ "capturedBy": "POST /v2/commands/submit-and-wait-for-transaction, TRANSACTION_SHAPE_LEDGER_EFFECTS; see ExercisedEvent.choiceArgument and ExercisedEvent.exerciseResult",
+ "response": {
+  "transaction": {
+   "updateId": "122090561c93fba2c3781052b4a841b4c4d175cc683615b19fd10067608657b3a8f0",
+   "commandId": "eff6b3d96f3d4035b92d52ca402e1706",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:04.767213Z",
+   "events": [
+    {
+     "ExercisedEvent": {
+      "offset": 6069,
+      "nodeId": 0,
+      "contractId": "00f9c54b4cf1ac0609a616f88cbeb9a58bf38b08977edaa81c1136b96f552d118eca121220ea362ddb26f079d3438340bbe63d976a4774b3be09cc5b5c883e74c08fe8e1da",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:WireRecord",
+      "interfaceId": null,
+      "choice": "Ping",
+      "choiceArgument": {},
+      "actingParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "consuming": false,
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "lastDescendantNodeId": 0,
+      "exerciseResult": {},
+      "packageName": "wiretypes23",
+      "implementedInterfaces": [],
+      "acsDelta": false
+     }
+    }
+   ],
+   "offset": 6069,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-ed908a11b9d4ffe634028f322c9c59f9-75711923479ce39e-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:04.778439Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 3247
+  }
+ }
+}

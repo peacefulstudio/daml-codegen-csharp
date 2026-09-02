@@ -15,7 +15,10 @@ public sealed partial record AnsRules
     /// <summary>
     /// Choice argument type for AnsRules_RejectEntryInitialPayment.
     /// </summary>
-    public sealed record AnsRules_RejectEntryInitialPayment([property: DamlFieldAttribute("paymentCid")] ContractId<Splice.Wallet.Payments.SubscriptionInitialPayment> PaymentCid, [property: DamlFieldAttribute("transferContext")] Splice.Amulet.AppTransferContext TransferContext) : IDamlRecord
+    public sealed record AnsRules_RejectEntryInitialPayment(
+        [property: DamlFieldAttribute("paymentCid")] ContractId<Splice.Wallet.Payments.SubscriptionInitialPayment> PaymentCid,
+        [property: DamlFieldAttribute("transferContext")] Splice.Amulet.AppTransferContext TransferContext
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

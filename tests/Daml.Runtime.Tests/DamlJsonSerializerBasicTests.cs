@@ -70,7 +70,7 @@ public class DamlJsonSerializerBasicTests
 
         var json = DamlJsonSerializer.Serialize(record);
 
-        json.Should().Contain("[1,2,3]");
+        json.Should().Contain("[\"1\",\"2\",\"3\"]");
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public class DamlJsonSerializerBasicTests
 
         var json = DamlJsonSerializer.Serialize(record);
 
-        json.Should().Contain("\"maybeValue\":42");
+        json.Should().Contain("\"maybeValue\":\"42\"");
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public class DamlJsonSerializerBasicTests
         var json = DamlJsonSerializer.Serialize(record);
 
         json.Should().Contain("\"key1\":\"value1\"");
-        json.Should().Contain("\"key2\":42");
+        json.Should().Contain("\"key2\":\"42\"");
     }
 
     [Fact]

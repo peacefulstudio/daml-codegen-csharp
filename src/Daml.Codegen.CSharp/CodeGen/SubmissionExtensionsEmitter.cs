@@ -1,9 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
-using LedgerNamespaces = Daml.Ledger.Abstractions.LedgerNamespaces;
-using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -35,9 +33,10 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </para>
 ///
 /// <para>
-/// When the static analyzer cannot resolve a <c>signatory</c> expression
-/// (anything other than a payload-field projection on the template parameter),
-/// codegen falls back to a single <c>SubmitterInfo submitter</c> parameter —
+/// When the analysis yields no payload field to derive from — either because
+/// the <c>signatory</c> expression is anything other than a payload-field
+/// projection on the template parameter, or because it resolves statically to an
+/// empty set — codegen falls back to a single <c>SubmitterInfo submitter</c> parameter —
 /// callers retain full control via <c>SubmitterInfo</c>'s implicit conversion
 /// from a single <c>Party</c>, so the legacy single-party call site stays a
 /// one-liner.
@@ -69,7 +68,7 @@ internal sealed class SubmissionExtensionsEmitter(
         var signatories = party.ValidatePayloadParties(template.Signatories, partyFields);
         var observers = party.ValidatePayloadParties(template.Observers, partyFields);
 
-        RequireAsyncExerciserNamespaces(indent);
+        EmittedUsings.RequireAsyncLedgerCallNamespaces(indent);
 
         indent.AppendLine();
         if (options.GenerateXmlDocs)
@@ -88,8 +87,8 @@ internal sealed class SubmissionExtensionsEmitter(
         indent.AppendLine("{");
         indent.Indent();
 
-        WriteCreateAsync(indent, className, signatories);
-        TryWriteObserversHelper(indent, className, observers);
+        WriteCreateAsync(indent, template.Name, className, signatories);
+        TryWriteObserversHelper(indent, template.Name, className, observers);
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -101,12 +100,12 @@ internal sealed class SubmissionExtensionsEmitter(
     /// Emits the <c>CreateAsync</c> extension. On the static path, the payload
     /// alone is enough to derive every signatory — the caller passes only the
     /// payload and an optional cancellation token, and the wrapper builds a
-    /// <c>SubmitterInfo</c> from the payload's PascalCased <c>Party</c>
-    /// properties. On the dynamic path, the caller passes a
+    /// <c>SubmitterInfo</c> from the payload's <c>Party</c> properties. On the
+    /// dynamic path, the caller passes a
     /// <c>SubmitterInfo</c> directly (with implicit conversion from
     /// a single <c>Party</c> for the single-party ergonomic).
     /// </summary>
-    private void WriteCreateAsync(IndentWriter indent, string className, DamlPartyAnalysis signatories)
+    private void WriteCreateAsync(IndentWriter indent, string templateName, string className, DamlPartyAnalysis signatories)
     {
         var staticParties = signatories.Source == DamlPartySource.Static
                             && signatories.Parties.Count > 0;
@@ -126,6 +125,13 @@ internal sealed class SubmissionExtensionsEmitter(
                 indent.AppendLine("/// The submitting parties are derived from the payload — each Daml signatory is");
                 indent.AppendLine("/// a reference to a payload field, so the caller never restates a party that's");
                 indent.AppendLine("/// already in the record.");
+            }
+            else if (signatories.Source == DamlPartySource.Static)
+            {
+                indent.AppendLine("/// The submitter is passed explicitly via <paramref name=\"submitter\"/>. The Daml");
+                indent.AppendLine("/// <c>signatory</c> clause resolved to an empty set, so there is no payload party");
+                indent.AppendLine("/// to derive. <see cref=\"SubmitterInfo\"/> implicitly converts from a single");
+                indent.AppendLine("/// <c>Party</c>, so single-party callers still pass one literal.");
             }
             else
             {
@@ -165,8 +171,6 @@ internal sealed class SubmissionExtensionsEmitter(
 
         if (staticParties)
         {
-            indent.AppendLine("// Each Daml signatory is a payload field; the wrapper builds a SubmitterInfo");
-            indent.AppendLine("// from those Party properties so the caller never restates a party.");
             if (multipleStatic)
             {
                 indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}>");
@@ -174,20 +178,26 @@ internal sealed class SubmissionExtensionsEmitter(
                 indent.Indent();
                 for (var i = 0; i < signatories.Parties.Count; i++)
                 {
-                    if (signatories.Parties[i] is DamlPartyPayloadField pf)
+                    if (signatories.Parties[i] is not DamlPartyPayloadField pf)
                     {
-                        var prop = Identifiers.ToPascalCase(Identifiers.Sanitize(pf.FieldName));
-                        var comma = i < signatories.Parties.Count - 1 ? "," : "";
-                        indent.AppendLine($"payload.{prop}{comma}");
+                        throw NotAPayloadField(templateName, "signatory", i, signatories.Parties[i]);
                     }
+
+                    var prop = Identifiers.MemberName(pf.FieldName, className);
+                    var comma = i < signatories.Parties.Count - 1 ? "," : "";
+                    indent.AppendLine($"payload.{prop}{comma}");
                 }
                 indent.Dedent();
                 indent.AppendLine("});");
             }
             else
             {
-                var pf = (DamlPartyPayloadField)signatories.Parties[0];
-                var prop = Identifiers.ToPascalCase(Identifiers.Sanitize(pf.FieldName));
+                if (signatories.Parties[0] is not DamlPartyPayloadField pf)
+                {
+                    throw NotAPayloadField(templateName, "signatory", 0, signatories.Parties[0]);
+                }
+
+                var prop = Identifiers.MemberName(pf.FieldName, className);
                 indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter = payload.{prop};");
             }
             indent.AppendLine();
@@ -204,7 +214,7 @@ internal sealed class SubmissionExtensionsEmitter(
     /// when the template's <c>observer</c> clause resolves statically to a
     /// non-empty set of payload-field references. Returns an
     /// <see cref="IReadOnlyList{Party}"/> derived from the payload's
-    /// PascalCased <c>Party</c> properties so callers can inspect the observer
+    /// <c>Party</c> properties so callers can inspect the observer
     /// set directly.
     ///
     /// <para>
@@ -216,7 +226,7 @@ internal sealed class SubmissionExtensionsEmitter(
     /// wrappers, which is handled in <c>ChoiceResults.cs</c>.
     /// </para>
     /// </summary>
-    private void TryWriteObserversHelper(IndentWriter indent, string className, DamlPartyAnalysis observers)
+    private void TryWriteObserversHelper(IndentWriter indent, string templateName, string className, DamlPartyAnalysis observers)
     {
         if (observers.Source != DamlPartySource.Static || observers.Parties.Count == 0)
         {
@@ -232,8 +242,7 @@ internal sealed class SubmissionExtensionsEmitter(
             indent.AppendLine("/// the parties named in the Daml <c>observer</c> clause, derived from");
             indent.AppendLine("/// the payload's <c>Party</c> properties in declaration order. Useful");
             indent.AppendLine("/// for inspecting / asserting the observer set without exercising a");
-            indent.AppendLine("/// choice. The same set is contributed to <c>SubmitterInfo.readAs</c>");
-            indent.AppendLine("/// on the emitted <c>&lt;Choice&gt;Async</c> wrappers.");
+            indent.AppendLine("/// choice.");
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"payload\">The contract payload.</param>");
         }
@@ -247,12 +256,14 @@ internal sealed class SubmissionExtensionsEmitter(
         indent.Indent();
         for (var i = 0; i < observers.Parties.Count; i++)
         {
-            if (observers.Parties[i] is DamlPartyPayloadField pf)
+            if (observers.Parties[i] is not DamlPartyPayloadField pf)
             {
-                var prop = Identifiers.ToPascalCase(Identifiers.Sanitize(pf.FieldName));
-                var comma = i < observers.Parties.Count - 1 ? "," : "";
-                indent.AppendLine($"payload.{prop}{comma}");
+                throw NotAPayloadField(templateName, "observer", i, observers.Parties[i]);
             }
+
+            var prop = Identifiers.MemberName(pf.FieldName, className);
+            var comma = i < observers.Parties.Count - 1 ? "," : "";
+            indent.AppendLine($"payload.{prop}{comma}");
         }
         indent.Dedent();
         indent.AppendLine("};");
@@ -260,14 +271,10 @@ internal sealed class SubmissionExtensionsEmitter(
         indent.AppendLine("}");
     }
 
-    private static void RequireAsyncExerciserNamespaces(IndentWriter indent)
-    {
-        indent.Require("System");
-        indent.Require("System.Threading");
-        indent.Require("System.Threading.Tasks");
-        indent.Require(LedgerNamespaces.Abstractions);
-        indent.Require(RuntimeNamespaces.Commands);
-        indent.Require(RuntimeNamespaces.Contracts);
-        indent.Require(RuntimeNamespaces.Outcomes);
-    }
+    private static CodegenException NotAPayloadField(
+        string templateName, string clause, int index, DamlPartyReference party) =>
+        new($"Daml template {templateName} carries a static {clause} set whose element {index} is a "
+            + $"{party.GetType().Name} reference rather than a payload field. ValidatePayloadParties demotes "
+            + "an analysis holding any non-payload-field reference to Dynamic, so this emitter should never "
+            + "reach one; skipping the element would derive a party set narrower than the clause names.");
 }

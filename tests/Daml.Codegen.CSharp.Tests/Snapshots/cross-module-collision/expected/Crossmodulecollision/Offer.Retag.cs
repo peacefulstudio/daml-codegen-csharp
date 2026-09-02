@@ -14,7 +14,10 @@ public sealed partial record Offer
     /// <summary>
     /// Choice argument type for Retag.
     /// </summary>
-    public sealed record Retag([property: DamlFieldAttribute("label")] string Label, [property: DamlFieldAttribute("count")] long Count) : IDamlRecord
+    public sealed record Retag(
+        [property: DamlFieldAttribute("label")] string Label,
+        [property: DamlFieldAttribute("count")] long Count
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

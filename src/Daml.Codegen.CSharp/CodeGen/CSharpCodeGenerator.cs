@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text.RegularExpressions;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 
 namespace Daml.Codegen.CSharp.CodeGen;
@@ -10,8 +12,14 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <summary>
 /// Generates C# code from Daml packages.
 /// </summary>
-public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegenLogger logger)
+/// <param name="options">Emission options.</param>
+/// <param name="logger">
+/// Where progress and warnings go. Omit it — or pass <c>null</c> — and the generator stays silent.
+/// </param>
+public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<CSharpCodeGenerator>? logger = null)
 {
+    private readonly ILogger _log = logger ?? NullLogger<CSharpCodeGenerator>.Instance;
+
     private readonly Regex? _rootFilter = options.RootFilter is not null
         ? new Regex(options.RootFilter, RegexOptions.Compiled)
         : null;
@@ -25,37 +33,28 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
     {
         var files = new List<GeneratedFile>();
 
-        var resolver = new DarCrossPackageResolver(dar, logger);
+        var resolver = new DarCrossPackageResolver(dar, _log);
 
-        // Generate code for the main package
         files.AddRange(GeneratePackage(resolver, dar.MainPackage));
 
-        // Optionally generate code for dependencies
         if (options.IncludeDependencies)
         {
             foreach (var dep in dar.Dependencies)
             {
-                logger.Debug($"Generating code for dependency: {dep.Name}");
+                LogGeneratingDependency(_log, dep.Name);
                 files.AddRange(GeneratePackage(resolver, dep));
             }
         }
 
-        // Generate project file if requested
         if (options.GenerateProjectFile)
         {
-            // Resolve every cross-package id encountered during codegen against the DAR
-            // archive. If a foreign package is genuinely missing from the DAR (i.e.
-            // GetPackageById returns null), warn — silently dropping it would emit a
-            // csproj that references types whose NuGet package never gets a
-            // <PackageReference>, surfacing later as opaque CS0246 at consumer
-            // build time.
             var externalRefs = new List<DamlPackage>();
             foreach (var id in resolver.DiscoveredExternalPackageIds)
             {
                 var pkg = dar.GetPackageById(id);
                 if (pkg is null)
                 {
-                    logger.Warning($"External package id {id[..Math.Min(16, id.Length)]}… is not present in the DAR — no <PackageReference> will be emitted for it. Generated code that references it will fail to compile.");
+                    LogExternalPackageMissing(_log, id[..Math.Min(16, id.Length)]);
                     continue;
                 }
                 if (IsStdlibPackage(pkg.Name) || IsPlaceholderPackageName(pkg.Name))
@@ -65,20 +64,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 externalRefs.Add(pkg);
             }
             var projectGenerator = new ProjectFileGenerator(options);
-            // Pass the actually-emitted file set (post-RootFilter, post-IncludeDependencies)
-            // so the LangVersion pin tracks what's in this project, not what's in the
-            // unfiltered main package — see ProjectFileGenerator.RequiresCSharp13.
-            files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage, externalRefs, files));
+            files.Add(projectGenerator.GenerateProjectFile(dar.MainPackage, externalRefs));
             files.Add(projectGenerator.GenerateReadme(dar.MainPackage));
             files.Add(projectGenerator.GenerateIcon());
         }
-
-        var requiresCSharp13 = files.Any(f =>
-            f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
-            && ProjectFileGenerator.ContentRequiresCSharp13(f.Content));
-        files.Add(GeneratedFile.Text(
-            ".daml-langversion",
-            requiresCSharp13 ? "13\n" : string.Empty));
 
         return files;
     }
@@ -99,10 +88,10 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
         var variantEmitter = new VariantEmitter(context, resolver, options, mapper);
         var recordSerialization = new RecordSerializationEmitter(context, resolver, options, mapper);
         var recordEmitter = new RecordEmitter(context, options, recordSerialization);
-        var interfaceEmitter = new InterfaceEmitter(context, mapper, choiceEmitter, options);
+        var interfaceEmitter = new InterfaceEmitter(context, mapper, resolver, choiceEmitter, options);
         var rootNamespace = context.RootNamespace;
         var submissionExtensions = new SubmissionExtensionsEmitter(context, options, _party);
-        var templateEmitter = new TemplateEmitter(context, resolver, mapper, recordSerialization, choiceEmitter, submissionExtensions, options);
+        var templateEmitter = new TemplateEmitter(context, resolver, recordSerialization, choiceEmitter, submissionExtensions, options, logger);
 
         var allTemplateNames = package.Modules
             .SelectMany(m => m.Templates)
@@ -111,41 +100,49 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
         foreach (var module in package.Modules)
         {
-            // Build a lookup of data types by name for populating template fields
             var dataTypesByName = module.DataTypes
                 .Where(dt => dt.Definition is DamlRecordDefinition)
                 .ToDictionary(dt => dt.Name, dt => (DamlRecordDefinition)dt.Definition!);
 
-            // Generate templates
             foreach (var template in module.Templates)
             {
                 if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{template.Name}"))
                 {
-                    logger.Debug($"Skipping template {module.Name}:{template.Name} (filtered)");
+                    LogSkippingTemplate(_log, module.Name, template.Name);
                     continue;
                 }
 
-                // Get fields from corresponding data type if template has none
-                var fields = template.Fields.Count > 0
-                    ? template.Fields
-                    : (dataTypesByName.TryGetValue(template.Name, out var recordDef) ? recordDef.Fields : []);
+                if (!dataTypesByName.TryGetValue(template.Name, out var recordDef))
+                {
+                    var sameNamed = module.DataTypes.FirstOrDefault(dt => dt.Name == template.Name);
+                    var cause = sameNamed is null
+                        ? "no data type of that name exists in the module"
+                        : $"the same-named data type is a {sameNamed.Definition.GetType().Name}";
 
-                var code = GenerateTemplate(context, templateEmitter, package, module, template, fields);
+                    throw new CodegenException(
+                        $"Template '{module.Name}:{template.Name}' has no same-named record definition in its module: {cause}. " +
+                        "An LF template payload is always a same-named record carrying the template's fields, so " +
+                        "this means the model is malformed and no payload type can be emitted.");
+                }
+
+                var code = GenerateTemplate(context, templateEmitter, package, module, template, recordDef.Fields);
                 var path = RelativeFilePath(rootNamespace, $"{EmitterHelpers.SanitizeIdentifier(template.Name)}.cs");
 
                 yield return GeneratedFile.Text(path, code);
             }
 
-            // Generate data types (skip templates and choice argument types - they're generated as nested types)
             foreach (var dataType in module.DataTypes)
             {
-                // Skip data types that correspond to templates - they're generated as part of the template
                 if (allTemplateNames.Contains(dataType.Name))
                 {
                     continue;
                 }
 
-                // Skip data types that are choice argument types - they're generated as nested types in the template
+                if (context.LocalInterfaceQualifiedNames.Contains($"{module.Name}:{dataType.Name}"))
+                {
+                    continue;
+                }
+
                 if (context.LocalChoiceArgToTemplate.ContainsKey($"{module.Name}:{dataType.Name}"))
                 {
                     continue;
@@ -157,7 +154,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 yield return GeneratedFile.Text(path, code);
             }
 
-            // Generate choice argument types as nested classes in partial template files
             foreach (var template in module.Templates)
             {
                 if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{template.Name}"))
@@ -167,7 +163,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
                 foreach (var choice in template.Choices)
                 {
-                    // Check if this choice's argument type is a data type that should be nested
                     if (choice.ArgumentType is DamlTypeRef typeRef &&
                         context.DataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var argDataType) &&
                         argDataType.Definition is DamlRecordDefinition)
@@ -183,12 +178,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
                 }
             }
 
-            // Generate interfaces
             foreach (var iface in module.Interfaces)
             {
                 if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{iface.Name}"))
                 {
-                    logger.Debug($"Skipping interface {module.Name}:{iface.Name} (filtered)");
+                    LogSkippingInterface(_log, module.Name, iface.Name);
                     continue;
                 }
 
@@ -199,7 +193,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             }
         }
 
-        // Generate ContractIdentifiers helper class if enabled
         if (options.GenerateContractIdentifiers)
         {
             var allTemplates = package.Modules
@@ -296,7 +289,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.Require(RuntimeNamespaces.Contracts);
             indent.Require($"static {RuntimeNamespaces.Contracts}.TemplateExtensions");
 
-            // Class documentation
             if (options.GenerateXmlDocs)
             {
                 indent.AppendLine("/// <summary>");
@@ -309,7 +301,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             indent.AppendLine("{");
             indent.Indent();
 
-            // Generate a property for each template
             for (int i = 0; i < templates.Count; i++)
             {
                 var (module, template) = templates[i];
@@ -325,7 +316,6 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
 
                 indent.AppendLine($"public static string {templateClassName} {{ get; }} = GetTemplateId<{templateClassName}>();");
 
-                // Add blank line between properties, but not after the last one
                 if (i < templates.Count - 1)
                 {
                     indent.AppendLine();
@@ -360,4 +350,19 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ICodegen
             RequireCommonNamespaces(indent);
             templateEmitter.WriteNestedChoiceArgumentType(indent, template, choice, argDataType);
         });
+
+    [LoggerMessage(EventId = 1000, Level = LogLevel.Debug, Message = "Generating code for dependency: {PackageName}")]
+    private static partial void LogGeneratingDependency(ILogger logger, string packageName);
+
+    [LoggerMessage(
+        EventId = 1001,
+        Level = LogLevel.Warning,
+        Message = "External package id {PackageIdPrefix}\u2026 is not present in the DAR \u2014 no <PackageReference> will be emitted for it. Generated code that references it will fail to compile.")]
+    private static partial void LogExternalPackageMissing(ILogger logger, string packageIdPrefix);
+
+    [LoggerMessage(EventId = 1002, Level = LogLevel.Debug, Message = "Skipping template {ModuleName}:{TemplateName} (filtered)")]
+    private static partial void LogSkippingTemplate(ILogger logger, string moduleName, string templateName);
+
+    [LoggerMessage(EventId = 1003, Level = LogLevel.Debug, Message = "Skipping interface {ModuleName}:{InterfaceName} (filtered)")]
+    private static partial void LogSkippingInterface(ILogger logger, string moduleName, string interfaceName);
 }

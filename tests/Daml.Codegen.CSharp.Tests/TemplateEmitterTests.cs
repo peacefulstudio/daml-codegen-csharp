@@ -3,8 +3,10 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
+using Daml.Codegen.CSharp.Tests.TestHelpers;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
@@ -50,17 +52,18 @@ public class TemplateEmitterTests
         };
 
     private static string EmitTemplate(
-        DamlTemplate template,
+        TemplateFixture fixture,
         DamlDataType[]? dataTypes = null,
         DamlInterface[]? interfaces = null,
         CodeGenOptions? options = null,
         Version? version = null,
-        string? upgradedPackageId = null)
+        string? upgradedPackageId = null,
+        ILogger? logger = null)
     {
         var module = new DamlModule
         {
             Name = ModuleName,
-            Templates = [template],
+            Templates = [fixture.Template],
             DataTypes = dataTypes ?? [],
             Interfaces = interfaces ?? [],
         };
@@ -73,30 +76,46 @@ public class TemplateEmitterTests
         var recordSerialization = new RecordSerializationEmitter(context, resolver, options, mapper);
         var choiceEmitter = new ChoiceEmitter(context, resolver, options, mapper, party);
         var submissionExtensions = new SubmissionExtensionsEmitter(context, options, party);
-        var emitter = new TemplateEmitter(context, resolver, mapper, recordSerialization, choiceEmitter, submissionExtensions, options);
+        var emitter = new TemplateEmitter(context, resolver, recordSerialization, choiceEmitter, submissionExtensions, options, logger);
         var sb = new StringBuilder();
-        emitter.WriteTemplateType(new IndentWriter(sb), package, module, template, template.Fields);
+        emitter.WriteTemplateType(new IndentWriter(sb), package, module, fixture.Template, fixture.Fields);
         return sb.ToString();
     }
 
-    private static DamlTemplate Template(
+    private static string EmitTemplate(
+        DamlTemplate template,
+        DamlDataType[]? dataTypes = null,
+        DamlInterface[]? interfaces = null,
+        CodeGenOptions? options = null,
+        Version? version = null,
+        string? upgradedPackageId = null,
+        ILogger? logger = null) =>
+        EmitTemplate(new TemplateFixture(template, []), dataTypes, interfaces, options, version, upgradedPackageId, logger);
+
+    private sealed record TemplateFixture(DamlTemplate Template, IReadOnlyList<DamlFieldDefinition> Fields);
+
+    private static TemplateFixture Template(
         string name,
         IReadOnlyList<DamlFieldDefinition>? fields = null,
         IReadOnlyList<DamlChoice>? choices = null,
         DamlType? key = null) =>
-        new()
-        {
-            Name = name,
-            Fields = fields ?? [],
-            Choices = choices ?? [],
-            Key = key,
-        };
+        new(
+            new DamlTemplate
+            {
+                Name = name,
+                Choices = choices ?? [],
+                Key = key,
+            },
+            fields ?? []);
 
     private static DamlFieldDefinition Field(string name, DamlPrimitive primitive) =>
         new(name, new DamlPrimitiveType(primitive));
 
+    private static DamlDataType RecordDataType(string name, params DamlFieldDefinition[] fields) =>
+        new() { Name = name, Definition = new DamlRecordDefinition(fields) };
+
     [Fact]
-    public void emits_the_template_record_with_the_ITemplate_facet()
+    public void TemplateEmitter_emits_the_template_record_with_the_ITemplate_facet()
     {
         var output = EmitTemplate(Template("SimpleTemplate", [Field("owner", DamlPrimitive.Party)]));
 
@@ -105,13 +124,12 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void adds_the_IImplements_facet_when_the_template_implements_an_interface()
+    public void TemplateEmitter_adds_the_IImplements_facet_when_the_template_implements_an_interface()
     {
         var output = EmitTemplate(
             new DamlTemplate
             {
                 Name = "Vault",
-                Fields = [Field("owner", DamlPrimitive.Party)],
                 Choices = [],
                 Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
             },
@@ -121,30 +139,143 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void orders_IImplements_after_the_key_facet_in_the_base_list()
+    public void TemplateEmitter_adds_the_IHasKey_facet_when_the_template_declares_a_key()
     {
         var output = EmitTemplate(
             new DamlTemplate
             {
                 Name = "KeyedVault",
-                Fields = [Field("owner", DamlPrimitive.Party)],
                 Choices = [],
                 Key = new DamlPrimitiveType(DamlPrimitive.Party),
                 Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
             },
             interfaces: [new DamlInterface { Name = "Asset", Choices = [] }]);
 
-        output.Should().Contain(": ITemplate, IHasKey<Party>, IImplements<Asset>");
+        output.Should().Contain(": ITemplate, IImplements<Asset>, IHasKey<KeyedVault, Party>");
     }
 
     [Fact]
-    public void orders_IImplements_after_the_IUpgradeable_facet_in_the_base_list()
+    public void TemplateEmitter_keeps_a_key_less_template_off_the_IHasKey_facet()
+    {
+        var output = EmitTemplate(Template("Keyless", [Field("owner", DamlPrimitive.Party)]));
+
+        output.Should().NotContain("IHasKey");
+        output.Should().NotContain("KeyDescriptor");
+    }
+
+    [Fact]
+    public void TemplateEmitter_emits_the_key_witness_carrying_the_codec_for_a_record_key()
+    {
+        var output = EmitTemplate(
+            Template(
+                "Account",
+                [Field("custodian", DamlPrimitive.Party)],
+                key: new DamlTypeRef(LocalPackageId, ModuleName, "AccountKey")),
+            dataTypes: [RecordDataType("AccountKey", Field("custodian", DamlPrimitive.Party))]);
+
+        output.Should().Contain(
+            ": ITemplate, IHasKey<Account, global::Test.Package.AccountKey>");
+        output.Should().Contain(
+            "public static KeyDescriptor<Account, global::Test.Package.AccountKey> Key { get; } =");
+        output.Should().Contain(
+            "KeyEncoder = key => key.ToRecord(),");
+        output.Should().Contain(
+            "KeyDecoder = value => global::Test.Package.AccountKey.FromRecord(value.As<DamlRecord>()),");
+    }
+
+    [Fact]
+    public void TemplateEmitter_emits_the_key_witness_for_a_key_that_is_not_a_record()
+    {
+        var output = EmitTemplate(
+            Template(
+                "Steward",
+                [Field("steward", DamlPrimitive.Party)],
+                key: new DamlPrimitiveType(DamlPrimitive.Party)));
+
+        output.Should().Contain(": ITemplate, IHasKey<Steward, Party>");
+        output.Should().Contain("public static KeyDescriptor<Steward, Party> Key { get; } =");
+        output.Should().Contain(
+            "KeyEncoder = key => key.ToDamlValue(),");
+        output.Should().Contain(
+            "KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),");
+    }
+
+    [Fact]
+    public void TemplateEmitter_hides_the_key_witness_behind_the_facet_when_a_field_takes_the_name()
+    {
+        var logger = new CapturingLogger();
+
+        var output = EmitTemplate(
+            Template(
+                "Locker",
+                [Field("key", DamlPrimitive.Text)],
+                key: new DamlPrimitiveType(DamlPrimitive.Party)),
+            logger: logger);
+
+        output.Should().Contain(
+            "static KeyDescriptor<Locker, Party> IHasKey<Locker, Party>.Key { get; } =");
+        output.Should().Contain("KeyEncoder = key => key.ToDamlValue(),");
+        output.Should().Contain("KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),");
+        output.Should().NotContain("public static KeyDescriptor<Locker, Party> Key");
+        output.Should().Contain("string Key");
+    }
+
+    [Fact]
+    public void TemplateEmitter_hides_the_key_witness_behind_the_facet_when_the_template_is_named_Key()
+    {
+        var output = EmitTemplate(
+            Template(
+                "Key",
+                [Field("owner", DamlPrimitive.Party)],
+                key: new DamlPrimitiveType(DamlPrimitive.Party)));
+
+        output.Should().Contain(
+            "static KeyDescriptor<Key, Party> IHasKey<Key, Party>.Key { get; } =");
+        output.Should().Contain("KeyEncoder = key => key.ToDamlValue(),");
+        output.Should().Contain("KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),");
+        output.Should().NotContain("public static KeyDescriptor<Key, Party> Key");
+    }
+
+    [Fact]
+    public void TemplateEmitter_warns_when_the_template_name_takes_the_key_witness_name()
+    {
+        var logger = new CapturingLogger();
+
+        EmitTemplate(
+            Template(
+                "Key",
+                [Field("owner", DamlPrimitive.Party)],
+                key: new DamlPrimitiveType(DamlPrimitive.Party)),
+            logger: logger);
+
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("Test.Module:Key");
+    }
+
+    [Fact]
+    public void TemplateEmitter_warns_when_a_field_takes_the_key_witness_name()
+    {
+        var logger = new CapturingLogger();
+
+        EmitTemplate(
+            Template(
+                "Locker",
+                [Field("key", DamlPrimitive.Text)],
+                key: new DamlPrimitiveType(DamlPrimitive.Party)),
+            logger: logger);
+
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("Test.Module:Locker")
+            .And.Contain("key");
+    }
+
+    [Fact]
+    public void TemplateEmitter_orders_IImplements_after_the_IUpgradeable_facet_in_the_base_list()
     {
         var output = EmitTemplate(
             new DamlTemplate
             {
                 Name = "KeyedUpgradedVault",
-                Fields = [Field("owner", DamlPrimitive.Party)],
                 Choices = [],
                 Key = new DamlPrimitiveType(DamlPrimitive.Party),
                 Implements = [new DamlTypeRef(LocalPackageId, ModuleName, "Asset")],
@@ -152,11 +283,20 @@ public class TemplateEmitterTests
             interfaces: [new DamlInterface { Name = "Asset", Choices = [] }],
             upgradedPackageId: "old-package-id");
 
-        output.Should().Contain(": ITemplate, IHasKey<Party>, IUpgradeable, IImplements<Asset>");
+        output.Should().Contain(
+            ": ITemplate, IUpgradeable, IImplements<Asset>, IHasKey<KeyedUpgradedVault, Party>, IDamlRecord<KeyedUpgradedVault>");
     }
 
     [Fact]
-    public void emits_static_template_metadata()
+    public void TemplateEmitter_adds_the_generic_IDamlRecord_facet_naming_the_template_itself()
+    {
+        var output = EmitTemplate(Template("SimpleTemplate", [Field("owner", DamlPrimitive.Party)]));
+
+        output.Should().Contain(": ITemplate, IDamlRecord<SimpleTemplate>");
+    }
+
+    [Fact]
+    public void TemplateEmitter_emits_static_template_metadata()
     {
         var output = EmitTemplate(Template("Asset", [Field("owner", DamlPrimitive.Party)]));
 
@@ -170,7 +310,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_static_daml_type_descriptor()
+    public void TemplateEmitter_emits_static_daml_type_descriptor()
     {
         var output = EmitTemplate(Template("Asset", [Field("owner", DamlPrimitive.Party)]));
 
@@ -179,7 +319,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_the_nested_ContractId_record()
+    public void TemplateEmitter_emits_the_nested_ContractId_record()
     {
         var output = EmitTemplate(Template("Token", [Field("issuer", DamlPrimitive.Party)]));
 
@@ -189,7 +329,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_the_nested_Contract_record()
+    public void TemplateEmitter_emits_the_nested_Contract_record()
     {
         var output = EmitTemplate(Template("Holding", [Field("amount", DamlPrimitive.Numeric)]));
 
@@ -199,7 +339,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void maps_all_primitive_fields_to_their_csharp_types()
+    public void TemplateEmitter_maps_all_primitive_fields_to_their_csharp_types()
     {
         var output = EmitTemplate(Template("AllPrimitives",
         [
@@ -222,7 +362,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void maps_complex_container_fields()
+    public void TemplateEmitter_maps_complex_container_fields()
     {
         var output = EmitTemplate(Template("ComplexFields",
         [
@@ -243,7 +383,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_the_ToRecord_method()
+    public void TemplateEmitter_emits_the_ToRecord_method()
     {
         var output = EmitTemplate(Template("Item",
         [
@@ -257,7 +397,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_the_FromRecord_method()
+    public void TemplateEmitter_emits_the_FromRecord_method()
     {
         var output = EmitTemplate(Template("Status",
         [
@@ -271,7 +411,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void serializes_list_fields_through_the_shared_serializer()
+    public void TemplateEmitter_serializes_list_fields_through_the_shared_serializer()
     {
         var output = EmitTemplate(Template("Tagged",
         [
@@ -284,7 +424,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void serializes_optional_fields_through_the_shared_serializer()
+    public void TemplateEmitter_serializes_optional_fields_through_the_shared_serializer()
     {
         var output = EmitTemplate(Template("OptionalTemplate",
         [
@@ -297,7 +437,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_required_properties_when_primary_constructors_are_disabled()
+    public void TemplateEmitter_emits_required_properties_when_primary_constructors_are_disabled()
     {
         var output = EmitTemplate(
             Template("NoConstructor", [Field("value", DamlPrimitive.Text)]),
@@ -308,7 +448,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_a_class_when_record_types_are_disabled()
+    public void TemplateEmitter_emits_a_class_when_record_types_are_disabled()
     {
         var output = EmitTemplate(
             Template("ClassTemplate", [Field("value", DamlPrimitive.Text)]),
@@ -318,7 +458,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void handles_a_template_with_no_fields()
+    public void TemplateEmitter_handles_a_template_with_no_fields()
     {
         var output = EmitTemplate(Template("EmptyTemplate"));
 
@@ -328,7 +468,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void uses_the_package_version_in_metadata()
+    public void TemplateEmitter_uses_the_package_version_in_metadata()
     {
         var output = EmitTemplate(
             Template("Versioned", [Field("value", DamlPrimitive.Text)]),
@@ -338,17 +478,28 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void adds_the_IHasKey_facet_and_a_throwing_key_accessor_when_the_template_has_a_key()
+    public void TemplateEmitter_puts_the_key_on_the_active_contract_not_the_payload()
     {
         var output = EmitTemplate(
             Template("Keyed", [Field("owner", DamlPrimitive.Party)], key: new DamlPrimitiveType(DamlPrimitive.Party)));
 
-        output.Should().Contain(": ITemplate, IHasKey<Party>");
-        output.Should().Contain("public Party Key => throw new global::System.NotImplementedException(");
+        output.Should().Contain("public sealed record Contract(ContractId Id, Keyed Data)");
+
+        output.Should().Contain("public required ContractKey<Party> Key { get; init; }");
+        output.Should().Contain("? new ContractKey<Party>(Party.FromDamlValue(contractKey.Value.As<DamlParty>()), contractKey.KeyHash)");
     }
 
     [Fact]
-    public void adds_the_IUpgradeable_facet_when_the_package_is_an_upgrade()
+    public void TemplateEmitter_leaves_the_active_contract_of_a_key_less_template_with_two_parameters()
+    {
+        var output = EmitTemplate(Template("Keyless", [Field("owner", DamlPrimitive.Party)]));
+
+        output.Should().Contain("public sealed record Contract(ContractId Id, Keyless Data) :");
+        output.Should().NotContain("ContractKey");
+    }
+
+    [Fact]
+    public void TemplateEmitter_adds_the_IUpgradeable_facet_when_the_package_is_an_upgrade()
     {
         var output = EmitTemplate(
             Template("Upgraded", [Field("owner", DamlPrimitive.Party)]),
@@ -359,7 +510,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void delegates_choice_descriptor_emission_to_the_choice_emitter()
+    public void TemplateEmitter_delegates_choice_descriptor_emission_to_the_choice_emitter()
     {
         var output = EmitTemplate(Template(
             "WithChoice",
@@ -379,7 +530,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void delegates_submission_extension_emission_to_the_submission_emitter()
+    public void TemplateEmitter_delegates_submission_extension_emission_to_the_submission_emitter()
     {
         var output = EmitTemplate(Template("Submittable", [Field("owner", DamlPrimitive.Party)]));
 
@@ -388,7 +539,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void emits_every_xml_doc_when_enabled()
+    public void TemplateEmitter_emits_every_xml_doc_when_enabled()
     {
         var output = EmitTemplate(
             Template("Documented", [Field("owner", DamlPrimitive.Party)], key: new DamlPrimitiveType(DamlPrimitive.Party)));
@@ -398,14 +549,13 @@ public class TemplateEmitterTests
         output.Should().Contain("/// <summary>Gets the package ID.</summary>");
         output.Should().Contain("/// <summary>Gets the package name.</summary>");
         output.Should().Contain("/// <summary>Gets the package version.</summary>");
-        output.Should().Contain("/// Gets the contract key of type");
         output.Should().Contain("/// <summary>Contract ID for Documented.</summary>");
         output.Should().Contain("/// <summary>Active contract for Documented.</summary>");
         output.Should().Contain("/// <summary>Creates a Contract from a CreatedEvent.</summary>");
     }
 
     [Fact]
-    public void omits_every_xml_doc_when_disabled()
+    public void TemplateEmitter_omits_every_xml_doc_when_disabled()
     {
         var output = EmitTemplate(
             Template("Documented", [Field("owner", DamlPrimitive.Party)], key: new DamlPrimitiveType(DamlPrimitive.Party)),
@@ -416,7 +566,6 @@ public class TemplateEmitterTests
         output.Should().NotContain("Gets the package ID");
         output.Should().NotContain("Gets the package name");
         output.Should().NotContain("Gets the package version");
-        output.Should().NotContain("Gets the contract key of type");
         output.Should().NotContain("Contract ID for Documented");
         output.Should().NotContain("Active contract for Documented");
         output.Should().NotContain("Creates a Contract from a CreatedEvent");
@@ -424,11 +573,12 @@ public class TemplateEmitterTests
         output.Should().Contain("public sealed partial record Documented");
         output.Should().Contain("public static Identifier TemplateId { get; }");
         output.Should().Contain("public sealed record ContractId(string Value)");
-        output.Should().Contain("public Party Key => throw new global::System.NotImplementedException(");
+        output.Should().Contain("public sealed record Contract(ContractId Id, Documented Data)");
+        output.Should().Contain("public required ContractKey<Party> Key { get; init; }");
     }
 
     [Fact]
-    public void emits_the_nested_choice_argument_partial_record()
+    public void TemplateEmitter_emits_the_nested_choice_argument_partial_record()
     {
         var module = new DamlModule
         {
@@ -446,9 +596,9 @@ public class TemplateEmitterTests
         var recordSerialization = new RecordSerializationEmitter(context, resolver, options, mapper);
         var choiceEmitter = new ChoiceEmitter(context, resolver, options, mapper, party);
         var submissionExtensions = new SubmissionExtensionsEmitter(context, options, party);
-        var emitter = new TemplateEmitter(context, resolver, mapper, recordSerialization, choiceEmitter, submissionExtensions, options);
+        var emitter = new TemplateEmitter(context, resolver, recordSerialization, choiceEmitter, submissionExtensions, options);
 
-        var template = Template("Account", [Field("owner", DamlPrimitive.Party)]);
+        var template = Template("Account", [Field("owner", DamlPrimitive.Party)]).Template;
         var choice = new DamlChoice
         {
             Name = "Transfer",
@@ -473,7 +623,7 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void filters_templates_with_the_root_filter()
+    public void TemplateEmitter_filters_templates_with_the_root_filter()
     {
         var options = new CodeGenOptions
         {
@@ -489,10 +639,22 @@ public class TemplateEmitterTests
             Name = ModuleName,
             Templates =
             [
-                Template("IncludeMe", [Field("owner", DamlPrimitive.Party)]),
-                Template("ExcludeMe", [Field("owner", DamlPrimitive.Party)]),
+                Template("IncludeMe").Template,
+                Template("ExcludeMe").Template,
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "IncludeMe",
+                    Definition = new DamlRecordDefinition([Field("owner", DamlPrimitive.Party)])
+                },
+                new DamlDataType
+                {
+                    Name = "ExcludeMe",
+                    Definition = new DamlRecordDefinition([Field("owner", DamlPrimitive.Party)])
+                },
+            ],
             Interfaces = [],
         };
 

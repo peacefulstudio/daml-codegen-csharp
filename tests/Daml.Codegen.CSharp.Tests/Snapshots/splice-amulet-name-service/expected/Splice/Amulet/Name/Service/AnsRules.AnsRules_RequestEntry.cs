@@ -14,7 +14,12 @@ public sealed partial record AnsRules
     /// <summary>
     /// Choice argument type for AnsRules_RequestEntry.
     /// </summary>
-    public sealed record AnsRules_RequestEntry([property: DamlFieldAttribute("name")] string Name, [property: DamlFieldAttribute("url")] string Url, [property: DamlFieldAttribute("description")] string Description, [property: DamlFieldAttribute("user")] Party User) : IDamlRecord
+    public sealed record AnsRules_RequestEntry(
+        [property: DamlFieldAttribute("name")] string Name,
+        [property: DamlFieldAttribute("url")] string Url,
+        [property: DamlFieldAttribute("description")] string Description,
+        [property: DamlFieldAttribute("user")] Party User
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

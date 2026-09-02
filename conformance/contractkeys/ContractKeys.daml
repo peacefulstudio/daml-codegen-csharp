@@ -1,0 +1,87 @@
+-- Copyright 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module ContractKeys where
+
+import KeyBuilders (ScheduleKey, ScheduleView(..), toScheduleKey)
+
+data AccountKey = AccountKey
+  with
+    custodian : Party
+    label : Text
+  deriving (Eq, Show)
+
+template Account
+  with
+    custodian : Party
+    label : Text
+    balance : Int
+  where
+    signatory custodian
+    key AccountKey custodian label : AccountKey
+    maintainer key.custodian
+
+    choice Credit : ContractId Account
+      with
+        delta : Int
+      controller custodian
+      do create this with balance = balance + delta
+
+    nonconsuming choice CurrentBalance : Int
+      controller custodian
+      do pure balance
+
+data Calendar = Calendar
+  with
+    id : Text
+    holidays : [Text]
+  deriving (Eq, Show)
+
+data HolidayKey = HolidayKey
+  with
+    provider : Party
+    id : Text
+  deriving (Eq, Show)
+
+template Holiday
+  with
+    provider : Party
+    calendar : Calendar
+  where
+    signatory provider
+    key HolidayKey provider calendar.id : HolidayKey
+    maintainer key.provider
+
+    choice Extend : ContractId Holiday
+      with
+        added : Text
+      controller provider
+      do create this with calendar = calendar with holidays = added :: calendar.holidays
+
+template Schedule
+  with
+    view : ScheduleView
+  where
+    signatory view.issuer
+    key toScheduleKey view : ScheduleKey
+    maintainer key.custodian
+
+    choice Reschedule : ContractId Schedule
+      with
+        rescheduled : Text
+      controller view.issuer
+      do create this with view = view with reference = rescheduled
+
+template Steward
+  with
+    steward : Party
+    charter : Text
+  where
+    signatory steward
+    key steward : Party
+    maintainer key
+
+    choice Revise : ContractId Steward
+      with
+        revised : Text
+      controller steward
+      do create this with charter = revised

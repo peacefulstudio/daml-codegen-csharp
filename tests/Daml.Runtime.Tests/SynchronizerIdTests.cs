@@ -78,6 +78,48 @@ public class SynchronizerIdTests
         sid.Id.Should().Be(Canton34Id);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FromWire_should_return_null_when_wire_id_is_null_empty_or_whitespace(string? id)
+    {
+        (SynchronizerId.FromWire(id) is null).Should().BeTrue();
+    }
+
+    [Fact]
+    public void FromWire_should_round_trip_a_non_blank_wire_id_through_Id()
+    {
+        var sid = SynchronizerId.FromWire(Canton35Id);
+
+        (sid is null).Should().BeFalse();
+        sid!.Value.Id.Should().Be(Canton35Id);
+    }
+
+    [Fact]
+    public void FromWire_should_store_a_padded_id_verbatim()
+    {
+        var padded = $"  {Canton35Id}  ";
+
+        var sid = SynchronizerId.FromWire(padded);
+
+        sid!.Value.Id.Should().Be(padded);
+    }
+
+    [Fact]
+    public void Default_returned_from_a_SynchronizerId_typed_helper_should_wrap_non_null_unlike_FromWire()
+    {
+        static SynchronizerId LegacyTransportHelper(string wire) =>
+            wire.Length == 0 ? default : (SynchronizerId)wire;
+
+        SynchronizerId? viaHelper = LegacyTransportHelper("");
+        Action readViaHelper = () => _ = viaHelper?.Id;
+
+        (viaHelper is null).Should().BeFalse();
+        readViaHelper.Should().Throw<InvalidOperationException>();
+        (SynchronizerId.FromWire("") is null).Should().BeTrue();
+    }
+
     [Fact]
     public void Equality_should_be_value_based()
     {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -167,6 +167,40 @@ public class DependencyTests
 
         // Assert
         found.Should().BeNull();
+    }
+
+    [Fact]
+    public void DarModel_GetPackageById_should_resolve_on_the_concrete_type_without_recursing()
+    {
+        var mainPackage = new DamlPackage
+        {
+            PackageId = "main-pkg-id",
+            Name = "main",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        var depPackage = new DamlPackage
+        {
+            PackageId = "dep-pkg-id",
+            Name = "dependency",
+            Version = new Version(2, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+
+        DarModel dar = new()
+        {
+            MainPackage = mainPackage,
+            Dependencies = [depPackage]
+        };
+
+        dar.GetPackageById("main-pkg-id").Should().Be(mainPackage);
+        dar.GetPackageById("dep-pkg-id").Should().Be(depPackage);
+        dar.GetPackageById("unknown-id").Should().BeNull();
     }
 
     #endregion

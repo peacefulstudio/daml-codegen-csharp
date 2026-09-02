@@ -8,10 +8,18 @@ namespace Daml.Runtime.Commands;
 /// onto the Ledger API <c>command_id</c> field.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Conversions to and from <see cref="string"/> are both explicit, so a command id can
 /// never be silently mistaken for an arbitrary string (or vice versa) — in particular it
 /// cannot be transposed with a <see cref="WorkflowId"/> at a call site; use
 /// <see cref="Value"/> or <see cref="ToString"/> for logging and interpolation.
+/// </para>
+/// <para>
+/// <c>default(CommandId)</c> is never a valid representation of an absent id — it throws
+/// on any access to <see cref="Value"/>, as does the explicit conversion to
+/// <see cref="string"/>; project an optional wire field through <see cref="FromWire"/>,
+/// which returns <see langword="null"/> for an absent value.
+/// </para>
 /// </remarks>
 public readonly record struct CommandId
 {
@@ -39,6 +47,20 @@ public readonly record struct CommandId
 
     /// <summary>Parses a command id; explicit so arbitrary strings never silently become command ids.</summary>
     public static explicit operator CommandId(string value) => new(value);
+
+    /// <summary>
+    /// Projects an optional wire field: <see langword="null"/> when
+    /// <paramref name="value"/> is null, empty, or whitespace; a constructed
+    /// <see cref="CommandId"/> otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The supported projection for an optional wire field — it never produces a default
+    /// instance, so the absent case is observable as <see langword="null"/> rather than
+    /// as a value that throws on <see cref="Value"/>.
+    /// </remarks>
+    /// <param name="value">The optional wire value.</param>
+    public static CommandId? FromWire(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : new CommandId(value);
 
     /// <remarks>
     /// Returns a sentinel — not a throw — for <c>default(CommandId)</c>: logging

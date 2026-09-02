@@ -16,7 +16,7 @@ namespace Daml.Ledger.Abstractions.Tests;
 
 /// <summary>
 /// Verifies <see cref="ThrowingExercise"/>: the throwing convenience wrappers around
-/// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>.
+/// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>.
 /// </summary>
 public class LedgerClientExtensionsTests
 {
@@ -31,9 +31,19 @@ public class LedgerClientExtensionsTests
 
     private static TransactionResult TransactionCreating(params string[] contractIds) =>
         new("update-id", LedgerOffset.Begin,
-            contractIds.Select(id => new CreatedContract(id, SampleTemplate.TemplateId, "{}")).ToArray(),
+            contractIds.Select(CreatedOf).ToArray(),
             [],
             new CommandId("cmd-id"));
+
+    private static CreatedContract CreatedOf(string contractId) =>
+        new(
+            EventId: $"evt-{contractId}",
+            ContractId: contractId,
+            TemplateId: SampleTemplate.TemplateId,
+            Payload: DamlRecord.Create(),
+            WitnessParties: [new Party("alice")],
+            Signatories: [new Party("alice")],
+            Observers: []);
 
     [Fact]
     public async Task ExerciseAsync_returns_value_when_TryExerciseAsync_returns_One()
@@ -119,6 +129,52 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
+    public async Task ExerciseAsync_forwards_the_timeout_to_TryExerciseAsync()
+    {
+        var stub = new StubLedgerClient(new ExerciseOutcome<int>.One(42));
+
+        await stub.ExerciseAsync<int>(
+            SampleCommand, new Party("alice"), timeout: TimeSpan.FromSeconds(7),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        stub.LastExerciseTimeout.Should().Be(TimeSpan.FromSeconds(7));
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_omitted_timeout_reaches_TryExerciseAsync_as_null()
+    {
+        var stub = new StubLedgerClient(new ExerciseOutcome<int>.One(42));
+
+        await stub.ExerciseAsync<int>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        stub.LastExerciseTimeout.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_forwards_the_timeout_to_TrySubmitAndWaitForTransactionAsync()
+    {
+        var stub = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.One(SampleTransaction));
+
+        await stub.ExerciseAsync(
+            SampleCommand, new Party("alice"), timeout: TimeSpan.FromSeconds(7),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        stub.LastTransactionTimeout.Should().Be(TimeSpan.FromSeconds(7));
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_omitted_timeout_reaches_TrySubmitAndWaitForTransactionAsync_as_null()
+    {
+        var stub = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.One(SampleTransaction));
+
+        await stub.ExerciseAsync(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        stub.LastTransactionTimeout.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExerciseAsync_void_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_One()
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.One(SampleTransaction));
@@ -129,13 +185,14 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
-    public async Task ExerciseAsync_void_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_None()
+    public async Task ExerciseAsync_void_throws_LedgerOperationException_when_TrySubmitSingleAsync_returns_None()
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        await act.Should().NotThrowAsync();
+        await act.Should().ThrowAsync<LedgerOperationException>()
+            .WithMessage("*None*");
     }
 
     [Fact]
@@ -264,14 +321,15 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
-    public async Task ExerciseAsync_void_with_SubmitterInfo_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_None()
+    public async Task ExerciseAsync_void_with_SubmitterInfo_throws_LedgerOperationException_when_TrySubmitSingleAsync_returns_None()
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
         var submitter = new SubmitterInfo(new Party("alice"));
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
 
-        await act.Should().NotThrowAsync();
+        await act.Should().ThrowAsync<LedgerOperationException>()
+            .WithMessage("*None*");
     }
 
     [Fact]
@@ -350,7 +408,7 @@ public class LedgerClientExtensionsTests
     public async Task ExerciseAsync_throws_LedgerOperationException_carrying_the_InfraError_outcome()
     {
         var sourceException = new InvalidOperationException("transport failed");
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset", sourceException));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset", SourceException: sourceException));
 
         Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -360,6 +418,22 @@ public class LedgerClientExtensionsTests
         exception.Category.Should().BeNull();
         exception.ErrorId.Should().BeNull();
         exception.Metadata.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_carrying_the_InfraError_category_and_status_code_together()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(
+            400, "Bad Request", DamlErrorCategory.InvalidIndependentOfSystemState));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.Category.Should().Be(DamlErrorCategory.InvalidIndependentOfSystemState);
+        exception.StatusCode.Should().Be(400);
+        exception.ErrorId.Should().BeNull(
+            "a classified transport failure carries no recoverable Canton error id, and both facts have to " +
+            "survive on the one exception rather than the caller having to pick which to discard");
     }
 
     [Fact]
@@ -412,7 +486,7 @@ public class LedgerClientExtensionsTests
     public async Task ExerciseAsync_void_throws_LedgerOperationException_carrying_the_InfraError_outcome()
     {
         var sourceException = new TimeoutException("deadline transport failure");
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.InfraError(4, "Deadline exceeded", sourceException));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.InfraError(4, "Deadline exceeded", SourceException: sourceException));
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -501,6 +575,22 @@ public class LedgerClientExtensionsTests
 
         result.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.InfraError>()
             .Which.StatusCode.Should().Be(14);
+    }
+
+    [Fact]
+    public async Task TryCreateOneByExerciseAsync_carries_the_InfraError_category_through_the_remap()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.InfraError(
+            400, "Bad Request", DamlErrorCategory.InvalidIndependentOfSystemState));
+
+        var result = await client.TryCreateOneByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.InfraError>()
+            .Which.Category.Should().Be(
+                DamlErrorCategory.InvalidIndependentOfSystemState,
+                "remapping the outcome onto the created contract id without forwarding the category silently " +
+                "discards a classification the transport determined without a structured Canton error to carry it");
     }
 
     [Fact]
@@ -662,15 +752,15 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
-    public async Task Read_paths_accept_an_interface_marker_as_type_argument()
+    public async Task Read_paths_accept_an_interface_marker_through_its_view_witness()
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
 
         var exercised = await client.TryCreateOneByExerciseAsync<SampleInterface>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
-        var subscription = client.SubscribeAsync<SampleInterface>(
-            new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
-        var events = new List<ContractStreamEvent<SampleInterface>>();
+        var subscription = client.SubscribeAsync(
+            SampleInterface.View, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+        var events = new List<InterfaceStreamEvent<SampleInterface, SampleView>>();
         await foreach (var evt in subscription)
         {
             events.Add(evt);
@@ -686,7 +776,8 @@ public class LedgerClientExtensionsTests
     /// and <c>TrySubmitAndWaitForTransactionAsync</c> primitives. The outcome is stored
     /// as <c>object</c> and cast on retrieval so a single non-generic stub can satisfy
     /// the generic contract for any <c>TResult</c>. The throwing extension wrappers and
-    /// the <c>Party</c>-<c>actAs</c> overloads both route here.
+    /// the <c>Party</c>-<c>actAs</c> overloads both route here. Each primitive records the
+    /// <c>timeout</c> it was handed, so a wrapper that accepts one and drops it is visible.
     /// </summary>
     private sealed class StubLedgerClient : ILedgerClient
     {
@@ -694,13 +785,21 @@ public class LedgerClientExtensionsTests
 
         public StubLedgerClient(object outcome) => _outcome = outcome;
 
+        public TimeSpan? LastExerciseTimeout { get; private set; }
+
+        public TimeSpan? LastTransactionTimeout { get; private set; }
+
         public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
             SubmitterInfo submitter,
             string? workflowId = null,
+            CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
-            => Task.FromResult((ExerciseOutcome<TResult>)_outcome);
+        {
+            LastExerciseTimeout = timeout;
+            return Task.FromResult((ExerciseOutcome<TResult>)_outcome);
+        }
 
         public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
             CommandsSubmission submission,
@@ -714,12 +813,16 @@ public class LedgerClientExtensionsTests
             SubmitterInfo submitter,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
-            => Task.FromResult((ExerciseOutcome<TransactionResult>)_outcome);
+        {
+            LastTransactionTimeout = timeout;
+            return Task.FromResult((ExerciseOutcome<TransactionResult>)_outcome);
+        }
 
         public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
             SubmitterInfo submitter,
             string? workflowId = null,
+            CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             where TTemplate : ITemplate
@@ -730,7 +833,7 @@ public class LedgerClientExtensionsTests
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
         public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
@@ -738,14 +841,14 @@ public class LedgerClientExtensionsTests
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
         public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,
             CancellationToken cancellationToken = default)
-            where T : IDamlType
+            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<AcsSnapshotEntry<T>>(cancellationToken);
 
         public Task<LedgerOffset> GetLedgerEndAsync(
@@ -754,6 +857,35 @@ public class LedgerClientExtensionsTests
             => Task.FromResult(LedgerOffset.Begin);
 
         public bool Disposed { get; private set; }
+
+        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? fromOffset = null,
+            LedgerOffset? toOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView>
+            => EmptyAsync<InterfaceStreamEvent<TInterface, TView>>(cancellationToken);
+
+        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? fromOffset = null,
+            LedgerOffset? toOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView>
+            => EmptyAsync<InterfaceStreamEvent<TInterface, TView>>(cancellationToken);
+
+        public IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
+            ViewDescriptor<TInterface, TView> view,
+            SubmitterInfo submitter,
+            LedgerOffset? activeAtOffset = null,
+            CancellationToken cancellationToken = default)
+            where TInterface : IDamlInterface, IHasView<TView>
+            where TView : IDamlRecord<TView>
+            => EmptyAsync<InterfaceAcsSnapshotEntry<TInterface, TView>>(cancellationToken);
 
         public void Dispose() => Disposed = true;
 
@@ -779,13 +911,20 @@ internal sealed record SampleTemplate : ITemplate
     public static SampleTemplate FromRecord(DamlRecord record) => new();
 }
 
-internal sealed record SampleInterface : IDamlInterface
+internal sealed record SampleInterface : IDamlInterface, IHasView<SampleView>
 {
     public static Identifier InterfaceId => new("iface-pkg", "Module", "ISample");
     public static string PackageId => "iface-pkg";
     public static string PackageName => "iface-name";
     public static Version PackageVersion => new(1, 0, 0);
     public static DamlTypeDescriptor DamlTypeId { get; } = new(InterfaceId, DamlTypeKind.Interface, PackageName);
+    public static ViewDescriptor<SampleInterface, SampleView> View { get; } = new();
 
     public DamlRecord ToRecord() => DamlRecord.Create();
+}
+
+internal sealed record SampleView : IDamlRecord<SampleView>
+{
+    public DamlRecord ToRecord() => DamlRecord.Create();
+    public static SampleView FromRecord(DamlRecord record) => new();
 }

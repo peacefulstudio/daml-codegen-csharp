@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -85,7 +85,7 @@ public class RecordEmitterTests
         new() { Name = name, Definition = new DamlVariantDefinition(constructors) };
 
     [Fact]
-    public void emits_the_sealed_record_declaration_with_primitive_fields()
+    public void RecordEmitter_emits_the_sealed_record_declaration_with_primitive_fields()
     {
         var output = EmitRecord(Record(
             "PersonInfo",
@@ -97,11 +97,81 @@ public class RecordEmitterTests
         output.Should().Contain("string Name");
         output.Should().Contain("long Age");
         output.Should().Contain("bool Active");
-        output.Should().Contain(": IDamlRecord");
+        output.Should().Contain(": IDamlRecord<PersonInfo>");
     }
 
     [Fact]
-    public void maps_numeric_fields_to_decimal()
+    public void RecordEmitter_stamps_the_generic_IDamlRecord_facet_naming_the_record_itself()
+    {
+        var output = EmitRecord(Record("Profile", Field("nickname", DamlPrimitive.Text)));
+
+        output.Should().Contain(": IDamlRecord<Profile>");
+    }
+
+    private static DamlInterface ViewingInterface(string name, string viewRecordName) =>
+        new()
+        {
+            Name = name,
+            Choices = [],
+            ViewType = new DamlTypeRef("", ModuleName, viewRecordName),
+        };
+
+    private static string EmitWithInterfaces(string targetName, DamlDataType[] packageTypes, DamlInterface[] interfaces)
+    {
+        var options = Options(generateXmlDocs: true);
+        var module = new DamlModule
+        {
+            Name = ModuleName,
+            Templates = [],
+            DataTypes = packageTypes,
+            Interfaces = interfaces,
+        };
+        var package = new DamlPackage
+        {
+            PackageId = LocalPackageId,
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+        var context = PackageEmitContext.ForPackage(package, options);
+        var resolver = new StubResolver();
+        var mapper = new DamlTypeMapper(context, resolver);
+        var serialization = new RecordSerializationEmitter(context, resolver, options, mapper);
+        var emitter = new RecordEmitter(context, options, serialization);
+        var target = packageTypes.First(d => d.Name == targetName);
+        var sb = new StringBuilder();
+        emitter.WriteRecordType(new IndentWriter(sb), module, target, (DamlRecordDefinition)target.Definition!);
+        return sb.ToString();
+    }
+
+    [Fact]
+    public void RecordEmitter_stamps_a_view_record_with_its_interface_marker_before_the_record_facet()
+    {
+        var output = EmitWithInterfaces(
+            "AssetView",
+            [Record("AssetView", Field("owner", DamlPrimitive.Party))],
+            [ViewingInterface("Asset", "AssetView")]);
+
+        output.Should().Contain(": IAsset, IDamlRecord<AssetView>");
+    }
+
+    [Fact]
+    public void RecordEmitter_leaves_a_view_record_shared_by_two_interfaces_unstamped()
+    {
+        var output = EmitWithInterfaces(
+            "SharedView",
+            [Record("SharedView", Field("owner", DamlPrimitive.Party))],
+            [ViewingInterface("Bond", "SharedView"), ViewingInterface("Asset", "SharedView")]);
+
+        output.Should().Contain(": IDamlRecord<SharedView>");
+        output.Should().NotContain("IAsset");
+        output.Should().NotContain("IBond");
+    }
+
+    [Fact]
+    public void RecordEmitter_maps_numeric_fields_to_decimal()
     {
         var output = EmitRecord(Record(
             "Amount",
@@ -113,7 +183,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_date_and_timestamp_fields()
+    public void RecordEmitter_maps_date_and_timestamp_fields()
     {
         var output = EmitRecord(Record(
             "Event",
@@ -125,7 +195,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_party_fields()
+    public void RecordEmitter_maps_party_fields()
     {
         var output = EmitRecord(Record(
             "Ownership",
@@ -137,7 +207,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_optional_fields_to_nullable()
+    public void RecordEmitter_maps_optional_fields_to_nullable()
     {
         var output = EmitRecord(Record(
             "OptionalData",
@@ -153,7 +223,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void decodes_optional_fields_through_AsOptional_in_FromRecord()
+    public void RecordEmitter_decodes_optional_fields_through_AsOptional_in_FromRecord()
     {
         var output = EmitRecord(Record(
             "OptionalData",
@@ -169,7 +239,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_list_fields_to_readonly_list()
+    public void RecordEmitter_maps_list_fields_to_readonly_list()
     {
         var output = EmitRecord(Record(
             "Collection",
@@ -185,7 +255,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_textmap_field_to_readonly_dictionary()
+    public void RecordEmitter_maps_textmap_field_to_readonly_dictionary()
     {
         var output = EmitRecord(Record(
             "Metadata",
@@ -197,7 +267,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void maps_contract_id_field_to_typed_contract_id()
+    public void RecordEmitter_maps_contract_id_field_to_typed_contract_id()
     {
         var output = EmitRecord(Record(
             "Reference",
@@ -209,7 +279,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void emits_a_ToRecord_method()
+    public void RecordEmitter_emits_a_ToRecord_method()
     {
         var output = EmitRecord(Record("Simple", Field("value", DamlPrimitive.Text)));
 
@@ -219,7 +289,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void emits_a_FromRecord_method()
+    public void RecordEmitter_emits_a_FromRecord_method()
     {
         var output = EmitRecord(Record("Simple", Field("value", DamlPrimitive.Text)));
 
@@ -228,7 +298,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void references_other_record_types_through_FromRecord()
+    public void RecordEmitter_references_other_record_types_through_FromRecord()
     {
         var address = Record(
             "Address",
@@ -246,7 +316,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void routes_record_field_through_ToVariant_and_FromVariant_when_field_is_a_variant()
+    public void RecordEmitter_routes_record_field_through_ToVariant_and_FromVariant_when_field_is_a_variant()
     {
         var module = new DamlModule
         {
@@ -275,7 +345,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void declares_type_parameters_with_docs_when_enabled()
+    public void RecordEmitter_declares_type_parameters_with_docs_when_enabled()
     {
         var box = new DamlDataType
         {
@@ -293,7 +363,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void declares_type_parameters_without_docs_when_disabled()
+    public void RecordEmitter_declares_type_parameters_without_docs_when_disabled()
     {
         var box = new DamlDataType
         {
@@ -310,7 +380,52 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void emits_every_xml_doc_when_enabled()
+    public void RecordEmitter_constrains_every_type_parameter_to_notnull()
+    {
+        var pair = new DamlDataType
+        {
+            Name = "Pair",
+            TypeParams = ["a", "b"],
+            Definition = new DamlRecordDefinition(
+            [
+                new DamlFieldDefinition("first", new DamlTypeVar("a")),
+                new DamlFieldDefinition("second", new DamlTypeVar("b")),
+            ]),
+        };
+
+        var output = EmitRecord(pair, generateXmlDocs: false);
+
+        output.Should().Contain(") where TA : notnull where TB : notnull",
+            "a Daml type variable ranges only over serialisable Daml types, none of which is nullable, "
+            + "and without the constraint a reflection-driven reader decodes the slot as an Optional");
+    }
+
+    [Fact]
+    public void RecordEmitter_leaves_the_return_type_of_FromRecord_unconstrained()
+    {
+        var box = new DamlDataType
+        {
+            Name = "Box",
+            TypeParams = ["a"],
+            Definition = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlTypeVar("a"))]),
+        };
+
+        var output = EmitRecord(box, generateXmlDocs: false);
+
+        output.Should().Contain("public static Box<TA> FromRecord(",
+            "a constraint clause belongs on the declaration only; repeating it on a member's return type is not C#");
+    }
+
+    [Fact]
+    public void RecordEmitter_leaves_a_non_generic_record_unconstrained()
+    {
+        var output = EmitRecord(Record("Simple", Field("value", DamlPrimitive.Text)), generateXmlDocs: false);
+
+        output.Should().NotContain("notnull");
+    }
+
+    [Fact]
+    public void RecordEmitter_emits_every_xml_doc_when_enabled()
     {
         var output = EmitRecord(Record("Simple", Field("value", DamlPrimitive.Text)), generateXmlDocs: true);
 
@@ -320,7 +435,7 @@ public class RecordEmitterTests
     }
 
     [Fact]
-    public void omits_every_xml_doc_when_disabled()
+    public void RecordEmitter_omits_every_xml_doc_when_disabled()
     {
         var output = EmitRecord(Record("Simple", Field("value", DamlPrimitive.Text)), generateXmlDocs: false);
 
@@ -331,101 +446,5 @@ public class RecordEmitterTests
         output.Should().Contain("public sealed record Simple(");
         output.Should().Contain("public DamlRecord ToRecord()");
         output.Should().Contain("public static Simple FromRecord(DamlRecord record)");
-    }
-
-    [Fact]
-    public void emits_a_throwing_template_stub_for_interface_placeholder_records()
-    {
-        var output = EmitInterfacePlaceholder("Holding");
-
-        output.Should().Contain("public sealed record Holding : ITemplate");
-        output.Should().Contain("Phantom placeholder for the Daml interface <c>Test.Module:Holding</c>.");
-        output.Should().Contain("throw new InvalidOperationException(");
-    }
-
-    private static string EmitInterfacePlaceholder(string name)
-    {
-        var package = new DamlPackage
-        {
-            PackageId = LocalPackageId,
-            Name = "test-package",
-            Version = new Version(1, 0, 0),
-            LfVersion = "2.1",
-            Modules =
-            [
-                new DamlModule
-                {
-                    Name = ModuleName,
-                    Templates = [],
-                    DataTypes = [Record(name)],
-                    Interfaces = [new DamlInterface { Name = name, Choices = [] }],
-                },
-            ],
-            DependencyReferences = [],
-        };
-
-        var options = Options(generateXmlDocs: true);
-        var context = PackageEmitContext.ForPackage(package, options);
-        var resolver = new StubResolver();
-        var mapper = new DamlTypeMapper(context, resolver);
-        var serialization = new RecordSerializationEmitter(context, resolver, options, mapper);
-        var emitter = new RecordEmitter(context, options, serialization);
-        var target = package.Modules[0].DataTypes.First(d => d.Name == name);
-        var sb = new StringBuilder();
-        emitter.WriteRecordType(new IndentWriter(sb), package.Modules[0], target, (DamlRecordDefinition)target.Definition!);
-        return sb.ToString();
-    }
-
-    [Fact]
-    public void emits_a_remarks_block_clarifying_interface_choices_need_no_coercion()
-    {
-        var output = EmitInterfacePlaceholder("Holding");
-
-        output.Should().Contain("/// <remarks>");
-        output.Should().Contain("/// </remarks>");
-        output.Should().Contain("exercise directly on <c>ContractId&lt;Holding&gt;</c>");
-        output.Should().Contain("no supported way to recover a concrete <c>ContractId&lt;TConcrete&gt;</c>");
-
-        var summaryEnd = output.IndexOf("/// </summary>", StringComparison.Ordinal);
-        var remarksStart = output.IndexOf("/// <remarks>", StringComparison.Ordinal);
-        var remarksEnd = output.IndexOf("/// </remarks>", StringComparison.Ordinal);
-        var recordDeclaration = output.IndexOf("public sealed record Holding : ITemplate", StringComparison.Ordinal);
-
-        summaryEnd.Should().BeLessThan(remarksStart);
-        remarksStart.Should().BeLessThan(remarksEnd);
-        remarksEnd.Should().BeLessThan(recordDeclaration);
-    }
-
-    [Fact]
-    public void emits_exception_tags_on_the_five_throwing_placeholder_members_only()
-    {
-        var output = EmitInterfacePlaceholder("Holding");
-        var lines = output.Split('\n');
-
-        var identityPhraseByMember = new Dictionary<string, string>
-        {
-            ["TemplateId"] = "template identity",
-            ["PackageId"] = "package identity",
-            ["PackageName"] = "package identity",
-            ["PackageVersion"] = "package identity",
-            ["DamlTypeId"] = "Daml type identity",
-        };
-
-        foreach (var member in new[] { "TemplateId", "PackageId", "PackageName", "PackageVersion", "DamlTypeId" })
-        {
-            var declarationLineIndex = Array.FindIndex(lines, l => l.Contains($" {member} =>", StringComparison.Ordinal));
-            declarationLineIndex.Should().BeGreaterThan(1);
-            lines[declarationLineIndex - 1].Should().Contain("/// <exception cref=\"System.InvalidOperationException\">");
-            lines[declarationLineIndex - 2].Should().Contain("/// <summary>Always throws");
-            lines[declarationLineIndex - 1].Should().Contain(identityPhraseByMember[member]);
-        }
-
-        var toRecordIndex = Array.FindIndex(lines, l => l.Contains("ToRecord() =>", StringComparison.Ordinal));
-        var fromRecordIndex = Array.FindIndex(lines, l => l.Contains("FromRecord(", StringComparison.Ordinal) && l.Contains("=>", StringComparison.Ordinal));
-
-        toRecordIndex.Should().BeGreaterThan(0);
-        fromRecordIndex.Should().BeGreaterThan(0);
-        lines[toRecordIndex - 1].Should().NotContain("<exception");
-        lines[fromRecordIndex - 1].Should().NotContain("<exception");
     }
 }

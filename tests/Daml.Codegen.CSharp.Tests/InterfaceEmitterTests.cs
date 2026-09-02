@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -39,21 +39,25 @@ public class InterfaceEmitterTests
     private static CodeGenOptions Options(bool generateXmlDocs) =>
         new() { RootNamespace = "Test.Package", GenerateXmlDocs = generateXmlDocs };
 
-    private static string EmitInterface(DamlInterface iface, DamlDataType[]? dataTypes = null, bool generateXmlDocs = true)
+    private static string EmitInterface(
+        DamlInterface iface,
+        DamlDataType[]? dataTypes = null,
+        bool generateXmlDocs = true,
+        DamlInterface[]? siblingInterfaces = null)
     {
         var module = new DamlModule
         {
             Name = ModuleName,
             Templates = [],
             DataTypes = dataTypes ?? [],
-            Interfaces = [iface],
+            Interfaces = [iface, .. siblingInterfaces ?? []],
         };
         var options = Options(generateXmlDocs);
         var context = PackageEmitContext.ForPackage(Package(module), options);
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var choiceEmitter = new ChoiceEmitter(context, resolver, options, mapper, new PartyAnalysis());
-        var emitter = new InterfaceEmitter(context, mapper, choiceEmitter, options);
+        var emitter = new InterfaceEmitter(context, mapper, resolver, choiceEmitter, options);
         var sb = new StringBuilder();
         emitter.WriteInterfaceType(new IndentWriter(sb), Package(module), module, iface);
         return sb.ToString();
@@ -63,7 +67,7 @@ public class InterfaceEmitterTests
         new() { Name = name, Choices = choices, ViewType = viewType };
 
     [Fact]
-    public void emits_the_interface_declaration_with_an_I_prefix()
+    public void InterfaceEmitter_emits_the_interface_declaration_with_an_I_prefix()
     {
         var output = EmitInterface(Interface("Transferable"));
 
@@ -71,7 +75,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void declares_IDamlInterface_as_the_base_facet()
+    public void InterfaceEmitter_declares_IDamlInterface_as_the_base_facet()
     {
         var output = EmitInterface(Interface("Lockable"));
 
@@ -79,7 +83,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void emits_static_interface_metadata()
+    public void InterfaceEmitter_emits_static_interface_metadata()
     {
         var output = EmitInterface(Interface("Holdable"));
 
@@ -93,7 +97,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void emits_explicit_daml_type_descriptor()
+    public void InterfaceEmitter_emits_explicit_daml_type_descriptor()
     {
         var output = EmitInterface(Interface("Holdable"));
 
@@ -101,8 +105,111 @@ public class InterfaceEmitterTests
             "static DamlTypeDescriptor global::Daml.Runtime.IDamlType.DamlTypeId => new(new Identifier(\"test-package-id\", \"Test.Module\", \"Holdable\"), DamlTypeKind.Interface, \"test-package\");");
     }
 
+    private static DamlDataType AssetViewRecord() =>
+        new()
+        {
+            Name = "AssetView",
+            Definition = new DamlRecordDefinition(
+            [
+                new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
+                new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric)),
+            ]),
+        };
+
+    private static string EmitAssetWithLocalView(bool generateXmlDocs = true) =>
+        EmitInterface(
+            Interface("Asset", viewType: new DamlTypeRef("", ModuleName, "AssetView")),
+            dataTypes: [AssetViewRecord()],
+            generateXmlDocs: generateXmlDocs);
+
     [Fact]
-    public void adds_the_IHasView_facet_when_the_interface_has_a_view_type()
+    public void InterfaceEmitter_adds_the_IHasView_facet_when_the_interface_has_a_view_type()
+    {
+        var output = EmitAssetWithLocalView();
+
+        output.Should().Contain("IHasView<AssetView>");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_omits_the_IHasView_facet_when_the_interface_has_no_view_type()
+    {
+        var output = EmitInterface(Interface("Lockable"));
+
+        output.Should().NotContain("IHasView");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_emits_the_View_witness_static_for_a_local_view_record()
+    {
+        var output = EmitAssetWithLocalView();
+
+        output.Should().Contain("public static ViewDescriptor<IAsset, AssetView> View { get; } = new();");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_mirrors_the_view_fields_as_marker_instance_properties()
+    {
+        var output = EmitAssetWithLocalView();
+
+        output.Should().Contain("Party Owner { get; }");
+        output.Should().Contain("decimal Amount { get; }");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_documents_marker_equality_as_reference_equality_when_the_view_is_local()
+    {
+        var output = EmitAssetWithLocalView();
+
+        output.Should().Contain("reference equality");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_omits_the_view_enrichment_when_the_interface_has_no_view_type()
+    {
+        var output = EmitInterface(Interface("Lockable"));
+
+        output.Should().NotContain("ViewDescriptor");
+        output.Should().NotContain("View { get; }");
+        output.Should().NotContain("reference equality");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_emits_the_witness_without_view_properties_for_a_foreign_view_record()
+    {
+        var output = EmitInterface(
+            Interface("Asset", viewType: new DamlTypeRef("foreign-package-id", "Foreign.Module", "AssetView")));
+
+        output.Should().Contain("public static ViewDescriptor<IAsset, AssetView> View { get; } = new();");
+        output.Should().NotContain("Owner { get; }");
+        output.Should().NotContain("reference equality");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_does_not_enrich_a_foreign_view_ref_that_name_collides_with_a_local_view_record()
+    {
+        var output = EmitInterface(
+            Interface("Foreign", viewType: new DamlTypeRef("other-package-id", ModuleName, "AssetView")),
+            dataTypes: [AssetViewRecord()],
+            siblingInterfaces: [Interface("Asset", viewType: new DamlTypeRef("", ModuleName, "AssetView"))]);
+
+        output.Should().Contain("public static ViewDescriptor<IForeign, AssetView> View { get; } = new();");
+        output.Should().NotContain("Owner { get; }");
+        output.Should().NotContain("reference equality");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_omits_the_witness_for_a_local_view_type_that_is_not_a_record()
+    {
+        var output = EmitInterface(
+            Interface("Coloured", viewType: new DamlTypeRef("", ModuleName, "Colour")),
+            dataTypes: [new DamlDataType { Name = "Colour", Definition = new DamlEnumDefinition(["Red"]) }]);
+
+        output.Should().Contain("IHasView<Colour>");
+        output.Should().NotContain("ViewDescriptor");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_omits_the_enrichment_for_a_view_record_whose_field_collides_with_the_witness()
     {
         var output = EmitInterface(
             Interface("Asset", viewType: new DamlTypeRef("", ModuleName, "AssetView")),
@@ -112,26 +219,17 @@ public class InterfaceEmitterTests
                 {
                     Name = "AssetView",
                     Definition = new DamlRecordDefinition(
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric)),
-                    ]),
+                        [new DamlFieldDefinition("view", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
             ]);
 
-        output.Should().Contain("IHasView<AssetView>");
+        output.Should().Contain("public static ViewDescriptor<IAsset, AssetView> View { get; } = new();");
+        output.Should().NotContain("Party View { get; }");
+        output.Should().NotContain("reference equality");
     }
 
     [Fact]
-    public void omits_the_IHasView_facet_when_the_interface_has_no_view_type()
-    {
-        var output = EmitInterface(Interface("Lockable"));
-
-        output.Should().NotContain("IHasView");
-    }
-
-    [Fact]
-    public void renders_each_choice_as_a_signature_comment()
+    public void InterfaceEmitter_writes_no_signature_comment_into_the_marker_body_for_a_choice()
     {
         var output = EmitInterface(Interface(
             "Transferable",
@@ -144,11 +242,12 @@ public class InterfaceEmitterTests
                 ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
             }));
 
-        output.Should().Contain("// Choice Transfer");
+        output.Should().NotContain("// Choice Transfer");
+        output.Should().NotContain("// Interface method Transfer.");
     }
 
     [Fact]
-    public void emits_the_sibling_choice_exerciser_class_when_the_interface_has_choices()
+    public void InterfaceEmitter_emits_the_sibling_choice_exerciser_class_when_the_interface_has_choices()
     {
         var output = EmitInterface(Interface(
             "Transferable",
@@ -164,11 +263,11 @@ public class InterfaceEmitterTests
             }));
 
         output.Should().Contain("public static class ITransferableExtensions");
-        output.Should().Contain("public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
     }
 
     [Fact]
-    public void emits_no_choice_exerciser_class_when_the_interface_has_no_choices()
+    public void InterfaceEmitter_emits_no_choice_exerciser_class_when_the_interface_has_no_choices()
     {
         var output = EmitInterface(Interface("Lockable"));
 
@@ -176,7 +275,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void emits_every_xml_doc_when_enabled()
+    public void InterfaceEmitter_emits_every_xml_doc_when_enabled()
     {
         var output = EmitInterface(Interface("Documented"), generateXmlDocs: true);
 
@@ -189,7 +288,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void omits_every_xml_doc_when_disabled()
+    public void InterfaceEmitter_omits_every_xml_doc_when_disabled()
     {
         var output = EmitInterface(Interface("Documented"), generateXmlDocs: false);
 
@@ -205,7 +304,7 @@ public class InterfaceEmitterTests
     }
 
     [Fact]
-    public void filters_interfaces_with_the_root_filter()
+    public void InterfaceEmitter_filters_interfaces_with_the_root_filter()
     {
         var options = new CodeGenOptions
         {

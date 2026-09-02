@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Data;
 
@@ -100,8 +101,10 @@ public sealed record DamlNumeric : DamlValue
     /// </summary>
     /// <exception cref="OverflowException">
     /// The stored value cannot be represented exactly as a <see cref="decimal"/>: its magnitude
-    /// exceeds <see cref="decimal.MaxValue"/>, or it has more fractional digits than
-    /// <see cref="decimal"/> can hold. The narrowing throws rather than silently rounding.
+    /// exceeds <see cref="decimal.MaxValue"/>, or it still has more fractional digits than
+    /// <see cref="decimal"/> can hold once trailing mantissa zeros are stripped. A participant
+    /// pads a Numeric out to its declared scale, so that padding never decides representability.
+    /// The narrowing throws rather than silently rounding.
     /// </exception>
     public decimal Value =>
         TryToDecimal(out var value)
@@ -111,16 +114,27 @@ public sealed record DamlNumeric : DamlValue
 
     private bool TryToDecimal(out decimal value)
     {
-        if (_mantissaScale > MaxDecimalMantissaScale || _unscaledMagnitude > MaxDecimalUnscaledMagnitude)
+        if (TryNarrow(_unscaledMagnitude, _mantissaScale, out value))
+        {
+            return true;
+        }
+
+        var (strippedMantissa, strippedScale, _) = Normalize(_unscaledMagnitude, _mantissaScale, _isNegative);
+        return TryNarrow(strippedMantissa, strippedScale, out value);
+    }
+
+    private bool TryNarrow(BigInteger unscaledMagnitude, int mantissaScale, out decimal value)
+    {
+        if (mantissaScale > MaxDecimalMantissaScale || unscaledMagnitude > MaxDecimalUnscaledMagnitude)
         {
             value = default;
             return false;
         }
 
-        var lo = unchecked((int)(uint)(_unscaledMagnitude & UInt32Mask));
-        var mid = unchecked((int)(uint)((_unscaledMagnitude >> 32) & UInt32Mask));
-        var hi = unchecked((int)(uint)((_unscaledMagnitude >> 64) & UInt32Mask));
-        value = new decimal(lo, mid, hi, _isNegative, (byte)_mantissaScale);
+        var lo = unchecked((int)(uint)(unscaledMagnitude & UInt32Mask));
+        var mid = unchecked((int)(uint)((unscaledMagnitude >> 32) & UInt32Mask));
+        var hi = unchecked((int)(uint)((unscaledMagnitude >> 64) & UInt32Mask));
+        value = new decimal(lo, mid, hi, _isNegative, (byte)mantissaScale);
         return true;
     }
 
@@ -446,56 +460,13 @@ public readonly record struct Party
 /// so Party round-trips through JSON payloads produced by PQS and the JSON Ledger API,
 /// which encode parties as raw strings (e.g. "Alice::1220abcd...").
 /// </summary>
-internal sealed class PartyJsonConverter : JsonConverter<Party>
+internal sealed class PartyJsonConverter : OpaqueStringIdJsonConverter<Party>
 {
-    // HandleNull=true so a bare `null` on a non-nullable Party field surfaces as a
-    // JsonException here instead of silently producing a default(Party) that later
-    // throws InvalidOperationException on .Id access. Party? is unaffected — STJ
-    // short-circuits null for Nullable<T> before invoking the converter.
-    public override bool HandleNull => true;
+    /// <inheritdoc/>
+    protected override Party Parse(string id) => new(id);
 
-    public override Party Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.String)
-        {
-            throw new JsonException($"Expected string token for Party, got {reader.TokenType}.");
-        }
-
-        var id = reader.GetString()!;
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            throw new JsonException("Party id cannot be null or whitespace.");
-        }
-
-        // Translate any ArgumentException the constructor might grow in the future
-        // into a JsonException, so callers catching serialization errors see the right type.
-        try
-        {
-            return new Party(id);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new JsonException($"Invalid Party id '{id}'.", ex);
-        }
-    }
-
-    public override void Write(Utf8JsonWriter writer, Party value, JsonSerializerOptions options)
-    {
-        // Mirror Read: translate the InvalidOperationException that Party.Id throws
-        // for default(Party) into a JsonException so callers can catch both directions
-        // of the round-trip uniformly.
-        string id;
-        try
-        {
-            id = value.Id;
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new JsonException("Cannot serialize an uninitialized Party.", ex);
-        }
-
-        writer.WriteStringValue(id);
-    }
+    /// <inheritdoc/>
+    protected override string Format(Party value) => value.Id;
 }
 
 /// <summary>

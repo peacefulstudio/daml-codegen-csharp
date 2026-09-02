@@ -15,7 +15,10 @@ public sealed partial record AnsEntryContext
     /// <summary>
     /// Choice argument type for AnsEntryContext_Terminate.
     /// </summary>
-    public sealed record AnsEntryContext_Terminate([property: DamlFieldAttribute("actor")] Party Actor, [property: DamlFieldAttribute("terminatedSubscriptionCid")] ContractId<Splice.Wallet.Payments.TerminatedSubscription> TerminatedSubscriptionCid) : IDamlRecord
+    public sealed record AnsEntryContext_Terminate(
+        [property: DamlFieldAttribute("actor")] Party Actor,
+        [property: DamlFieldAttribute("terminatedSubscriptionCid")] ContractId<Splice.Wallet.Payments.TerminatedSubscription> TerminatedSubscriptionCid
+    ) : IDamlRecord
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(

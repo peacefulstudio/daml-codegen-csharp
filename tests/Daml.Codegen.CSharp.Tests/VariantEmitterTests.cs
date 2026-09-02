@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -71,7 +71,38 @@ public class VariantEmitterTests
         Emit(target.Name, [target], generateXmlDocs);
 
     [Fact]
-    public void emits_the_abstract_base_record_and_every_constructor()
+    public void VariantEmitter_constrains_every_type_parameter_to_notnull()
+    {
+        var output = EmitVariant(new DamlDataType
+        {
+            Name = "Slot",
+            TypeParams = ["a"],
+            Definition = new DamlVariantDefinition(
+            [
+                Ctor("Filled", new DamlTypeVar("a")),
+                Ctor("Vacant"),
+            ]),
+        });
+
+        output.Should().Contain("public abstract record Slot<TA> where TA : notnull",
+            "a Daml type variable ranges only over serialisable Daml types, none of which is nullable, "
+            + "and without the constraint a reflection-driven reader decodes the arm payload as an Optional");
+        output.Should().Contain("public static Slot<TA> FromVariant(",
+            "a constraint clause belongs on the declaration only; repeating it on a member's return type is not C#");
+        output.Should().Contain("public sealed record Filled(TA Value) : Slot<TA>",
+            "a nested arm reuses the enclosing type parameter and may not redeclare its constraint");
+    }
+
+    [Fact]
+    public void VariantEmitter_leaves_a_non_generic_variant_unconstrained()
+    {
+        var output = EmitVariant(Variant("PaymentMethod", Ctor("Cash"), Ctor("Card", Text)));
+
+        output.Should().NotContain("notnull");
+    }
+
+    [Fact]
+    public void VariantEmitter_emits_the_abstract_base_record_and_every_constructor()
     {
         var output = EmitVariant(Variant(
             "PaymentMethod",
@@ -92,7 +123,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void documents_case_Tag_and_ToVariant_overrides_with_inheritdoc()
+    public void VariantEmitter_documents_case_Tag_and_ToVariant_overrides_with_inheritdoc()
     {
         var output = EmitVariant(Variant("PaymentMethod", Ctor("Cash"), Ctor("Card", Text)));
 
@@ -102,7 +133,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void maps_numeric_payload_constructors_to_decimal()
+    public void VariantEmitter_maps_numeric_payload_constructors_to_decimal()
     {
         var numeric = new DamlPrimitiveType(DamlPrimitive.Numeric);
         var output = EmitVariant(Variant("Amount", Ctor("Fixed", numeric), Ctor("Percentage", numeric)));
@@ -112,7 +143,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void round_trips_primitive_payload_through_ToVariant_and_FromVariant()
+    public void VariantEmitter_round_trips_primitive_payload_through_ToVariant_and_FromVariant()
     {
         var output = EmitVariant(Variant("Maybe", Ctor("Nothing"), Ctor("Just", Text)));
 
@@ -130,7 +161,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void routes_variant_payload_through_ToVariant_and_FromVariant()
+    public void VariantEmitter_routes_variant_payload_through_ToVariant_and_FromVariant()
     {
         var inner = Variant("Inner", Ctor("Lit", new DamlPrimitiveType(DamlPrimitive.Int64)));
         var outer = Variant("Outer", Ctor("Wrap", new DamlTypeRef(string.Empty, ModuleName, "Inner")));
@@ -144,7 +175,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void uses_indefinite_article_an_for_vowel_initial_variant_in_FromVariant_summary()
+    public void VariantEmitter_uses_indefinite_article_an_for_vowel_initial_variant_in_FromVariant_summary()
     {
         var output = EmitVariant(Variant("Outcome", Ctor("Win", Text), Ctor("Pending")));
 
@@ -153,7 +184,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void uses_indefinite_article_a_for_consonant_initial_variant_in_FromVariant_summary()
+    public void VariantEmitter_uses_indefinite_article_a_for_consonant_initial_variant_in_FromVariant_summary()
     {
         var output = EmitVariant(Variant("PaymentMethod", Ctor("Cash"), Ctor("Card", Text)));
 
@@ -162,7 +193,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void emits_every_xml_doc_when_enabled()
+    public void VariantEmitter_emits_every_xml_doc_when_enabled()
     {
         var output = EmitVariant(Variant("Maybe", Ctor("Nothing"), Ctor("Just", Text)), generateXmlDocs: true);
 
@@ -176,7 +207,7 @@ public class VariantEmitterTests
     }
 
     [Fact]
-    public void omits_every_xml_doc_when_disabled()
+    public void VariantEmitter_omits_every_xml_doc_when_disabled()
     {
         var output = EmitVariant(Variant("Maybe", Ctor("Nothing"), Ctor("Just", Text)), generateXmlDocs: false);
 

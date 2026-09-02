@@ -15,7 +15,10 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record MarkerContext
 /// </summary>
-public sealed record MarkerContext([property: DamlFieldAttribute("featuredAppRightCid")] ContractId<Splice.Api.Featured.App.V1.IFeaturedAppRight> FeaturedAppRightCid, [property: DamlFieldAttribute("beneficiaries")] IReadOnlyList<Splice.Api.Featured.App.V1.AppRewardBeneficiary> Beneficiaries) : IDamlRecord
+public sealed record MarkerContext(
+    [property: DamlFieldAttribute("featuredAppRightCid")] ContractId<Splice.Api.Featured.App.V1.IFeaturedAppRight> FeaturedAppRightCid,
+    [property: DamlFieldAttribute("beneficiaries")] IReadOnlyList<Splice.Api.Featured.App.V1.AppRewardBeneficiary> Beneficiaries
+) : IDamlRecord<MarkerContext>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

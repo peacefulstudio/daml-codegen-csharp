@@ -22,8 +22,8 @@ var noExtraArgs = new ExtraArgs(
 
 Console.WriteLine("1. ACS filter over the IHolding (V2) interface:");
 Console.WriteLine(
-    $"   ACS query ready: {nameof(ILedgerStreamer)}.{nameof(ILedgerStreamer.SubscribeActiveAsync)}<{nameof(IHolding)}>()"
-    + $" → IAsyncEnumerable<{nameof(AcsSnapshotEntry<IHolding>)}<{nameof(IHolding)}>>\n");
+    $"   ACS query ready: {nameof(ILedgerStreamer)}.{nameof(ILedgerStreamer.SubscribeActiveAsync)}({nameof(IHolding)}.View)"
+    + $" → IAsyncEnumerable<{nameof(InterfaceAcsSnapshotEntry<IHolding, HoldingView>)}<{nameof(IHolding)}, {nameof(HoldingView)}>>\n");
 
 Console.WriteLine("2. Accepting a TransferInstruction (V2) via its typed interface choice:");
 var transferId = new ContractId<ITransferInstruction>("00transferinstruction");
@@ -56,4 +56,4 @@ var submission = CommandsSubmission.Single(transfer)
 Console.WriteLine($"   commands: {submission.Commands.Count}, actAs: {string.Join(", ", submission.ActAs ?? [])}\n");
 
 Console.WriteLine("Done. Against a live ledger these commands submit through an ILedgerWriter,");
-Console.WriteLine("and active IHolding contracts stream through ILedgerStreamer.SubscribeActiveAsync<IHolding>.");
+Console.WriteLine("and active IHolding contracts stream through ILedgerStreamer.SubscribeActiveAsync(IHolding.View).");

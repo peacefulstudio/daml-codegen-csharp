@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -15,7 +15,7 @@ public class ContractIdentifiersTests
     #region Basic Generation Tests
 
     [Fact]
-    public void generate_should_create_contract_identifiers_file()
+    public void Generate_should_create_contract_identifiers_file()
     {
         // Arrange
         var module = new DamlModule
@@ -26,7 +26,6 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
@@ -53,7 +52,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_create_file_in_correct_path()
+    public void Generate_should_create_file_in_correct_path()
     {
         // Arrange
         var module = new DamlModule
@@ -64,11 +63,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -86,7 +92,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_include_all_templates_as_properties()
+    public void Generate_should_include_all_templates_as_properties()
     {
         // Arrange
         var module = new DamlModule
@@ -97,17 +103,29 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "FirstTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 },
                 new DamlTemplate
                 {
                     Name = "SecondTemplate",
-                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "FirstTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                },
+                new DamlDataType
+                {
+                    Name = "SecondTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -127,7 +145,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_include_templates_from_multiple_modules()
+    public void Generate_should_include_templates_from_multiple_modules()
     {
         // Arrange
         var module1 = new DamlModule
@@ -138,11 +156,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "TemplateA",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "TemplateA",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -154,11 +179,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "TemplateB",
-                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "TemplateB",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -182,7 +214,7 @@ public class ContractIdentifiersTests
     #region Helper Method Tests
 
     [Fact]
-    public void generate_should_use_template_extensions_get_template_id()
+    public void Generate_should_use_template_extensions_get_template_id()
     {
         // Arrange
         var module = new DamlModule
@@ -193,11 +225,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -224,7 +263,7 @@ public class ContractIdentifiersTests
     #region Code Structure Tests
 
     [Fact]
-    public void generate_should_include_auto_generated_header()
+    public void Generate_should_include_auto_generated_header()
     {
         // Arrange
         var module = new DamlModule
@@ -235,11 +274,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -259,7 +305,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_include_nullable_enable_directive()
+    public void Generate_should_include_nullable_enable_directive()
     {
         // Arrange
         var module = new DamlModule
@@ -270,11 +316,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -293,7 +346,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_include_required_usings()
+    public void Generate_should_include_required_usings()
     {
         // Arrange
         var module = new DamlModule
@@ -304,11 +357,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -328,7 +388,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_use_file_scoped_namespace()
+    public void Generate_should_use_file_scoped_namespace()
     {
         // Arrange
         var module = new DamlModule
@@ -339,11 +399,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -362,7 +429,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_include_xml_docs()
+    public void Generate_should_include_xml_docs()
     {
         // Arrange
         var module = new DamlModule
@@ -373,11 +440,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -398,7 +472,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_create_static_class()
+    public void Generate_should_create_static_class()
     {
         // Arrange
         var module = new DamlModule
@@ -409,11 +483,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -436,7 +517,7 @@ public class ContractIdentifiersTests
     #region Option Tests
 
     [Fact]
-    public void generate_should_not_create_file_when_option_disabled()
+    public void Generate_should_not_create_file_when_option_disabled()
     {
         // Arrange
         var options = new CodeGenOptions
@@ -452,11 +533,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -472,7 +560,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_not_create_file_when_no_templates()
+    public void Generate_should_not_create_file_when_no_templates()
     {
         // Arrange
         var module = new DamlModule
@@ -502,7 +590,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void generate_should_use_block_scoped_namespace_when_option_disabled()
+    public void Generate_should_use_block_scoped_namespace_when_option_disabled()
     {
         // Arrange
         var options = new CodeGenOptions
@@ -519,11 +607,18 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "MyTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -546,7 +641,7 @@ public class ContractIdentifiersTests
     #region Filter Tests
 
     [Fact]
-    public void generate_should_respect_root_filter()
+    public void Generate_should_respect_root_filter()
     {
         // Arrange
         var options = new CodeGenOptions
@@ -563,17 +658,29 @@ public class ContractIdentifiersTests
                 new DamlTemplate
                 {
                     Name = "IncludedTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 },
                 new DamlTemplate
                 {
                     Name = "ExcludedTemplate",
-                    Fields = [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "IncludedTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                },
+                new DamlDataType
+                {
+                    Name = "ExcludedTemplate",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))])
+                }
+            ],
             Interfaces = []
         };
 

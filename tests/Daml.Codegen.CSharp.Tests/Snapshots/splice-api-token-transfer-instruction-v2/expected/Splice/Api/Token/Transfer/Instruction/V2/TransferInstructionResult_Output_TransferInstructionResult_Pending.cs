@@ -13,7 +13,9 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferInstructionResult_Output.TransferInstructionResult_Pending
 /// </summary>
-public sealed record TransferInstructionResult_Output_TransferInstructionResult_Pending([property: DamlFieldAttribute("transferInstructionCid")] ContractId<ITransferInstruction> TransferInstructionCid) : IDamlRecord
+public sealed record TransferInstructionResult_Output_TransferInstructionResult_Pending(
+    [property: DamlFieldAttribute("transferInstructionCid")] ContractId<ITransferInstruction> TransferInstructionCid
+) : IDamlRecord<TransferInstructionResult_Output_TransferInstructionResult_Pending>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

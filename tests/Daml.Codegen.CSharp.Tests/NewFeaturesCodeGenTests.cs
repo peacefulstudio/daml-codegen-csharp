@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -17,149 +17,72 @@ public class NewFeaturesCodeGenTests
 {
     #region Contract Keys Tests
 
-    [Fact]
-    public void Generate_should_implement_IHasKey_when_template_has_primitive_key()
-    {
-        // Arrange
-        var module = new DamlModule
+    private static DamlModule KeyedModule(string templateName, DamlType key, IReadOnlyList<DamlDataType>? extraDataTypes = null) =>
+        new()
         {
             Name = "Test.Module",
             Templates =
             [
                 new DamlTemplate
                 {
-                    Name = "AssetWithKey",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
+                    Name = templateName,
                     Choices = [],
-                    Key = new DamlPrimitiveType(DamlPrimitive.Text)
+                    Key = key
                 }
             ],
             DataTypes =
             [
                 new DamlDataType
                 {
-                    Name = "AssetWithKey",
-                    Definition = new DamlRecordDefinition(
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ])
-                }
-            ],
-            Interfaces = []
-        };
-
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
-
-        // Act
-        var files = generator.Generate(dar);
-        var assetFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("AssetWithKey.cs", StringComparison.Ordinal));
-
-        // Assert
-        assetFile.Should().NotBeNull();
-        var code = assetFile!.Content;
-
-        code.Should().Contain("IHasKey<string>");
-        // The Key accessor is a non-partial throwing stub until the DALF
-        // key-expression analysis lands. The template still
-        // declares `: IHasKey<string>`, but the body throws rather than deferring to a
-        // consumer-supplied partial (which broke the automated publish pipeline).
-        code.Should().Contain("public string Key =>");
-        code.Should().Contain("NotImplementedException");
-        code.Should().NotContain("public partial string Key { get; }");
-    }
-
-    [Fact]
-    public void Generate_should_implement_IHasKey_when_template_has_party_key()
-    {
-        // Arrange
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "UserProfile",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("user", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
-                    Choices = [],
-                    Key = new DamlPrimitiveType(DamlPrimitive.Party)
-                }
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "UserProfile",
-                    Definition = new DamlRecordDefinition(
-                    [
-                        new DamlFieldDefinition("user", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("name", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ])
-                }
-            ],
-            Interfaces = []
-        };
-
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
-
-        // Act
-        var files = generator.Generate(dar);
-        var profileFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("UserProfile.cs", StringComparison.Ordinal));
-
-        // Assert
-        profileFile.Should().NotBeNull();
-        var code = profileFile!.Content;
-
-        // Party maps to Party, so key should be Party
-        code.Should().Contain("IHasKey<Party>");
-        code.Should().Contain("public Party Key =>");
-        code.Should().Contain("NotImplementedException");
-        code.Should().NotContain("public partial Party Key { get; }");
-    }
-
-    [Fact]
-    public void Generate_should_implement_IHasKey_when_template_has_record_type_key()
-    {
-        // Arrange
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "CompositeKeyTemplate",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
-                    Choices = [],
-                    Key = new DamlTypeRef("", "Test.Module", "AssetKey")
-                }
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "CompositeKeyTemplate",
+                    Name = templateName,
                     Definition = new DamlRecordDefinition(
                     [
                         new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
                         new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 },
+                .. extraDataTypes ?? []
+            ],
+            Interfaces = []
+        };
+
+    private static string EmitKeyed(string templateName, DamlType key, IReadOnlyList<DamlDataType>? extraDataTypes = null)
+    {
+        var files = CreateGenerator().Generate(CreateTestDar(KeyedModule(templateName, key, extraDataTypes)));
+        var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith($"{templateName}.cs", StringComparison.Ordinal));
+        templateFile.Should().NotBeNull();
+        return templateFile!.Content;
+    }
+
+    [Fact]
+    public void Generate_should_put_a_primitive_key_on_the_active_contract()
+    {
+        var code = EmitKeyed("AssetWithKey", new DamlPrimitiveType(DamlPrimitive.Text));
+
+        code.Should().Contain("public sealed record Contract(ContractId Id, AssetWithKey Data)");
+
+        code.Should().Contain("public required ContractKey<string> Key { get; init; }");
+        code.Should().Contain("? new ContractKey<string>(contractKey.Value.As<DamlText>().Value, contractKey.KeyHash)");
+    }
+
+    [Fact]
+    public void Generate_should_put_a_party_key_on_the_active_contract()
+    {
+        var code = EmitKeyed("UserProfile", new DamlPrimitiveType(DamlPrimitive.Party));
+
+        code.Should().Contain("public sealed record Contract(ContractId Id, UserProfile Data)");
+
+        code.Should().Contain("public required ContractKey<Party> Key { get; init; }");
+        code.Should().Contain("? new ContractKey<Party>(Party.FromDamlValue(contractKey.Value.As<DamlParty>()), contractKey.KeyHash)");
+    }
+
+    [Fact]
+    public void Generate_should_put_a_record_key_on_the_active_contract()
+    {
+        var code = EmitKeyed(
+            "CompositeKeyTemplate",
+            new DamlTypeRef("", "Test.Module", "AssetKey"),
+            [
                 new DamlDataType
                 {
                     Name = "AssetKey",
@@ -169,87 +92,44 @@ public class NewFeaturesCodeGenTests
                         new DamlFieldDefinition("assetId", new DamlPrimitiveType(DamlPrimitive.Text))
                     ])
                 }
-            ],
-            Interfaces = []
-        };
+            ]);
 
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
+        code.Should().Contain("public sealed record Contract(ContractId Id, CompositeKeyTemplate Data)");
 
-        // Act
-        var files = generator.Generate(dar);
-        var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("CompositeKeyTemplate.cs", StringComparison.Ordinal));
-
-        // Assert
-        templateFile.Should().NotBeNull();
-        var code = templateFile!.Content;
-
-        code.Should().Contain("IHasKey<AssetKey>");
-        code.Should().Contain("public AssetKey Key =>");
-        code.Should().Contain("NotImplementedException");
-        code.Should().NotContain("public partial AssetKey Key { get; }");
+        code.Should().Contain("public required ContractKey<global::Test.Package.AssetKey> Key { get; init; }");
+        code.Should().Contain("? new ContractKey<global::Test.Package.AssetKey>(global::Test.Package.AssetKey.FromRecord(contractKey.Value.As<DamlRecord>()), contractKey.KeyHash)");
     }
 
     [Fact]
-    public void Generate_should_emit_valid_cref_when_key_type_contains_angle_brackets()
+    public void Generate_should_emit_no_unescaped_cref_when_the_key_type_contains_angle_brackets()
     {
-        // Pins the cref-escape transform on a key type whose mapped C# form
-        // contains generic angle brackets. `[Text]` (List Text) maps to
-        // `IReadOnlyList<string>`, and cref-attribute syntax requires the angle
-        // brackets be rendered as `{ }` — without the escape, the emitted XML
-        // doc reads `cref="...IHasKey<IReadOnlyList<string>>"/>` which is
-        // malformed XML and breaks consumer builds with
-        // <GenerateDocumentationFile>true</> + TreatWarningsAsErrors.
-        // The string-key test above doesn't exercise this path because `string`
-        // contains no angle brackets to escape.
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "ListKeyTemplate",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
-                    Choices = [],
-                    Key = new DamlTypeApp(
-                        new DamlPrimitiveType(DamlPrimitive.List),
-                        [new DamlPrimitiveType(DamlPrimitive.Text)]),
-                },
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "ListKeyTemplate",
-                    Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
-                },
-            ],
-            Interfaces = [],
-        };
+        var code = EmitKeyed(
+            "ListKeyTemplate",
+            new DamlTypeApp(
+                new DamlPrimitiveType(DamlPrimitive.List),
+                [new DamlPrimitiveType(DamlPrimitive.Text)]));
 
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
+        code.Should().Contain("public sealed record Contract(ContractId Id, ListKeyTemplate Data)");
 
-        var files = generator.Generate(dar);
-        var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("ListKeyTemplate.cs", StringComparison.Ordinal));
-
-        templateFile.Should().NotBeNull();
-        var code = templateFile!.Content;
-
-        code.Should().Contain("public IReadOnlyList<string> Key =>",
-            "the property signature uses real C# generic syntax");
-        code.Should().Contain(
-            "of type <c>IReadOnlyList{string}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
-            "the concrete key type is cref-escaped prose while the cref targets the open generic by its declared type-parameter name TKey, because cref braces accept a type-parameter identifier not a constructed type (embedding a constructed type there is CS1584/CS1658)");
+        code.Should().Contain("public required ContractKey<IReadOnlyList<string>> Key { get; init; }");
         code.Should().NotMatchRegex(@"cref=""[^""]*<[^""]*""",
-            "no unescaped angle bracket may appear inside any cref attribute");
+            "a cref must render angle brackets as {{ }}, or a consumer building with GenerateDocumentationFile and TreatWarningsAsErrors fails on malformed XML");
     }
 
     [Fact]
-    public void Generate_should_not_implement_IHasKey_when_template_has_no_key()
+    public void Generate_should_emit_no_instance_key_member_on_the_template_payload()
     {
-        // Arrange
+        var code = EmitKeyed("AssetWithKey", new DamlPrimitiveType(DamlPrimitive.Text));
+
+        var payload = code[..code.IndexOf("public sealed record ContractId(", StringComparison.Ordinal)];
+
+        payload.Should().NotMatchRegex(@"\bpublic\s+(?!static\b)[^;{=]+?\s+Key\b",
+            "the payload is what a caller constructs locally, so it cannot know the key of a contract it has not created yet");
+    }
+
+    [Fact]
+    public void Generate_should_leave_a_key_less_template_without_a_key_slot()
+    {
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -258,10 +138,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "NoKeyTemplate",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))
-                    ],
                     Choices = [],
                     Key = null
                 }
@@ -280,86 +156,15 @@ public class NewFeaturesCodeGenTests
             Interfaces = []
         };
 
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
-
-        // Act
-        var files = generator.Generate(dar);
+        var files = CreateGenerator().Generate(CreateTestDar(module));
         var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("NoKeyTemplate.cs", StringComparison.Ordinal));
 
-        // Assert
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
+        code.Should().Contain("public sealed record Contract(ContractId Id, NoKeyTemplate Data) :");
         code.Should().NotContain("IHasKey");
-        // Belt-and-braces: no Key emission of any shape for a key-less template.
-        // The `IHasKey` check is the load-bearing one; this catches a Key
-        // emission of ANY type form — generic (`IReadOnlyList<string>`),
-        // nullable (`string?`), qualified (`Foo.Bar`), or bare identifier —
-        // followed by the standalone `Key` token (so `IHasKey<...>` in the
-        // type declaration doesn't trip a false positive). The character class
-        // excludes `{`, `;`, `=` so the match can't span across the type
-        // declaration's own opening brace and into the property body.
-        code.Should().NotMatchRegex(@"\bpartial\s+[^;{=]+?\s+Key\b");
-    }
-
-    [Fact]
-    public void Generate_should_include_key_documentation()
-    {
-        // Arrange
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "DocumentedKey",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
-                    Choices = [],
-                    Key = new DamlPrimitiveType(DamlPrimitive.Text)
-                }
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "DocumentedKey",
-                    Definition = new DamlRecordDefinition(
-                    [
-                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ])
-                }
-            ],
-            Interfaces = []
-        };
-
-        var dar = CreateTestDar(module);
-        var generator = CreateGenerator();
-
-        // Act
-        var files = generator.Generate(dar);
-        var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("DocumentedKey.cs", StringComparison.Ordinal));
-
-        // Assert
-        templateFile.Should().NotBeNull();
-        var code = templateFile!.Content;
-
-        // Multi-line XML doc emitted by the throwing-Key shape. Assert on the
-        // doc-comment line itself (with the `///` prefix and the `<see cref>` to
-        // the closed-generic IHasKey<string>): a bare `Contain("IHasKey")` would
-        // pass from the type declaration `: IHasKey<string>` even if the doc
-        // breadcrumb were dropped. The cref uses cref-attribute syntax (`{string}`
-        // instead of `<string>`) so it survives <GenerateDocumentationFile> on
-        // consumer projects without a CS1574 warning.
-        code.Should().Contain(
-            "/// Gets the contract key of type <c>string</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{TKey}\"/>",
-            "the cref targets the open generic by its declared type-parameter name TKey while the concrete key type appears in prose, because a keyword/constructed type inside cref braces is CS1584/CS1658");
-        code.Should().Contain("Contract-key projection is not generated yet by daml-codegen-csharp",
-            "the throwing accessor's message is the consumer-facing signal explaining the un-projected key");
+        code.Should().NotContain("ContractKey");
     }
 
     #endregion
@@ -614,10 +419,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "UpgradedTemplate",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
                     Choices = []
                 }
             ],
@@ -662,10 +463,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "NormalTemplate",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
                     Choices = []
                 }
             ],
@@ -710,10 +507,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "DocumentedUpgrade",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
-                    ],
                     Choices = []
                 }
             ],
@@ -746,7 +539,7 @@ public class NewFeaturesCodeGenTests
     }
 
     [Fact]
-    public void Generate_should_implement_both_IHasKey_and_IUpgradeable_when_applicable()
+    public void Generate_should_carry_both_the_contract_key_and_IUpgradeable_when_applicable()
     {
         // Arrange
         var module = new DamlModule
@@ -757,11 +550,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "FullFeaturedTemplate",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("id", new DamlPrimitiveType(DamlPrimitive.Text)),
-                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Numeric))
-                    ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Text)
                 }
@@ -792,10 +580,10 @@ public class NewFeaturesCodeGenTests
         templateFile.Should().NotBeNull();
         var code = templateFile!.Content;
 
-        // Should have all three interfaces
         code.Should().Contain("ITemplate");
-        code.Should().Contain("IHasKey<string>");
         code.Should().Contain("IUpgradeable");
+        code.Should().Contain("public sealed record Contract(ContractId Id, FullFeaturedTemplate Data)");
+        code.Should().Contain("public required ContractKey<string> Key { get; init; }");
     }
 
     #endregion
@@ -814,11 +602,6 @@ public class NewFeaturesCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))
-                    ],
                     Choices = [],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party)
                 }
@@ -867,7 +650,8 @@ public class NewFeaturesCodeGenTests
         // Template should exist with key and upgrade support
         var assetFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         assetFile.Should().NotBeNull();
-        assetFile!.Content.Should().Contain("IHasKey<Party>");
+        assetFile!.Content.Should().Contain("public sealed record Contract(ContractId Id, Asset Data)");
+        assetFile!.Content.Should().Contain("public required ContractKey<Party> Key { get; init; }");
         assetFile.Content.Should().Contain("IUpgradeable");
 
         // Generic data type should exist

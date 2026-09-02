@@ -47,13 +47,14 @@ internal sealed class IndentWriter(StringBuilder sb)
         _atLineStart = false;
     }
 
-    // Emit LF explicitly rather than via `StringBuilder.AppendLine` (which uses
-    // `Environment.NewLine`). Generated source is published in NuGet packages
-    // and compared by `DriftDetectionTests` byte-for-byte; OS-dependent line
-    // endings would make a Windows codegen run produce different bytes from a
-    // macOS/Linux one for no behaviour change. LF is the conventional choice
-    // for cross-platform source distribution and matches what `.editorconfig`
-    // pins repo-wide.
+    /// <remarks>
+    /// Line endings are written explicitly rather than through <c>StringBuilder.AppendLine</c>,
+    /// which uses <see cref="Environment.NewLine"/>. Generated source ships in NuGet packages and
+    /// is compared byte for byte by the drift tests, so an OS-dependent newline would make a
+    /// Windows codegen run differ from a macOS or Linux one for no change in behaviour. LF is the
+    /// conventional choice for cross-platform source distribution and matches what
+    /// <c>.editorconfig</c> pins repo-wide.
+    /// </remarks>
     private const char Newline = '\n';
 
     public void AppendLine(string? line = null)

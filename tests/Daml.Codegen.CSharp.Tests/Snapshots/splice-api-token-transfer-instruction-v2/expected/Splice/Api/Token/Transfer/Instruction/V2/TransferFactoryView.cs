@@ -12,7 +12,10 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record TransferFactoryView
 /// </summary>
-public sealed record TransferFactoryView([property: DamlFieldAttribute("admin")] Party Admin, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record TransferFactoryView(
+    [property: DamlFieldAttribute("admin")] Party Admin,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : ITransferFactory, IDamlRecord<TransferFactoryView>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

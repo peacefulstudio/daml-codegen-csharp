@@ -29,7 +29,7 @@ public class CliErrorReportingTests : IDisposable
         Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName, "intermediate.binpb");
 
     [Fact]
-    public async Task failure_at_default_verbosity_also_logs_the_root_cause_when_it_differs_from_the_top_message()
+    public async Task CliErrorReporting_failure_at_default_verbosity_also_logs_the_root_cause_when_it_differs_from_the_top_message()
     {
         var corruptCounters = Path.Combine(_workspace, "release-counters.json");
         await File.WriteAllTextAsync(corruptCounters, "{not json", TestContext.Current.CancellationToken);
@@ -49,7 +49,7 @@ public class CliErrorReportingTests : IDisposable
     }
 
     [Fact]
-    public async Task cancellation_warns_that_partially_written_files_may_remain_in_the_output_directory()
+    public async Task CliErrorReporting_cancellation_warns_that_partially_written_files_may_remain_in_the_output_directory()
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -81,7 +81,7 @@ public class CliErrorReportingTests : IDisposable
     }
 
     [Fact]
-    public async Task invalid_version_suffix_is_rejected_at_the_cli_boundary_with_a_clean_error()
+    public async Task CliErrorReporting_invalid_version_suffix_is_rejected_at_the_cli_boundary_with_a_clean_error()
     {
         var (exit, stderr) = await RunCapturingStdErr(() => Program.Main(
         [

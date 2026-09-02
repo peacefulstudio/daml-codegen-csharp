@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -22,25 +22,26 @@ internal sealed class RecordSerializationEmitter(
     DamlTypeMapper mapper)
 {
     /// <summary>
-    /// Writes the comma-separated primary-constructor parameters for
-    /// <paramref name="fields"/> into <paramref name="indent"/>.
+    /// Writes the primary-constructor parameters for <paramref name="fields"/> into
+    /// <paramref name="indent"/>, one per line and indented one level, leaving the writer
+    /// at the start of the line that closes the parameter list. The caller has already
+    /// written the opening parenthesis and writes the closing one, so the closing
+    /// parenthesis and any base list land on their own line.
     /// </summary>
     internal void WriteRecordParameters(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
     {
-        var first = true;
-        foreach (var field in fields)
+        indent.AppendLine();
+        indent.Indent();
+        for (var i = 0; i < fields.Count; i++)
         {
-            if (!first)
-            {
-                indent.Append(", ");
-            }
-            first = false;
-
+            var field = fields[i];
             var csharpType = mapper.MapType(field.Type);
             var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-            StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
-            indent.Append($"[property: {DamlFieldAttributeSyntax(field.Name)}] {csharpType} {fieldName}");
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
+            var separator = i == fields.Count - 1 ? "" : ",";
+            indent.AppendLine($"[property: {DamlFieldAttributeSyntax(field.Name)}] {csharpType} {fieldName}{separator}");
         }
+        indent.Dedent();
     }
 
     /// <summary>
@@ -53,7 +54,7 @@ internal sealed class RecordSerializationEmitter(
         {
             var csharpType = mapper.MapType(field.Type);
             var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-            StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
 
             if (options.GenerateXmlDocs)
             {
@@ -98,7 +99,7 @@ internal sealed class RecordSerializationEmitter(
             var fieldName = MemberName(field.Name, indent.CurrentTypeName);
             var conversion = mapper.ToValue(field.Type, fieldName, delegates);
             var comma = i < fields.Count - 1 ? "," : "";
-            StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
 
             indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.DamlField, context.RootNamespace)}.Create(\"{field.Name}\", {conversion}){comma}");
         }
@@ -133,7 +134,7 @@ internal sealed class RecordSerializationEmitter(
 
         foreach (var field in fields)
         {
-            StdlibPackages.RequireForFieldType(resolver, indent, field.Type);
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
         }
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors)

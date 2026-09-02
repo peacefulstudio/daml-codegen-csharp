@@ -1,9 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Ledger.Abstractions;
 using Daml.Runtime;
 using Daml.Runtime.Commands;
@@ -51,7 +52,6 @@ public class NonContractChoiceUnitExerciserRoundTripTests
                 new DamlTemplate
                 {
                     Name = EntityName,
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -93,7 +93,7 @@ public class NonContractChoiceUnitExerciserRoundTripTests
             UseRecordTypes = true,
             UsePrimaryConstructors = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(new DarModel { MainPackage = package, Dependencies = [] });
 
         return EmitAssembly(files);
@@ -139,7 +139,7 @@ public class NonContractChoiceUnitExerciserRoundTripTests
                 "\n",
                 emit.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
-                    .Select(d => d.GetMessage() + " @ " + d.Location)));
+                    .Select(d => d.GetMessage(CultureInfo.InvariantCulture) + " @ " + d.Location)));
 
         stream.Seek(0, SeekOrigin.Begin);
         return Assembly.Load(stream.ToArray());
@@ -170,20 +170,30 @@ public class NonContractChoiceUnitExerciserRoundTripTests
 
     private static readonly Assembly WrapperAssembly = CompileWrapperAssembly();
 
-    private static async Task<ExerciseOutcome<Unit>> InvokeDoNothingAsync(ILedgerWriter client, string contractId)
+    private static MethodInfo DoNothingAsyncExerciser()
     {
-        var sinkType = WrapperAssembly.GetType($"{GeneratedNamespace}.{EntityName}", throwOnError: true)!;
         var extensionsType = WrapperAssembly.GetType(
             $"{GeneratedNamespace}.{EntityName}{NonContractExtensionsSuffix}", throwOnError: true)!;
-        var method = extensionsType.GetMethod($"{ChoiceName}Async", BindingFlags.Public | BindingFlags.Static)
-            ?? throw new InvalidOperationException($"{ChoiceName}Async not found on emitted extensions class");
+        return extensionsType
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m => m.Name == $"{ChoiceName}Async"
+                         && m.GetParameters().Any(p => p.ParameterType == typeof(SubmitterInfo)));
+    }
 
-        var contractIdType = typeof(ContractId<>).MakeGenericType(sinkType);
-        var typedContractId = Activator.CreateInstance(contractIdType, contractId);
+    private static object TypedContractId(string contractId)
+    {
+        var sinkType = WrapperAssembly.GetType($"{GeneratedNamespace}.{EntityName}", throwOnError: true)!;
+        return Activator.CreateInstance(typeof(ContractId<>).MakeGenericType(sinkType), contractId)!;
+    }
 
-        var task = (Task<ExerciseOutcome<Unit>>)method.Invoke(
+    private static async Task<ExerciseOutcome<Unit>> InvokeDoNothingAsync(
+        ILedgerWriter client,
+        string contractId,
+        SubmitterInfo submitter)
+    {
+        var task = (Task<ExerciseOutcome<Unit>>)DoNothingAsyncExerciser().Invoke(
             null,
-            [typedContractId, client, new Party("alice"), null, null, null, CancellationToken.None])!;
+            [TypedContractId(contractId), client, submitter, null, null, null, CancellationToken.None])!;
         return await task;
     }
 
@@ -196,10 +206,34 @@ public class NonContractChoiceUnitExerciserRoundTripTests
             .Returns(Task.FromResult<ExerciseOutcome<TransactionResult>>(
                 new ExerciseOutcome<TransactionResult>.One(TransactionWith(ExercisedDoNothing("contract-1")))));
 
-        var outcome = await InvokeDoNothingAsync(client, "contract-1");
+        SubmitterInfo singleParty = new Party("alice");
+
+        var outcome = await InvokeDoNothingAsync(client, "contract-1", singleParty);
 
         var one = outcome.Should().BeOfType<ExerciseOutcome<Unit>.One>().Subject;
         one.Result.Should().Be(Unit.Value);
+    }
+
+    [Fact]
+    public async Task DoNothingAsync_forwards_the_readAs_parties_of_an_explicit_submitter()
+    {
+        var client = Substitute.For<ILedgerWriter>();
+        client.TrySubmitAndWaitForTransactionAsync(
+                Arg.Any<CommandsSubmission>(), Arg.Any<SubmitterInfo>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ExerciseOutcome<TransactionResult>>(
+                new ExerciseOutcome<TransactionResult>.One(TransactionWith(ExercisedDoNothing("contract-1")))));
+
+        var submitter = new SubmitterInfo(
+            actAs: new HashSet<Party> { new("alice"), new("carol") },
+            readAs: new HashSet<Party> { new("bob") });
+
+        await InvokeDoNothingAsync(client, "contract-1", submitter);
+
+        await client.Received(1).TrySubmitAndWaitForTransactionAsync(
+            Arg.Any<CommandsSubmission>(),
+            Arg.Is<SubmitterInfo>(s => s.ReadAs.Contains(new Party("bob")) && s.ActAs.Count == 2),
+            Arg.Any<TimeSpan?>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -210,7 +244,7 @@ public class NonContractChoiceUnitExerciserRoundTripTests
     /// otherwise bind to the package-local enum instead (CS0117 on <c>.Value</c>).
     /// </summary>
     [Fact]
-    public void generated_wrapper_compiles_clean_when_the_package_declares_its_own_unit_enum()
+    public void NonContractChoiceUnitExerciserRoundTrip_generated_wrapper_compiles_clean_when_the_package_declares_its_own_unit_enum()
     {
         var module = new DamlModule
         {
@@ -220,7 +254,6 @@ public class NonContractChoiceUnitExerciserRoundTripTests
                 new DamlTemplate
                 {
                     Name = EntityName,
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -267,7 +300,7 @@ public class NonContractChoiceUnitExerciserRoundTripTests
             UseRecordTypes = true,
             UsePrimaryConstructors = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(new DarModel { MainPackage = package, Dependencies = [] });
 
         EmitAssembly(files);

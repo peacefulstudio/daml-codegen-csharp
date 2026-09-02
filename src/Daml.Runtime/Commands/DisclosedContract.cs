@@ -16,12 +16,27 @@ namespace Daml.Runtime.Commands;
 /// <param name="CreatedEventBlob">
 /// The raw <c>created_event_blob</c> bytes from the gRPC <c>CreatedEvent</c>,
 /// carried verbatim and opaque to this library — no encoding is imposed on callers.
+/// Copied into this record, which then owns its bytes.
 /// </param>
 public sealed record DisclosedContract(
     string ContractId,
     Identifier TemplateId,
     ReadOnlyMemory<byte> CreatedEventBlob)
 {
+    private readonly ReadOnlyMemory<byte> _createdEventBlob = CreatedEventBlob.ToArray();
+
+    /// <summary>
+    /// The raw <c>created_event_blob</c> bytes carried by this disclosed contract. Copied
+    /// at construction and on <c>init</c>, so a caller that retains the array it supplied
+    /// cannot change the disclosed payload, this value's equality, or its hash code after
+    /// the contract has been attached to a submission.
+    /// </summary>
+    public ReadOnlyMemory<byte> CreatedEventBlob
+    {
+        get => _createdEventBlob;
+        init => _createdEventBlob = value.ToArray();
+    }
+
     /// <summary>
     /// Compares <see cref="CreatedEventBlob"/> byte-for-byte, unlike the synthesized
     /// record equality, which compares only the memory segment's reference, offset,

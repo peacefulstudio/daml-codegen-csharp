@@ -3,9 +3,10 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 
 namespace Daml.Codegen.CSharp.Tests;
 
@@ -57,7 +58,6 @@ public class ChoiceEmitterNonContractExerciserTests
         new()
         {
             Name = "Vault",
-            Fields = [],
             Choices = choices,
             Signatories = DamlPartyAnalysis.Dynamic,
             Observers = DamlPartyAnalysis.Dynamic,
@@ -76,7 +76,7 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_emits_a_typed_async_exerciser_over_the_return_type()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_emits_a_typed_async_exerciser_over_the_return_type()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
@@ -86,7 +86,7 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_emits_an_exercised_events_projector()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_emits_an_exercised_events_projector()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
@@ -95,7 +95,7 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void unit_returning_choice_uses_the_stdlib_unit_decoder_path()
+    public void ChoiceEmitterNonContractExerciser_unit_returning_choice_uses_the_stdlib_unit_decoder_path()
     {
         var output = Emit(Template(Choice("Touch", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
@@ -104,7 +104,7 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void contract_id_returning_choice_is_not_handled_here()
+    public void ChoiceEmitterNonContractExerciser_contract_id_returning_choice_is_not_handled_here()
     {
         var cidReturn = new DamlTypeApp(
             new DamlPrimitiveType(DamlPrimitive.ContractId),
@@ -116,12 +116,12 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_exerciser_accepts_optional_command_id_override()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_exerciser_accepts_optional_command_id_override()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
         output.Should().Contain("CommandId? commandId = null,");
-        output.Should().Contain(".WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));");
+        output.Should().Contain(TrySubmitSingleArgumentOrder);
 
         var idxWorkflowId = output.IndexOf("string? workflowId = null,", StringComparison.Ordinal);
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
@@ -131,12 +131,12 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_exerciser_forwards_optional_timeout()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_exerciser_forwards_optional_timeout()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
         output.Should().Contain("TimeSpan? timeout = null,");
-        output.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken)");
+        output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
         var idxCommandId = output.IndexOf("CommandId? commandId = null,", StringComparison.Ordinal);
         var idxTimeout = output.IndexOf("TimeSpan? timeout = null,", StringComparison.Ordinal);
@@ -146,7 +146,7 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_emits_a_command_builder_that_returns_an_exercise_command()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_emits_a_command_builder_that_returns_an_exercise_command()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
@@ -156,12 +156,12 @@ public class ChoiceEmitterNonContractExerciserTests
     }
 
     [Fact]
-    public void value_returning_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
+    public void ChoiceEmitterNonContractExerciser_value_returning_choice_async_method_delegates_to_the_command_builder_instead_of_building_inline()
     {
         var output = Emit(Template(Choice("Quote", new DamlPrimitiveType(DamlPrimitive.Numeric))));
 
         output.Should().Contain("var command = contractId.QuoteCommand();");
-        output.Should().Contain("var submission = CommandsSubmission.Single(command)");
+        output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
         const string inlineConstructionMarker = "var command = new ExerciseCommand(";
         output.Should().NotContain(inlineConstructionMarker);

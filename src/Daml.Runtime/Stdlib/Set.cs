@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 
 namespace Daml.Runtime.Stdlib;
@@ -28,9 +29,18 @@ namespace Daml.Runtime.Stdlib;
 [System.Diagnostics.CodeAnalysis.SuppressMessage(
     "Naming", "CA1716:Identifiers should not match keywords",
     Justification = "Matches the Daml stdlib type name DA.Set.Types.Set so the codegen-emitted type name resolves directly. Renaming would force the codegen to learn an additional translation.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1000:Do not declare static members on generic types",
+    Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Set<...>.FromRecord, mirroring the Daml constructor it decodes.")]
 public sealed record Set<T>
+    where T : notnull
 {
-    /// <summary>The set's elements, deduplicated under default CLR equality.</summary>
+    /// <summary>
+    /// The set's elements, deduplicated under default CLR equality. Materialized at
+    /// construction, so a producer that retains the collection it supplied cannot change
+    /// this value's equality or hash code afterwards.
+    /// </summary>
     public IReadOnlySet<T> Elements { get; }
 
     /// <summary>
@@ -41,8 +51,7 @@ public sealed record Set<T>
     /// </summary>
     public Set(IEnumerable<T> elements)
     {
-        ArgumentNullException.ThrowIfNull(elements);
-        Elements = elements as IReadOnlySet<T> ?? elements.ToHashSet();
+        Elements = EventCollections.Copy(elements, nameof(elements));
     }
 
     /// <summary>The number of elements in the set.</summary>
@@ -87,5 +96,25 @@ public sealed record Set<T>
         var map = record.GetRequiredField("map").As<DamlGenMap>();
         var elements = map.Entries.Select(entry => convertElement(entry.Key));
         return new Set<T>(elements);
+    }
+
+    /// <summary>
+    /// Compares two sets by element content, independent of iteration order. The
+    /// record-synthesized equality compares the backing <see cref="IReadOnlySet{T}"/>
+    /// by reference — a footgun for a value type — so we override it with structural
+    /// comparison.
+    /// </summary>
+    public bool Equals(Set<T>? other) =>
+        other is not null && Elements.SetEquals(other.Elements);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = 0;
+        foreach (var element in Elements)
+        {
+            hash ^= EqualityComparer<T>.Default.GetHashCode(element);
+        }
+        return hash;
     }
 }

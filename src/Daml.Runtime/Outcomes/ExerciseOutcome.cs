@@ -94,6 +94,12 @@ public abstract record ExerciseOutcome<T>
     /// <c>(int)Grpc.Core.StatusCode</c>; consumers that want the typed enum cast back. Held as
     /// <c>int</c> so this type stays free of any transport-library dep.</param>
     /// <param name="Message">Status detail / message from the participant or transport.</param>
+    /// <param name="Category">Classification of the transport failure when the transport could determine
+    /// one without a structured Canton error attached; <c>null</c> when the failure was not classified.</param>
     /// <param name="SourceException">Transport exception that caused the infrastructure failure, when available.</param>
-    public sealed record InfraError(int StatusCode, string Message, Exception? SourceException = null) : ExerciseOutcome<T>;
+    public sealed record InfraError(
+        int StatusCode,
+        string Message,
+        DamlErrorCategory? Category = null,
+        Exception? SourceException = null) : ExerciseOutcome<T>;
 }

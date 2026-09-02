@@ -12,7 +12,14 @@ namespace Splice.Api.Token.Allocation.V2;
 /// <summary>
 /// Generated from Daml record TransferLeg
 /// </summary>
-public sealed record TransferLeg([property: DamlFieldAttribute("transferLegId")] string TransferLegId, [property: DamlFieldAttribute("sender")] Splice.Api.Token.Holding.V2.Account Sender, [property: DamlFieldAttribute("receiver")] Splice.Api.Token.Holding.V2.Account Receiver, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("instrumentId")] string InstrumentId, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record TransferLeg(
+    [property: DamlFieldAttribute("transferLegId")] string TransferLegId,
+    [property: DamlFieldAttribute("sender")] Splice.Api.Token.Holding.V2.Account Sender,
+    [property: DamlFieldAttribute("receiver")] Splice.Api.Token.Holding.V2.Account Receiver,
+    [property: DamlFieldAttribute("amount")] decimal Amount,
+    [property: DamlFieldAttribute("instrumentId")] string InstrumentId,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<TransferLeg>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -24,7 +25,6 @@ public class EmittedRecordReferenceCompilesTests
                 new DamlTemplate
                 {
                     Name = "MergeDelegation",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -83,7 +83,7 @@ public class EmittedRecordReferenceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a sibling record referencing a same-package nested choice-arg type must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -97,7 +97,6 @@ public class EmittedRecordReferenceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -153,7 +152,7 @@ public class EmittedRecordReferenceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a nested choice-arg record whose field PascalCases to the choice (and thus the nested record) name would be CS0542 unless disambiguated, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -201,7 +200,7 @@ public class EmittedRecordReferenceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record field whose type is a variant must serialize via the variant's ToVariant/FromVariant, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -227,9 +226,9 @@ public class EmittedRecordReferenceCompilesTests
             DependencyReferences = [],
         };
         var resolver = new DarCrossPackageResolver(
-            new DarModel { MainPackage = package, Dependencies = [] }, new ConsoleLogger(0));
+            new DarModel { MainPackage = package, Dependencies = [] });
 
-        StdlibPackages.RequireForFieldType(resolver, indent, nestedAppCarryingContractId);
+        StdlibPackages.RequireForFieldType(resolver, package, indent, nestedAppCarryingContractId);
 
         indent.RequiredUsings.Should().Contain(
             "Daml.Runtime.Contracts",
@@ -278,7 +277,6 @@ public class EmittedRecordReferenceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -317,6 +315,6 @@ public class EmittedRecordReferenceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record field typed as a parametric stdlib type wrapping ContractId<T> must compile (the file needs `using Daml.Runtime.Contracts;`), but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

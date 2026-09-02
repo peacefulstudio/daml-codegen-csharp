@@ -1,7 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 
 namespace Daml.Codegen.CSharp.CodeGen;
@@ -9,10 +11,11 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <summary>
 /// Emits the C# for a Daml template: the sealed template record with its
 /// <see cref="Daml.Runtime.Contracts.ITemplate"/> facet (plus the optional
-/// <see cref="Daml.Runtime.Contracts.IHasKey{TKey}"/> and <c>IUpgradeable</c>
-/// facets, plus one <c>IImplements</c> per implemented interface), the static
-/// template metadata, the throwing
-/// contract-key accessor, the nested <c>ContractId</c> / <c>Contract</c> records,
+/// <c>IUpgradeable</c> facet, plus one <c>IImplements</c> per implemented
+/// interface, plus <c>IHasKey</c> and its static <c>Key</c> witness when the
+/// template declares a contract key), the static template metadata, the nested <c>ContractId</c> /
+/// <c>Contract</c> records — the latter carrying the contract key read off the
+/// created event when the template declares one —
 /// and the namespace-level choice / submission extension surface. The
 /// field-bearing serialization surface (constructor parameters, properties,
 /// <c>ToRecord</c> / <c>FromRecord</c>) is delegated to the shared
@@ -22,22 +25,34 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// instances the sibling emitters use, so record, template, and choice output stay
 /// byte-identical. Constructed once per package over the package's
 /// <see cref="PackageEmitContext"/>, the DAR-scoped <see cref="ICrossPackageResolver"/>,
-/// the package's <see cref="DamlTypeMapper"/>, those three composed emitters, and the
-/// shared <see cref="CodeGenOptions"/>. The caller owns the file scaffold and the
+/// those three composed emitters, and the shared <see cref="CodeGenOptions"/>. The
+/// contract-key slot is mapped through its own <see cref="DamlTypeMapper"/> over a
+/// <see cref="PackageQualifiedResolver"/>, so it does not share the sibling emitters'
+/// unqualified names. The caller owns the file scaffold and the
 /// common usings; this emitter writes the template body into the provided
 /// <see cref="IndentWriter"/>.
 /// </summary>
-internal sealed class TemplateEmitter(
+internal sealed partial class TemplateEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
-    DamlTypeMapper mapper,
     RecordSerializationEmitter recordSerialization,
     ChoiceEmitter choiceEmitter,
     SubmissionExtensionsEmitter submissionExtensions,
-    CodeGenOptions options)
+    CodeGenOptions options,
+    ILogger? logger = null)
 {
+    private const string NestedContractIdTypeName = "ContractId";
+    private const string NestedContractTypeName = "Contract";
+    private const string KeyMemberName = "Key";
+    private const string KeyEncoderMemberName = "KeyEncoder";
+    private const string KeyEncoderParameterName = "key";
+    private const string KeyDecoderMemberName = "KeyDecoder";
+    private const string KeyDecoderParameterName = "value";
+
+    private readonly ILogger _log = logger ?? NullLogger.Instance;
+
     /// <summary>
-    /// Writes the template record, its static metadata, the optional key accessor,
+    /// Writes the template record, its static metadata,
     /// the serialization round-trip, the nested <c>ContractId</c> / <c>Contract</c>
     /// records, and the sibling choice / submission extension classes for
     /// <paramref name="template"/> into <paramref name="indent"/>.
@@ -60,16 +75,26 @@ internal sealed class TemplateEmitter(
         }
 
         var className = EmitterHelpers.SanitizeIdentifier(template.Name);
+        if (className is NestedContractIdTypeName or NestedContractTypeName)
+        {
+            throw new CodegenException(
+                $"Daml template {module.Name}:{template.Name} maps to the C# type '{className}', which is also the name of a record this emitter nests inside it. "
+                + "A nested type may not share the name of its enclosing type (CS0542), so the generated code would not compile. "
+                + "Rename the template in the Daml model.");
+        }
+
         indent.CurrentTypeName = className;
 
-        var keyType = template.Key is not null ? mapper.MapType(template.Key) : null;
+        var keyWitness = DescribeKeyWitness(className, template.Key, fields);
+
         var interfacesList = new List<string> { context.Qualifier.Qualify(RuntimeTypeNames.ITemplate, context.RootNamespace) };
-        if (keyType is not null)
-            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey, context.RootNamespace)}<{keyType}>");
         if (package.UpgradedPackageId is not null)
             interfacesList.Add(context.Qualifier.Qualify(RuntimeTypeNames.IUpgradeable, context.RootNamespace));
         foreach (var implemented in template.Implements)
             interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IImplements, context.RootNamespace)}<{resolver.Resolve(implemented, context)}>");
+        if (keyWitness is not null)
+            interfacesList.Add(keyWitness.FacetType);
+        interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}<{className}>");
         var interfaces = string.Join(", ", interfacesList);
 
         if (options.UseRecordTypes && options.UsePrimaryConstructors && fields.Count > 0)
@@ -92,9 +117,9 @@ internal sealed class TemplateEmitter(
 
         WriteTemplateMetadata(indent, package, module, template);
 
-        if (template.Key is not null)
+        if (keyWitness is not null)
         {
-            WriteKeyProperty(indent, template.Key);
+            WriteKeyWitness(indent, module, template, keyWitness);
         }
 
         if (!options.UsePrimaryConstructors || !options.UseRecordTypes)
@@ -107,8 +132,10 @@ internal sealed class TemplateEmitter(
 
         choiceEmitter.WriteChoiceDescriptors(indent, template);
 
+        choiceEmitter.WriteChoiceByKeyCommandBuilders(indent, template, className, dataTypes);
+
         WriteContractIdClass(indent, className);
-        WriteContractClass(indent, className);
+        WriteContractClass(indent, className, template.Key);
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -215,39 +242,99 @@ internal sealed class TemplateEmitter(
         }
     }
 
-    private static string ToCrefTypeArgument(string csharpType) =>
-        csharpType
-            .Replace("global::", string.Empty, StringComparison.Ordinal)
-            .Replace('<', '{')
-            .Replace('>', '}');
+    /// <summary>
+    /// The resolved pieces of a keyed template's <c>IHasKey</c> facet: the facet named in the
+    /// base list, the descriptor type the witness is declared as, the encode expression over a
+    /// lambda parameter named <c>key</c>, the decode expression over a lambda parameter named
+    /// <c>value</c>, and whichever declaration already takes the C# member name <c>Key</c> on
+    /// the template record.
+    /// </summary>
+    private sealed record KeyWitness(
+        string FacetType,
+        string DescriptorType,
+        string Encoder,
+        string Decoder,
+        bool TemplateNameTakesTheMemberName,
+        string? FieldTakingTheMemberName)
+    {
+        public bool MemberNameIsTaken =>
+            TemplateNameTakesTheMemberName || FieldTakingTheMemberName is not null;
+    }
 
-    private void WriteKeyProperty(IndentWriter indent, DamlType keyType)
+    private KeyWitness? DescribeKeyWitness(
+        string className,
+        DamlType? keyType,
+        IReadOnlyList<DamlFieldDefinition> fields)
+    {
+        if (keyType is null)
+        {
+            return null;
+        }
+
+        var typeArguments = $"<{className}, {PackageQualifiedMapper.MapType(keyType)}>";
+        var fieldTakingTheMemberName = fields.FirstOrDefault(
+            field => Identifiers.MemberName(field.Name, className) == KeyMemberName);
+
+        return new KeyWitness(
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey, context.RootNamespace)}{typeArguments}",
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.KeyDescriptor, context.RootNamespace)}{typeArguments}",
+            PackageQualifiedMapper.ToValue(keyType, KeyEncoderParameterName),
+            PackageQualifiedMapper.FromValue(keyType, KeyDecoderParameterName),
+            className == KeyMemberName,
+            fieldTakingTheMemberName?.Name);
+    }
+
+    /// <summary>
+    /// Writes the keyed template's static <c>Key</c> witness. When the member name is already
+    /// taken — by a payload field mapping to it (CS0102), or by the template record itself
+    /// being named <c>Key</c> (CS0542) — only the explicit interface implementation is written.
+    /// It declares no member name of its own, so the facet stays reachable through a generic
+    /// constraint while the template keeps the name it had.
+    /// </summary>
+    private void WriteKeyWitness(
+        IndentWriter indent,
+        DamlModule module,
+        DamlTemplate template,
+        KeyWitness witness)
     {
         indent.Require(RuntimeNamespaces.Contracts);
-        StdlibPackages.RequireForFieldType(resolver, indent, keyType);
-        var csharpKeyType = mapper.MapType(keyType);
-        var crefKeyType = ToCrefTypeArgument(csharpKeyType);
+        StdlibPackages.RequireForFieldType(resolver, context.Package, indent, template.Key!);
 
-        // Translating the template's `key` Daml expression to a C# projection is
-        // not yet implemented; the intermediate model carries only the key type, not
-        // the expression. Until that projection (or an upstream Daml-LF projection)
-        // lands, the accessor throws. This deliberately reverts the earlier
-        // partial-property contract: its CS9248 compile gate blocked the automated
-        // DAR publish pipeline, which has no human to supply an implementing partial.
+        if (witness.MemberNameIsTaken)
+        {
+            if (witness.FieldTakingTheMemberName is { } fieldName)
+            {
+                LogKeyFieldTakesTheWitnessName(_log, module.Name, template.Name, fieldName);
+            }
+            else
+            {
+                LogTemplateNameTakesTheWitnessName(_log, module.Name, template.Name);
+            }
+
+            indent.AppendLine($"static {witness.DescriptorType} {witness.FacetType}.{KeyMemberName} {{ get; }} =");
+            WriteKeyWitnessInitializer(indent, witness);
+            return;
+        }
+
         if (options.GenerateXmlDocs)
         {
-            indent.AppendLine("/// <summary>");
-            indent.AppendLine($"/// Gets the contract key of type <c>{crefKeyType}</c>, satisfying <see cref=\"global::Daml.Runtime.Contracts.IHasKey{{TKey}}\"/>.");
-            indent.AppendLine("/// </summary>");
-            indent.AppendLine("/// <remarks>");
-            indent.AppendLine("/// Throws <see cref=\"global::System.NotImplementedException\"/>: the codegen does not");
-            indent.AppendLine("/// yet translate the template's <c>key</c> expression into a C# projection.");
-            indent.AppendLine("/// The key type is fully generated and serializable — construct a key value");
-            indent.AppendLine("/// explicitly for key-based ledger operations rather than reading it here.");
-            indent.AppendLine("/// </remarks>");
+            indent.AppendLine("/// <summary>Gets the witness pairing this template with its contract key type and carrying the key codec; passing it to a generic method infers both type parameters from one argument.</summary>");
         }
-        indent.AppendLine($"public {csharpKeyType} Key => throw new global::System.NotImplementedException(");
-        indent.AppendLine($"    \"Contract-key projection is not generated yet by daml-codegen-csharp; construct the {csharpKeyType} key value explicitly for key-based ledger operations.\");");
+        indent.AppendLine($"public static {witness.DescriptorType} {KeyMemberName} {{ get; }} =");
+        WriteKeyWitnessInitializer(indent, witness);
+    }
+
+    private static void WriteKeyWitnessInitializer(IndentWriter indent, KeyWitness witness)
+    {
+        indent.Indent();
+        indent.AppendLine("new()");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine($"{KeyEncoderMemberName} = {KeyEncoderParameterName} => {witness.Encoder},");
+        indent.AppendLine($"{KeyDecoderMemberName} = {KeyDecoderParameterName} => {witness.Decoder},");
+        indent.Dedent();
+        indent.AppendLine("};");
+        indent.Dedent();
         indent.AppendLine();
     }
 
@@ -257,7 +344,8 @@ internal sealed class TemplateEmitter(
         indent.Require(RuntimeNamespaces.Contracts);
         if (options.GenerateXmlDocs)
             indent.AppendLine($"/// <summary>Contract ID for {className}.</summary>");
-        indent.AppendLine($"public sealed record ContractId(string Value) : {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}>(Value), {context.Qualifier.Qualify(RuntimeTypeNames.IExercises, context.RootNamespace)}<{className}>");
+        indent.AppendLine("[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]");
+        indent.AppendLine($"public sealed record {NestedContractIdTypeName}(string Value) : {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}>(Value), {context.Qualifier.Qualify(RuntimeTypeNames.IExercises, context.RootNamespace)}<{className}>");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -268,23 +356,95 @@ internal sealed class TemplateEmitter(
         indent.AppendLine();
     }
 
-    private void WriteContractClass(IndentWriter indent, string className)
+    private void WriteContractClass(IndentWriter indent, string className, DamlType? keyType)
     {
         indent.Require(RuntimeNamespaces.Contracts);
+        if (keyType is not null)
+        {
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, keyType);
+        }
+
+        var contractKeyType = keyType is null
+            ? null
+            : $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractKey, context.RootNamespace)}<{PackageQualifiedMapper.MapType(keyType)}>";
+
         if (options.GenerateXmlDocs)
             indent.AppendLine($"/// <summary>Active contract for {className}.</summary>");
-        indent.AppendLine($"public sealed record Contract(ContractId Id, {className} Data) : {context.Qualifier.Qualify(RuntimeTypeNames.IContract, context.RootNamespace)}<ContractId, {className}>");
+        indent.AppendLine($"public sealed record {NestedContractTypeName}({NestedContractIdTypeName} Id, {className} Data) : {context.Qualifier.Qualify(RuntimeTypeNames.IContract, context.RootNamespace)}<{NestedContractIdTypeName}, {className}>");
         indent.AppendLine("{");
         indent.Indent();
 
+        if (contractKeyType is not null)
+        {
+            if (options.GenerateXmlDocs)
+                indent.AppendLine("/// <summary>The contract key read off the created event, decoded and paired with the ledger's hash of it.</summary>");
+            indent.AppendLine($"public required {contractKeyType} Key {{ get; init; }}");
+            indent.AppendLine();
+        }
+
         if (options.GenerateXmlDocs)
-            indent.AppendLine("/// <summary>Creates a Contract from a CreatedEvent.</summary>");
-        indent.AppendLine($"public static Contract FromCreatedEvent({context.Qualifier.Qualify(RuntimeTypeNames.CreatedEvent, context.RootNamespace)} @event) =>");
+            indent.AppendLine($"/// <summary>Creates a {NestedContractTypeName} from a CreatedEvent.</summary>");
+        indent.AppendLine($"public static {NestedContractTypeName} FromCreatedEvent({context.Qualifier.Qualify(RuntimeTypeNames.CreatedEvent, context.RootNamespace)} @event) =>");
         indent.Indent();
-        indent.AppendLine($"new(new ContractId(@event.ContractId), {className}.FromRecord(@event.CreateArguments));");
+        if (keyType is null)
+        {
+            indent.AppendLine($"new(new {NestedContractIdTypeName}(@event.ContractId), {QualifyInPackage(className)}.FromRecord(@event.CreateArguments));");
+        }
+        else
+        {
+            indent.AppendLine("new(");
+            indent.Indent();
+            indent.AppendLine($"new {NestedContractIdTypeName}(@event.ContractId),");
+            indent.AppendLine($"{QualifyInPackage(className)}.FromRecord(@event.CreateArguments))");
+            indent.Dedent();
+            indent.AppendLine("{");
+            indent.Indent();
+            indent.AppendLine($"Key = @event.ContractKey is {{ }} contractKey");
+            indent.Indent();
+            indent.AppendLine($"? new {contractKeyType}({PackageQualifiedMapper.FromValue(keyType, "contractKey.Value")}, contractKey.KeyHash)");
+            indent.AppendLine($": throw new global::System.InvalidOperationException(\"The created event for contract '\" + @event.ContractId + \"' of keyed template {className} carried no contract key, so the contract key cannot be populated.\"),");
+            indent.Dedent();
+            indent.Dedent();
+            indent.AppendLine("};");
+        }
         indent.Dedent();
 
         indent.Dedent();
         indent.AppendLine("}");
     }
+
+    /// <summary>
+    /// Maps the contract-key slot and its decoder. The active contract nests <c>Contract</c>
+    /// and <c>ContractId</c> records and declares <c>Id</c> / <c>Data</c> / <c>Key</c>
+    /// members, any of which binds ahead of a package type the key names, so every in-package
+    /// name in the key slot is resolved <c>global::</c>-qualified.
+    /// </summary>
+    private DamlTypeMapper PackageQualifiedMapper =>
+        _packageQualifiedMapper ??= new DamlTypeMapper(context, new PackageQualifiedResolver(resolver));
+
+    private DamlTypeMapper? _packageQualifiedMapper;
+
+    /// <summary>
+    /// Prefixes a bare in-package type name with its <c>global::</c>-qualified namespace,
+    /// so the <c>Id</c> / <c>Data</c> / <c>Key</c> properties of the active contract cannot
+    /// shadow a type a decoder names. A name that already carries a dot was emitted with its
+    /// own qualifier by the cross-package resolver and is left alone. Mirrors the same guard
+    /// the choice-result projector applies for the same reason.
+    /// </summary>
+    private string QualifyInPackage(string typeName) =>
+        typeName.Contains('.', StringComparison.Ordinal)
+            ? typeName
+            : $"global::{context.RootNamespace}.{typeName}";
+
+    [LoggerMessage(
+        EventId = 1300,
+        Level = LogLevel.Warning,
+        Message = "Template {ModuleName}:{TemplateName} has a field {FieldName} whose C# member is named Key, so the contract-key witness is emitted as an explicit IHasKey implementation only. Reach it through a generic constraint on IHasKey, not through the template type directly.")]
+    private static partial void LogKeyFieldTakesTheWitnessName(ILogger logger, string moduleName, string templateName, string fieldName);
+
+    [LoggerMessage(
+        EventId = 1301,
+        Level = LogLevel.Warning,
+        Message = "Template {ModuleName}:{TemplateName} maps to a C# type named Key, which a member may not share, so the contract-key witness is emitted as an explicit IHasKey implementation only. Reach it through a generic constraint on IHasKey, not through the template type directly.")]
+    private static partial void LogTemplateNameTakesTheWitnessName(ILogger logger, string moduleName, string templateName);
 }

@@ -14,7 +14,10 @@ namespace Splice.Api.Token.Allocation.Request.V2;
 /// <summary>
 /// Generated from Daml record AllocationRequest_Withdraw
 /// </summary>
-public sealed record AllocationRequest_Withdraw([property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs) : IDamlRecord
+public sealed record AllocationRequest_Withdraw(
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs
+) : IDamlRecord<AllocationRequest_Withdraw>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

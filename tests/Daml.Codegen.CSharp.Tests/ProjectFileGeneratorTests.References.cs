@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using System.Reflection;
 using AwesomeAssertions;
 using Xunit;
@@ -12,7 +12,120 @@ namespace Daml.Codegen.CSharp.Tests;
 public partial class ProjectFileGeneratorTests
 {
     [Fact]
-    public void GenerateProjectFile_should_apply_emitter_counter_and_suffix_to_sibling_references()
+    public void GenerateProjectFile_floats_dependency_generation_and_prerelease_when_no_release_coordinates_are_supplied()
+    {
+        var options = CreateOptions();
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "dep-id-1",
+                Name = "my-dependency",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            }
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences);
+
+        file.Content.Should().NotContain(
+            "<PackageReference Include=\"My.Dependency\" Version=\"1.0.0.0\" />",
+            "the 4th segment is a codegen-generation ordinal and the prerelease tag is a release-time decision, both facts about how the dependency was published and neither recoverable from the DAR, so pinning a dependency to generation 0 with no suffix names a version nobody published and fails restore with NU1103");
+        file.Content.Should().Contain(
+            "<PackageReference Include=\"My.Dependency\" Version=\"1.0.0.*-*\" />",
+            "the DAR supplies only the intrinsic Major.Minor.Patch, so a run that is not itself producing the dependency must float over every generation and prerelease tag published for that intrinsic version");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_still_floats_dependencies_when_a_version_suffix_stamps_this_package_only()
+    {
+        var options = CreateOptions(versionSuffix: "preview.1");
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "dep-id-1",
+                Name = "my-dependency",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                Modules = [],
+                DependencyReferences = []
+            }
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences);
+
+        file.Content.Should().Contain(
+            "<PackageReference Include=\"My.Dependency\" Version=\"1.0.0.*-*\" />",
+            "a prerelease suffix stamps the version this run produces for its own package and says nothing about how the dependency was published, so it must not be projected onto the dependency reference");
+        file.Content.Should().Contain(
+            "<Version>1.0.0.0-preview.1</Version>",
+            "the suffix still applies to the package this run does produce");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_pins_sibling_references_at_generation_zero_when_the_run_publishes_them()
+    {
+        var options = new CodeGenOptions
+        {
+            TargetFramework = "net10.0",
+            GenerateProjectFile = true,
+            PublishesReferencedPackages = true,
+        };
+        var generator = new ProjectFileGenerator(options);
+        var package = new DamlPackage
+        {
+            PackageId = "test-id",
+            Name = "my-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = []
+        };
+        var externalReferences = new List<DamlPackage>
+        {
+            new()
+            {
+                PackageId = "dep-id-1",
+                Name = "my-dependency",
+                Version = new Version(1, 0, 0),
+                LfVersion = "2.1",
+                DependencyReferences = [],
+                Modules = []
+            }
+        };
+
+        var file = generator.GenerateProjectFile(package, externalReferences);
+
+        file.Content.Should().Contain(
+            "<PackageReference Include=\"My.Dependency\" Version=\"1.0.0.0\" />",
+            "an empty release-counter store mints generation ordinal 0, so a genuine first release of a family co-produces siblings at .0 and must pin them there — the ordinal's value cannot stand in for whether the run publishes its dependencies");
+    }
+
+    [Fact]
+    public void GenerateProjectFile_applies_emitter_counter_and_suffix_to_sibling_references()
     {
         var options = new CodeGenOptions
         {
@@ -21,6 +134,7 @@ public partial class ProjectFileGeneratorTests
             RuntimePackageVersion = "1.2.3",
             EmitterCounter = 5,
             VersionSuffix = "preview.2",
+            PublishesReferencedPackages = true,
         };
         var generator = new ProjectFileGenerator(options);
         var package = new DamlPackage
@@ -146,7 +260,7 @@ public partial class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"My.Dependency\" Version=\"2.0.0.*-*\" />");
     }
 
     [Fact]
@@ -178,7 +292,7 @@ public partial class ProjectFileGeneratorTests
 
         var file = generator.GenerateProjectFile(package, externalReferences);
 
-        file.Content.Should().Contain("<PackageReference Include=\"No.Package.Metadata\" Version=\"0.0.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"No.Package.Metadata\" Version=\"0.0.0.*-*\" />");
         file.Content.Should().NotContain("Include=\".No.Package.Metadata");
     }
 
@@ -243,8 +357,8 @@ public partial class ProjectFileGeneratorTests
         var file = generator.GenerateProjectFile(package, externalReferences);
 
         // Assert
-        file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0.0\" />");
-        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0.0\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Another.Known.Dep\" Version=\"3.0.0.*-*\" />");
+        file.Content.Should().Contain("<PackageReference Include=\"Known.Dep\" Version=\"2.0.0.*-*\" />");
     }
 
     [Fact]

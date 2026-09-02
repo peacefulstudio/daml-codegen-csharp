@@ -79,6 +79,58 @@ public class DamlValueStructuralEqualityTests
     }
 
     [Fact]
+    public void DamlRecord_stays_findable_in_a_set_after_the_producer_mutates_its_field_list()
+    {
+        var fields = new List<DamlField> { DamlField.Create("amount", new DamlNumeric(100.5m)) };
+        var record = new DamlRecord(null, fields);
+        var set = new HashSet<DamlRecord> { record };
+        var hashBefore = record.GetHashCode();
+
+        fields.Add(DamlField.Create("issuer", new DamlParty("Alice::1220abcd")));
+
+        set.Should().Contain(record);
+        record.GetHashCode().Should().Be(hashBefore);
+        record.Fields.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void DamlRecord_stays_usable_as_a_DamlGenMap_key_after_the_producer_mutates_its_field_list()
+    {
+        var fields = new List<DamlField> { DamlField.Create("id", new DamlText("k")) };
+        var key = new DamlRecord(null, fields);
+        var map = DamlGenMap.Create((key, new DamlInt64(1)));
+        var set = new HashSet<DamlGenMap> { map };
+        var hashBefore = map.GetHashCode();
+
+        fields.Add(DamlField.Create("extra", new DamlInt64(9)));
+
+        set.Should().Contain(map);
+        map.GetHashCode().Should().Be(hashBefore);
+        map.Entries[0].Key.Should().Be(DamlRecord.Create(DamlField.Create("id", new DamlText("k"))));
+    }
+
+    [Fact]
+    public void DamlRecord_copies_fields_supplied_through_a_with_expression()
+    {
+        var fields = new List<DamlField> { DamlField.Create("amount", new DamlNumeric(100.5m)) };
+        var record = SampleRecord() with { Fields = fields };
+        var hashBefore = record.GetHashCode();
+
+        fields.Add(DamlField.Create("issuer", new DamlParty("Alice::1220abcd")));
+
+        record.Fields.Should().ContainSingle();
+        record.GetHashCode().Should().Be(hashBefore);
+    }
+
+    [Fact]
+    public void DamlRecord_rejects_a_null_field_list_at_the_producer()
+    {
+        Action act = () => _ = new DamlRecord(null, null!);
+
+        act.Should().Throw<ArgumentNullException>().WithParameterName("Fields");
+    }
+
+    [Fact]
     public void DamlOptional_equals_compares_nested_collections_structurally()
     {
         var left = DamlOptional.Some(DamlList.Create(new DamlInt64(1), new DamlInt64(2)));

@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -26,30 +26,16 @@ internal enum CreatedCardinality
 /// </summary>
 /// <remarks>
 /// <see cref="ChoiceEmitter"/> checks this record for presence (a non-<see
-/// langword="null"/> slot is an interface slot) and then branches on <see
-/// cref="IsPlaceholder"/>: for a fully-emitted interface marker, the comparison reads
+/// langword="null"/> slot is an interface slot) and then reads
 /// <c>{marker}.InterfaceId.ModuleName</c>/<c>EntityName</c> off the generated marker at
 /// runtime, mirroring how the template branch reads <c>{template}.TemplateId</c>. Local
-/// interface refs resolve to a C# name whose class shape RecordEmitter alone decides —
-/// it always emits the LF-mandated accompanying record as a throwing <c>ITemplate</c>
-/// stub with no <c>InterfaceId</c> member (see
-/// <c>RecordEmitter.WriteInterfacePlaceholderRecord</c>) — so those stay on the
-/// string-literal comparison baked at codegen time instead of trusting a generated
-/// symbol that this slot cannot itself confirm exists. <see cref="ModuleName"/> and
-/// <see cref="EntityName"/> remain here as the slot's resolved identity for both the
-/// literal comparison and testing.
+/// and foreign interface refs alike resolve to a marker carrying that static, so both
+/// take the same branch. <see cref="ModuleName"/> and <see cref="EntityName"/> remain
+/// here as the slot's resolved identity for testing.
 /// </remarks>
 /// <param name="ModuleName">The interface's declaring Daml module name.</param>
 /// <param name="EntityName">The interface's entity (declaration) name.</param>
-/// <param name="IsPlaceholder">
-/// <see langword="true"/> when the slot targets a local interface ref — RecordEmitter
-/// always emits the local placeholder record as a throwing stub with no
-/// <c>InterfaceId</c>, so the projector must match via string literals rather than a
-/// generated symbol. <see langword="false"/> for foreign interfaces resolved against
-/// another package's own module declarations, which carry no equivalent
-/// placeholder-record concept in this package's emission.
-/// </param>
-internal sealed record InterfaceMatcher(string ModuleName, string EntityName, bool IsPlaceholder);
+internal sealed record InterfaceMatcher(string ModuleName, string EntityName);
 
 /// <summary>
 /// One declared <c>ContractId T</c>-bearing slot in a choice's return type.
@@ -131,6 +117,13 @@ internal static class ChoiceCreatedSlots
         return slots;
     }
 
+    /// <remarks>
+    /// Recognizes <c>ContractId T</c> as a created slot, <c>Optional</c> and list wrappers as
+    /// cardinality carriers, and <c>DA.Types</c> tuples as products to flatten over. A slot
+    /// inherits the cardinality of the wrapper it sits under, so <c>[ContractId T]</c> yields a
+    /// list slot rather than a single one. Records, variants, primitives, type variables and
+    /// <c>Unit</c> contribute nothing — codegen treats them as non-creating return types.
+    /// </remarks>
     private static void Walk(
         PackageEmitContext context, ICrossPackageResolver resolver, DamlTypeMapper mapper,
         DamlType type,
@@ -139,9 +132,6 @@ internal static class ChoiceCreatedSlots
     {
         switch (type)
         {
-            // ContractId T — single-create slot. Inherit `parentCardinality` from any
-            // wrapping Optional/List so a `[ContractId T]` becomes a List slot rather
-            // than a Single one.
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
             {
                 var (templateName, csharpName, interfaceMatcher) = ResolveContractIdTarget(context, resolver, mapper, arg);
@@ -152,15 +142,12 @@ internal static class ChoiceCreatedSlots
                     Interface: interfaceMatcher));
                 return;
             }
-            // Optional (ContractId T) — recurse with Optional cardinality.
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var inner] }:
                 Walk(context, resolver, mapper, inner, slots, CreatedCardinality.Optional);
                 return;
-            // [ContractId T] — recurse with List cardinality.
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var inner] }:
                 Walk(context, resolver, mapper, inner, slots, CreatedCardinality.List);
                 return;
-            // Daml tuple (DA.Types:Tuple2/3/.../N) — flatten over the components.
             case DamlTypeApp { Base: DamlTypeRef { Module: "DA.Types", Name: var tupleName } } app
                 when tupleName.StartsWith("Tuple", StringComparison.Ordinal):
                 for (var i = 0; i < app.Arguments.Count; i++)
@@ -169,8 +156,6 @@ internal static class ChoiceCreatedSlots
                 }
                 return;
             default:
-                // Records, variants, primitives, type vars, plain Unit — no created-slot
-                // contribution. Codegen treats these as non-creating return types.
                 return;
         }
     }
@@ -192,24 +177,23 @@ internal static class ChoiceCreatedSlots
                 return (fieldName, csharpName, ResolveInterfaceMatcher(context, resolver, typeRef));
             }
             default:
-                // Type variable or otherwise opaque target — fall back to the mapped C#
-                // name and a synthetic field name. Generated code may not compile in this
-                // case; callers will see a clear loud failure at consumer build time.
                 var mapped = mapper.MapType(arg);
                 return ("Created", mapped, null);
         }
     }
 
-    // Mirrors the interface-marker branches of DarCrossPackageResolver.Resolve: a slot
-    // targets a Daml interface exactly when the resolver would emit an interface-marker
-    // name for it. Local interfaces live in the placeholder set; foreign interfaces are
-    // read from the referenced package's interface declarations.
+    /// <remarks>
+    /// Mirrors the interface-marker branches of <see cref="DarCrossPackageResolver"/>: a slot
+    /// targets a Daml interface exactly when the resolver would emit an interface-marker name for
+    /// it. Local interfaces live in <see cref="PackageEmitContext.LocalInterfaceQualifiedNames"/>;
+    /// foreign ones are read from the referenced package's interface declarations.
+    /// </remarks>
     private static InterfaceMatcher? ResolveInterfaceMatcher(PackageEmitContext context, ICrossPackageResolver resolver, DamlTypeRef typeRef)
     {
         if (context.IsLocalRef(typeRef))
         {
-            var isLocalInterface = context.InterfacePlaceholderQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}");
-            return isLocalInterface ? new InterfaceMatcher(typeRef.Module, typeRef.Name, IsPlaceholder: true) : null;
+            var isLocalInterface = context.LocalInterfaceQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}");
+            return isLocalInterface ? new InterfaceMatcher(typeRef.Module, typeRef.Name) : null;
         }
 
         var isForeignInterface = resolver.LookupPackage(typeRef.PackageId) is { } pkg
@@ -218,6 +202,6 @@ internal static class ChoiceCreatedSlots
             && pkg.Modules.Any(module => module.Name == typeRef.Module
                 && module.Interfaces.Any(iface => iface.Name == typeRef.Name));
 
-        return isForeignInterface ? new InterfaceMatcher(typeRef.Module, typeRef.Name, IsPlaceholder: false) : null;
+        return isForeignInterface ? new InterfaceMatcher(typeRef.Module, typeRef.Name) : null;
     }
 }

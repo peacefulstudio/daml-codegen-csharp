@@ -1,0 +1,50 @@
+{
+ "damlType": "WireTypes:Asset { issuer : Party, amount : Decimal } at amount = 0.0000000001 (smallest representable at scale 10)",
+ "capturedBy": "create, ACS_DELTA. Sibling captures in the same run used 10.0 and 20.5",
+ "response": {
+  "transaction": {
+   "updateId": "12203161f236859fce7f9c2f547d6932929eddabb0f2f7454468d730874f0f64955b",
+   "commandId": "12a6ba733cf94c3894ad50d78a63d367",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:02.598713Z",
+   "events": [
+    {
+     "CreatedEvent": {
+      "offset": 6051,
+      "nodeId": 0,
+      "contractId": "007cb6a42546f70bc2da5003d129f364064c019ff3f96d84dfcb94f78127d3fc45ca121220de8fe4776bad93c9df08267466e5b9066255724c92de9b2f33e26048d9f29923",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Asset",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "issuer": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b",
+       "amount": "0.0000000001"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:02.598713Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     }
+    }
+   ],
+   "offset": 6051,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-47deeb8289e6ca6270968d10e432bc4d-f4b8d1020aace1c6-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:02.608082Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 2708
+  }
+ }
+}

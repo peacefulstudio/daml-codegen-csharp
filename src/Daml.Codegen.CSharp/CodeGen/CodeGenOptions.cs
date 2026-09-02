@@ -107,6 +107,22 @@ public sealed class CodeGenOptions
     public string? VersionSuffix { get; init; }
 
     /// <summary>
+    /// Gets or sets whether this run also produces the NuGet packages for the other
+    /// DAR packages the generated code references. When <c>true</c>, each such
+    /// reference is pinned to the exact version this run produces for it — the same
+    /// <see cref="EmitterCounter"/> and <see cref="VersionSuffix"/> as the main
+    /// package — which is correct only for a release run that publishes the whole
+    /// family together under one ordinal. When <c>false</c> (the default), the
+    /// generation ordinal and prerelease tag a dependency was published with are
+    /// facts about that publication and are not recoverable from the DAR, so the
+    /// reference instead floats over every generation and prerelease published
+    /// against the dependency's intrinsic <c>Major.Minor.Patch</c>. On the CLI this
+    /// is set by <c>--release-counters</c>, the flag the release pipeline uses to
+    /// key one generation ordinal across the whole family.
+    /// </summary>
+    public bool PublishesReferencedPackages { get; init; }
+
+    /// <summary>
     /// Gets or sets the repository URL emitted in the generated <c>.csproj</c>'s
     /// <c>&lt;PackageProjectUrl&gt;</c>, <c>&lt;RepositoryUrl&gt;</c>, and
     /// <c>&lt;RepositoryType&gt;</c>. When null, empty, or whitespace, those three

@@ -1,0 +1,53 @@
+{
+ "damlType": "WireTypes:WireRecord.nestedNote : Optional (Optional Text)",
+ "capturedBy": "One create per candidate encoding; accepted candidates are echoed back from CreatedEvent.createArgument of the same transaction.",
+ "note": "The encodings this repo's codegen writes and reads for a nested Optional chain: one array level per Optional. Of the rejected candidates only null is flat throughout; [null] and [\"deep\"] are mixed, taking the array form at the outer level and the flat form at the inner one.",
+ "response": {
+  "null": {
+   "sent": null,
+   "accepted": false,
+   "error": "HTTP Error 500: Internal Server Error"
+  },
+  "empty_array": {
+   "sent": [],
+   "accepted": true,
+   "echoed": []
+  },
+  "array_of_null": {
+   "sent": [
+    null
+   ],
+   "accepted": false,
+   "error": "HTTP Error 500: Internal Server Error"
+  },
+  "array_of_empty_array": {
+   "sent": [
+    []
+   ],
+   "accepted": true,
+   "echoed": [
+    []
+   ]
+  },
+  "array_of_array_of_text": {
+   "sent": [
+    [
+     "deep"
+    ]
+   ],
+   "accepted": true,
+   "echoed": [
+    [
+     "deep"
+    ]
+   ]
+  },
+  "array_of_text": {
+   "sent": [
+    "deep"
+   ],
+   "accepted": false,
+   "error": "HTTP Error 500: Internal Server Error"
+  }
+ }
+}

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text.RegularExpressions;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using PbBuiltin = Daml.Codegen.Intermediate.BuiltinType;
 using PbChoice = Daml.Codegen.Intermediate.Choice;
 using PbDar = Daml.Codegen.Intermediate.IntermediateDar;
@@ -110,8 +110,7 @@ public static partial class IntermediateDarReader
     private static DamlModule ConvertModule(PbModule module)
     {
         var dataTypes = module.DataTypes.Select(ConvertDataType).ToList();
-        var dataTypesByName = dataTypes.ToDictionary(dt => dt.Name);
-        var templates = module.Templates.Select(t => ConvertTemplate(t, dataTypesByName)).ToList();
+        var templates = module.Templates.Select(ConvertTemplate).ToList();
         var interfaces = module.Interfaces.Select(ConvertInterface).ToList();
 
         return new DamlModule
@@ -167,17 +166,11 @@ public static partial class IntermediateDarReader
         return new DamlVariantConstructor(RequireIdentifier(field.Name, "variant constructor"), ConvertType(field.Type));
     }
 
-    private static DamlTemplate ConvertTemplate(PbTemplate template, IReadOnlyDictionary<string, DamlDataType> dataTypesByName)
+    private static DamlTemplate ConvertTemplate(PbTemplate template)
     {
-        var fields = dataTypesByName.TryGetValue(template.Name, out var dt)
-                     && dt.Definition is DamlRecordDefinition recordDef
-            ? recordDef.Fields
-            : [];
-
         return new DamlTemplate
         {
             Name = RequireDottedIdentifier(template.Name, "template name"),
-            Fields = fields,
             Choices = template.Choices.Select(ConvertChoice).ToList(),
             Key = template.KeyType is not null ? ConvertType(template.KeyType) : null,
             Implements = template.Implements.Select(ConvertTypeConRef).ToList(),

@@ -6,6 +6,7 @@ package studio.peaceful.daml.codegen.helper
 import studio.peaceful.daml.codegen.intermediate.intermediate_dar.IntermediateDar
 
 import java.io.{BufferedOutputStream, FileOutputStream, IOException, OutputStream}
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
 /** Entry point for the JVM codegen helper.
@@ -29,19 +30,22 @@ import java.nio.file.{Files, Path, Paths}
 object Decode {
 
   private val Usage: String =
-    """Usage: daml-codegen-jvm-helper --dar <path-to.dar> --out <path-to-output.binpb> [--schema-only]
+    """Usage: daml-dar-to-proto --dar <path-to.dar> --out <path-to-output.binpb> [--schema-only]
       |
       |Options:
       |  --schema-only  Opt into the patch-version-insensitive schema-mode decode path.
       |                 The default is full-decode + static party-expression analysis,
-      |                 which is patch-version-sensitive but enables typed-actAs codegen.""".stripMargin
+      |                 which is patch-version-sensitive but enables typed-actAs codegen.
+      |  --version      Print the build version and exit.""".stripMargin
+
+  private val VersionResourceName = "daml-dar-to-proto-version.txt"
 
   def main(args: Array[String]): Unit = sys.exit(runCli(args.toList))
 
   /** Drives the CLI end-to-end and returns the process exit code.
     *
-    *   - `0` — success (or `--help`)
-    *   - `1` — runtime failure (DAR read, decode, or write)
+    *   - `0` — success (or `--help` / `--version`)
+    *   - `1` — runtime failure (DAR read, decode, write, or missing version resource)
     *   - `2` — CLI usage error (unknown arg, missing required arg)
     *
     * Side-effecting on stdout/stderr; visible for testing so tests need not
@@ -52,6 +56,15 @@ object Decode {
       case Right(CliCommand.Help) =>
         println(Usage)
         0
+      case Right(CliCommand.Version) =>
+        readBuildVersion() match {
+          case Right(version) =>
+            println(version)
+            0
+          case Left(message) =>
+            System.err.println(message)
+            1
+        }
       case Right(CliCommand.Run(parsed)) =>
         run(parsed) match {
           case Right(()) => 0
@@ -134,22 +147,44 @@ object Decode {
     }
   }
 
+  /** Reads the build version baked into the classpath at assembly time.
+    * Visible for testing; a missing, unreadable, or blank resource is a
+    * `Left`, never a silent default.
+    */
+  def readBuildVersion(resourceName: String = VersionResourceName): Either[String, String] =
+    Option(getClass.getClassLoader.getResourceAsStream(resourceName)) match {
+      case None =>
+        Left(s"Build version resource $resourceName is missing from the classpath")
+      case Some(stream) =>
+        try {
+          val version = new String(stream.readAllBytes(), StandardCharsets.UTF_8).trim
+          if (version.isEmpty) Left(s"Build version resource $resourceName is blank")
+          else Right(version)
+        } catch {
+          case e: IOException =>
+            Left(s"Build version resource $resourceName could not be read: ${e.getMessage}")
+        } finally stream.close()
+    }
+
   /** Parsed command-line arguments. */
   final case class ParsedArgs(darPath: Path, outPath: Path, schemaOnly: Boolean = false)
 
-  /** Outcome of parsing CLI args: either run with parsed args, or print help. */
+  /** Outcome of parsing CLI args: run with parsed args, print help, or print the version. */
   sealed trait CliCommand
   object CliCommand {
     final case class Run(args: ParsedArgs) extends CliCommand
     case object Help extends CliCommand
+    case object Version extends CliCommand
   }
 
-  /** Parses `--dar <path> --out <path>` (or `--help`) from a list of CLI
-    * arguments. `--help` is a distinct successful outcome, not an error,
-    * so that downstream tooling probing `--help` sees exit code 0.
+  /** Parses `--dar <path> --out <path>` (or `--help` / `--version`) from a
+    * list of CLI arguments. `--help` and `--version` are distinct successful
+    * outcomes, not errors, so that downstream tooling probing them sees exit
+    * code 0; `--help` takes precedence when both are present.
     */
   def parseArgs(args: List[String]): Either[String, CliCommand] = {
     if (args.contains("--help")) Right(CliCommand.Help)
+    else if (args.contains("--version")) Right(CliCommand.Version)
     else {
       @scala.annotation.tailrec
       def loop(

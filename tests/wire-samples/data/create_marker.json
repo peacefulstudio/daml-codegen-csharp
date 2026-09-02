@@ -1,0 +1,49 @@
+{
+ "damlType": "WireTypes:Marker { owner : Party } \u2014 the minimal single-field record",
+ "capturedBy": "POST /v2/commands/submit-and-wait-for-transaction, TRANSACTION_SHAPE_ACS_DELTA",
+ "response": {
+  "transaction": {
+   "updateId": "1220c66d985d785609a290e982d1bef6cc2ff9419dc8e99e2f8e7ec876122504dc2b",
+   "commandId": "8ee31bbc5f9943309d8377a967ba919a",
+   "workflowId": "",
+   "effectiveAt": "2026-07-31T09:23:01.467878Z",
+   "events": [
+    {
+     "CreatedEvent": {
+      "offset": 6042,
+      "nodeId": 0,
+      "contractId": "00e658d5467611d5231f1a4efafd299efb6e78f9f3971f4fb270773c65f8da64e7ca121220f1dcf68bdb90b3eb833c1ff85f6efc86e701399b3e88b358a8d24abc40fa9612",
+      "templateId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200:WireTypes:Marker",
+      "contractKey": null,
+      "contractKeyHash": "",
+      "createArgument": {
+       "owner": "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      },
+      "createdEventBlob": "",
+      "interfaceViews": [],
+      "witnessParties": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "signatories": [
+       "wiree3ed3454::1220141a01c00ef277c31ca4eb0e82ee3de7f790eb25f3787f8195f117af8668bf3b"
+      ],
+      "observers": [],
+      "createdAt": "2026-07-31T09:23:01.467878Z",
+      "packageName": "wiretypes23",
+      "representativePackageId": "f7230672ba7d77a5adba89f092d50b7c957d0eb5030c1e4f96706dcca93f2200",
+      "acsDelta": true
+     }
+    }
+   ],
+   "offset": 6042,
+   "synchronizerId": "global-domain::122081089699cb37a4179170d18c311527ed5e248cf3cc9f11ac73f5a19d1a4cd7b4",
+   "traceContext": {
+    "traceparent": "00-b3340a5c0f357190524e44e7b2c4794c-952e97cb0096263e-03",
+    "tracestate": null
+   },
+   "recordTime": "2026-07-31T09:23:01.480257Z",
+   "externalTransactionHash": null,
+   "paidTrafficCost": 2695
+  }
+ }
+}

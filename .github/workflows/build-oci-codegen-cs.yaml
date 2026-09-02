@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: jvm-helper-jar
-          path: jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar
+          path: jvm-helper/target/scala-2.13/daml-dar-to-proto.jar
           retention-days: 1
           if-no-files-found: error
 
@@ -231,7 +231,7 @@ jobs:
           BUNDLE="bundle/${RID}"
           mkdir -p "${BUNDLE}/bin"
           cp "publish/${RID}/${EXE_NAME}" "${BUNDLE}/bin/${EXE_NAME}"
-          cp jvm-helper-artifact/daml-codegen-jvm-helper.jar "${BUNDLE}/bin/daml-codegen-jvm-helper.jar"
+          cp jvm-helper-artifact/daml-dar-to-proto.jar "${BUNDLE}/bin/daml-dar-to-proto.jar"
           cp "scripts/bundle-entrypoint/${ENTRYPOINT_NAME}" "${BUNDLE}/${ENTRYPOINT_NAME}"
           cp "scripts/bundle-entrypoint/${MANIFEST_NAME}" "${BUNDLE}/component.yaml"
           if [ "${BUNDLE_OS}" != "windows" ]; then
@@ -343,7 +343,7 @@ jobs:
             "component.yaml:644"
             "${ENTRYPOINT_NAME}:755"
             "bin/${EXE_NAME}:755"
-            "bin/daml-codegen-jvm-helper.jar:644"
+            "bin/daml-dar-to-proto.jar:644"
           )
 
           ANNOTATIONS_JSON="${RUNNER_TEMP}/oras-annotations-${RID}.json"
@@ -400,7 +400,7 @@ jobs:
             "component.yaml:${COMPONENT_FILE_MEDIA_TYPE}" \
             "${ENTRYPOINT_NAME}:${COMPONENT_FILE_MEDIA_TYPE}" \
             "bin/${EXE_NAME}:${COMPONENT_FILE_MEDIA_TYPE}" \
-            "bin/daml-codegen-jvm-helper.jar:${COMPONENT_FILE_MEDIA_TYPE}")
+            "bin/daml-dar-to-proto.jar:${COMPONENT_FILE_MEDIA_TYPE}")
           popd > /dev/null
           echo "ref=${REF}" >> "${GITHUB_OUTPUT}"
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"

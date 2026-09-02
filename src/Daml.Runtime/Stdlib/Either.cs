@@ -10,7 +10,13 @@ namespace Daml.Runtime.Stdlib;
 /// </summary>
 /// <typeparam name="TL">Type carried by the <see cref="Left"/> constructor.</typeparam>
 /// <typeparam name="TR">Type carried by the <see cref="Right"/> constructor.</typeparam>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1000:Do not declare static members on generic types",
+    Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Either<...>.FromValue, mirroring the Daml constructor it decodes.")]
 public abstract record Either<TL, TR>
+    where TL : notnull
+    where TR : notnull
 {
     private Either()
     {

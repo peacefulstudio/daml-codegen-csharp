@@ -21,19 +21,30 @@ public interface ILedgerWriter
     /// primary authorization-carrying overload: the <paramref name="submitter"/>
     /// carries the act-as parties and any optional read-as parties through to the
     /// implementation.
-    /// Use <see cref="Extensions.ThrowingExercise.ExerciseAsync{TResult}(ILedgerWriter,ExerciseCommand,SubmitterInfo,string?,CancellationToken)"/>
+    /// Use <see cref="Extensions.ThrowingExercise.ExerciseAsync{TResult}(ILedgerWriter,ExerciseCommand,SubmitterInfo,string?,CommandId?,TimeSpan?,CancellationToken)"/>
     /// for the throwing convenience overload.
     /// </summary>
     /// <typeparam name="TResult">The result type of the choice.</typeparam>
     /// <param name="command">The exercise command.</param>
-    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="submitter">
+    /// The submitter authorization (act-as parties and optional read-as parties). A single
+    /// <see cref="Daml.Runtime.Data.Party"/> converts implicitly, so a one-party submission
+    /// passes the party itself here.
+    /// </param>
     /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="commandId">
+    /// Optional command id for deduplication; a fresh id is minted only when omitted. Pass the
+    /// same id across a retry of a lost-but-accepted submission so the ledger deduplicates the
+    /// resubmission instead of re-executing the command.
+    /// </param>
     /// <param name="timeout">
-    /// Optional per-call deadline, applied best-effort by the transport (for gRPC
-    /// transports, mapped to <c>CallOptions.Deadline</c>): the transport bounds
-    /// server-side call duration, but this is not a hard guarantee that participant-side
-    /// work stops the instant the deadline elapses. An overrun is a transport failure and
-    /// surfaces as an <see cref="ExerciseOutcome{TResult}.InfraError"/> outcome. <c>null</c>
+    /// Optional per-call deadline, applied best-effort by the transport. gRPC transports
+    /// map it to <c>CallOptions.Deadline</c>, which bounds server-side call duration —
+    /// still not a hard guarantee that participant-side work stops the instant the
+    /// deadline elapses. Transports without a server-side deadline, such as JSON/REST,
+    /// apply a client-side bound only and cannot stop the participant working on the
+    /// call. An overrun is a transport failure and surfaces as an
+    /// <see cref="ExerciseOutcome{TResult}.InfraError"/> outcome. <c>null</c>
     /// applies no deadline; <paramref name="cancellationToken"/> then remains the only bound.
     /// </param>
     /// <param name="cancellationToken">
@@ -49,6 +60,7 @@ public interface ILedgerWriter
         ExerciseCommand command,
         SubmitterInfo submitter,
         string? workflowId = null,
+        CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
@@ -64,7 +76,7 @@ public interface ILedgerWriter
     /// </param>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
-    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
+    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
     /// for the deadline contract. An overrun surfaces as a transport failure.
     /// </param>
     /// <param name="cancellationToken">
@@ -107,7 +119,7 @@ public interface ILedgerWriter
     /// </param>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
-    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
+    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
     /// for the deadline contract. An overrun surfaces as an
     /// <see cref="ExerciseOutcome{TransactionResult}.InfraError"/> outcome.
     /// </param>
@@ -116,7 +128,7 @@ public interface ILedgerWriter
     /// <see cref="OperationCanceledException"/>, not as an
     /// <see cref="ExerciseOutcome{TransactionResult}.InfraError"/> outcome — see the
     /// contract documented on
-    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>.
+    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>.
     /// </param>
     /// <returns>The outcome of the submission.</returns>
     Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
@@ -134,11 +146,20 @@ public interface ILedgerWriter
     /// </summary>
     /// <typeparam name="TTemplate">The template type expected to be created.</typeparam>
     /// <param name="payload">The template payload.</param>
-    /// <param name="submitter">The submitter authorization (act-as parties and optional read-as parties).</param>
+    /// <param name="submitter">
+    /// The submitter authorization (act-as parties and optional read-as parties). A single
+    /// <see cref="Daml.Runtime.Data.Party"/> converts implicitly, so a one-party submission
+    /// passes the party itself here.
+    /// </param>
     /// <param name="workflowId">Optional workflow identifier.</param>
+    /// <param name="commandId">
+    /// Optional command id for deduplication; a fresh id is minted only when omitted. Pass the
+    /// same id across a retry of a lost-but-accepted submission so the ledger deduplicates the
+    /// resubmission instead of re-executing the command.
+    /// </param>
     /// <param name="timeout">
     /// Optional per-call deadline, applied best-effort by the transport — see
-    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>
+    /// <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
     /// for the deadline contract. An overrun surfaces as an
     /// <see cref="ExerciseOutcome{TResult}.InfraError"/> outcome.
     /// </param>
@@ -146,12 +167,13 @@ public interface ILedgerWriter
     /// Cancellation token. Cancelling it must surface as
     /// <see cref="OperationCanceledException"/>, not as an
     /// <see cref="ExerciseOutcome{TResult}.InfraError"/> outcome — see the contract
-    /// documented on <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, TimeSpan?, CancellationToken)"/>.
+    /// documented on <see cref="TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>.
     /// </param>
     Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
         TTemplate payload,
         SubmitterInfo submitter,
         string? workflowId = null,
+        CommandId? commandId = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
         where TTemplate : ITemplate;

@@ -8,7 +8,7 @@ namespace Daml.Ledger.Abstractions;
 
 /// <summary>
 /// A ledger client: the composition of the write, read, and streaming capabilities.
-/// Derived transports (gRPC today, JSON/REST planned) implement this whole surface.
+/// Derived transports (gRPC, JSON/REST) implement this whole surface.
 /// </summary>
 public interface ILedgerClient : ILedgerWriter, ILedgerReader, ILedgerStreamer, IDisposable, IAsyncDisposable
 {

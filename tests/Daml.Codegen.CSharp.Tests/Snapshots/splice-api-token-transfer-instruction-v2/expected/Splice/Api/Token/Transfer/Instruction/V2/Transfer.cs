@@ -16,7 +16,16 @@ namespace Splice.Api.Token.Transfer.Instruction.V2;
 /// <summary>
 /// Generated from Daml record Transfer
 /// </summary>
-public sealed record Transfer([property: DamlFieldAttribute("sender")] Splice.Api.Token.Holding.V2.Account Sender, [property: DamlFieldAttribute("receiver")] Splice.Api.Token.Holding.V2.Account Receiver, [property: DamlFieldAttribute("amount")] decimal Amount, [property: DamlFieldAttribute("instrumentId")] Splice.Api.Token.Holding.V2.InstrumentId InstrumentId, [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt, [property: DamlFieldAttribute("executeBefore")] DateTimeOffset ExecuteBefore, [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids, [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta) : IDamlRecord
+public sealed record Transfer(
+    [property: DamlFieldAttribute("sender")] Splice.Api.Token.Holding.V2.Account Sender,
+    [property: DamlFieldAttribute("receiver")] Splice.Api.Token.Holding.V2.Account Receiver,
+    [property: DamlFieldAttribute("amount")] decimal Amount,
+    [property: DamlFieldAttribute("instrumentId")] Splice.Api.Token.Holding.V2.InstrumentId InstrumentId,
+    [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt,
+    [property: DamlFieldAttribute("executeBefore")] DateTimeOffset ExecuteBefore,
+    [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids,
+    [property: DamlFieldAttribute("meta")] Splice.Api.Token.Metadata.V1.Metadata Meta
+) : IDamlRecord<Transfer>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

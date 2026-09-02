@@ -1,0 +1,11 @@
+-- Copyright 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module DefaultTarget where
+
+template Note
+  with
+    owner : Party
+    body : Text
+    revision : Int
+  where
+    signatory owner

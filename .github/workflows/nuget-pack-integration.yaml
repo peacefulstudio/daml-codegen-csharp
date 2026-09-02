@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: jvm-helper-jar
-          path: jvm-helper/target/scala-2.13/daml-codegen-jvm-helper.jar
+          path: jvm-helper/target/scala-2.13/daml-dar-to-proto.jar
           retention-days: 1
           if-no-files-found: error
 
@@ -157,7 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           dotnet publish src/Daml.Codegen.CSharp.Cli -c Release -o bundle/bin
-          cp jvm-helper-artifact/daml-codegen-jvm-helper.jar "bundle/bin/daml-codegen-jvm-helper.jar"
+          cp jvm-helper-artifact/daml-dar-to-proto.jar "bundle/bin/daml-dar-to-proto.jar"
           cp "scripts/bundle-entrypoint/${ENTRYPOINT}" "bundle/${ENTRYPOINT}"
           if [ "${RUNNER_OS}" != "Windows" ]; then
             chmod +x "bundle/${ENTRYPOINT}" "bundle/bin/${EXE}"

@@ -6,6 +6,7 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -21,7 +22,12 @@ namespace Quickstart;
 /// <summary>
 /// Generated from Daml template Iou:Iou
 /// </summary>
-public sealed partial record Iou([property: DamlFieldAttribute("issuer")] Party Issuer, [property: DamlFieldAttribute("owner")] Party Owner, [property: DamlFieldAttribute("currency")] string Currency, [property: DamlFieldAttribute("amount")] decimal Amount) : ITemplate
+public sealed partial record Iou(
+    [property: DamlFieldAttribute("issuer")] Party Issuer,
+    [property: DamlFieldAttribute("owner")] Party Owner,
+    [property: DamlFieldAttribute("currency")] string Currency,
+    [property: DamlFieldAttribute("amount")] decimal Amount
+) : ITemplate, IDamlRecord<Iou>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("61d1c8472218a119a9e73167b9e9af82bfed91bf5ae5a89a82da27c10ea7f763", "Iou", "Iou");
@@ -79,6 +85,7 @@ public sealed partial record Iou([property: DamlFieldAttribute("issuer")] Party 
     };
 
     /// <summary>Contract ID for Iou.</summary>
+    [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
     public sealed record ContractId(string Value) : ContractId<Iou>(Value), IExercises<Iou>
     {
         ContractId<Iou> IExercises<Iou>.ContractId => this;
@@ -89,7 +96,7 @@ public sealed partial record Iou([property: DamlFieldAttribute("issuer")] Party 
     {
         /// <summary>Creates a Contract from a CreatedEvent.</summary>
         public static Contract FromCreatedEvent(CreatedEvent @event) =>
-            new(new ContractId(@event.ContractId), Iou.FromRecord(@event.CreateArguments));
+            new(new ContractId(@event.ContractId), global::Quickstart.Iou.FromRecord(@event.CreateArguments));
     }
 }
 
@@ -98,7 +105,9 @@ public sealed partial record Iou([property: DamlFieldAttribute("issuer")] Party 
 /// One field per template the choice creates; cardinality follows the choice's
 /// return type (single, optional, list).
 /// </summary>
-public sealed record TransferResult(ContractId<Iou> Iou)
+public sealed record TransferResult(
+    ContractId<Iou> Iou
+)
 {
     /// <summary>
     /// Projects an upstream transaction's created contracts to a typed <see cref="TransferResult"/>.
@@ -155,7 +164,7 @@ public sealed record TransferResult(ContractId<Iou> Iou)
 /// <summary>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for <see cref="Iou"/>.
 /// One method per create-bearing choice; each delegates to
-/// <see cref="global::Daml.Ledger.Abstractions.ILedgerWriter.TrySubmitAndWaitForTransactionAsync"/>
+/// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
 /// and projects success via <c>&lt;Choice&gt;Result.FromCreatedContracts</c>.
 /// </summary>
 public static class IouExtensions
@@ -189,10 +198,10 @@ public static class IouExtensions
     /// <param name="argument">The choice argument.</param>
     /// <param name="owner">Controller party from the Daml <c>controller</c> clause, routed into the submission's <c>actAs</c> set.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static async Task<ExerciseOutcome<TransferResult>> TransferAsync(
+    public static Task<ExerciseOutcome<TransferResult>> TransferAsync(
         this ContractId<Iou> contractId,
         ILedgerWriter client,
         Iou.Transfer argument,
@@ -206,18 +215,14 @@ public static class IouExtensions
 
         SubmitterInfo submitter = owner;
 
-        var command = contractId.TransferCommand(argument);
-
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return outcome.ProjectCommitted(tx => TransferResult.FromCreatedContracts(tx.CreatedContracts));
+        return contractId.TransferAsync(
+            client,
+            argument,
+            submitter,
+            workflowId,
+            commandId,
+            timeout,
+            cancellationToken);
     }
 
     /// <summary>
@@ -231,8 +236,8 @@ public static class IouExtensions
     /// <param name="argument">The choice argument.</param>
     /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<TransferResult>> TransferAsync(
         this ContractId<Iou> contractId,
@@ -248,14 +253,7 @@ public static class IouExtensions
 
         var command = contractId.TransferCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => TransferResult.FromCreatedContracts(tx.CreatedContracts));
     }
@@ -270,8 +268,8 @@ public static class IouExtensions
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static Task<ExerciseOutcome<TransferResult>> TransferAsync(
         this Iou.Contract contract,
@@ -295,6 +293,45 @@ public static class IouExtensions
             timeout,
             cancellationToken);
     }
+
+    /// <summary>
+    /// Exercises the Transfer choice on a fetched <see cref="Iou"/> contract with an
+    /// explicit <see cref="SubmitterInfo"/>. Companion to the payload-derived overload for
+    /// multi-party submissions and for callers who must supply <c>readAs</c> parties the
+    /// payload cannot name. Delegates to the
+    /// <c>ContractId&lt;Iou&gt;</c> overload.
+    /// </summary>
+    /// <param name="contract">The fetched contract on which to exercise the choice.</param>
+    /// <param name="client">The ledger client.</param>
+    /// <param name="argument">The choice argument.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
+    /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static Task<ExerciseOutcome<TransferResult>> TransferAsync(
+        this Iou.Contract contract,
+        ILedgerWriter client,
+        Iou.Transfer argument,
+        SubmitterInfo submitter,
+        string? workflowId = null,
+        CommandId? commandId = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(argument);
+
+        return contract.Id.TransferAsync(
+            client,
+            argument,
+            submitter,
+            workflowId,
+            commandId,
+            timeout,
+            cancellationToken);
+    }
 }
 
 /// <summary>
@@ -310,26 +347,41 @@ public static class IouSubmissionExtensions
 {
     /// <summary>
     /// Creates a new <see cref="Iou"/> contract on the ledger.
-    /// The submitter is passed explicitly via <paramref name="submitter"/>. The static
-    /// analyzer could not resolve the Daml <c>signatory</c> clause to payload-field
-    /// references — typically because the expression involves the template key, a
-    /// constant, or a function call. <see cref="SubmitterInfo"/> implicitly converts
-    /// from a single <c>Party</c>, so single-party callers still pass one literal.
+    /// The submitting parties are derived from the payload — each Daml signatory is
+    /// a reference to a payload field, so the caller never restates a party that's
+    /// already in the record.
     /// </summary>
     /// <param name="client">The ledger client.</param>
     /// <param name="payload">The contract payload.</param>
-    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static Task<ExerciseOutcome<ContractId<Iou>>> CreateAsync(
         this ILedgerWriter client,
         Iou payload,
-        SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(payload);
 
+        SubmitterInfo submitter = payload.Issuer;
+
         return client.TryCreateAsync<Iou>(payload, submitter, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the observers of a <see cref="Iou"/> payload —
+    /// the parties named in the Daml <c>observer</c> clause, derived from
+    /// the payload's <c>Party</c> properties in declaration order. Useful
+    /// for inspecting / asserting the observer set without exercising a
+    /// choice.
+    /// </summary>
+    /// <param name="payload">The contract payload.</param>
+    public static IReadOnlyList<Party> Observers(Iou payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return new Party[]
+        {
+            payload.Owner
+        };
     }
 }
 
@@ -337,7 +389,7 @@ public static class IouSubmissionExtensions
 /// Async exerciser extensions for <see cref="Iou"/> contract IDs whose choices
 /// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).
 /// Each method submits the choice via
-/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
+/// <c>SingleCommandExtensions.TrySubmitSingleAsync</c> and lifts the typed result
 /// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.
 /// </summary>
 public static class IouNonContractExtensions
@@ -364,15 +416,15 @@ public static class IouNonContractExtensions
     /// </summary>
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<Iou> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -382,14 +434,7 @@ public static class IouNonContractExtensions
 
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }

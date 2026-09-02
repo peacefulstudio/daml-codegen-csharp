@@ -13,10 +13,20 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 public class RelabelResultTests
 {
     private static CreatedContract RichRecordCreated(string contractId) =>
-        new(contractId, RichRecord.TemplateId, "{}");
+        CreatedOf(contractId, RichRecord.TemplateId);
+
+    private static CreatedContract CreatedOf(string contractId, Identifier templateId) =>
+        new(
+            EventId: $"evt-{contractId}",
+            ContractId: contractId,
+            TemplateId: templateId,
+            Payload: DamlRecord.Create(),
+            WitnessParties: [new Party("alice")],
+            Signatories: [new Party("alice")],
+            Observers: []);
 
     [Fact]
-    public void from_created_contracts_returns_one_with_the_typed_id_on_a_single_match()
+    public void FromCreatedContracts_returns_one_with_the_typed_id_on_a_single_match()
     {
         var outcome = RelabelResult.FromCreatedContracts(new[] { RichRecordCreated("rich-cid-1") });
 
@@ -25,9 +35,9 @@ public class RelabelResultTests
     }
 
     [Fact]
-    public void from_created_contracts_returns_none_when_the_required_template_is_absent()
+    public void FromCreatedContracts_returns_none_when_the_required_template_is_absent()
     {
-        var foreign = new CreatedContract("foreign-cid", new Identifier("other", "Other.Mod", "Foo"), "{}");
+        var foreign = CreatedOf("foreign-cid", new Identifier("other", "Other.Mod", "Foo"));
 
         var outcome = RelabelResult.FromCreatedContracts(new[] { foreign });
 
@@ -35,7 +45,7 @@ public class RelabelResultTests
     }
 
     [Fact]
-    public void from_created_contracts_returns_many_when_the_single_slot_overshoots()
+    public void FromCreatedContracts_returns_many_when_the_single_slot_overshoots()
     {
         var outcome = RelabelResult.FromCreatedContracts(new[]
         {
@@ -50,12 +60,11 @@ public class RelabelResultTests
     }
 
     [Fact]
-    public void from_created_contracts_matches_on_module_and_entity_ignoring_package_id()
+    public void FromCreatedContracts_matches_on_module_and_entity_ignoring_package_id()
     {
-        var upgraded = new CreatedContract(
+        var upgraded = CreatedOf(
             "rich-cid-1",
-            RichRecord.TemplateId with { PackageId = "a-different-package-hash" },
-            "{}");
+            RichRecord.TemplateId with { PackageId = "a-different-package-hash" });
 
         var outcome = RelabelResult.FromCreatedContracts(new[] { upgraded });
 
@@ -63,7 +72,7 @@ public class RelabelResultTests
     }
 
     [Fact]
-    public void from_created_contracts_throws_on_null_input()
+    public void FromCreatedContracts_throws_on_null_input()
     {
         var act = () => RelabelResult.FromCreatedContracts(null!);
 

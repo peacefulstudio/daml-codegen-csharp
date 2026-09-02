@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
@@ -138,8 +138,8 @@ public partial class CodeGenEdgeCaseTests
 
         // Assert
         csproj.Should().NotBeNull();
-        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0.0\" />");
-        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0.0\" />");
+        csproj!.Content.Should().Contain("<PackageReference Include=\"Foreign.A\" Version=\"1.0.0.*-*\" />");
+        csproj.Content.Should().Contain("<PackageReference Include=\"Foreign.B\" Version=\"1.0.0.*-*\" />");
     }
 
     [Fact]
@@ -232,7 +232,6 @@ public partial class CodeGenEdgeCaseTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice

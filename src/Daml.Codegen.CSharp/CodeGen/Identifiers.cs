@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using System.Text;
 
 namespace Daml.Codegen.CSharp.CodeGen;
@@ -139,7 +140,7 @@ internal static class Identifiers
         && IsLowerHexDigit(encodedTail[3])
         && IsLowerHexDigit(encodedTail[4]);
 
-    private static string HexEscape(char c) => "_u" + ((int)c).ToString("x4");
+    private static string HexEscape(char c) => "_u" + ((int)c).ToString("x4", CultureInfo.InvariantCulture);
 
     private static bool IsLowerHexDigit(char c) => c is >= '0' and <= '9' or >= 'a' and <= 'f';
 
@@ -203,14 +204,23 @@ internal static class Identifiers
     }
 
     /// <summary>
-    /// Derives the C# member identifier for a Daml field, PascalCasing and
-    /// sanitising the Daml name and disambiguating with a trailing <c>_</c> when
-    /// the result would equal <paramref name="enclosingTypeName"/> (illegal in
-    /// C#: CS0542 member names cannot be the same as their enclosing type). The
-    /// Daml wire name is unaffected — only the emitted C# identifier changes.
+    /// Derives the C# member identifier for a Daml field: leaf-sanitised
+    /// (<see cref="SanitizeBare"/>), PascalCased, disambiguated with a trailing
+    /// <c>_</c> when the result would equal <paramref name="enclosingTypeName"/>
+    /// (illegal in C#: CS0542 member names cannot be the same as their enclosing
+    /// type), and keyword-escaped last. The order is load-bearing: escaping first
+    /// leaves <see cref="ToPascalCase"/> spending its capitalisation on the
+    /// <c>@</c> rather than on the letter behind it, so Daml <c>lock</c> would
+    /// emit a lowercase <c>@lock</c> among PascalCased siblings. Escaping last, the
+    /// escape is in fact unreachable — <see cref="ToPascalCase"/> never returns a
+    /// lowercase-initial name and every entry of the C# keyword set is lowercase —
+    /// but it is composed anyway so the identifier stays legal if the casing step
+    /// changes. A leaf Daml name never contains a <c>.</c>, so
+    /// <see cref="SanitizeBare"/> covers everything <see cref="Sanitize"/> would.
+    /// The Daml wire name is unaffected — only the emitted C# identifier changes.
     /// </summary>
     internal static string MemberName(string damlFieldName, string enclosingTypeName) =>
-        Disambiguate(ToPascalCase(Sanitize(damlFieldName)), enclosingTypeName);
+        EscapeKeyword(Disambiguate(ToPascalCase(SanitizeBare(damlFieldName)), enclosingTypeName));
 
     /// <summary>
     /// Builds the C# marker-interface name for a Daml interface: the sanitised
@@ -221,7 +231,12 @@ internal static class Identifiers
     /// package (template, record, enum, or variant) can legally sanitise to an
     /// interface marker (e.g. record <c>IFactory</c> alongside interface
     /// <c>Factory</c>), which would otherwise emit two public <c>IFactory</c>
-    /// declarations in the same namespace (CS0101). Shared by the interface emitter
+    /// declarations in the same namespace (CS0101). The name is built from
+    /// <see cref="SanitizeBare"/> with <see cref="EscapeKeyword"/> applied last:
+    /// escaping first would emit <c>I@event</c>, which parses as two identifiers
+    /// rather than one. The escape is unreachable — the <c>I</c> prefix leaves an
+    /// uppercase-initial name and every C# keyword is lowercase — and is composed
+    /// only so the prefix is not the sole guarantee. Shared by the interface emitter
     /// and the type resolver so a reference to an interface names the same marker on
     /// the field-type path as on the choice-exercise path — callers must pass the
     /// declaring package's widened top-level type-name set
@@ -237,12 +252,12 @@ internal static class Identifiers
     /// </param>
     internal static string InterfaceMarkerName(string interfaceName, IReadOnlySet<string> reservedTypeNames)
     {
-        var marker = "I" + Sanitize(interfaceName);
+        var marker = "I" + SanitizeBare(interfaceName);
         while (reservedTypeNames.Contains(marker))
         {
             marker += "_";
         }
-        return marker;
+        return EscapeKeyword(marker);
     }
 
     /// <summary>

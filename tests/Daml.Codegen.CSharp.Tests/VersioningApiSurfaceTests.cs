@@ -1,7 +1,6 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
 using Daml.Codegen.CSharp.Versioning;
 using AwesomeAssertions;
 using Xunit;

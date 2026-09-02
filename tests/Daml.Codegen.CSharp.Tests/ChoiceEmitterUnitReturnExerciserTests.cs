@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -56,7 +56,6 @@ public class ChoiceEmitterUnitReturnExerciserTests
         new()
         {
             Name = "Sink",
-            Fields = [],
             Choices = choices,
         };
 
@@ -73,7 +72,7 @@ public class ChoiceEmitterUnitReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_stdlib_unit_wrapper_for_unit_returning_choice()
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_emits_stdlib_unit_wrapper_for_unit_returning_choice()
     {
         var (code, usings) = EmitNonContract(Template(Choice("DoNothing", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
@@ -83,7 +82,7 @@ public class ChoiceEmitterUnitReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_stdlib_unit_wrapper_for_optional_unit_in_signature_and_decoder()
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_emits_stdlib_unit_wrapper_for_optional_unit_in_signature_and_decoder()
     {
         var optionalUnit = new DamlTypeApp(
             new DamlPrimitiveType(DamlPrimitive.Optional),
@@ -99,7 +98,7 @@ public class ChoiceEmitterUnitReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_stdlib_unit_wrapper_for_list_of_unit()
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_emits_stdlib_unit_wrapper_for_list_of_unit()
     {
         var listOfUnit = new DamlTypeApp(
             new DamlPrimitiveType(DamlPrimitive.List),
@@ -114,7 +113,7 @@ public class ChoiceEmitterUnitReturnExerciserTests
     }
 
     [Fact]
-    public void non_contract_exerciser_emits_stdlib_unit_wrapper_for_textmap_of_unit()
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_emits_stdlib_unit_wrapper_for_textmap_of_unit()
     {
         var mapOfUnit = new DamlTypeApp(
             new DamlPrimitiveType(DamlPrimitive.TextMap),

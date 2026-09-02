@@ -6,6 +6,7 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -20,7 +21,14 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml template Splice.Ans:AnsEntry
 /// </summary>
-public sealed partial record AnsEntry([property: DamlFieldAttribute("user")] Party User, [property: DamlFieldAttribute("dso")] Party Dso, [property: DamlFieldAttribute("name")] string Name, [property: DamlFieldAttribute("url")] string Url, [property: DamlFieldAttribute("description")] string Description, [property: DamlFieldAttribute("expiresAt")] DateTimeOffset ExpiresAt) : ITemplate
+public sealed partial record AnsEntry(
+    [property: DamlFieldAttribute("user")] Party User,
+    [property: DamlFieldAttribute("dso")] Party Dso,
+    [property: DamlFieldAttribute("name")] string Name,
+    [property: DamlFieldAttribute("url")] string Url,
+    [property: DamlFieldAttribute("description")] string Description,
+    [property: DamlFieldAttribute("expiresAt")] DateTimeOffset ExpiresAt
+) : ITemplate, IDamlRecord<AnsEntry>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans", "AnsEntry");
@@ -94,6 +102,7 @@ public sealed partial record AnsEntry([property: DamlFieldAttribute("user")] Par
     };
 
     /// <summary>Contract ID for AnsEntry.</summary>
+    [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
     public sealed record ContractId(string Value) : ContractId<AnsEntry>(Value), IExercises<AnsEntry>
     {
         ContractId<AnsEntry> IExercises<AnsEntry>.ContractId => this;
@@ -104,7 +113,7 @@ public sealed partial record AnsEntry([property: DamlFieldAttribute("user")] Par
     {
         /// <summary>Creates a Contract from a CreatedEvent.</summary>
         public static Contract FromCreatedEvent(CreatedEvent @event) =>
-            new(new ContractId(@event.ContractId), AnsEntry.FromRecord(@event.CreateArguments));
+            new(new ContractId(@event.ContractId), global::Splice.Amulet.Name.Service.AnsEntry.FromRecord(@event.CreateArguments));
     }
 }
 
@@ -149,7 +158,7 @@ public static class AnsEntrySubmissionExtensions
 /// Async exerciser extensions for <see cref="AnsEntry"/> contract IDs whose choices
 /// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).
 /// Each method submits the choice via
-/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
+/// <c>SingleCommandExtensions.TrySubmitSingleAsync</c> and lifts the typed result
 /// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.
 /// </summary>
 public static class AnsEntryNonContractExtensions
@@ -180,16 +189,16 @@ public static class AnsEntryNonContractExtensions
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AnsEntry_ExpireResult>> AnsEntry_ExpireAsync(
         this ContractId<AnsEntry> contractId,
         ILedgerWriter client,
         AnsEntry.AnsEntry_Expire argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -199,14 +208,7 @@ public static class AnsEntryNonContractExtensions
 
         var command = contractId.AnsEntry_ExpireCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsEntry_ExpireResult(tx, contractId.Value));
     }
@@ -237,16 +239,16 @@ public static class AnsEntryNonContractExtensions
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AnsEntry_RenewResult>> AnsEntry_RenewAsync(
         this ContractId<AnsEntry> contractId,
         ILedgerWriter client,
         AnsEntry.AnsEntry_Renew argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -256,14 +258,7 @@ public static class AnsEntryNonContractExtensions
 
         var command = contractId.AnsEntry_RenewCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAnsEntry_RenewResult(tx, contractId.Value));
     }
@@ -290,15 +285,15 @@ public static class AnsEntryNonContractExtensions
     /// </summary>
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<AnsEntry> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -308,14 +303,7 @@ public static class AnsEntryNonContractExtensions
 
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }

@@ -38,7 +38,7 @@ public class NuGetPackIntegrationTests
     private const string ExpectedPackageIdPrefix = "Splice.Api.Token.Holding.V1.";
 
     [Fact]
-    public async Task generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture()
+    public async Task NuGetPackIntegration_generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture()
     {
         var snapshotDir = Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName);
         var darPath = Path.Combine(snapshotDir, $"{FixtureSnapshotName}.dar");
@@ -103,7 +103,7 @@ public class NuGetPackIntegrationTests
             // dotnet pack walks up from the csproj for NuGet.config; place it at the
             // --out root (a csproj ancestor) so the generated Daml.* PackageReferences
             // resolve against the local feed.
-            WriteLocalNuGetConfig(outDir, localNuGetSource!);
+            WriteLocalNuGetConfig(outDir, localNuGetSource!, Path.Combine(workspace, "nuget-packages"));
 
             var packOutput = Path.Combine(workspace, "nupkg-out");
             Directory.CreateDirectory(packOutput);
@@ -223,12 +223,15 @@ public class NuGetPackIntegrationTests
         return null;
     }
 
-    private static void WriteLocalNuGetConfig(string directory, string localSource)
+    private static void WriteLocalNuGetConfig(string directory, string localSource, string packagesFolder)
     {
         var configPath = Path.Combine(directory, "NuGet.config");
         var content =
 $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <configuration>
+  <config>
+    <add key=""globalPackagesFolder"" value=""{packagesFolder}"" />
+  </config>
   <packageSources>
     <clear />
     <add key=""local-output"" value=""{localSource}"" />

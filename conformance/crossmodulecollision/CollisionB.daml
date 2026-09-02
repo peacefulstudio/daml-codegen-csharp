@@ -1,0 +1,17 @@
+-- Copyright 2026 Peaceful Studio OÜ
+-- SPDX-License-Identifier: Apache-2.0
+module CollisionB where
+
+template Offer
+  with
+    owner : Party
+    memo : Text
+  where
+    signatory owner
+
+    choice Retag : ContractId Offer
+      with
+        label : Text
+        count : Int
+      controller owner
+      do create this with memo = label

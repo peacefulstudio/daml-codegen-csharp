@@ -15,7 +15,15 @@ namespace Splice.Api.Token.Transfer.Events.V2;
 /// <summary>
 /// Generated from Daml record EventLog_HoldingsChange
 /// </summary>
-public sealed record EventLog_HoldingsChange([property: DamlFieldAttribute("admin")] Party Admin, [property: DamlFieldAttribute("account")] Splice.Api.Token.Holding.V2.Account Account, [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids, [property: DamlFieldAttribute("transferLegSides")] IReadOnlyList<TransferLegSide> TransferLegSides, [property: DamlFieldAttribute("outputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> OutputHoldingCids, [property: DamlFieldAttribute("observers")] IReadOnlyList<Party> Observers, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs) : IDamlRecord
+public sealed record EventLog_HoldingsChange(
+    [property: DamlFieldAttribute("admin")] Party Admin,
+    [property: DamlFieldAttribute("account")] Splice.Api.Token.Holding.V2.Account Account,
+    [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids,
+    [property: DamlFieldAttribute("transferLegSides")] IReadOnlyList<TransferLegSide> TransferLegSides,
+    [property: DamlFieldAttribute("outputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> OutputHoldingCids,
+    [property: DamlFieldAttribute("observers")] IReadOnlyList<Party> Observers,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs
+) : IDamlRecord<EventLog_HoldingsChange>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

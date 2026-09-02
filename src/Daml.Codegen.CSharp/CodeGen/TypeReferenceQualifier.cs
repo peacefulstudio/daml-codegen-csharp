@@ -20,10 +20,12 @@ internal sealed class TypeReferenceQualifier
 {
     private const string GlobalPrefix = "global::";
 
-    // ImplicitUsings imports System into every generated file, so a stdlib type
-    // sharing a BCL simple name (DayOfWeek vs System.DayOfWeek) is an ambiguous
-    // reference (CS0104) regardless of generated-namespace shadowing. These names
-    // are always emitted global::-qualified.
+    /// <remarks>
+    /// Implicit usings import <c>System</c> into every generated file, so a stdlib type sharing a
+    /// BCL simple name — <c>DayOfWeek</c> against <c>System.DayOfWeek</c> — is an ambiguous
+    /// reference (CS0104) no matter how the generated namespace shadows it. These names are
+    /// always emitted <c>global::</c>-qualified.
+    /// </remarks>
     private static readonly IReadOnlySet<string> NamesCollidingWithImplicitBclImports =
         new HashSet<string>(StringComparer.Ordinal) { RuntimeTypeNames.DayOfWeek };
 
@@ -66,12 +68,15 @@ internal sealed class TypeReferenceQualifier
             [RuntimeTypeNames.SubmitterInfo] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.IExercises] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.ExerciseCommand] = RuntimeNamespaces.Commands,
+            [RuntimeTypeNames.ExerciseByKeyCommand] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.CommandsSubmission] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.WorkflowId] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.CommandId] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.ChoiceName] = RuntimeNamespaces.Commands,
             [RuntimeTypeNames.IDamlInterface] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IHasView] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.ViewDescriptor] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.KeyDescriptor] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.IImplements] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.CreatedEvent] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.DamlTypeDescriptor] = RuntimeNamespaces.Contracts,
@@ -86,6 +91,7 @@ internal sealed class TypeReferenceQualifier
             [RuntimeTypeNames.NonEmpty] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.Map] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.Unit] = RuntimeNamespaces.Stdlib,
+            [RuntimeTypeNames.Optional] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.GenericStub] = RuntimeNamespaces.Stdlib,
             [RuntimeTypeNames.ILedgerClient] = LedgerNamespaces.Abstractions,
             [RuntimeTypeNames.ILedgerWriter] = LedgerNamespaces.Abstractions,

@@ -121,7 +121,17 @@ public class ChoiceResultFromCreatedContractsTests
     }
 
     private static CreatedContract Created<T>(string contractId) where T : ITemplate =>
-        new(contractId, T.TemplateId, "{}");
+        CreatedOf(contractId, T.TemplateId);
+
+    private static CreatedContract CreatedOf(string contractId, Identifier templateId) =>
+        new(
+            EventId: $"evt-{contractId}",
+            ContractId: contractId,
+            TemplateId: templateId,
+            Payload: DamlRecord.Create(),
+            WitnessParties: [new Party("alice")],
+            Signatories: [new Party("alice")],
+            Observers: []);
 
     [Fact]
     public void FromCreatedContracts_should_return_One_when_all_required_slots_match()
@@ -222,7 +232,7 @@ public class ChoiceResultFromCreatedContractsTests
         {
             Created<Agreement>("agree-cid-1"),
             Created<SwapRecord>("swap-cid-1"),
-            new CreatedContract("foreign-cid", foreignId, "{}"),
+            CreatedOf("foreign-cid", foreignId),
         };
 
         var outcome = ExecuteSwapResult.FromCreatedContracts(refs);

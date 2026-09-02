@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -30,14 +31,13 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
                         {
                             Name = "Reissue",
                             Consuming = true,
-                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Party),
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
                             ReturnType = ContractIdOf("Asset"),
                         },
                     ],
@@ -48,6 +48,12 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlDataType
                 {
                     Name = "HoldingView",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+                },
+                new DamlDataType
+                {
+                    Name = "Asset",
                     Definition = new DamlRecordDefinition(
                         [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))]),
                 },
@@ -112,17 +118,12 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted interface code whose namespace shadows a runtime type must compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
     public void Emitted_key_bearing_template_in_party_colliding_namespace_has_no_cref_diagnostics()
     {
-        // Regression for CS1584/CS1658: WriteKeyProperty embedded the rendered key
-        // type inside the IHasKey cref braces. In a Party-shadowing namespace
-        // MapDamlTypeToCSharp returns `global::Daml.Runtime.Data.Party`, so the cref
-        // became IHasKey{global::Daml.Runtime.Data.Party} — a constructed type in
-        // cref braces, which Roslyn rejects under DocumentationMode.Diagnose.
         var module = new DamlModule
         {
             Name = "Replication",
@@ -131,10 +132,18 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Key = new DamlPrimitiveType(DamlPrimitive.Party),
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
-                    Choices = [],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Reissue",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
                 },
             ],
             DataTypes =
@@ -172,17 +181,12 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
             .ToList();
         crefDiagnostics.Should().BeEmpty(
             "emitted XML-doc crefs must be single-global::, well-formed names so no malformed-cref diagnostic surfaces under DocumentationMode.Diagnose, but got: {0}",
-            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
     public void Emitted_key_bearing_template_with_nested_generic_party_key_has_no_cref_diagnostics()
     {
-        // Regression for CS1584/CS1658 on a key whose mapped C# form is a NESTED
-        // generic wrapping an imported type: `List Party` renders as
-        // IReadOnlyList<global::Daml.Runtime.Data.Party> in a Party-shadowing
-        // namespace. ToCrefTypeArgument must strip the inner global:: AND escape
-        // the nested <>, yielding the prose form IReadOnlyList{Daml.Runtime.Data.Party}.
         var module = new DamlModule
         {
             Name = "Replication",
@@ -191,12 +195,20 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Key = new DamlTypeApp(
                         new DamlPrimitiveType(DamlPrimitive.List),
                         [new DamlPrimitiveType(DamlPrimitive.Party)]),
                     Signatories = DamlPartyAnalysis.Static([new DamlPartyPayloadField("issuer")]),
-                    Choices = [],
+                    Choices =
+                    [
+                        new DamlChoice
+                        {
+                            Name = "Reissue",
+                            Consuming = true,
+                            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        },
+                    ],
                 },
             ],
             DataTypes =
@@ -226,8 +238,11 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
 
         var holding = files.First(f => f.RelativePath.EndsWith("Holding.cs", StringComparison.Ordinal));
         holding.Content.Should().Contain(
-            "of type <c>IReadOnlyList{Daml.Runtime.Data.Party}</c>",
-            "the nested-generic key type appears in cref-escaped prose with every global:: stripped and the inner angle brackets rendered as braces");
+            "public required ContractKey<IReadOnlyList<global::Daml.Runtime.Data.Party>> Key { get; init; }",
+            "the nested-generic key slot on the active contract qualifies the shadowed imported type");
+        holding.Content.Should().Contain(
+            "IReadOnlyList<global::Daml.Runtime.Data.Party> key)",
+            "the by-key command builder's key parameter qualifies the shadowed imported type too");
 
         var diagnostics = CompileEmittedFilesWithDocDiagnostics(files);
         var crefDiagnostics = diagnostics
@@ -235,7 +250,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
             .ToList();
         crefDiagnostics.Should().BeEmpty(
             "a nested-generic key over an imported type must produce a well-formed cref under DocumentationMode.Diagnose, but got: {0}",
-            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", crefDiagnostics.Select(e => e.Id + " " + e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Theory]
@@ -372,11 +387,6 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlTemplate
                 {
                     Name = "Lock",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("duration", relTime),
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -437,6 +447,6 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted stdlib types must global::-qualify (no CS0118) and import Daml.Runtime.Stdlib when the namespace shadows a stdlib simple name, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

@@ -25,6 +25,9 @@ public class IdentifiersTests
     [InlineData("period", "Period", "Period_")]
     [InlineData("other", "Period", "Other")]
     [InlineData("period", "", "Period")]
+    [InlineData("operator", "Agreement", "Operator")]
+    [InlineData("lock", "HoldingView", "Lock")]
+    [InlineData("lock", "Lock", "Lock_")]
     public void MemberName_pascal_cases_then_disambiguates_against_enclosing_type(
         string damlFieldName, string enclosingTypeName, string expected)
     {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.Intermediate;
 using AwesomeAssertions;
 using Xunit;
@@ -41,18 +41,16 @@ public class QuickstartSampleDriftTests
             proto = IntermediateDar.Parser.ParseFrom(stream);
         }
         var dar = IntermediateDarReader.Read(proto);
-        var generated = new CSharpCodeGenerator(new CodeGenOptions(), new ConsoleLogger(0)).Generate(dar);
+        var generated = new CSharpCodeGenerator(new CodeGenOptions()).Generate(dar);
 
         var actualFiles = generated
-            .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal)
-                     || f.RelativePath.EndsWith(".daml-langversion", StringComparison.Ordinal))
+            .Where(f => f.RelativePath.EndsWith(".cs", StringComparison.Ordinal))
             .Select(f => new { f.RelativePath, f.Content })
             .OrderBy(f => f.RelativePath, StringComparer.Ordinal)
             .ToList();
 
         var committedFiles = Directory.EnumerateFiles(sampleDir, "*", SearchOption.AllDirectories)
-            .Where(p => p.EndsWith(".cs", StringComparison.Ordinal)
-                     || p.EndsWith(".daml-langversion", StringComparison.Ordinal))
+            .Where(p => p.EndsWith(".cs", StringComparison.Ordinal))
             .Select(absPath => new
             {
                 RelativePath = Path.GetRelativePath(sampleDir, absPath).Replace('\\', '/'),

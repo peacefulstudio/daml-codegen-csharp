@@ -7,7 +7,17 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <NoWarn>$(NoWarn);CA1062;CA2225;CA1711;CA1721;CA1000;CA1720;CA1305;CA1024;CA1707;CA1822;CA1850;CA1852;CA1859</NoWarn>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1062;CA1852;CA1859</NoWarn>
+
+    <!-- Packaging rigor. Pack-time only, so inert for IsPackable=false projects. SourceLink for
+         GitHub is implicit in the .NET SDK; ContinuousIntegrationBuild=true is passed by
+         publish.yaml, never locally. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EnablePackageValidation>true</EnablePackageValidation>
 
     <!-- Package metadata -->
     <Authors>Peaceful Studio OÜ</Authors>
@@ -20,9 +30,9 @@
     <PackageIcon>icon.png</PackageIcon>
 
     <!-- Versioning -->
-    <Version>0.4.1-preview.1</Version>
-    <AssemblyVersion>0.4.1.0</AssemblyVersion>
-    <FileVersion>0.4.1.0</FileVersion>
+    <Version>0.5.0-preview.1</Version>
+    <AssemblyVersion>0.5.0.0</AssemblyVersion>
+    <FileVersion>0.5.0.0</FileVersion>
 
     <!-- Package output directory -->
     <PackageOutputPath>$(MSBuildThisFileDirectory)output/nuget</PackageOutputPath>

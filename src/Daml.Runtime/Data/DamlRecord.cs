@@ -1,6 +1,8 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Contracts;
+
 namespace Daml.Runtime.Data;
 
 /// <summary>
@@ -12,6 +14,20 @@ public sealed record DamlRecord(
     Identifier? RecordId,
     IReadOnlyList<DamlField> Fields) : DamlValue
 {
+    private readonly IReadOnlyList<DamlField> _fields =
+        EventCollections.Copy(Fields, nameof(Fields));
+
+    /// <summary>
+    /// The fields of the record. Copied at construction and on <c>init</c>, so a caller that
+    /// retains the list it supplied cannot change this value's equality or hash code
+    /// afterwards.
+    /// </summary>
+    public IReadOnlyList<DamlField> Fields
+    {
+        get => _fields;
+        init => _fields = EventCollections.Copy(value, nameof(Fields));
+    }
+
     /// <summary>
     /// Creates a record with the specified fields.
     /// </summary>

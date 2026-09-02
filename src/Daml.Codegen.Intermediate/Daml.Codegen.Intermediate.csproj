@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Daml.Codegen.Intermediate</PackageId>
+    <Description>Intermediate DAR contract for Daml C# codegen. Carries the generated IntermediateDar protobuf types and the language-neutral Daml model shared by producers of the intermediate representation and the C# emitter that consumes it.</Description>
+    <PackageTags>daml;canton;blockchain;smart-contracts;codegen;protobuf</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\proto\intermediate_dar.proto" ProtoRoot="..\..\proto" GrpcServices="None" Link="Proto\intermediate_dar.proto" />
+  </ItemGroup>
+
+</Project>

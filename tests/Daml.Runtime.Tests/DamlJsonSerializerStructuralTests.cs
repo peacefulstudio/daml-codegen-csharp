@@ -43,7 +43,7 @@ public class DamlJsonSerializerStructuralTests
 
         var json = DamlJsonSerializer.Serialize(record);
 
-        json.Should().Contain("\"entries\":[[\"Alice\",1],[\"Bob\",2]]");
+        json.Should().Contain("\"entries\":[[\"Alice\",\"1\"],[\"Bob\",\"2\"]]");
     }
 
     [Fact]
@@ -222,5 +222,53 @@ public class DamlJsonSerializerStructuralTests
         var act = () => DamlJsonSerializer.DeserializeRecord(NestJson(DamlLfValueDepthLimit));
 
         act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Serialize_should_render_DamlOptionalChain_none_as_an_empty_array()
+    {
+        DamlJsonSerializer.Serialize(DamlOptionalChain.None).Should().Be("[]");
+    }
+
+    [Fact]
+    public void Serialize_should_render_a_chain_carrying_none_as_an_array_of_an_empty_array()
+    {
+        DamlJsonSerializer.Serialize(DamlOptionalChain.Some(DamlOptionalChain.None))
+            .Should().Be("[[]]");
+    }
+
+    [Fact]
+    public void Serialize_should_render_a_chain_carrying_a_value_as_an_array_of_an_array()
+    {
+        DamlJsonSerializer.Serialize(
+                DamlOptionalChain.Some(DamlOptionalChain.Some(new DamlText("deep"))))
+            .Should().Be("""[["deep"]]""");
+    }
+
+    [Fact]
+    public void Serialize_should_leave_a_flat_DamlOptional_on_its_existing_encoding()
+    {
+        DamlJsonSerializer.Serialize(DamlOptional.None).Should().Be("null");
+        DamlJsonSerializer.Serialize(DamlOptional.Some(new DamlText("present")))
+            .Should().Be("\"present\"");
+    }
+
+    [Fact]
+    public void Serialize_should_never_emit_a_nested_optional_encoding_the_participant_rejected()
+    {
+        var rejected = new[] { "null", "[null]", """["deep"]""" };
+
+        var emitted = new[]
+        {
+            DamlJsonSerializer.Serialize(DamlOptionalChain.None),
+            DamlJsonSerializer.Serialize(DamlOptionalChain.Some(DamlOptionalChain.None)),
+            DamlJsonSerializer.Serialize(
+                DamlOptionalChain.Some(DamlOptionalChain.Some(new DamlText("deep")))),
+        };
+
+        emitted.Should().HaveCount(3,
+            "a shorter array would satisfy the disjointness below without serializing anything");
+        emitted.Should().NotIntersectWith(rejected,
+            "the participant answered HTTP 500 to each of these forms in a nested position");
     }
 }

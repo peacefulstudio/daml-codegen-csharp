@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.DamlModelBuilder;
@@ -28,11 +28,18 @@ public class TemplateCodeGenTests
                 new DamlTemplate
                 {
                     Name = templateName,
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = []
                 }
             ],
-            DataTypes = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = templateName,
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+                }
+            ],
             Interfaces = []
         };
 
@@ -79,6 +86,89 @@ public class TemplateCodeGenTests
 
         templateFile.Should().NotBeNull();
         templateFile!.RelativePath.Should().Contain("Test/Package/");
+    }
+
+    private static DamlModule ModuleWithTemplateButNoDataTypes(string moduleName, string templateName) =>
+        new()
+        {
+            Name = moduleName,
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = templateName,
+                    Choices = []
+                }
+            ],
+            DataTypes = [],
+            Interfaces = []
+        };
+
+    [Fact]
+    public void Generate_should_fail_loudly_when_a_template_has_no_same_named_record_definition()
+    {
+        var generator = CreateGenerator();
+
+        var act = () => generator.Generate(CreateTestDar(ModuleWithTemplateButNoDataTypes("Test.Module", "Orphan"))).ToList();
+
+        act.Should().Throw<CodegenException>()
+            .WithMessage(
+                "*Test.Module:Orphan*",
+                "an LF template payload is always a same-named record, so a template without one is a malformed "
+                + "model that must not be papered over with an empty payload — and the diagnostic has to name the "
+                + "module too, since template names are only unique within one");
+    }
+
+    [Fact]
+    public void Generate_should_not_validate_a_recordless_template_the_root_filter_excludes()
+    {
+        var generator = CreateGenerator(new CodeGenOptions { RootFilter = "Test\\.Module:Keep.*" });
+
+        var act = () => generator.Generate(
+            CreateTestDar(ModuleWithTemplateButNoDataTypes("Test.Module", "Orphan"))).ToList();
+
+        act.Should().NotThrow(
+            "the root filter skips a template before the payload lookup runs, so excluding a template also "
+            + "excludes it from validation — the boundary between what this generator fails loudly on and what "
+            + "it never looks at");
+    }
+
+    private static DamlModule ModuleWithTemplateAndSameNamedVariant(string moduleName, string templateName) =>
+        new()
+        {
+            Name = moduleName,
+            Templates =
+            [
+                new DamlTemplate
+                {
+                    Name = templateName,
+                    Choices = []
+                }
+            ],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = templateName,
+                    Definition = new DamlVariantDefinition([new DamlVariantConstructor("Only", null)])
+                }
+            ],
+            Interfaces = []
+        };
+
+    [Fact]
+    public void Generate_should_name_the_kind_when_the_same_named_definition_is_not_a_record()
+    {
+        var generator = CreateGenerator();
+
+        var act = () => generator.Generate(
+            CreateTestDar(ModuleWithTemplateAndSameNamedVariant("Test.Module", "Orphan"))).ToList();
+
+        act.Should().Throw<CodegenException>()
+            .WithMessage(
+                "*DamlVariantDefinition*",
+                "a same-named definition of the wrong kind is a different malformation from an absent one, and "
+                + "reporting only that no record was found leaves the reader staring at a definition that is right there");
     }
 
     [Fact]

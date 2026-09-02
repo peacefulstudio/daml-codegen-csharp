@@ -12,7 +12,9 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationInstructionAction.AIA_Custom
 /// </summary>
-public sealed record AllocationInstructionAction_AIA_Custom([property: DamlFieldAttribute("id")] string Id) : IDamlRecord
+public sealed record AllocationInstructionAction_AIA_Custom(
+    [property: DamlFieldAttribute("id")] string Id
+) : IDamlRecord<AllocationInstructionAction_AIA_Custom>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

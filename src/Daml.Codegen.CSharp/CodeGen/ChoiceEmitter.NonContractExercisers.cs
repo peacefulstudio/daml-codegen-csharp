@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -11,8 +11,8 @@ internal sealed partial class ChoiceEmitter
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit, context.RootNamespace),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
-                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } }] } =>
-            throw new NotSupportedException("Codegen does not support nested Optional types (Optional (Optional t)). C# nullable syntax cannot represent the Some Nothing / Nothing distinction without a wrapper type. Refactor the Daml signature, or open a feature request to introduce a representable CLR model."),
+                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } or DamlTypeVar] } =>
+            mapper.MapType(returnType),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapNonContractReturnType(arg)}?",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
@@ -43,6 +43,9 @@ internal sealed partial class ChoiceEmitter
         string valueExpr) => returnType switch
     {
         DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit, context.RootNamespace) + ".Value",
+        DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
+                      Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } or DamlTypeVar] } =>
+            mapper.FromValue(returnType, valueExpr),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{valueExpr}.AsOptional().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.AsOptional().Value!")} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
@@ -70,21 +73,8 @@ internal sealed partial class ChoiceEmitter
     {
         var className = SanitizeIdentifier(template.Name);
 
-        // Mirror the gate applied to <Choice>Async emission for CID-returning
-        // choices: skip choices whose argument type went through the
-        // codegen fallback path. The fallback emits a field-less <Choice>Arg
-        // stub with no ToRecord(), so `argument.ToRecord()` would not compile
-        // in consumer output.
         var emittable = template.Choices
-            .Where(c =>
-            {
-                if (ChoiceCreatedSlots.Extract(context, resolver, mapper, c.ReturnType).Count > 0)
-                {
-                    return false;
-                }
-                var (_, _, isFallback, _) = GetChoiceArgumentInfo(c, dataTypes);
-                return !isFallback;
-            })
+            .Where(c => ChoiceCreatedSlots.Extract(context, resolver, mapper, c.ReturnType).Count == 0)
             .ToList();
 
         if (emittable.Count == 0)
@@ -92,7 +82,7 @@ internal sealed partial class ChoiceEmitter
             return false;
         }
 
-        RequireAsyncExerciserNamespaces(indent);
+        EmittedUsings.RequireAsyncExerciserNamespaces(indent);
 
         indent.AppendLine();
         if (options.GenerateXmlDocs)
@@ -101,7 +91,7 @@ internal sealed partial class ChoiceEmitter
             indent.AppendLine($"/// Async exerciser extensions for <see cref=\"{className}\"/> contract IDs whose choices");
             indent.AppendLine("/// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).");
             indent.AppendLine("/// Each method submits the choice via");
-            indent.AppendLine("/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result");
+            indent.AppendLine("/// <c>SingleCommandExtensions.TrySubmitSingleAsync</c> and lifts the typed result");
             indent.AppendLine("/// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.");
             indent.AppendLine("/// </summary>");
         }
@@ -115,13 +105,12 @@ internal sealed partial class ChoiceEmitter
             {
                 indent.AppendLine();
             }
-            WriteNonContractChoiceCommandBuilder(indent, emittable[i], className, dataTypes);
+            WriteChoiceCommandBuilder(indent, emittable[i], className, dataTypes);
             indent.AppendLine();
-            WriteSingleNonContractChoiceAsyncExerciser(indent, emittable[i], className, dataTypes);
+            WriteSingleNonContractChoiceAsyncExerciser(
+                indent, emittable[i], className, dataTypes, SubmitterInfoParameter());
         }
 
-        // Per-choice projector helpers, emitted after the public methods so they
-        // visually follow the call sites that reference them.
         foreach (var choice in emittable)
         {
             indent.AppendLine();
@@ -134,84 +123,19 @@ internal sealed partial class ChoiceEmitter
         return true;
     }
 
-    /// <summary>
-    /// Emits the <c>&lt;Choice&gt;Command(this ContractId&lt;TemplateName&gt; contractId, ...)</c>
-    /// builder that constructs the choice's <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/>
-    /// without submitting it. Called from <see cref="WriteSingleNonContractChoiceAsyncExerciser"/>'s
-    /// generated <c>&lt;Choice&gt;Async</c> method.
-    /// </summary>
-    private void WriteNonContractChoiceCommandBuilder(
-        IndentWriter indent,
-        DamlChoice choice,
-        string templateClassName,
-        IReadOnlyDictionary<string, DamlDataType> dataTypes)
-    {
-        var choiceName = SanitizeIdentifier(choice.Name);
-        var commandMethodName = $"{choiceName}Command";
-        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
-        var hasArg = argTypeName != "DamlUnit";
-
-        if (options.GenerateXmlDocs)
-        {
-            indent.AppendLine("/// <summary>");
-            indent.AppendLine($"/// Builds the <see cref=\"global::Daml.Runtime.Commands.ExerciseCommand\"/> for the {choice.Name} choice on this contract id.");
-            indent.AppendLine("/// </summary>");
-            indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
-            if (hasArg)
-            {
-                indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
-            }
-        }
-
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
-        indent.Indent();
-        if (hasArg)
-        {
-            var argParamType = isNestedTemplateArg
-                ? $"{templateClassName}.{argTypeName}"
-                : argTypeName;
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-            indent.AppendLine($"{argParamType} argument)");
-        }
-        else
-        {
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId)");
-        }
-        indent.Dedent();
-        indent.AppendLine("{");
-        indent.Indent();
-
-        indent.AppendLine("ArgumentNullException.ThrowIfNull(contractId);");
-        if (hasArg)
-        {
-            indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
-        }
-
-        var argExpr = hasArg ? "argument.ToRecord()" : EmptyArgumentExpression(choice);
-        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
-        indent.Indent();
-        indent.AppendLine($"{templateClassName}.TemplateId,");
-        indent.AppendLine("contractId,");
-        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
-        indent.AppendLine($"{argExpr});");
-        indent.Dedent();
-
-        indent.Dedent();
-        indent.AppendLine("}");
-    }
-
     private void WriteSingleNonContractChoiceAsyncExerciser(
         IndentWriter indent,
         DamlChoice choice,
         string templateClassName,
-        IReadOnlyDictionary<string, DamlDataType> dataTypes)
+        IReadOnlyDictionary<string, DamlDataType> dataTypes,
+        ChoiceSubmitterParameter submitter)
     {
         var choiceName = SanitizeIdentifier(choice.Name);
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
-        var (argTypeName, _, _, isNestedTemplateArg) = GetChoiceArgumentInfo(choice, dataTypes);
-        var hasArg = argTypeName != "DamlUnit";
+        var argument = GetChoiceArgumentInfo(choice, dataTypes);
+        var hasArg = argument.HasArgument;
 
-        StdlibPackages.RequireForFieldType(resolver, indent, choice.ReturnType);
+        StdlibPackages.RequireForFieldType(resolver, context.Package, indent, choice.ReturnType);
 
         if (options.GenerateXmlDocs)
         {
@@ -226,11 +150,8 @@ internal sealed partial class ChoiceEmitter
             {
                 indent.AppendLine("/// <param name=\"argument\">The choice argument.</param>");
             }
-            indent.AppendLine("/// <param name=\"actAs\">The party submitting the command.</param>");
-            indent.AppendLine("/// <param name=\"workflowId\">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>");
-            indent.AppendLine("/// <param name=\"commandId\">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>");
-            indent.AppendLine("/// <param name=\"timeout\">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>");
-            indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
+            indent.AppendLine($"/// <param name=\"{submitter.Name}\">{submitter.DocSummary}</param>");
+            WriteSubmissionParameterDocs(indent);
         }
 
         indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>> {choiceName}Async(");
@@ -239,41 +160,23 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
         if (hasArg)
         {
-            var argParamType = isNestedTemplateArg
-                ? $"{templateClassName}.{argTypeName}"
-                : argTypeName;
-            indent.AppendLine($"{argParamType} argument,");
+            indent.AppendLine($"{argument.ParameterType(templateClassName)} argument,");
         }
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} actAs,");
-        indent.AppendLine("string? workflowId = null,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
-        indent.AppendLine("TimeSpan? timeout = null,");
-        indent.AppendLine("CancellationToken cancellationToken = default)");
+        indent.AppendLine($"{submitter.TypeName} {submitter.Name},");
+        WriteSubmissionParametersAndCloseSignature(indent);
         indent.Dedent();
         indent.AppendLine("{");
         indent.Indent();
 
         indent.AppendLine("ArgumentNullException.ThrowIfNull(client);");
-
         indent.AppendLine();
+
         indent.AppendLine(hasArg
             ? $"var command = contractId.{choiceName}Command(argument);"
             : $"var command = contractId.{choiceName}Command();");
 
         indent.AppendLine();
-        indent.AppendLine($"var submission = {context.Qualifier.Qualify(RuntimeTypeNames.CommandsSubmission, context.RootNamespace)}.Single(command)");
-        indent.Indent();
-        indent.AppendLine($".WithCommandId(commandId ?? new {context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}(Guid.NewGuid().ToString()));");
-        indent.Dedent();
-        indent.AppendLine("if (!string.IsNullOrEmpty(workflowId))");
-        indent.AppendLine("{");
-        indent.Indent();
-        indent.AppendLine($"submission = submission.WithWorkflowId(new {context.Qualifier.Qualify(RuntimeTypeNames.WorkflowId, context.RootNamespace)}(workflowId));");
-        indent.Dedent();
-        indent.AppendLine("}");
-
-        indent.AppendLine();
-        indent.AppendLine("var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);");
+        indent.AppendLine($"var outcome = await client.TrySubmitSingleAsync(command, {submitter.Name}, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);");
         indent.AppendLine();
         indent.AppendLine($"return outcome.ProjectCommitted(tx => Project{choiceName}Result(tx, contractId.Value));");
 
@@ -290,6 +193,13 @@ internal sealed partial class ChoiceEmitter
     /// present (mirrors the cardinality semantics of upstream's
     /// <c>tx.ExerciseResult&lt;T&gt;(choiceName)</c>).
     /// </summary>
+    /// <remarks>
+    /// The emitted filter keys on contract id, template id and choice name together, so a nested
+    /// exercise of the same choice on another contract in the same transaction is not returned by
+    /// mistake. The template id is compared on its module and entity names only, never the full
+    /// identifier, so package-id drift from an upgrade does not break projection — the same
+    /// drift-tolerant comparison the created-contract projector uses.
+    /// </remarks>
     private void WriteExerciseProjector(
         IndentWriter indent,
         DamlChoice choice,
@@ -303,12 +213,6 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        // Filter on (ContractId, TemplateId by (ModuleName, EntityName), ChoiceName)
-        // so nested exercises of the same choice on other contracts within the same
-        // transaction don't get returned by mistake. TemplateId is matched on
-        // (ModuleName, EntityName) only — not the full Identifier — so package-id
-        // drift from upgrades doesn't break projection. Mirrors the same
-        // drift-tolerant comparison used by the created-contract projector.
         indent.AppendLine("foreach (var exercised in tx.ExercisedEvents)");
         indent.AppendLine("{");
         indent.Indent();

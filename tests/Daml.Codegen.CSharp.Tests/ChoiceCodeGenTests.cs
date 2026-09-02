@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.CSharp.Tests.TestHelpers;
 using AwesomeAssertions;
 using System.IO;
@@ -41,11 +41,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Int64))
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -116,8 +111,8 @@ public class ChoiceCodeGenTests
 
         nestedFile.Should().NotBeNull("the choice argument record is emitted as a nested type in a partial template file");
         nestedFile!.Content.Should().Contain(
-            "\n    public sealed record Transfer([property: DamlFieldAttribute(\"newOwner\")] Party NewOwner, [property: DamlFieldAttribute(\"amount\")] decimal Amount) : IDamlRecord",
-            "the nested record signature must be indented one level and the parameter list must close without trailing whitespace");
+            "\n    public sealed record Transfer(\n        [property: DamlFieldAttribute(\"newOwner\")] Party NewOwner,\n        [property: DamlFieldAttribute(\"amount\")] decimal Amount\n    ) : IDamlRecord",
+            "the nested record signature must be indented one level, carry one parameter per line indented one level further, and close on its own line with the base list");
     }
 
     private static DamlModule NestedTransferArgumentModule()
@@ -136,7 +131,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Asset",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -177,8 +171,7 @@ public class ChoiceCodeGenTests
             [
                 new DamlTemplate
                 {
-                    Name = "Contract",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
+                    Name = "MyTemplate",
                     Choices =
                     [
                         new DamlChoice
@@ -195,7 +188,7 @@ public class ChoiceCodeGenTests
             [
                 new DamlDataType
                 {
-                    Name = "Contract",
+                    Name = "MyTemplate",
                     Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
                 }
             ],
@@ -207,13 +200,13 @@ public class ChoiceCodeGenTests
 
         // Act
         var files = generator.Generate(dar);
-        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Contract.cs", StringComparison.Ordinal));
+        var contractFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("MyTemplate.cs", StringComparison.Ordinal));
 
         // Assert
         contractFile.Should().NotBeNull();
         var code = contractFile!.Content;
 
-        code.Should().Contain("Choice<Contract, DamlUnit, DamlUnit>");
+        code.Should().Contain("Choice<MyTemplate, DamlUnit, DamlUnit>");
         code.Should().Contain("ArgumentEncoder = _ => DamlUnit.Instance");
         code.Should().Contain("ResultDecoder = _ => DamlUnit.Instance");
     }
@@ -230,7 +223,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "MyTemplate",
-                    Fields = [new DamlFieldDefinition("data", new DamlPrimitiveType(DamlPrimitive.Text))],
                     Choices =
                     [
                         new DamlChoice
@@ -282,7 +274,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Factory",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -345,7 +336,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Counter",
-                    Fields = [new DamlFieldDefinition("count", new DamlPrimitiveType(DamlPrimitive.Int64))],
                     Choices =
                     [
                         new DamlChoice
@@ -417,7 +407,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("amount", new DamlPrimitiveType(DamlPrimitive.Numeric))],
                     Choices =
                     [
                         // Local data type argument
@@ -511,7 +500,7 @@ public class ChoiceCodeGenTests
 
         agreementExpire.Should().NotBeNull();
         agreementExpire!.Content.Should().Contain(
-            "public sealed record Expire([property: DamlFieldAttribute(\"actor\")] Party Actor) : IDamlRecord",
+            "public sealed record Expire(\n        [property: DamlFieldAttribute(\"actor\")] Party Actor\n    ) : IDamlRecord",
             "the Agreement module's Expire argument record must keep its own fields instead of the Offer module's");
         offerExpire.Should().NotBeNull();
         offerExpire!.Content.Should().Contain(
@@ -532,7 +521,6 @@ public class ChoiceCodeGenTests
                 new DamlTemplate
                 {
                     Name = templateName,
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice

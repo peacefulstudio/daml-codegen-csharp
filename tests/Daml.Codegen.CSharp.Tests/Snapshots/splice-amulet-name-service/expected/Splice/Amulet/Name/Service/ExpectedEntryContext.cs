@@ -13,7 +13,11 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record ExpectedEntryContext
 /// </summary>
-public sealed record ExpectedEntryContext([property: DamlFieldAttribute("dso")] Party Dso, [property: DamlFieldAttribute("user")] Party User, [property: DamlFieldAttribute("reference")] ContractId<Splice.Wallet.Payments.SubscriptionRequest> Reference) : IDamlRecord
+public sealed record ExpectedEntryContext(
+    [property: DamlFieldAttribute("dso")] Party Dso,
+    [property: DamlFieldAttribute("user")] Party User,
+    [property: DamlFieldAttribute("reference")] ContractId<Splice.Wallet.Payments.SubscriptionRequest> Reference
+) : IDamlRecord<ExpectedEntryContext>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

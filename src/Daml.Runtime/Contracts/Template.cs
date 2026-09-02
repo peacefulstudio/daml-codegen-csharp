@@ -38,15 +38,20 @@ public interface ITemplate : IDamlRecord, IDamlType
 }
 
 /// <summary>
-/// Interface for templates that have a contract key.
+/// Facet implemented by templates that have a contract key. Generic code constrained on this
+/// facet reaches the key codec through <see cref="Key"/> with no reflection, so
+/// <typeparamref name="TKey"/> carries no constraint of its own and a bare
+/// <see cref="Party"/> key is admitted alongside a record key.
 /// </summary>
+/// <typeparam name="TSelf">The implementing template type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
-public interface IHasKey<TKey>
+public interface IHasKey<TSelf, TKey>
+    where TSelf : ITemplate, IHasKey<TSelf, TKey>
 {
     /// <summary>
-    /// Gets the contract key.
+    /// Gets the witness pairing this template with its key type and carrying the key codec.
     /// </summary>
-    TKey Key { get; }
+    static abstract KeyDescriptor<TSelf, TKey> Key { get; }
 }
 
 /// <summary>
@@ -82,15 +87,13 @@ public interface IDamlInterface : IDamlRecord, IDamlType
 }
 
 /// <summary>
-/// Interface for Daml interfaces that have an associated view type.
+/// Phantom link between a Daml interface marker and its view type. Carries no members:
+/// views are server-computed, so the association exists purely at the type level, and
+/// generic code binds the pair through <see cref="ViewDescriptor{TInterface, TView}"/>.
 /// </summary>
 /// <typeparam name="TView">The view type.</typeparam>
 public interface IHasView<TView>
 {
-    /// <summary>
-    /// Gets the interface view.
-    /// </summary>
-    TView View { get; }
 }
 
 /// <summary>

@@ -1,9 +1,10 @@
--- Copyright (c) 2026 Peaceful Studio OÜ
+-- Copyright 2026 Peaceful Studio OÜ
 -- SPDX-License-Identifier: Apache-2.0
 module RichTypes where
 
 import DA.Time ()
 import DA.TextMap (TextMap)
+import DA.Map (Map)
 
 data Profile = Profile
   with
@@ -15,11 +16,71 @@ data Outcome = Win with prize : Numeric 2; tier : Text
              | Pending
   deriving (Eq, Show)
 
+data Suit = Clubs | Diamonds | Hearts | Spades
+  deriving (Eq, Show)
+
+data Box a = Box
+  with
+    item : a
+  deriving (Eq, Show)
+
+data Crate a = Crate
+  with
+    item : Optional a
+  deriving (Eq, Show)
+
+data Slot a = Filled a
+            | Vacant
+  deriving (Eq, Show)
+
+data Branch = Branch
+  with
+    label : Text
+    children : [Branch]
+  deriving (Eq, Show)
+
 template Marker
   with
     owner : Party
   where
     signatory owner
+
+data HoldingView = HoldingView
+  with
+    amount : Decimal
+  deriving (Eq, Show)
+
+interface Holding where
+  viewtype HoldingView
+
+  holder : Party
+
+  nonconsuming choice Describe : Text
+    with
+      prefix : Text
+    controller holder this
+    do
+      let holdingView = view this
+      pure (prefix <> show holdingView.amount)
+
+  choice Reissue : ContractId Holding
+    with
+      newAmount : Decimal
+    controller holder this
+    do
+      create Asset with issuer = holder this, amount = newAmount
+        >>= \cid -> pure (toInterfaceContractId @Holding cid)
+
+template Asset
+  with
+    issuer : Party
+    amount : Decimal
+  where
+    signatory issuer
+
+    interface instance Holding for Asset where
+      view = HoldingView with amount
+      holder = issuer
 
 template RichRecord
   with
@@ -34,8 +95,11 @@ template RichRecord
     tags : [Text]
     attributes : TextMap Text
     marker : ContractId Marker
+    holdingCid : ContractId Holding
+    holdingCids : [ContractId Holding]
     profile : Profile
     outcome : Outcome
+    suit : Suit
     fee : Numeric 2
   where
     signatory owner
@@ -46,3 +110,31 @@ template RichRecord
       controller owner
       do
         create this with label = newLabel
+
+template TypeCorners
+  with
+    owner : Party
+    boxedText : Box Text
+    boxedProfile : Box Profile
+    slot : Slot Int
+    nestedNote : Optional (Box (Optional Text))
+    maybeMaybeNote : Optional (Optional Text)
+    crate : Crate Text
+    quotaByParty : Map Party Int
+    labelByRank : Map Int Text
+    rankOrLabel : Either Int Text
+    noteOrRank : Either (Optional Text) Int
+    pair : (Text, Int)
+    triple : (Text, Int, Bool)
+    branch : Branch
+    whole : Numeric 0
+    finest : Numeric 37
+  where
+    signatory owner
+
+    nonconsuming choice Rebox : ContractId TypeCorners
+      with
+        replacement : Box Text
+      controller owner
+      do
+        create this with boxedText = replacement

@@ -16,7 +16,14 @@ namespace Splice.Api.Token.Allocation.Instruction.V2;
 /// <summary>
 /// Generated from Daml record AllocationFactory_Allocate
 /// </summary>
-public sealed record AllocationFactory_Allocate([property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement, [property: DamlFieldAttribute("allocation")] Splice.Api.Token.Allocation.V2.AllocationSpecification Allocation, [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt, [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids, [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs, [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors) : IDamlRecord
+public sealed record AllocationFactory_Allocate(
+    [property: DamlFieldAttribute("settlement")] Splice.Api.Token.Allocation.V2.SettlementInfo Settlement,
+    [property: DamlFieldAttribute("allocation")] Splice.Api.Token.Allocation.V2.AllocationSpecification Allocation,
+    [property: DamlFieldAttribute("requestedAt")] DateTimeOffset RequestedAt,
+    [property: DamlFieldAttribute("inputHoldingCids")] IReadOnlyList<ContractId<Splice.Api.Token.Holding.V2.IHolding>> InputHoldingCids,
+    [property: DamlFieldAttribute("extraArgs")] Splice.Api.Token.Metadata.V1.ExtraArgs ExtraArgs,
+    [property: DamlFieldAttribute("actors")] IReadOnlyList<Party> Actors
+) : IDamlRecord<AllocationFactory_Allocate>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

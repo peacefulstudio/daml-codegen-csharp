@@ -1,7 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -11,10 +13,10 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// external-package-id set are DAR-scoped — they live for the resolver's lifetime,
 /// not per package.
 /// </summary>
-internal sealed class DarCrossPackageResolver : ICrossPackageResolver
+internal sealed partial class DarCrossPackageResolver : ICrossPackageResolver
 {
     private readonly IDarSource _dar;
-    private readonly ICodegenLogger _logger;
+    private readonly ILogger _logger;
     private readonly HashSet<string> _discoveredExternalPackageIds = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignChoiceArgCache = [];
     private readonly Dictionary<string, IReadOnlySet<string>> _foreignInterfaceCache = [];
@@ -22,12 +24,13 @@ internal sealed class DarCrossPackageResolver : ICrossPackageResolver
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _foreignInterfaceMarkerNameCache = [];
 
     /// <summary>Creates a resolver scoped to a single <see cref="IDarSource"/>.</summary>
-    public DarCrossPackageResolver(IDarSource dar, ICodegenLogger logger)
+    /// <param name="dar">The archive type refs are resolved against.</param>
+    /// <param name="logger">Where cross-package warnings go; omit it and the resolver stays silent.</param>
+    public DarCrossPackageResolver(IDarSource dar, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(dar);
-        ArgumentNullException.ThrowIfNull(logger);
         _dar = dar;
-        _logger = logger;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <inheritdoc />
@@ -46,7 +49,7 @@ internal sealed class DarCrossPackageResolver : ICrossPackageResolver
 
         if (context.IsLocalRef(typeRef))
         {
-            if (context.InterfacePlaceholderQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}"))
+            if (context.LocalInterfaceQualifiedNames.Contains($"{typeRef.Module}:{typeRef.Name}"))
             {
                 return context.LocalInterfaceMarkerNames[$"{typeRef.Module}:{typeRef.Name}"];
             }
@@ -71,7 +74,7 @@ internal sealed class DarCrossPackageResolver : ICrossPackageResolver
             {
                 return context.Qualifier.Qualify(mapped, context.RootNamespace);
             }
-            _logger.Warning($"Unmapped stdlib type {foreignPkg.Name}:{typeRef.Module}:{typeRef.Name} — generated code will not compile (no stdlib mapping for this type yet)");
+            LogUnmappedStdlibType(_logger, foreignPkg.Name, typeRef.Module, typeRef.Name);
             return sanitized;
         }
 
@@ -166,8 +169,7 @@ internal sealed class DarCrossPackageResolver : ICrossPackageResolver
                         if (result.TryGetValue(key, out var existingTemplate)
                             && existingTemplate != template.Name)
                         {
-                            _logger.Warning(
-                                $"Choice-argument type {key} in package {pkg.Name} is used by both templates {existingTemplate} and {template.Name} in the same package; keeping {existingTemplate} and ignoring {template.Name}. Rename one choice-argument type to disambiguate.");
+                            LogAmbiguousForeignChoiceArgument(_logger, key, pkg.Name, existingTemplate, template.Name);
                             continue;
                         }
                         result[key] = template.Name;
@@ -177,4 +179,16 @@ internal sealed class DarCrossPackageResolver : ICrossPackageResolver
         }
         return result;
     }
+
+    [LoggerMessage(
+        EventId = 1100,
+        Level = LogLevel.Warning,
+        Message = "Unmapped stdlib type {PackageName}:{ModuleName}:{TypeName} \u2014 generated code will not compile (no stdlib mapping for this type yet)")]
+    private static partial void LogUnmappedStdlibType(ILogger logger, string packageName, string moduleName, string typeName);
+
+    [LoggerMessage(
+        EventId = 1101,
+        Level = LogLevel.Warning,
+        Message = "Choice-argument type {ChoiceArgumentKey} in package {PackageName} is used by both templates {KeptTemplate} and {IgnoredTemplate} in the same package; keeping {KeptTemplate} and ignoring {IgnoredTemplate}. Rename one choice-argument type to disambiguate.")]
+    private static partial void LogAmbiguousForeignChoiceArgument(ILogger logger, string choiceArgumentKey, string packageName, string keptTemplate, string ignoredTemplate);
 }

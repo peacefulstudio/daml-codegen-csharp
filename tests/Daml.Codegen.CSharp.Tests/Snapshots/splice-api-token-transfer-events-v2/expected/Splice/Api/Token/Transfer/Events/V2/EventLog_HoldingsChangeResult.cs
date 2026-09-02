@@ -12,7 +12,7 @@ namespace Splice.Api.Token.Transfer.Events.V2;
 /// <summary>
 /// Generated from Daml record EventLog_HoldingsChangeResult
 /// </summary>
-public sealed record EventLog_HoldingsChangeResult : IDamlRecord
+public sealed record EventLog_HoldingsChangeResult : IDamlRecord<EventLog_HoldingsChangeResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create();

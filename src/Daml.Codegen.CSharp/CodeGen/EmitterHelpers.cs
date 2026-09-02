@@ -1,6 +1,8 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Codegen.Intermediate.Model;
+
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
@@ -36,6 +38,25 @@ internal static class EmitterHelpers
     }
 
     /// <summary>
+    /// Builds the <c>where T : notnull</c> clauses trailing a generic record's or variant's
+    /// declaration; empty for a non-generic type. A Daml type variable ranges only over
+    /// serialisable Daml types, none of which is nullable — the nullable positions are exactly
+    /// the ones Daml spells <c>Optional</c>, which <see cref="DamlTypeMapper"/> renders as an
+    /// explicit <c>?</c> or as a wrapper rather than as a bare type variable. Left
+    /// unconstrained, a field typed by the type variable reports a nullable read-state through
+    /// <see cref="System.Reflection.NullabilityInfoContext"/> at every reference-type
+    /// instantiation, so a reflection-driven reader decodes it as an <c>Optional</c> the wire
+    /// never carried.
+    /// </summary>
+    internal static string GetTypeParameterConstraints(IReadOnlyList<string> typeParams)
+    {
+        if (typeParams.Count == 0)
+            return string.Empty;
+
+        return string.Concat(typeParams.Select(param => $" where {TypeParameterName(param)} : notnull"));
+    }
+
+    /// <summary>
     /// Derives the injected converter-delegate parameter name for a Daml type
     /// variable — the delegate a generic record/variant's <c>ToRecord</c>/<c>FromRecord</c>
     /// (or <c>ToVariant</c>/<c>FromVariant</c>) accepts to bridge that type parameter's
@@ -47,7 +68,7 @@ internal static class EmitterHelpers
     /// <summary>
     /// Maps each Daml type-variable name to its <see cref="ConverterParameterName"/>,
     /// threaded into the <see cref="DamlTypeMapper"/>'s <c>ToValue</c>/<c>FromValue</c>
-    /// so a <see cref="Model.DamlTypeVar"/> field resolves to its injected converter.
+    /// so a <see cref="DamlTypeVar"/> field resolves to its injected converter.
     /// </summary>
     internal static IReadOnlyDictionary<string, string> ConverterNameMap(IReadOnlyList<string> typeParams) =>
         typeParams.ToDictionary(param => param, ConverterParameterName);

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using Daml.Codegen.CSharp.Tests.TestHelpers;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -45,7 +46,6 @@ public class ChoiceAsyncExerciserTests
         new()
         {
             Name = name,
-            Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
             Choices =
             [
                 new DamlChoice
@@ -83,7 +83,6 @@ public class ChoiceAsyncExerciserTests
             templates.Add(new DamlTemplate
             {
                 Name = sibling,
-                Fields = [],
                 Choices = []
             });
         }
@@ -174,18 +173,13 @@ public class ChoiceAsyncExerciserTests
 
         code.Should().NotContain("\"exercise-renew\"");
         code.Should().NotContain("workflowId ??");
-        code.Should().Contain("if (!string.IsNullOrEmpty(workflowId))");
-        code.Should().Contain("submission = submission.WithWorkflowId(new WorkflowId(workflowId));");
+        code.Should().NotContain(".WithWorkflowId(");
+        code.Should().Contain("client." + TrySubmitSingleArgumentOrder);
     }
 
     [Fact]
-    public void Generate_should_skip_async_extension_when_argument_type_is_fallback()
+    public void Generate_should_fail_loudly_when_a_choice_argument_type_is_unmappable()
     {
-        // B3: when the codegen can't resolve the choice argument to a known same-module
-        // record / Unit / external ref, GetChoiceArgumentInfo returns IsFallback=true and
-        // emits a field-less <Choice>Arg stub with no ToRecord(). The Async exerciser's
-        // `argument.ToRecord()` call would then fail to compile. Skip emission for that
-        // case so generated code always compiles.
         var unresolvedArgType = new DamlTypeApp(
             new DamlTypeRef("", "Test.Module", "Unresolved"),
             [new DamlPrimitiveType(DamlPrimitive.Int64)]);
@@ -196,9 +190,9 @@ public class ChoiceAsyncExerciserTests
             argType: unresolvedArgType);
         var module = ModuleWith(template);
 
-        var code = GenerateAndReadTemplate(module, "Agreement");
-
-        code.Should().NotContain("WeirdAsync");
+        FluentActions.Invoking(() => GenerateAndReadTemplate(module, "Agreement"))
+            .Should().Throw<CodegenException>()
+            .WithMessage("*Weird*");
     }
 
     [Fact]
@@ -209,7 +203,7 @@ public class ChoiceAsyncExerciserTests
 
         var code = GenerateAndReadTemplate(module, "Agreement");
 
-        code.Should().Contain("client.TrySubmitAndWaitForTransactionAsync(submission, submitter, timeout: timeout, cancellationToken: cancellationToken)");
+        code.Should().Contain("client." + TrySubmitSingleArgumentOrder);
     }
 
     [Fact]
@@ -253,7 +247,6 @@ public class ChoiceAsyncExerciserTests
         var template = new DamlTemplate
         {
             Name = "Agreement",
-            Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
             Choices =
             [
                 new DamlChoice

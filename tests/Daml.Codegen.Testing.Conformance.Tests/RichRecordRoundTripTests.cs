@@ -36,7 +36,7 @@ public class RichRecordRoundTripTests
         Fee: 1.5m);
 
     [Fact]
-    public void round_trips_every_field_when_optional_is_present()
+    public void RichRecordRoundTrip_round_trips_every_field_when_optional_is_present()
     {
         var original = Sample(note: "hello");
 
@@ -46,7 +46,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void round_trips_every_field_when_optional_is_absent()
+    public void RichRecordRoundTrip_round_trips_every_field_when_optional_is_absent()
     {
         var original = Sample(note: null);
 
@@ -57,7 +57,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_maps_primitives_to_their_daml_backing_types()
+    public void ToRecord_maps_primitives_to_their_daml_backing_types()
     {
         var record = Sample(note: "hello").ToRecord();
 
@@ -72,7 +72,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_emits_none_for_an_absent_optional()
+    public void ToRecord_emits_none_for_an_absent_optional()
     {
         var record = Sample(note: null).ToRecord();
 
@@ -80,7 +80,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_serializes_list_and_textmap_fields()
+    public void ToRecord_serializes_list_and_textmap_fields()
     {
         var record = Sample(note: "hello").ToRecord();
 
@@ -92,7 +92,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_nests_the_profile_record()
+    public void ToRecord_nests_the_profile_record()
     {
         var record = Sample(note: "hello").ToRecord();
 
@@ -102,7 +102,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_wires_the_outcome_variant()
+    public void ToRecord_wires_the_outcome_variant()
     {
         var record = Sample(note: "hello").ToRecord();
 
@@ -114,7 +114,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void to_record_wires_the_suit_enum()
+    public void ToRecord_wires_the_suit_enum()
     {
         var record = Sample(note: "hello").ToRecord();
 
@@ -122,7 +122,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void non_default_scale_fee_serializes_unpadded()
+    public void RichRecordRoundTrip_non_default_scale_fee_serializes_unpadded()
     {
         var record = new RichRecord(
             Owner: new Party("alice"),
@@ -149,7 +149,7 @@ public class RichRecordRoundTripTests
     }
 
     [Fact]
-    public void interface_typed_contract_id_fields_round_trip_without_throwing()
+    public void RichRecordRoundTrip_interface_typed_contract_id_fields_round_trip_without_throwing()
     {
         var scalarCid = "00aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
         var listCids = new[]

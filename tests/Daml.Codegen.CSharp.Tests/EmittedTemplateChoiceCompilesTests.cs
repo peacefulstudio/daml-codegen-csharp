@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -14,17 +15,8 @@ namespace Daml.Codegen.CSharp.Tests;
 public class EmittedTemplateChoiceCompilesTests
 {
     [Fact]
-    public void Emitted_template_with_fallback_argument_choice_compiles()
+    public void Emitted_template_with_unmappable_choice_argument_fails_generation()
     {
-        // Regression: WriteChoiceMethod previously emitted
-        //   `ArgumentEncoder = arg => arg.ToRecord()`
-        // for any non-Unit, non-external choice argument type. When the type
-        // hits the codegen fallback path (here: a non-Unit DamlPrimitiveType),
-        // WriteChoiceArgumentType emits a stub `<Choice>Arg` record with no
-        // ToRecord() method — so the static `Choice<T,A,R>` field site no
-        // longer compiles in consumer output. The B3 gate already extended to
-        // <Choice>Async emission; this test pins the same gate on
-        // WriteChoiceMethod.
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -33,16 +25,12 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
                         {
                             Name = "Process",
                             Consuming = false,
-                            // Non-Unit primitive — routes through the GetChoiceArgumentInfo
-                            // fallback branch (IsFallback=true) and emits a stub ProcessArg
-                            // record with no ToRecord().
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Text),
                             ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
                         },
@@ -71,13 +59,11 @@ public class EmittedTemplateChoiceCompilesTests
         };
 
         var dar = new DarModel { MainPackage = package, Dependencies = [] };
-        var files = CreateGenerator().Generate(dar);
 
-        var diagnostics = CompileEmittedFiles(files);
-        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-        errors.Should().BeEmpty(
-            "emitted code for a fallback-argument-type choice should compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+        FluentActions.Invoking(() => CreateGenerator().Generate(dar))
+            .Should().Throw<CodegenException>(
+                "a choice argument the codegen cannot map to an argument record must fail generation instead of emitting an empty stub record")
+            .WithMessage("*Process*");
     }
 
     [Fact]
@@ -98,7 +84,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -139,7 +124,7 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "emitted code should compile against Daml.Runtime + Daml.Ledger.Abstractions, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -158,7 +143,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -206,11 +190,11 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a choice returning an interface-typed ContractId must match created contracts by InterfaceIds, not TemplateId, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
-    public void Emitted_choice_returning_a_local_placeholder_interface_contract_id_compiles_and_uses_literals()
+    public void Emitted_choice_returning_a_local_interface_contract_id_compiles_and_reads_the_marker_identity()
     {
         var module = new DamlModule
         {
@@ -220,7 +204,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices =
                     [
                         new DamlChoice
@@ -265,16 +248,17 @@ public class EmittedTemplateChoiceCompilesTests
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
-            "a choice returning a local placeholder-interface-typed ContractId (backed by RecordEmitter's throwing ITemplate stub, with no InterfaceId member) must still compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            "a choice returning a local interface-typed ContractId resolves to the interface's marker, so the projector's InterfaceId reads must compile, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
 
         var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
         code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
-        code.Should().Contain("string.Equals(interfaceId.ModuleName, \"Test.Module\", StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(interfaceId.EntityName, \"Holdable\", StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Package.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Package.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
         code.Should().NotContain(
-            "IHoldable.InterfaceId",
-            "the local placeholder record backing `Holdable` exposes no InterfaceId member — the projector must not reference one");
+            "\"Holdable\", StringComparison.Ordinal",
+            "a local interface now resolves to a marker carrying InterfaceId, so the projector reads that "
+            + "static instead of baking the identity in as a string literal the marker could drift from");
     }
 
     [Fact]
@@ -288,7 +272,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Vault",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                     Implements = [new DamlTypeRef("", "Test.Module", "Holdable")],
                 },
@@ -329,7 +312,7 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a template implementing a local interface must emit IImplements<IHoldable> and satisfy the where TInterface : IDamlInterface constraint, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -349,7 +332,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = fields,
                     Choices =
                     [
                         new DamlChoice
@@ -412,7 +394,7 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "the payload-bearing overload must be reachable from a nested Agreement.Contract (the type FromCreatedEvent returns), but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -433,7 +415,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields = fields,
                     Choices =
                     [
                         new DamlChoice
@@ -511,7 +492,7 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "the nested-Contract overload forwarding a record argument and multiple controllers should compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -535,12 +516,6 @@ public class EmittedTemplateChoiceCompilesTests
                 new DamlTemplate
                 {
                     Name = "Agreement",
-                    Fields =
-                    [
-                        new DamlFieldDefinition("platform", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("holder", new DamlPrimitiveType(DamlPrimitive.Party)),
-                        new DamlFieldDefinition("issuer", new DamlPrimitiveType(DamlPrimitive.Party)),
-                    ],
                     Choices =
                     [
                         new DamlChoice
@@ -593,6 +568,6 @@ public class EmittedTemplateChoiceCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "observer-aware emitted code should compile cleanly, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

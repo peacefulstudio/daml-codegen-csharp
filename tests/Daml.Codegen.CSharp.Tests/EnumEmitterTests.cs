@@ -3,7 +3,7 @@
 
 using System.Text;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -49,7 +49,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void emits_the_enum_declaration_with_every_constructor()
+    public void EnumEmitter_emits_the_enum_declaration_with_every_constructor()
     {
         var output = EmitEnum("Status", ["Pending", "Active", "Completed", "Cancelled"]);
 
@@ -61,7 +61,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void names_extension_methods_after_their_DamlEnum_type()
+    public void EnumEmitter_names_extension_methods_after_their_DamlEnum_type()
     {
         var output = EmitEnum("Status", ["Pending", "Active"]);
 
@@ -72,7 +72,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void round_trips_each_constructor_through_the_DamlEnum_serializers()
+    public void EnumEmitter_round_trips_each_constructor_through_the_DamlEnum_serializers()
     {
         var output = EmitEnum("Status", ["Pending", "Active"]);
 
@@ -83,7 +83,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void emits_xml_docs_when_enabled()
+    public void EnumEmitter_emits_xml_docs_when_enabled()
     {
         var output = EmitEnum("Color", ["Red", "Green", "Blue"], generateXmlDocs: true);
 
@@ -94,7 +94,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void emits_xml_docs_for_every_enum_constructor_when_enabled()
+    public void EnumEmitter_emits_xml_docs_for_every_enum_constructor_when_enabled()
     {
         var output = EmitEnum("Color", ["Red", "Green", "Blue"], generateXmlDocs: true);
 
@@ -104,7 +104,7 @@ public class EnumEmitterTests
     }
 
     [Fact]
-    public void omits_the_type_xml_docs_when_disabled()
+    public void EnumEmitter_omits_the_type_xml_docs_when_disabled()
     {
         var output = EmitEnum("Color", ["Red", "Green", "Blue"], generateXmlDocs: false);
 

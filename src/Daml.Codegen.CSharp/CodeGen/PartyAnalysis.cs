@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -15,6 +15,10 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// without duplicating the logic. Shared dependency of the choice-exerciser and
 /// submission-extension emitters.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Performance",
+    "CA1822:Mark members as static",
+    Justification = "Instance members keep this a constructor-injected collaborator of the choice and submission emitters; making them static would replace the seam with a hard dependency on a concrete type.")]
 internal sealed class PartyAnalysis
 {
     /// <summary>

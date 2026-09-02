@@ -37,7 +37,8 @@ public class ReassignmentPairingFieldTypingTests
     {
         var ev = new ContractStreamEvent<TestTemplate>.Assigned(
             new ContractId<TestTemplate>("c1"),
-            DamlRecord.Create(),
+            new TestTemplate("alice"),
+            null,
             LedgerOffset.At(6),
             Source,
             Target,
@@ -68,7 +69,7 @@ public class ReassignmentPairingFieldTypingTests
         parameters["WitnessParties"].Position.Should().Be(parameters["ReassignmentCounter"].Position + 1);
     }
 
-    private sealed record TestTemplate(string Owner) : ITemplate
+    private sealed record TestTemplate(string Owner) : ITemplate, IDamlRecord<TestTemplate>
     {
         public static Identifier TemplateId { get; } = new("pkg", "M", "TestTemplate");
         public static string PackageId => "pkg";
@@ -76,6 +77,9 @@ public class ReassignmentPairingFieldTypingTests
         public static Version PackageVersion { get; } = new(0, 1, 0);
         public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
 
-        public DamlRecord ToRecord() => DamlRecord.Create();
+        public DamlRecord ToRecord() => DamlRecord.Create(new DamlField("owner", new DamlText(Owner)));
+
+        public static TestTemplate FromRecord(DamlRecord record) =>
+            new((record.GetField("owner") as DamlText)?.Value ?? string.Empty);
     }
 }

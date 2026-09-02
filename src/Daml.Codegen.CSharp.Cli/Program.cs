@@ -4,13 +4,13 @@
 using System.CommandLine;
 using Daml.Codegen.CSharp;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
 using Daml.Codegen.CSharp.Versioning;
 using Daml.Codegen.Intermediate;
+using Microsoft.Extensions.Logging;
 
 namespace Daml.Codegen.CSharp.Cli;
 
-internal static class Program
+internal static partial class Program
 {
     internal static async Task<int> Main(string[] args)
     {
@@ -234,17 +234,21 @@ internal static class Program
 
     internal static async Task<int> RunCodegen(CodegenArgs args, CancellationToken cancellationToken)
     {
-        var logger = new ConsoleLogger(args.Verbosity);
+        using var loggerFactory = LoggerFactory.Create(builder =>
+            builder.AddProvider(new VerbosityConsoleLoggerProvider(args.Verbosity))
+                   .SetMinimumLevel(LogLevel.Trace));
+        var logger = loggerFactory.CreateLogger<CSharpCodeGenerator>();
 
         try
         {
-            logger.Info($"Daml C# Codegen v{typeof(Program).Assembly.GetName().Version}");
-            logger.Info($"Output directory: {args.OutputDirectory.FullName}");
+            var emitterVersion = typeof(Program).Assembly.GetName().Version;
+            LogBanner(logger, emitterVersion);
+            LogOutputDirectory(logger, args.OutputDirectory.FullName);
 
             if (!args.OutputDirectory.Exists)
             {
                 args.OutputDirectory.Create();
-                logger.Debug($"Created output directory: {args.OutputDirectory.FullName}");
+                LogCreatedOutputDirectory(logger, args.OutputDirectory.FullName);
             }
 
             await GenerateFromIntermediate(args.IntermediateFile, args, logger, cancellationToken);
@@ -252,30 +256,28 @@ internal static class Program
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            logger.Error(
-                "Code generation was canceled. " +
-                $"Partially written files may remain in '{args.OutputDirectory.FullName}'.");
+            LogCanceled(logger, args.OutputDirectory.FullName);
             return 130;
         }
         catch (Exception ex)
         {
-            logger.Error($"Code generation failed: {ex.Message}");
+            LogFailed(logger, ex.Message);
             var rootCauseMessage = ex.GetBaseException().Message;
             if (rootCauseMessage != ex.Message)
             {
-                logger.Error($"Root cause: {rootCauseMessage}");
+                LogRootCause(logger, rootCauseMessage);
             }
             if (args.Verbosity >= 3)
             {
-                logger.Error(ex.ToString());
+                LogFailureDetail(logger, ex.ToString());
             }
             return 1;
         }
     }
 
-    private static async Task GenerateFromIntermediate(FileInfo file, CodegenArgs args, ConsoleLogger logger, CancellationToken cancellationToken)
+    private static async Task GenerateFromIntermediate(FileInfo file, CodegenArgs args, ILogger<CSharpCodeGenerator> logger, CancellationToken cancellationToken)
     {
-        logger.Info($"Reading IntermediateDar: {file.Name}");
+        LogReadingIntermediate(logger, file.Name);
         IntermediateDar proto;
         await using (var stream = file.OpenRead())
         {
@@ -284,9 +286,9 @@ internal static class Program
         cancellationToken.ThrowIfCancellationRequested();
 
         var dar = IntermediateDarReader.Read(proto);
-        logger.Info($"  Package: {dar.MainPackage.Name} v{dar.MainPackage.Version}");
-        logger.Info($"  Modules: {dar.MainPackage.Modules.Count}");
-        logger.Debug($"  Dependencies: {dar.Dependencies.Count}");
+        LogPackage(logger, dar.MainPackage.Name, dar.MainPackage.Version);
+        LogModuleCount(logger, dar.MainPackage.Modules.Count);
+        LogDependencyCount(logger, dar.Dependencies.Count);
 
         var effectiveCounter = args.ReleaseCountersFile is not null
             ? ResolveReleaseCounter(args.ReleaseCountersFile, ResolveCodegenVersion(args), dar.MainPackage.Name, dar.MainPackage.Version, logger)
@@ -307,12 +309,14 @@ internal static class Program
         string codegenVersion,
         string packageName,
         Version packageVersion,
-        ConsoleLogger logger)
+        ILogger logger)
     {
         var store = JsonReleaseCounterStore.OpenOrCreate(storeFile.FullName);
         var version = NuGetVersionResolver.Compute(packageVersion, codegenVersion, store);
 
-        logger.Info($"  Release counter: codegen_version={codegenVersion}; {packageName} {packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)} version={version}");
+        var threePartVersion = $"{packageVersion.Major}.{packageVersion.Minor}.{Math.Max(0, packageVersion.Build)}";
+        var resolvedVersion = version.ToString();
+        LogReleaseCounter(logger, codegenVersion, packageName, threePartVersion, resolvedVersion);
 
         return version.Generation;
     }
@@ -331,12 +335,12 @@ internal static class Program
             EmitterCounter = emitterCounter,
             PackageLicenseExpression = args.PackageLicenseExpression,
             VersionSuffix = args.VersionSuffix,
+            PublishesReferencedPackages = args.ReleaseCountersFile is not null,
             RepositoryUrl = args.RepositoryUrl,
         };
 
-    private static async Task<int> WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ConsoleLogger logger, CancellationToken cancellationToken)
+    private static async Task WriteGeneratedFiles(IReadOnlyList<GeneratedFile> generatedFiles, CodegenArgs args, ILogger logger, CancellationToken cancellationToken)
     {
-        var written = 0;
         foreach (var file in generatedFiles)
         {
             var filePath = Path.Combine(args.OutputDirectory.FullName, file.RelativePath);
@@ -354,11 +358,54 @@ internal static class Program
             {
                 await File.WriteAllTextAsync(filePath, file.Content, cancellationToken);
             }
-            logger.Debug($"  Generated: {file.RelativePath}");
-            written++;
+            LogGeneratedFile(logger, file.RelativePath);
         }
-        return written;
     }
+
+    [LoggerMessage(EventId = 2000, Level = LogLevel.Information, Message = "Daml C# Codegen v{AssemblyVersion}")]
+    private static partial void LogBanner(ILogger logger, Version? assemblyVersion);
+
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Output directory: {OutputDirectory}")]
+    private static partial void LogOutputDirectory(ILogger logger, string outputDirectory);
+
+    [LoggerMessage(EventId = 2002, Level = LogLevel.Debug, Message = "Created output directory: {OutputDirectory}")]
+    private static partial void LogCreatedOutputDirectory(ILogger logger, string outputDirectory);
+
+    [LoggerMessage(
+        EventId = 2003,
+        Level = LogLevel.Error,
+        Message = "Code generation was canceled. Partially written files may remain in '{OutputDirectory}'.")]
+    private static partial void LogCanceled(ILogger logger, string outputDirectory);
+
+    [LoggerMessage(EventId = 2004, Level = LogLevel.Error, Message = "Code generation failed: {Reason}")]
+    private static partial void LogFailed(ILogger logger, string reason);
+
+    [LoggerMessage(EventId = 2005, Level = LogLevel.Error, Message = "Root cause: {RootCause}")]
+    private static partial void LogRootCause(ILogger logger, string rootCause);
+
+    [LoggerMessage(EventId = 2006, Level = LogLevel.Error, Message = "{FailureDetail}")]
+    private static partial void LogFailureDetail(ILogger logger, string failureDetail);
+
+    [LoggerMessage(EventId = 2007, Level = LogLevel.Information, Message = "Reading IntermediateDar: {FileName}")]
+    private static partial void LogReadingIntermediate(ILogger logger, string fileName);
+
+    [LoggerMessage(EventId = 2008, Level = LogLevel.Information, Message = "  Package: {PackageName} v{PackageVersion}")]
+    private static partial void LogPackage(ILogger logger, string packageName, Version packageVersion);
+
+    [LoggerMessage(EventId = 2009, Level = LogLevel.Information, Message = "  Modules: {ModuleCount}")]
+    private static partial void LogModuleCount(ILogger logger, int moduleCount);
+
+    [LoggerMessage(EventId = 2010, Level = LogLevel.Debug, Message = "  Dependencies: {DependencyCount}")]
+    private static partial void LogDependencyCount(ILogger logger, int dependencyCount);
+
+    [LoggerMessage(
+        EventId = 2011,
+        Level = LogLevel.Information,
+        Message = "  Release counter: codegen_version={CodegenVersion}; {PackageName} {PackageVersion} version={ResolvedVersion}")]
+    private static partial void LogReleaseCounter(ILogger logger, string codegenVersion, string packageName, string packageVersion, string resolvedVersion);
+
+    [LoggerMessage(EventId = 2012, Level = LogLevel.Debug, Message = "  Generated: {RelativePath}")]
+    private static partial void LogGeneratedFile(ILogger logger, string relativePath);
 }
 
 internal sealed record CodegenArgs(

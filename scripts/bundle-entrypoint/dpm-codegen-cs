@@ -23,7 +23,7 @@ EOF
 }
 
 BUNDLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HELPER_JAR="${BUNDLE_ROOT}/bin/daml-codegen-jvm-helper.jar"
+HELPER_JAR="${BUNDLE_ROOT}/bin/daml-dar-to-proto.jar"
 EMITTER="${BUNDLE_ROOT}/bin/Daml.Codegen.CSharp.Cli"
 
 DAR=""

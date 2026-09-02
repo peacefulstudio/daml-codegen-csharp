@@ -1,8 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Globalization;
 using Daml.Codegen.CSharp.CodeGen;
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Xunit;
@@ -63,7 +64,7 @@ public class EmittedRecordFieldCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record whose field PascalCases to its own type name must still compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -131,14 +132,14 @@ public class EmittedRecordFieldCompilesTests
             UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
-        var generator = new CSharpCodeGenerator(options, new ConsoleLogger(0));
+        var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(dar);
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record field whose type is the stdlib DayOfWeek enum must round-trip via the runtime-provided Daml.Runtime.Stdlib.DayOfWeekExtensions, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -152,7 +153,6 @@ public class EmittedRecordFieldCompilesTests
                 new DamlTemplate
                 {
                     Name = "Holding",
-                    Fields = [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))],
                     Choices = [],
                 },
             ],
@@ -212,7 +212,7 @@ public class EmittedRecordFieldCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "GenMap-of-List FromRecord must compile without CS1503 against IReadOnlyDictionary<K,IReadOnlyList<V>>, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public class EmittedRecordFieldCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "nested Map-of-Map FromRecord must compile without CS1503 against the declared nested IReadOnlyDictionary<K1, IReadOnlyDictionary<K2,V>>, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 
     [Fact]
@@ -345,7 +345,7 @@ public class EmittedRecordFieldCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record field typed as DA.Types:Either must map to Daml.Runtime.Stdlib.Either and compile, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
 
         var emitted = string.Join("\n", files.Select(f => f.Content));
         emitted.Should().Contain(
@@ -354,6 +354,90 @@ public class EmittedRecordFieldCompilesTests
         emitted.Should().Contain(
             "Either<string, long>.FromValue(",
             "the emitted decoder must wire DA.Types:Either through Either.FromValue (EmitParametricStdlibFromValue)");
+    }
+
+    [Fact]
+    public void Emitted_record_with_either_field_carrying_an_optional_compiles()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = "daml-prim-id",
+            Name = "daml-prim",
+            Version = new Version(0, 0, 0),
+            LfVersion = "2.1",
+            Modules =
+            [
+                new DamlModule
+                {
+                    Name = "DA.Types",
+                    Templates = [],
+                    DataTypes =
+                    [
+                        new DamlDataType
+                        {
+                            Name = "Either",
+                            TypeParams = ["a", "b"],
+                            Definition = new DamlVariantDefinition([]),
+                        },
+                    ],
+                    Interfaces = [],
+                },
+            ],
+            DependencyReferences = [],
+        };
+
+        var eitherTextOptionalText = new DamlTypeApp(
+            new DamlTypeRef("daml-prim-id", "DA.Types", "Either"),
+            [
+                new DamlPrimitiveType(DamlPrimitive.Text),
+                new DamlTypeApp(
+                    new DamlPrimitiveType(DamlPrimitive.Optional),
+                    [new DamlPrimitiveType(DamlPrimitive.Text)]),
+            ]);
+
+        var module = new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [],
+            DataTypes =
+            [
+                new DamlDataType
+                {
+                    Name = "Decision",
+                    Definition = new DamlRecordDefinition(
+                        [new DamlFieldDefinition("outcome", eitherTextOptionalText)]),
+                },
+            ],
+            Interfaces = [],
+        };
+
+        var package = new DamlPackage
+        {
+            PackageId = "test-pkg",
+            Name = "test-package",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [module],
+            DependencyReferences = [],
+        };
+
+        var dar = new DarModel { MainPackage = package, Dependencies = [stdlibPackage] };
+        var files = CreateGenerator().Generate(dar);
+
+        var diagnostics = CompileEmittedFiles(files);
+        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        errors.Should().BeEmpty(
+            "an Optional in a parametric stdlib generic's type-argument position takes the wrapper, so "
+            + "Either's notnull type parameters are satisfied, but got: {0}",
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
+
+        var emitted = string.Join("\n", files.Select(f => f.Content));
+        emitted.Should().Contain(
+            "Either<string, Optional<string>>",
+            "the Optional type argument must render as the wrapper rather than as string?");
+        emitted.Should().NotContain(
+            "Either<string, string?>",
+            "string? cannot satisfy Either's notnull type parameter");
     }
 
     [Fact]
@@ -411,6 +495,6 @@ public class EmittedRecordFieldCompilesTests
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
             "a record with an unmappable object-typed field must compile (no .ToRecord() on object), but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage() + " @ " + e.Location)));
+            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

@@ -13,7 +13,9 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml record AmuletConversionRateFeed_UpdateResult
 /// </summary>
-public sealed record AmuletConversionRateFeed_UpdateResult([property: DamlFieldAttribute("cid")] ContractId<AmuletConversionRateFeed> Cid) : IDamlRecord
+public sealed record AmuletConversionRateFeed_UpdateResult(
+    [property: DamlFieldAttribute("cid")] ContractId<AmuletConversionRateFeed> Cid
+) : IDamlRecord<AmuletConversionRateFeed_UpdateResult>
 {
     /// <summary>Converts this value to a DamlRecord.</summary>
     public DamlRecord ToRecord() => DamlRecord.Create(

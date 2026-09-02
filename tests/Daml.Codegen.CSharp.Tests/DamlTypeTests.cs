@@ -1,7 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
-using Daml.Codegen.CSharp.Model;
+using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
 
@@ -43,6 +43,32 @@ public class DamlTypeTests
 
         // Assert
         listType.IsOptional.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DamlWrappedOptional_should_identify_Optional()
+    {
+        // Arrange
+        var wrapped = new DamlWrappedOptional(
+            new DamlPrimitiveType(DamlPrimitive.Text), OptionalEncoding.Flat);
+
+        // Assert
+        wrapped.IsOptional.Should().BeTrue();
+    }
+
+    [Fact]
+    public void DamlTypeApp_should_hash_structurally_identical_values_alike()
+    {
+        // Arrange
+        var built = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.Optional),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+        var rebuilt = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.Optional),
+            [new DamlPrimitiveType(DamlPrimitive.Text)]);
+
+        // Assert
+        rebuilt.GetHashCode().Should().Be(built.GetHashCode());
     }
 
     [Fact]

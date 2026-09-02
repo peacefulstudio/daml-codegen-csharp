@@ -37,8 +37,8 @@ class PartyAnalysesSpec extends AnyWordSpec with Matchers with EitherValues {
       ansRulesAnalysis.observers shouldBe PartyAnalysisResult.Static(Nil)
     }
 
-    "keep AnsRules signatories Dynamic because the resolved body chains through a let binding" in {
-      ansRulesAnalysis.signatories shouldBe PartyAnalysisResult.Dynamic
+    "resolve AnsRules signatories to the dso payload field through the located toParties indirection" in {
+      ansRulesAnalysis.signatories shouldBe PartyAnalysisResult.Static(List("dso"))
     }
   }
 }

@@ -6,12 +6,14 @@
 #nullable enable
 
 using Daml.Ledger.Abstractions;
+using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,7 +22,12 @@ namespace Splice.Amulet.Name.Service;
 /// <summary>
 /// Generated from Daml template Splice.Ans.AmuletConversionRateFeed:AmuletConversionRateFeed
 /// </summary>
-public sealed partial record AmuletConversionRateFeed([property: DamlFieldAttribute("publisher")] Party Publisher, [property: DamlFieldAttribute("dso")] Party Dso, [property: DamlFieldAttribute("nextUpdateAfter")] DateTimeOffset? NextUpdateAfter, [property: DamlFieldAttribute("amuletConversionRate")] decimal AmuletConversionRate) : ITemplate
+public sealed partial record AmuletConversionRateFeed(
+    [property: DamlFieldAttribute("publisher")] Party Publisher,
+    [property: DamlFieldAttribute("dso")] Party Dso,
+    [property: DamlFieldAttribute("nextUpdateAfter")] DateTimeOffset? NextUpdateAfter,
+    [property: DamlFieldAttribute("amuletConversionRate")] decimal AmuletConversionRate
+) : ITemplate, IDamlRecord<AmuletConversionRateFeed>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans.AmuletConversionRateFeed", "AmuletConversionRateFeed");
@@ -90,6 +97,7 @@ public sealed partial record AmuletConversionRateFeed([property: DamlFieldAttrib
     };
 
     /// <summary>Contract ID for AmuletConversionRateFeed.</summary>
+    [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
     public sealed record ContractId(string Value) : ContractId<AmuletConversionRateFeed>(Value), IExercises<AmuletConversionRateFeed>
     {
         ContractId<AmuletConversionRateFeed> IExercises<AmuletConversionRateFeed>.ContractId => this;
@@ -100,7 +108,7 @@ public sealed partial record AmuletConversionRateFeed([property: DamlFieldAttrib
     {
         /// <summary>Creates a Contract from a CreatedEvent.</summary>
         public static Contract FromCreatedEvent(CreatedEvent @event) =>
-            new(new ContractId(@event.ContractId), AmuletConversionRateFeed.FromRecord(@event.CreateArguments));
+            new(new ContractId(@event.ContractId), global::Splice.Amulet.Name.Service.AmuletConversionRateFeed.FromRecord(@event.CreateArguments));
     }
 }
 
@@ -118,26 +126,41 @@ public static class AmuletConversionRateFeedSubmissionExtensions
 {
     /// <summary>
     /// Creates a new <see cref="AmuletConversionRateFeed"/> contract on the ledger.
-    /// The submitter is passed explicitly via <paramref name="submitter"/>. The static
-    /// analyzer could not resolve the Daml <c>signatory</c> clause to payload-field
-    /// references — typically because the expression involves the template key, a
-    /// constant, or a function call. <see cref="SubmitterInfo"/> implicitly converts
-    /// from a single <c>Party</c>, so single-party callers still pass one literal.
+    /// The submitting parties are derived from the payload — each Daml signatory is
+    /// a reference to a payload field, so the caller never restates a party that's
+    /// already in the record.
     /// </summary>
     /// <param name="client">The ledger client.</param>
     /// <param name="payload">The contract payload.</param>
-    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static Task<ExerciseOutcome<ContractId<AmuletConversionRateFeed>>> CreateAsync(
         this ILedgerWriter client,
         AmuletConversionRateFeed payload,
-        SubmitterInfo submitter,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(payload);
 
+        SubmitterInfo submitter = payload.Publisher;
+
         return client.TryCreateAsync<AmuletConversionRateFeed>(payload, submitter, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the observers of a <see cref="AmuletConversionRateFeed"/> payload —
+    /// the parties named in the Daml <c>observer</c> clause, derived from
+    /// the payload's <c>Party</c> properties in declaration order. Useful
+    /// for inspecting / asserting the observer set without exercising a
+    /// choice.
+    /// </summary>
+    /// <param name="payload">The contract payload.</param>
+    public static IReadOnlyList<Party> Observers(AmuletConversionRateFeed payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return new Party[]
+        {
+            payload.Dso
+        };
     }
 }
 
@@ -145,7 +168,7 @@ public static class AmuletConversionRateFeedSubmissionExtensions
 /// Async exerciser extensions for <see cref="AmuletConversionRateFeed"/> contract IDs whose choices
 /// return a non-contract-id payload (Decimal, records, lists, Unit, etc.).
 /// Each method submits the choice via
-/// <c>ILedgerWriter.TrySubmitAndWaitForTransactionAsync</c> and lifts the typed result
+/// <c>SingleCommandExtensions.TrySubmitSingleAsync</c> and lifts the typed result
 /// into <c>ExerciseOutcome&lt;TReturn&gt;</c>.
 /// </summary>
 public static class AmuletConversionRateFeedNonContractExtensions
@@ -176,16 +199,16 @@ public static class AmuletConversionRateFeedNonContractExtensions
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>> AmuletConversionRateFeed_ArchiveAsDsoAsync(
         this ContractId<AmuletConversionRateFeed> contractId,
         ILedgerWriter client,
         AmuletConversionRateFeed.AmuletConversionRateFeed_ArchiveAsDso argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -195,14 +218,7 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         var command = contractId.AmuletConversionRateFeed_ArchiveAsDsoCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAmuletConversionRateFeed_ArchiveAsDsoResult(tx, contractId.Value));
     }
@@ -233,16 +249,16 @@ public static class AmuletConversionRateFeedNonContractExtensions
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
     /// <param name="argument">The choice argument.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>> AmuletConversionRateFeed_UpdateAsync(
         this ContractId<AmuletConversionRateFeed> contractId,
         ILedgerWriter client,
         AmuletConversionRateFeed.AmuletConversionRateFeed_Update argument,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -252,14 +268,7 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         var command = contractId.AmuletConversionRateFeed_UpdateCommand(argument);
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectAmuletConversionRateFeed_UpdateResult(tx, contractId.Value));
     }
@@ -286,15 +295,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
     /// </summary>
     /// <param name="contractId">The contract on which to exercise the choice.</param>
     /// <param name="client">The ledger client.</param>
-    /// <param name="actAs">The party submitting the command.</param>
+    /// <param name="submitter">The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.</param>
     /// <param name="workflowId">Optional workflow id; passed through to the ledger when supplied. No default — workflow IDs are correlation keys, and a per-choice default would bucket every submission of the same choice under one ID.</param>
-    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted. Pass the same id across a retry of a lost-but-accepted submission so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
-    /// <param name="timeout">Optional per-call deadline, enforced server-side; the default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
+    /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
+    /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<AmuletConversionRateFeed> contractId,
         ILedgerWriter client,
-        Party actAs,
+        SubmitterInfo submitter,
         string? workflowId = null,
         CommandId? commandId = null,
         TimeSpan? timeout = null,
@@ -304,14 +313,7 @@ public static class AmuletConversionRateFeedNonContractExtensions
 
         var command = contractId.ArchiveCommand();
 
-        var submission = CommandsSubmission.Single(command)
-            .WithCommandId(commandId ?? new CommandId(Guid.NewGuid().ToString()));
-        if (!string.IsNullOrEmpty(workflowId))
-        {
-            submission = submission.WithWorkflowId(new WorkflowId(workflowId));
-        }
-
-        var outcome = await client.TrySubmitAndWaitForTransactionAsync(submission, actAs, timeout: timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
 
         return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }

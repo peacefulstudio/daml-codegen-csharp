@@ -10,6 +10,7 @@ using AwesomeAssertions;
 using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
+using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Streams;
 using Xunit;
@@ -30,9 +31,13 @@ namespace Daml.Ledger.Abstractions.Testing.Conformance;
 /// <see cref="ContractStreamEvent{T}.Archived"/>), honored <c>(fromOffset, toOffset]</c>
 /// bounds, and cancellation-honoring streams.
 /// </summary>
-/// <typeparam name="TProbe">The Daml marker the seeded snapshot/stream is filtered to.</typeparam>
+/// <typeparam name="TProbe">The Daml template the seeded snapshot/stream is filtered to.</typeparam>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming",
+    "CA1707:Identifiers should not contain underscores",
+    Justification = "These are xUnit test methods shipped as an abstract conformance base; they follow the repo-wide Subject_scenario_expectation naming that test readers and failure output depend on.")]
 public abstract class LedgerClientConformanceTests<TProbe>
-    where TProbe : IDamlType
+    where TProbe : ITemplate, IDamlRecord<TProbe>
 {
     /// <summary>Creates a client seeded with the canonical conformance scenario.</summary>
     protected abstract ILedgerClient CreateClient();
@@ -74,6 +79,17 @@ public abstract class LedgerClientConformanceTests<TProbe>
     /// <c>null</c>, which skips the write-path checks below.
     /// </summary>
     protected virtual WriteConformanceFixture? CreateWriteFixture() => null;
+
+    /// <summary>
+    /// A write-capable client and the submissions proving the <c>commandId</c> deduplication
+    /// contract of
+    /// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/> /
+    /// <see cref="ILedgerWriter.TryCreateAsync{TTemplate}(TTemplate, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>,
+    /// or <c>null</c> if the adopter cannot read back the <c>command_id</c> the participant
+    /// recorded for a submission. Defaults to <c>null</c>, which skips the command-id checks
+    /// below. Called afresh by each check, which then submits exactly once.
+    /// </summary>
+    protected virtual CommandIdConformanceFixture? CreateCommandIdFixture() => null;
 
     /// <summary>A cancelled live subscription surfaces cancellation, not an in-band error.</summary>
     [Fact]
@@ -172,12 +188,12 @@ public abstract class LedgerClientConformanceTests<TProbe>
         var all = await CollectBounded(client, LedgerOffset.Begin, end);
         all.Should().NotBeEmpty(
             "the conformance scenario must seed at least one event on the subscription stream");
-        var resumeFrom = OffsetOf(all[0]);
+        var resumeFrom = FirstPosition(all);
 
         var resumed = await CollectBounded(client, resumeFrom, end);
 
         resumed.Should().NotContain(
-            e => OffsetOf(e) == resumeFrom,
+            e => PositionOf(e) == resumeFrom,
             "fromOffset is exclusive: resuming from an offset must not re-deliver the event at it");
     }
 
@@ -191,16 +207,17 @@ public abstract class LedgerClientConformanceTests<TProbe>
         var all = await CollectBounded(client, LedgerOffset.Begin, end);
         all.Should().NotBeEmpty(
             "the conformance scenario must seed at least one event on the subscription stream");
-        var boundary = OffsetOf(all[0]);
+        var boundary = FirstPosition(all);
 
         var bounded = await CollectBounded(client, LedgerOffset.Begin, boundary);
 
         bounded.Should().Contain(
-            e => OffsetOf(e) == boundary,
+            e => PositionOf(e) == boundary,
             "toOffset is inclusive: the event at toOffset must be delivered");
         bounded.Should().OnlyContain(
-            e => OffsetOf(e).Value <= boundary.Value,
-            "a bounded subscription must complete at toOffset and deliver nothing past it");
+            e => SitsAtOrBefore(e, boundary),
+            "a bounded subscription must complete at toOffset and deliver nothing past it; an event "
+            + "carrying no ledger position cannot sit past the boundary because it sits nowhere");
     }
 
     /// <summary>
@@ -346,6 +363,107 @@ public abstract class LedgerClientConformanceTests<TProbe>
             "authorized pre-set ActAs rescue an unauthorized submitter");
     }
 
+    /// <summary>
+    /// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
+    /// must dispatch a caller-supplied <c>commandId</c> to the participant verbatim, never
+    /// substituting one of its own — a caller replaying a lost-but-accepted submission under the
+    /// same id gets deduplication only if the id survives the call. Opt-in: skipped unless the
+    /// adopter overrides <see cref="CreateCommandIdFixture"/>.
+    /// </summary>
+    [Fact]
+    public async Task TryExerciseAsync_dispatches_the_caller_supplied_commandId_verbatim()
+    {
+        var maybeFixture = CreateCommandIdFixture();
+        Assert.SkipWhen(maybeFixture is null, CommandIdFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        await fixture.Exercise(fixture.Client, CallerSuppliedCommandId);
+
+        var recorded = await fixture.ReadRecordedCommandId();
+
+        recorded.Should().Be(
+            CallerSuppliedCommandId.Value,
+            "the caller-supplied commandId must reach the participant unchanged; an implementation " +
+            "that mints its own id anyway silently breaks deduplication across a retry that reuses the id");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.TryExerciseAsync{TResult}(ExerciseCommand, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
+    /// must mint a command id when the caller omits one, rather than leaving the participant's
+    /// <c>command_id</c> unset — an unset id is not deduplicable and leaves the completion
+    /// uncorrelatable. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateCommandIdFixture"/>. Takes its own fresh fixture and submits once, so a
+    /// leftover id recorded by the sibling check cannot pass for a minted one.
+    /// </summary>
+    [Fact]
+    public async Task TryExerciseAsync_mints_a_command_id_when_the_caller_omits_one()
+    {
+        var maybeFixture = CreateCommandIdFixture();
+        Assert.SkipWhen(maybeFixture is null, CommandIdFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        await fixture.Exercise(fixture.Client, null);
+
+        var recorded = await fixture.ReadRecordedCommandId();
+
+        recorded.Should().NotBeNullOrWhiteSpace(
+            "an omitted commandId obliges the implementation to mint one; an implementation that " +
+            "forwards the omission and leaves the participant's command_id unset yields a " +
+            "submission that can neither be deduplicated nor correlated to its completion");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.TryCreateAsync{TTemplate}(TTemplate, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
+    /// must dispatch a caller-supplied <c>commandId</c> to the participant verbatim, never
+    /// substituting one of its own. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateCommandIdFixture"/>.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateAsync_dispatches_the_caller_supplied_commandId_verbatim()
+    {
+        var maybeFixture = CreateCommandIdFixture();
+        Assert.SkipWhen(maybeFixture is null, CommandIdFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        await fixture.Create(fixture.Client, CallerSuppliedCommandId);
+
+        var recorded = await fixture.ReadRecordedCommandId();
+
+        recorded.Should().Be(
+            CallerSuppliedCommandId.Value,
+            "the caller-supplied commandId must reach the participant unchanged; an implementation " +
+            "that mints its own id anyway silently breaks deduplication across a retry that reuses the id");
+    }
+
+    /// <summary>
+    /// <see cref="ILedgerWriter.TryCreateAsync{TTemplate}(TTemplate, SubmitterInfo, string?, CommandId?, TimeSpan?, CancellationToken)"/>
+    /// must mint a command id when the caller omits one, rather than leaving the participant's
+    /// <c>command_id</c> unset. Opt-in: skipped unless the adopter overrides
+    /// <see cref="CreateCommandIdFixture"/>. Takes its own fresh fixture and submits once, so a
+    /// leftover id recorded by the sibling check cannot pass for a minted one.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateAsync_mints_a_command_id_when_the_caller_omits_one()
+    {
+        var maybeFixture = CreateCommandIdFixture();
+        Assert.SkipWhen(maybeFixture is null, CommandIdFixtureSkipReason);
+        await using var fixture = maybeFixture!;
+
+        await fixture.Create(fixture.Client, null);
+
+        var recorded = await fixture.ReadRecordedCommandId();
+
+        recorded.Should().NotBeNullOrWhiteSpace(
+            "an omitted commandId obliges the implementation to mint one; an implementation that " +
+            "forwards the omission and leaves the participant's command_id unset yields a " +
+            "submission that can neither be deduplicated nor correlated to its completion");
+    }
+
+    private static readonly CommandId CallerSuppliedCommandId = new("conformance-caller-supplied-command-id");
+
+    private const string CommandIdFixtureSkipReason =
+        "adopter opted out of the command-id check: CreateCommandIdFixture() returned null";
+
     private const string WriteFixtureSkipReason =
         "adopter opted out of the submitter-authority check: CreateWriteFixture() returned null";
 
@@ -400,7 +518,7 @@ public abstract class LedgerClientConformanceTests<TProbe>
         return items;
     }
 
-    private static LedgerOffset OffsetOf(ContractStreamEvent<TProbe> e) => e switch
+    private static LedgerOffset? PositionOf(ContractStreamEvent<TProbe> e) => e switch
     {
         ContractStreamEvent<TProbe>.Created c => c.Offset,
         ContractStreamEvent<TProbe>.Archived a => a.Offset,
@@ -413,4 +531,19 @@ public abstract class LedgerClientConformanceTests<TProbe>
             "a bounded conformance subscription must not surface a transport StreamError"),
         _ => throw new InvalidOperationException("unrecognized ContractStreamEvent variant"),
     };
+
+    private static bool SitsAtOrBefore(ContractStreamEvent<TProbe> e, LedgerOffset boundary) =>
+        PositionOf(e) is not { } position || position.Value <= boundary.Value;
+
+    private static LedgerOffset FirstPosition(IReadOnlyList<ContractStreamEvent<TProbe>> events)
+    {
+        var positioned = events.Select(PositionOf).OfType<LedgerOffset>().ToList();
+
+        positioned.Should().NotBeEmpty(
+            "the conformance scenario must seed at least one event that carries a ledger position "
+            + "(Created, Archived, Checkpoint, …); an Unclassified event may legitimately carry none, "
+            + "so it alone cannot anchor the offset-boundary checks");
+
+        return positioned[0];
+    }
 }
