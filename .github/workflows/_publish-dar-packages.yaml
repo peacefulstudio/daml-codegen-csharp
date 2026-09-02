@@ -32,7 +32,7 @@ on:
         description: 'damlc component version listed under daml.yaml components.'
         required: false
         type: string
-        default: '3.4.11'
+        default: '3.5.2'
       runtime_version:
         description: 'Daml.Runtime NuGet version referenced from generated csprojs. Empty = Directory.Build.props <Version>.'
         required: false
