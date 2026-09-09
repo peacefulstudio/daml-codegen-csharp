@@ -65,7 +65,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? fromOffset = null,
@@ -100,7 +108,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
         SubmitterInfo submitter,
         StakeholderResume resumeFrom,
@@ -138,7 +154,15 @@ public interface ILedgerStreamer
     /// subscription passes the party itself here.
     /// </param>
     /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? activeAtOffset = null,
@@ -201,7 +225,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
         SubmitterInfo submitter,
         LedgerOffset? fromOffset = null,
@@ -248,7 +280,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
         ViewDescriptor<TInterface, TView> view,
         SubmitterInfo submitter,
@@ -286,7 +326,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
         ViewDescriptor<TInterface, TView> view,
         SubmitterInfo submitter,
@@ -325,7 +373,15 @@ public interface ILedgerStreamer
     /// subscription passes the party itself here.
     /// </param>
     /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
         ViewDescriptor<TInterface, TView> view,
         SubmitterInfo submitter,
@@ -369,7 +425,15 @@ public interface ILedgerStreamer
     /// delivered and then the bounded stream completes. <c>null</c> follows the live
     /// stream, which does not complete on its own.
     /// </param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
     IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
         ViewDescriptor<TInterface, TView> view,
         SubmitterInfo submitter,

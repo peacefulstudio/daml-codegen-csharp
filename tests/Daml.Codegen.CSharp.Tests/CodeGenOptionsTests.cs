@@ -16,30 +16,24 @@ public class CodeGenOptionsTests
     [Fact]
     public void CodeGenOptions_should_have_correct_defaults()
     {
-        // Arrange & Act
         var options = new CodeGenOptions();
 
-        // Assert
         options.EnableNullableReferenceTypes.Should().BeTrue();
         options.GenerateXmlDocs.Should().BeTrue();
         options.UseFileScopedNamespaces.Should().BeTrue();
-        options.UseRecordTypes.Should().BeTrue();
-        options.UsePrimaryConstructors.Should().BeTrue();
     }
 
     [Fact]
     public void CodeGenOptions_should_allow_customization()
     {
-        // Arrange & Act
         var options = new CodeGenOptions
         {
-            RootNamespace = "MyCompany.Contracts",
+            NamespacePrefix = "MyCompany.Contracts",
             RootFilter = ".*Iou.*",
             EnableNullableReferenceTypes = false,
         };
 
-        // Assert
-        options.RootNamespace.Should().Be("MyCompany.Contracts");
+        options.NamespacePrefix.Should().Be("MyCompany.Contracts");
         options.RootFilter.Should().Be(".*Iou.*");
         options.EnableNullableReferenceTypes.Should().BeFalse();
     }
@@ -47,10 +41,8 @@ public class CodeGenOptionsTests
     [Fact]
     public void CodeGenOptions_should_have_correct_new_option_defaults()
     {
-        // Arrange & Act
         var options = new CodeGenOptions();
 
-        // Assert - new options should have correct defaults
         options.GenerateProjectFile.Should().BeFalse();
         options.IncludeDependencies.Should().BeFalse();
         options.TargetFramework.Should().Be("net10.0");
@@ -96,7 +88,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_include_project_file_when_GenerateProjectFile_is_true()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             GenerateProjectFile = true,
@@ -105,10 +96,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var projectFile = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
         projectFile.Should().NotBeNull();
         projectFile!.RelativePath.Should().Be("Main.Package.csproj");
@@ -118,7 +107,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_not_include_project_file_when_GenerateProjectFile_is_false()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             GenerateProjectFile = false
@@ -126,10 +114,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var projectFile = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
         projectFile.Should().BeNull();
     }
@@ -141,7 +127,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_include_dependency_code_when_IncludeDependencies_is_true()
     {
-        // Arrange
         var depModule = CreateSimpleModule("Dep.Module", "DepTemplate");
         var depPackage = new DamlPackage
         {
@@ -160,10 +145,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var mainFile = files.FirstOrDefault(f => f.RelativePath.Contains("SimpleTemplate.cs", StringComparison.Ordinal));
         var depFile = files.FirstOrDefault(f => f.RelativePath.Contains("DepTemplate.cs", StringComparison.Ordinal));
 
@@ -174,7 +157,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_not_include_dependency_code_when_IncludeDependencies_is_false()
     {
-        // Arrange
         var depModule = CreateSimpleModule("Dep.Module", "DepTemplate");
         var depPackage = new DamlPackage
         {
@@ -193,10 +175,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var mainFile = files.FirstOrDefault(f => f.RelativePath.Contains("SimpleTemplate.cs", StringComparison.Ordinal));
         var depFile = files.FirstOrDefault(f => f.RelativePath.Contains("DepTemplate.cs", StringComparison.Ordinal));
 
@@ -207,7 +187,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_include_multiple_dependencies_when_IncludeDependencies_is_true()
     {
-        // Arrange
         var dep1Module = CreateSimpleModule("Dep1.Module", "Dep1Template");
         var dep1Package = new DamlPackage
         {
@@ -237,10 +216,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(dep1Package, dep2Package).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var mainFile = files.FirstOrDefault(f => f.RelativePath.Contains("SimpleTemplate.cs", StringComparison.Ordinal));
         var dep1File = files.FirstOrDefault(f => f.RelativePath.Contains("Dep1Template.cs", StringComparison.Ordinal));
         var dep2File = files.FirstOrDefault(f => f.RelativePath.Contains("Dep2Template.cs", StringComparison.Ordinal));
@@ -257,7 +234,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_include_both_project_file_and_dependencies()
     {
-        // Arrange
         var depModule = CreateSimpleModule("Dep.Module", "DepTemplate");
         var depPackage = new DamlPackage
         {
@@ -278,10 +254,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).WithDependencies(depPackage).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var projectFile = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
         var mainFile = files.FirstOrDefault(f => f.RelativePath.Contains("SimpleTemplate.cs", StringComparison.Ordinal));
         var depFile = files.FirstOrDefault(f => f.RelativePath.Contains("DepTemplate.cs", StringComparison.Ordinal));
@@ -294,7 +268,6 @@ public class CodeGenOptionsTests
     [Fact]
     public void Generate_should_use_runtime_version_in_project_file()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             GenerateProjectFile = true,
@@ -303,10 +276,8 @@ public class CodeGenOptionsTests
         var generator = CreateGenerator(options);
         var dar = MainPackageDar().WithModule(CreateSimpleModule()).Build();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         var projectFile = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
         projectFile.Should().NotBeNull();
         projectFile!.Content.Should().Contain("Version=\"1.2.3\"");

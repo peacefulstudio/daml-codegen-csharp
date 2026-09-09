@@ -13,21 +13,68 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </summary>
 internal static class Identifiers
 {
-    private const string FallbackNamespace = "DamlGenerated";
+    /// <summary>The C# global namespace alias every fully qualified emitted name starts with.</summary>
+    internal const string GlobalPrefix = "global::";
 
     /// <summary>
-    /// Derives a C# namespace from a Daml package name: PascalCases each
-    /// <c>-</c>/<c>_</c>-delimited segment and joins with <c>.</c>, falling back to
-    /// <c>DamlGenerated</c> when no usable segment remains.
+    /// Spells <paramref name="name"/> declared in <paramref name="dottedNamespace"/> as a
+    /// <c>global::</c>-rooted fully qualified name, immune to a nearer declaration of the same
+    /// spelling capturing it.
     /// </summary>
-    public static string DeriveNamespace(string packageName)
+    internal static string GlobalQualified(string dottedNamespace, string name) =>
+        $"{GlobalPrefix}{dottedNamespace}.{name}";
+
+    /// <summary>
+    /// True when <paramref name="dottedName"/> equals <paramref name="prefix"/> or begins with it
+    /// at a segment boundary — <c>Acme.Ledger.Token</c> starts with <c>Acme.Ledger</c>, while
+    /// <c>Acme.LedgerX</c> does not. The one test both the <c>-n</c> prefix elision and the
+    /// namespace-ancestry walk rely on.
+    /// </summary>
+    internal static bool StartsWithSegments(string dottedName, string prefix) =>
+        dottedName == prefix || dottedName.StartsWith(prefix + ".", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Every namespace declaring <paramref name="dottedNamespace"/> implies, shortest first:
+    /// <c>A.B.C</c> yields <c>A</c>, <c>A.B</c> and <c>A.B.C</c> itself.
+    /// </summary>
+    internal static IEnumerable<string> NamespaceWithAncestors(string dottedNamespace)
     {
-        var parts = packageName.Split('-', '_')
-            .Select(ToPascalCase)
-            .Select(Sanitize)
-            .Where(segment => segment.Length > 0)
-            .ToList();
-        return parts.Count == 0 ? FallbackNamespace : string.Join(".", parts);
+        var segments = dottedNamespace.Split('.');
+        for (var length = 1; length <= segments.Length; length++)
+        {
+            yield return string.Join('.', segments[..length]);
+        }
+    }
+
+    /// <summary>
+    /// Derives the C# namespace a Daml module's types are emitted into: the module name
+    /// itself, each <c>.</c>-delimited segment leaf-sanitised (see <see cref="SanitizeBare"/>)
+    /// and keyword-escaped, with the segment structure kept intact. When
+    /// <see cref="CodeGenOptions.NamespacePrefix"/> is set and the module belongs to the main
+    /// package, that value is prepended as a prefix — unless the module name already equals
+    /// the prefix or begins with it at a segment boundary, in which case the module name is
+    /// returned unchanged so <c>Acme.Ledger</c> + <c>Acme.Ledger.Token</c> is
+    /// <c>Acme.Ledger.Token</c>, not <c>Acme.Ledger.Acme.Ledger.Token</c>. The elision is a
+    /// whole-prefix test on segment boundaries, never a longest-common-suffix match: suffix
+    /// matching would send <c>Ledger.Token</c> and <c>Token</c> to the same namespace.
+    /// Dependency packages never receive the prefix, so a dependency generated locally is
+    /// interchangeable with the same package's published bindings, which are emitted with no
+    /// override.
+    /// </summary>
+    public static string ModuleNamespace(string moduleName, bool isMainPackage, CodeGenOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(moduleName);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var sanitisedModule = string.Join('.', moduleName.Split('.').Select(segment => EscapeKeyword(SanitizeBare(segment))));
+        var prefix = options.NamespacePrefix;
+        if (prefix is null || !isMainPackage)
+        {
+            return sanitisedModule;
+        }
+        return StartsWithSegments(sanitisedModule, prefix)
+            ? sanitisedModule
+            : prefix + "." + sanitisedModule;
     }
 
     /// <summary>
@@ -226,12 +273,14 @@ internal static class Identifiers
     /// Builds the C# marker-interface name for a Daml interface: the sanitised
     /// interface name prefixed with <c>I</c> (e.g. Daml <c>Holding</c> →
     /// <c>IHolding</c>), appending a trailing <c>_</c> until the result is absent
-    /// from <paramref name="reservedTypeNames"/> — a package's namespace is flat
-    /// across all its modules, so any top-level Daml declaration anywhere in the
-    /// package (template, record, enum, or variant) can legally sanitise to an
-    /// interface marker (e.g. record <c>IFactory</c> alongside interface
-    /// <c>Factory</c>), which would otherwise emit two public <c>IFactory</c>
-    /// declarations in the same namespace (CS0101). The name is built from
+    /// from <paramref name="reservedTypeNames"/> — the sanitised names of every
+    /// top-level Daml declaration in the declaring package (template, record, enum,
+    /// or variant), whichever module declares it, since any of them can legally
+    /// sanitise to an interface marker (e.g. record <c>IFactory</c> alongside
+    /// interface <c>Factory</c>) and two such declarations in one namespace would be
+    /// CS0101. Reserving across the whole package rather than the marker's own
+    /// namespace over-approximates that collision, but keeps the assignment
+    /// independent of how modules map to namespaces. The name is built from
     /// <see cref="SanitizeBare"/> with <see cref="EscapeKeyword"/> applied last:
     /// escaping first would emit <c>I@event</c>, which parses as two identifiers
     /// rather than one. The escape is unreachable — the <c>I</c> prefix leaves an

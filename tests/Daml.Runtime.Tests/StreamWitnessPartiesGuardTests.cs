@@ -5,7 +5,6 @@ using System.Reflection;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
-using Daml.Runtime.Outcomes;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -13,12 +12,13 @@ using Xunit;
 namespace Daml.Runtime.Tests;
 
 /// <summary>
-/// Closes a gap in the borrowed-collection guard: <c>Contracts/</c> event records guard every
-/// collection member at both the primary constructor and the <c>init</c> accessor, but
-/// the four <c>Streams/</c> event/entry unions had <c>WitnessParties</c> members with no
-/// guard at all. Discovers every closed variant of the four families through reflection
-/// rather than a hand-listed set, so a future variant that forgets the guard fails this
-/// test instead of shipping a silent <see cref="NullReferenceException"/> downstream.
+/// The four <c>Streams/</c> event/entry unions carry a <c>WitnessParties</c> member on every
+/// contract-bearing arm. Its guarantee — never <c>null</c>, compared by content — is the
+/// member's declared type, <see cref="EquatableArray{T}"/>, so a future arm keeps it by
+/// declaring that type and loses it by declaring anything else. Discovers every closed
+/// variant of the four families through reflection rather than a hand-listed set, so a
+/// variant that regresses to an <see cref="IReadOnlyList{T}"/> member fails here instead of
+/// shipping a member that can be nulled again.
 /// </summary>
 public class StreamWitnessPartiesGuardTests
 {
@@ -35,44 +35,23 @@ public class StreamWitnessPartiesGuardTests
 
     [Theory]
     [MemberData(nameof(WitnessPartiesVariants))]
-    public void Constructor_rejects_a_null_WitnessParties(Type recordType)
+    public void WitnessParties_is_declared_as_an_EquatableArray_of_Party(Type recordType)
     {
-        var ctor = recordType.GetConstructors().Single();
-        var parameters = ctor.GetParameters();
-        var witnessIndex = Array.FindIndex(parameters, p => p.Name == "WitnessParties");
-        var args = parameters.Select(p => DummyValue(p.ParameterType)).ToArray();
-        args[witnessIndex] = null;
+        var parameter = recordType.GetConstructors().Single()
+            .GetParameters()
+            .Single(p => p.Name == "WitnessParties");
 
-        var act = () => ctor.Invoke(args);
-
-        act.Should().Throw<TargetInvocationException>()
-            .WithInnerException<ArgumentNullException>()
-            .Which.ParamName.Should().Be("WitnessParties");
-    }
-
-    [Theory]
-    [MemberData(nameof(WitnessPartiesVariants))]
-    public void Init_accessor_rejects_a_null_WitnessParties(Type recordType)
-    {
-        var ctor = recordType.GetConstructors().Single();
-        var args = ctor.GetParameters().Select(p => DummyValue(p.ParameterType)).ToArray();
-        var instance = ctor.Invoke(args);
-        var setter = recordType.GetProperty("WitnessParties")!.GetSetMethod(nonPublic: true)!;
-
-        var act = () => setter.Invoke(instance, [null]);
-
-        act.Should().Throw<TargetInvocationException>()
-            .WithInnerException<ArgumentNullException>()
-            .Which.ParamName.Should().Be("WitnessParties");
+        parameter.ParameterType.Should().Be<EquatableArray<Party>>();
+        recordType.GetProperty("WitnessParties")!.PropertyType.Should().Be<EquatableArray<Party>>();
     }
 
     /// <summary>
     /// Proves the sweep is not vacuous by asserting the exact member count,
     /// rather than only "more than zero" — a discovery bug that silently dropped every
-    /// variant would otherwise pass both theories above by finding nothing to test.
+    /// variant would otherwise pass the theory above by finding nothing to test.
     /// </summary>
     [Fact]
-    public void Sweep_finds_exactly_the_twelve_unguarded_members()
+    public void Sweep_finds_exactly_the_twelve_witness_party_members()
     {
         DiscoverVariants().Should().HaveCount(12);
     }
@@ -107,68 +86,6 @@ public class StreamWitnessPartiesGuardTests
                 }
             }
         }
-    }
-
-    private static object? DummyValue(Type type)
-    {
-        if (type == typeof(string))
-        {
-            return "s";
-        }
-
-        if (type == typeof(bool))
-        {
-            return true;
-        }
-
-        if (type == typeof(long))
-        {
-            return 1L;
-        }
-
-        if (type == typeof(DamlValue))
-        {
-            return DamlUnit.Instance;
-        }
-
-        if (type == typeof(LedgerOffset))
-        {
-            return LedgerOffset.At(1);
-        }
-
-        if (type == typeof(SynchronizerId))
-        {
-            return new SynchronizerId("sync");
-        }
-
-        if (type == typeof(IReadOnlyList<Party>))
-        {
-            return new List<Party> { new("alice") };
-        }
-
-        if (type == typeof(ContractKey))
-        {
-            return new ContractKey(DamlUnit.Instance);
-        }
-
-        if (type == typeof(TestTemplate))
-        {
-            return new TestTemplate();
-        }
-
-        if (type == typeof(TestView))
-        {
-            return new TestView();
-        }
-
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ContractId<>))
-        {
-            return Activator.CreateInstance(type, "00c");
-        }
-
-        throw new NotSupportedException(
-            $"No dummy-value factory registered for parameter type '{type}'. Add one so this "
-            + "sweep can keep exercising every WitnessParties-carrying variant.");
     }
 
     private sealed record TestTemplate : ITemplate, IDamlRecord<TestTemplate>

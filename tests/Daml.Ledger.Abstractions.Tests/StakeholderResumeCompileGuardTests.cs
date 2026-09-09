@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Testing.Roslyn;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -166,15 +167,10 @@ public sealed class StakeholderResumeCompileGuardTests
     {
         var tree = CSharpSyntaxTree.ParseText(source);
 
-        var references = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
-            .ToList();
-
         var compilation = CSharpCompilation.Create(
             assemblyName: "StakeholderResumeCompileGuardTests-probe",
             syntaxTrees: [tree],
-            references: references,
+            references: ConsumerReferenceSet.Assemblies,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         return compilation.GetDiagnostics();

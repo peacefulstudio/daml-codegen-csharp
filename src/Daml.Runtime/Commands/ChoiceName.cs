@@ -1,6 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json.Serialization;
+using Daml.Runtime.Serialization;
+
 namespace Daml.Runtime.Commands;
 
 /// <summary>
@@ -14,6 +17,7 @@ namespace Daml.Runtime.Commands;
 /// cannot be transposed with the adjacent contract-id string at a command-construction
 /// site; use <see cref="Value"/> or <see cref="ToString"/> for logging and interpolation.
 /// </remarks>
+[JsonConverter(typeof(ChoiceNameJsonConverter))]
 public readonly record struct ChoiceName
 {
     private readonly string? _value;
@@ -47,4 +51,20 @@ public readonly record struct ChoiceName
     /// handling, and a throw here would mask the original exception.
     /// </remarks>
     public override string ToString() => _value ?? "<uninitialized ChoiceName>";
+}
+
+/// <summary>
+/// System.Text.Json converter for <see cref="ChoiceName"/>. Serializes as a plain JSON string,
+/// the shape the Ledger API's <c>choice</c> field carries, so a <see cref="ChoiceName"/> member
+/// reads back with the choice it named. A whole <see cref="ExerciseCommand"/> still does not
+/// round-trip — it holds an abstract <c>ContractId</c> and <c>DamlValue</c>, and
+/// <see cref="ICommand"/> carries no <c>[JsonDerivedType]</c>.
+/// </summary>
+internal sealed class ChoiceNameJsonConverter : OpaqueStringIdJsonConverter<ChoiceName>
+{
+    /// <inheritdoc/>
+    protected override ChoiceName Parse(string id) => new(id);
+
+    /// <inheritdoc/>
+    protected override string Format(ChoiceName value) => value.Value;
 }

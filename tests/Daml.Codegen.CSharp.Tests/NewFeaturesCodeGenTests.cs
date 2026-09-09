@@ -96,8 +96,8 @@ public class NewFeaturesCodeGenTests
 
         code.Should().Contain("public sealed record Contract(ContractId Id, CompositeKeyTemplate Data)");
 
-        code.Should().Contain("public required ContractKey<global::Test.Package.AssetKey> Key { get; init; }");
-        code.Should().Contain("? new ContractKey<global::Test.Package.AssetKey>(global::Test.Package.AssetKey.FromRecord(contractKey.Value.As<DamlRecord>()), contractKey.KeyHash)");
+        code.Should().Contain("public required ContractKey<global::Test.Module.AssetKey> Key { get; init; }");
+        code.Should().Contain("? new ContractKey<global::Test.Module.AssetKey>(global::Test.Module.AssetKey.FromRecord(contractKey.Value.As<DamlRecord>()), contractKey.KeyHash)");
     }
 
     [Fact]

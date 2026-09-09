@@ -913,4 +913,81 @@ public class DamlLfJsonReaderStdlibGenericsTests
         act.Should().Throw<JsonException>()
             .WithMessage("Expected JSON String at 'ContractIdHolder.contractId' but found Null");
     }
+
+    public static TheoryData<Type> GenericFamiliesRefusedAsTopLevelValues =>
+    [
+        typeof(IReadOnlyList<string>),
+        typeof(IReadOnlyDictionary<string, string>),
+        typeof(IReadOnlyDictionary<Party, long>),
+        typeof(Optional<string>),
+        typeof(Optional<Optional<string>>),
+        typeof(Tuple2<Party, string>),
+        typeof(Tuple3<Party, string, long>),
+        typeof(Either<string, long>),
+        typeof(Set<string>),
+        typeof(NonEmpty<string>),
+        typeof(Map<string, long>),
+    ];
+
+    [Theory]
+    [MemberData(nameof(GenericFamiliesRefusedAsTopLevelValues))]
+    public void ReadValue_should_refuse_a_generic_family_as_a_top_level_value(Type valueType)
+    {
+        var act = () => DamlLfJsonReader.ReadValue("[]", valueType);
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{valueType}' at '{valueType.Name}' names a generic Daml type family the reader does not decode "
+            + "as a top-level value; decode it as a field of a generated Daml record, or decode this value without "
+            + "the reader.");
+    }
+
+    [Theory]
+    [MemberData(nameof(GenericFamiliesRefusedAsTopLevelValues))]
+    public void ReadValue_should_refuse_a_generic_family_as_a_top_level_value_from_a_parsed_element(
+        Type valueType)
+    {
+        using var document = JsonDocument.Parse("[]");
+        var element = document.RootElement;
+
+        var act = () => DamlLfJsonReader.ReadValue(element, valueType);
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{valueType}' at '{valueType.Name}' names a generic Daml type family the reader does not decode "
+            + "as a top-level value; decode it as a field of a generated Daml record, or decode this value without "
+            + "the reader.");
+    }
+
+    [Fact]
+    public void ReadValue_should_refuse_a_nullable_scalar_as_a_top_level_value()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<long?>("\"42\"");
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{typeof(long?)}' at '{typeof(long?).Name}' names a generic Daml type family the reader does "
+            + "not decode as a top-level value; decode it as a field of a generated Daml record, or decode this "
+            + "value without the reader.");
+    }
+
+    [Fact]
+    public void ReadValue_should_refuse_a_nullable_generated_enum_as_a_top_level_value()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Direction?>("\"Forward\"");
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{typeof(Direction?)}' at '{typeof(Direction?).Name}' names a generic Daml type family the "
+            + "reader does not decode as a top-level value; decode it as a field of a generated Daml record, or "
+            + "decode this value without the reader.");
+    }
+
+    private static readonly Type TextListKnownOnlyAtRuntime = typeof(IReadOnlyList<string>);
+
+    [Fact]
+    public void ReadValue_should_refuse_a_top_level_list_even_when_the_json_matches_its_shape()
+    {
+        var act = () => DamlLfJsonReader.ReadValue("""["a","b"]""", TextListKnownOnlyAtRuntime);
+
+        act.Should().Throw<NotSupportedException>(
+            "a bare Type cannot say whether the element is Optional, so decoding it would silently "
+            + "drop optionality rather than fail");
+    }
 }

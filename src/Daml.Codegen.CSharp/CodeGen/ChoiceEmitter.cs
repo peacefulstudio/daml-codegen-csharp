@@ -98,11 +98,11 @@ internal sealed partial class ChoiceEmitter(
 
         var argTypeRef = argument.HasArgument
             ? argument.TypeName
-            : context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace);
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.Choice, context.RootNamespace)}<{indent.CurrentTypeName}, {argTypeRef}, {returnType}> Choice{choiceName} {{ get; }} = new()");
+            : context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit);
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.Choice)}<{indent.CurrentTypeName}, {argTypeRef}, {returnType}> Choice{choiceName} {{ get; }} = new()");
         indent.AppendLine("{");
         indent.Indent();
-        indent.AppendLine($"Name = new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"Name = new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName)}(\"{choice.Name}\"),");
         indent.AppendLine($"Consuming = {(choice.Consuming ? "true" : "false")},");
 
         if (argument.HasArgument)
@@ -135,11 +135,11 @@ internal sealed partial class ChoiceEmitter(
         switch (returnType)
         {
             case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
-                indent.AppendLine($"ResultDecoder = _ => {context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance");
+                indent.AppendLine($"ResultDecoder = _ => {context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance");
                 return;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
                 var contractType = mapper.MapType(arg);
-                indent.AppendLine($"ResultDecoder = val => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{contractType}>(val.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlContractId, context.RootNamespace)}>().Value)");
+                indent.AppendLine($"ResultDecoder = val => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{contractType}>(val.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlContractId)}>().Value)");
                 return;
         }
 
@@ -148,7 +148,7 @@ internal sealed partial class ChoiceEmitter(
     }
 
     private ChoiceSubmitterParameter SubmitterInfoParameter() => new(
-        context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace),
+        context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo),
         "submitter",
         "The submitter party set (<c>actAs</c> + optional <c>readAs</c>), so a submitter that must read contracts it does not act as stays expressible.");
 
@@ -168,8 +168,8 @@ internal sealed partial class ChoiceEmitter(
 
     private string EmptyArgumentExpression(DamlChoice choice) =>
         IsSyntheticArchive(choice)
-            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create()"
-            : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
+            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create()"
+            : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance";
 
     /// <summary>
     /// Emits the <c>&lt;Choice&gt;Command(this ContractId&lt;TemplateName&gt; contractId, ...)</c>
@@ -207,16 +207,16 @@ internal sealed partial class ChoiceEmitter(
             }
         }
 
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand)} {commandMethodName}(");
         indent.Indent();
         if (hasArg)
         {
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateClassName}> contractId,");
             indent.AppendLine($"{argument.ParameterType(templateClassName)} argument)");
         }
         else
         {
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId)");
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateClassName}> contractId)");
         }
         indent.Dedent();
         indent.AppendLine("{");
@@ -229,11 +229,11 @@ internal sealed partial class ChoiceEmitter(
         }
 
         var argExpr = hasArg ? "argument.ToRecord()" : EmptyArgumentExpression(choice);
-        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}(");
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine("contractId,");
-        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName)}(\"{choice.Name}\"),");
         indent.AppendLine($"{argExpr});");
         indent.Dedent();
 
@@ -305,7 +305,7 @@ internal sealed partial class ChoiceEmitter(
             indent.AppendLine("/// </remarks>");
         }
 
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseByKeyCommand, context.RootNamespace)} {choiceName}ByKeyCommand(");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseByKeyCommand)} {choiceName}ByKeyCommand(");
         indent.Indent();
         if (hasArg)
         {
@@ -330,11 +330,11 @@ internal sealed partial class ChoiceEmitter(
         }
 
         var argExpr = hasArg ? "argument.ToRecord()" : EmptyArgumentExpression(choice);
-        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseByKeyCommand, context.RootNamespace)}(");
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseByKeyCommand)}(");
         indent.Indent();
         indent.AppendLine($"{templateClassName}.TemplateId,");
         indent.AppendLine($"{PackageQualifiedMapper.ToValue(keyType, "key")},");
-        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"),");
+        indent.AppendLine($"new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName)}(\"{choice.Name}\"),");
         indent.AppendLine($"{argExpr});");
         indent.Dedent();
 

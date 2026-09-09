@@ -3,8 +3,8 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Contractkeys;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.ContractKeys;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;

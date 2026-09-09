@@ -62,9 +62,12 @@ public static class TransactionResultExtensions
 
     /// <summary>
     /// Returns all created <see cref="ContractId{T}"/> matching <typeparamref name="T"/>'s
-    /// identifier, in transaction order.
+    /// identifier, in transaction order. Carried as an
+    /// <see cref="EquatableArray{T}">EquatableArray&lt;ContractId&lt;T&gt;&gt;</see>, like the
+    /// <see cref="TransactionResult.CreatedContracts"/> it projects, so two calls over the
+    /// same created contracts compare equal.
     /// </summary>
-    public static IReadOnlyList<ContractId<T>> All<T>(this TransactionResult result) where T : IDamlType
+    public static EquatableArray<ContractId<T>> All<T>(this TransactionResult result) where T : IDamlType
     {
         ArgumentNullException.ThrowIfNull(result);
         var matches = MatchingContractIds<T>(result);
@@ -73,7 +76,7 @@ public static class TransactionResultExtensions
         {
             ids[i] = new ContractId<T>(matches[i]);
         }
-        return ids;
+        return EquatableArray.Create(ids);
     }
 
     private static List<string> MatchingContractIds<T>(TransactionResult result) where T : IDamlType

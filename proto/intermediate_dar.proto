@@ -7,9 +7,7 @@
 // third-party SDK). Field numbers are append-only: they are never reused
 // or renumbered. The orderings and normalisations documented in comments
 // below are load-bearing for deterministic output and are part of the
-// contract. When published as a release asset, this file ships as
-// `intermediate_dar-<version>.proto` beside the matching
-// `daml-dar-to-proto-<version>.jar`.
+// contract. This file is not currently published as a release asset.
 
 syntax = "proto3";
 

@@ -98,9 +98,9 @@ public partial class ContractTypesTests
     {
         var templateId = new Identifier("pkg", "Module", "Template");
         var createArgs = DamlRecord.Create();
-        var witnesses = new List<Party> { new("Alice"), new("Bob") };
-        var signatories = new List<Party> { new("Alice") };
-        var observers = new List<Party> { new("Charlie") };
+        EquatableArray<Party> witnesses = [new("Alice"), new("Bob")];
+        EquatableArray<Party> signatories = [new("Alice")];
+        EquatableArray<Party> observers = [new("Charlie")];
         var contractKey = new ContractKey(new DamlText("key-value"), templateId);
         var createdAt = DateTimeOffset.UtcNow;
 
@@ -150,7 +150,7 @@ public partial class ContractTypesTests
     public void ArchivedEvent_should_store_all_properties()
     {
         var templateId = new Identifier("pkg", "Module", "Template");
-        var witnesses = new List<Party> { new("Alice"), new("Bob") };
+        EquatableArray<Party> witnesses = [new("Alice"), new("Bob")];
 
         var @event = new ArchivedEvent(
             EventId: "archive-event-1",
@@ -168,11 +168,11 @@ public partial class ContractTypesTests
     public void ArchivedEvent_should_support_equality()
     {
         var templateId = new Identifier("pkg", "Module", "Template");
-        var witnesses = new List<Party> { new("Alice") };
-        var event1 = new ArchivedEvent("e1", "c1", templateId, witnesses);
-        var event2 = new ArchivedEvent("e1", "c1", templateId, witnesses);
+        var event1 = new ArchivedEvent("e1", "c1", templateId, [new("Alice")]);
+        var event2 = new ArchivedEvent("e1", "c1", templateId, [new("Alice")]);
 
         event1.Should().Be(event2);
+        event1.GetHashCode().Should().Be(event2.GetHashCode());
     }
 
     [Fact]

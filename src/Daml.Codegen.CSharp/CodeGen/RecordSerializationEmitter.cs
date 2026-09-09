@@ -7,10 +7,10 @@ namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
 /// Emits the record-serialization surface shared by every field-bearing C# type:
-/// the primary-constructor parameters, the <c>required</c> properties, and the
-/// <c>ToRecord</c> / <c>FromRecord</c> round-trip. The same emitter feeds all three
-/// consumers — plain records (<see cref="RecordEmitter"/>), templates, and nested
-/// choice-argument records — so their serialization output stays byte-identical.
+/// the primary-constructor parameters and the <c>ToRecord</c> / <c>FromRecord</c>
+/// round-trip. The same emitter feeds all three consumers — plain records
+/// (<see cref="RecordEmitter"/>), templates, and nested choice-argument records —
+/// so their serialization output stays byte-identical.
 /// Constructed once per package over the package's <see cref="PackageEmitContext"/>,
 /// the DAR-scoped <see cref="ICrossPackageResolver"/>, the shared
 /// <see cref="CodeGenOptions"/>, and the package's <see cref="DamlTypeMapper"/>.
@@ -21,6 +21,8 @@ internal sealed class RecordSerializationEmitter(
     CodeGenOptions options,
     DamlTypeMapper mapper)
 {
+    private readonly CollectionValueSemanticsEmitter _valueSemantics = new(context, options);
+
     /// <summary>
     /// Writes the primary-constructor parameters for <paramref name="fields"/> into
     /// <paramref name="indent"/>, one per line and indented one level, leaving the writer
@@ -30,42 +32,48 @@ internal sealed class RecordSerializationEmitter(
     /// </summary>
     internal void WriteRecordParameters(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
     {
+        var members = ValueMembers(indent, fields);
+        var redeclaresProperties = CollectionValueSemanticsEmitter.NeedsValueSemantics(members);
+
         indent.AppendLine();
         indent.Indent();
         for (var i = 0; i < fields.Count; i++)
         {
             var field = fields[i];
-            var csharpType = mapper.MapType(field.Type);
-            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
+            var member = members[i];
             StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
             var separator = i == fields.Count - 1 ? "" : ",";
-            indent.AppendLine($"[property: {DamlFieldAttributeSyntax(field.Name)}] {csharpType} {fieldName}{separator}");
+            var attribute = redeclaresProperties
+                ? string.Empty
+                : $"[property: {DamlFieldAttributeSyntax(field.Name)}] ";
+            indent.AppendLine($"{attribute}{member.CSharpType} {member.Name}{separator}");
         }
         indent.Dedent();
     }
 
     /// <summary>
-    /// Writes a <c>required</c> init-only property for each of <paramref name="fields"/>
-    /// into <paramref name="indent"/>.
+    /// Writes the copying properties, <c>Equals</c> and <c>GetHashCode</c> that give
+    /// <paramref name="selfType"/> value semantics over its collection-typed fields, or nothing
+    /// when it carries none.
     /// </summary>
-    internal void WriteProperties(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
-    {
-        foreach (var field in fields)
-        {
-            var csharpType = mapper.MapType(field.Type);
-            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
+    /// <param name="indent">Writer positioned at the top of the record body.</param>
+    /// <param name="selfType">The record's own type, including type parameters.</param>
+    /// <param name="fields">The record's Daml fields, in declaration order.</param>
+    internal void WriteCollectionValueSemantics(
+        IndentWriter indent,
+        string selfType,
+        IReadOnlyList<DamlFieldDefinition> fields) =>
+        _valueSemantics.Write(indent, selfType, ValueMembers(indent, fields), derivesFromRecord: false);
 
-            if (options.GenerateXmlDocs)
-            {
-                indent.AppendLine($"/// <summary>Gets the {field.Name} field.</summary>");
-            }
-
-            indent.AppendLine($"[{DamlFieldAttributeSyntax(field.Name)}]");
-            indent.AppendLine($"public required {csharpType} {fieldName} {{ get; init; }}");
-            indent.AppendLine();
-        }
-    }
+    private IReadOnlyList<ValueMember> ValueMembers(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields) =>
+    [
+        .. fields.Select(field => new ValueMember(
+            MemberName(field.Name, indent.CurrentTypeName),
+            mapper.MapType(field.Type),
+            mapper.ClassifyCollection(field.Type),
+            $"The Daml field <c>{field.Name}</c>.",
+            field.Name)),
+    ];
 
     /// <summary>
     /// Writes the <c>ToRecord</c> method that serializes <paramref name="fields"/> to a
@@ -85,12 +93,12 @@ internal sealed class RecordSerializationEmitter(
 
         if (fields.Count == 0)
         {
-            indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create();");
+            indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create();");
             indent.AppendLine();
             return;
         }
 
-        indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)}.Create(");
+        indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create(");
         indent.Indent();
 
         for (int i = 0; i < fields.Count; i++)
@@ -101,7 +109,7 @@ internal sealed class RecordSerializationEmitter(
             var comma = i < fields.Count - 1 ? "," : "";
             StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
 
-            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.DamlField, context.RootNamespace)}.Create(\"{field.Name}\", {conversion}){comma}");
+            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.DamlField)}.Create(\"{field.Name}\", {conversion}){comma}");
         }
 
         indent.Dedent();
@@ -122,7 +130,7 @@ internal sealed class RecordSerializationEmitter(
         }
 
         var converterParameters = ConverterParameters(indent, typeParams, EmitterHelpers.DeserializeConverterParameters);
-        var parameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord, context.RootNamespace)} record{Prefixed(converterParameters)}";
+        var parameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} record{Prefixed(converterParameters)}";
         var delegates = EmitterHelpers.ConverterNameMap(typeParams);
 
         if (fields.Count == 0)
@@ -137,47 +145,21 @@ internal sealed class RecordSerializationEmitter(
             StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
         }
 
-        if (options.UseRecordTypes && options.UsePrimaryConstructors)
+        indent.AppendLine($"public static {className} FromRecord({parameters}) => new {className}(");
+        indent.Indent();
+
+        for (int i = 0; i < fields.Count; i++)
         {
-            indent.AppendLine($"public static {className} FromRecord({parameters}) => new {className}(");
-            indent.Indent();
+            var field = fields[i];
+            var fieldName = MemberName(field.Name, indent.CurrentTypeName);
+            var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
+            var comma = i < fields.Count - 1 ? "," : "";
 
-            for (int i = 0; i < fields.Count; i++)
-            {
-                var field = fields[i];
-                var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
-                var comma = i < fields.Count - 1 ? "," : "";
-
-                indent.AppendLine($"{fieldName}: {conversion}{comma}");
-            }
-
-            indent.Dedent();
-            indent.AppendLine(");");
+            indent.AppendLine($"{fieldName}: {conversion}{comma}");
         }
-        else
-        {
-            indent.AppendLine($"public static {className} FromRecord({parameters})");
-            indent.AppendLine("{");
-            indent.Indent();
 
-            indent.AppendLine($"return new {className}");
-            indent.AppendLine("{");
-            indent.Indent();
-
-            foreach (var field in fields)
-            {
-                var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-                var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
-                indent.AppendLine($"{fieldName} = {conversion},");
-            }
-
-            indent.Dedent();
-            indent.AppendLine("};");
-
-            indent.Dedent();
-            indent.AppendLine("}");
-        }
+        indent.Dedent();
+        indent.AppendLine(");");
         indent.AppendLine();
     }
 
@@ -192,14 +174,14 @@ internal sealed class RecordSerializationEmitter(
         }
 
         indent.Require("System");
-        return build(typeParams, context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace));
+        return build(typeParams, context.Qualifier.Qualify(RuntimeTypeNames.DamlValue));
     }
 
     private static string Prefixed(string parameters) =>
         string.IsNullOrEmpty(parameters) ? string.Empty : $", {parameters}";
 
     private string DamlFieldAttributeSyntax(string damlFieldName) =>
-        $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlFieldAttribute, context.RootNamespace)}(\"{damlFieldName}\")";
+        $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlFieldAttribute)}(\"{damlFieldName}\")";
 
     private static string MemberName(string damlFieldName, string enclosingTypeName) =>
         Identifiers.MemberName(damlFieldName, enclosingTypeName);

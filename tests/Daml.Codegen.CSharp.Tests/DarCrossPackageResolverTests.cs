@@ -70,14 +70,18 @@ public class DarCrossPackageResolverTests
             Interfaces = [new DamlInterface { Name = interfaceName, Choices = [], ViewType = null }]
         };
 
-    private static PackageEmitContext ContextFor(DamlPackage main) =>
-        PackageEmitContext.ForPackage(main, new CodeGenOptions());
+    private static PackageEmitContext ContextFor(DamlPackage package, CodeGenOptions? options = null, bool isMainPackage = true) =>
+        PackageEmitContext.ForPackage(package, options ?? new CodeGenOptions(), isMainPackage).Single();
+
+    private static PackageEmitContext ContextFor(DamlPackage package, string moduleName) =>
+        PackageEmitContext.ForPackage(package, new CodeGenOptions(), isMainPackage: true)
+            .Single(context => context.Module.Name == moduleName);
 
     [Fact]
     public void Resolve_returns_the_bare_name_for_a_local_ref()
     {
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Widget"), ContextFor(main));
 
@@ -88,7 +92,7 @@ public class DarCrossPackageResolverTests
     public void Resolve_returns_the_interface_marker_for_a_local_interface_ref()
     {
         var main = Package("main-id", "my-pkg", InterfaceModule("M", "Holding"));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Holding"), ContextFor(main));
 
@@ -101,11 +105,11 @@ public class DarCrossPackageResolverTests
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var foreign = Package("foreign-id", "foreign-pkg", InterfaceModule("Splice.Holding", "Holding"));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, foreign));
+            new FakeDarSource(main, foreign), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("foreign-id", "Splice.Holding", "Holding"), ContextFor(main));
 
-        result.Should().Be("Foreign.Pkg.IHolding");
+        result.Should().Be("global::Splice.Holding.IHolding");
         resolver.DiscoveredExternalPackageIds.Should().Contain("foreign-id");
     }
 
@@ -113,7 +117,7 @@ public class DarCrossPackageResolverTests
     public void Resolve_disambiguates_a_local_interface_marker_reserved_by_a_template()
     {
         var main = Package("main-id", "my-pkg", InterfaceModuleWithMarkerReservingTemplate("M", "Holding"));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "Holding"), ContextFor(main));
 
@@ -127,18 +131,67 @@ public class DarCrossPackageResolverTests
         var foreign = Package(
             "foreign-id", "foreign-pkg", InterfaceModuleWithMarkerReservingTemplate("Splice.Holding", "Holding"));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, foreign));
+            new FakeDarSource(main, foreign), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("foreign-id", "Splice.Holding", "Holding"), ContextFor(main));
 
-        result.Should().Be("Foreign.Pkg.IHolding_");
+        result.Should().Be("global::Splice.Holding.IHolding_");
+    }
+
+    [Fact]
+    public void Resolve_qualifies_a_local_ref_declared_in_another_module_with_that_module_namespace()
+    {
+        var main = Package("main-id", "my-pkg", Module("M1", Record("Widget")), Module("M2", Record("Gadget")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
+
+        var result = resolver.Resolve(new DamlTypeRef("main-id", "M1", "Widget"), ContextFor(main, "M2"));
+
+        result.Should().Be("global::M1.Widget");
+    }
+
+    [Fact]
+    public void Resolve_applies_the_namespace_prefix_to_main_package_refs_only()
+    {
+        var options = new CodeGenOptions { NamespacePrefix = "Acme" };
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var dep = Package("dep-id", "dep-pkg", Module("D", Record("Thing")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, dep), options);
+
+        var mainRefFromDependency = resolver.Resolve(new DamlTypeRef("main-id", "M", "Widget"), ContextFor(dep, options, isMainPackage: false));
+        var dependencyRefFromMain = resolver.Resolve(new DamlTypeRef("dep-id", "D", "Thing"), ContextFor(main, options));
+
+        mainRefFromDependency.Should().Be("global::Acme.M.Widget");
+        dependencyRefFromMain.Should().Be("global::D.Thing");
+    }
+
+    [Fact]
+    public void Resolve_qualifies_a_foreign_choice_argument_with_the_namespace_of_the_template_it_nests_inside()
+    {
+        var foreignChoice = new DamlChoice
+        {
+            Name = "Do",
+            Consuming = true,
+            ArgumentType = new DamlTypeRef("other-id", "Args", "ForeignArg"),
+            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+        };
+        var other = Package(
+            "other-id",
+            "other-pkg",
+            Module("Args", Record("ForeignArg")),
+            new DamlModule { Name = "N", DataTypes = [], Templates = [new DamlTemplate { Name = "Thing", Choices = [foreignChoice] }], Interfaces = [] });
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), new CodeGenOptions());
+
+        var result = resolver.Resolve(new DamlTypeRef("other-id", "Args", "ForeignArg"), ContextFor(main));
+
+        result.Should().Be("global::N.Thing.ForeignArg");
     }
 
     [Fact]
     public void Resolve_treats_an_empty_package_id_as_local()
     {
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("", "M", "Widget"), ContextFor(main));
 
@@ -166,7 +219,7 @@ public class DarCrossPackageResolverTests
             Modules = [new DamlModule { Name = "M", DataTypes = [argType], Templates = [template], Interfaces = [] }],
             DependencyReferences = []
         };
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "TransferArg"), ContextFor(main));
 
@@ -204,13 +257,13 @@ public class DarCrossPackageResolverTests
             "my-pkg",
             ModuleWithTransferChoice("Banking", "Account"),
             ModuleWithTransferChoice("Custody", "Vault"));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
-        var context = ContextFor(main);
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
+        var context = ContextFor(main, "Banking");
 
         resolver.Resolve(new DamlTypeRef("main-id", "Banking", "Transfer"), context)
             .Should().Be("Account.Transfer");
         resolver.Resolve(new DamlTypeRef("main-id", "Custody", "Transfer"), context)
-            .Should().Be("Vault.Transfer");
+            .Should().Be("global::Custody.Vault.Transfer");
     }
 
     [Fact]
@@ -246,13 +299,13 @@ public class DarCrossPackageResolverTests
             ModuleWithTransferChoice("Banking", "Account"),
             ModuleWithTransferChoice("Custody", "Vault"));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, foreign));
+            new FakeDarSource(main, foreign), new CodeGenOptions());
         var context = ContextFor(main);
 
         resolver.Resolve(new DamlTypeRef("foreign-id", "Banking", "Transfer"), context)
-            .Should().Be("Foreign.Pkg.Account.Transfer");
+            .Should().Be("global::Banking.Account.Transfer");
         resolver.Resolve(new DamlTypeRef("foreign-id", "Custody", "Transfer"), context)
-            .Should().Be("Foreign.Pkg.Vault.Transfer");
+            .Should().Be("global::Custody.Vault.Transfer");
     }
 
     [Fact]
@@ -292,11 +345,11 @@ public class DarCrossPackageResolverTests
         };
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var logger = new CapturingLogger();
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, foreign), logger);
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, foreign), new CodeGenOptions(), logger);
         var context = ContextFor(main);
 
         resolver.Resolve(new DamlTypeRef("foreign-id", "Banking", "Transfer"), context)
-            .Should().Be("Foreign.Pkg.Account.Transfer");
+            .Should().Be("global::Banking.Account.Transfer");
         logger.Warnings.Should().ContainSingle()
             .Which.Should().Contain("Banking:Transfer").And.Contain("Account").And.Contain("Vault").And.Contain("in the same package");
     }
@@ -307,7 +360,7 @@ public class DarCrossPackageResolverTests
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var stdlib = Package("stdlib-id", "daml-stdlib", Module("DA.Time.Types", Record("RelTime")));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, stdlib));
+            new FakeDarSource(main, stdlib), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("stdlib-id", "DA.Time.Types", "RelTime"), ContextFor(main));
 
@@ -321,11 +374,11 @@ public class DarCrossPackageResolverTests
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var other = Package("other-id", "other-pkg", Module("N", Record("Gadget")));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, other));
+            new FakeDarSource(main, other), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("other-id", "N", "Gadget"), ContextFor(main));
 
-        result.Should().Be("Other.Pkg.Gadget");
+        result.Should().Be("global::N.Gadget");
         resolver.DiscoveredExternalPackageIds.Should().Contain("other-id");
     }
 
@@ -333,7 +386,7 @@ public class DarCrossPackageResolverTests
     public void Resolve_throws_when_the_target_package_is_absent_from_the_dar()
     {
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
 
         var act = () => resolver.Resolve(new DamlTypeRef("missing-id", "N", "Gadget"), ContextFor(main));
 
@@ -347,7 +400,7 @@ public class DarCrossPackageResolverTests
         var a = Package("a-id", "a-pkg", Module("A", Record("Alpha")));
         var b = Package("b-id", "b-pkg", Module("B", Record("Beta")));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, a, b));
+            new FakeDarSource(main, a, b), new CodeGenOptions());
         var context = ContextFor(main);
 
         resolver.Resolve(new DamlTypeRef("a-id", "A", "Alpha"), context);
@@ -379,13 +432,13 @@ public class DarCrossPackageResolverTests
             DependencyReferences = []
         };
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), new CodeGenOptions());
         var context = ContextFor(main);
 
         var first = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
         var second = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
 
-        first.Should().Be("Other.Pkg.Thing.ForeignArg");
+        first.Should().Be("global::N.Thing.ForeignArg");
         second.Should().Be(first);
     }
 
@@ -413,14 +466,14 @@ public class DarCrossPackageResolverTests
             DependencyReferences = []
         };
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), new CodeGenOptions());
         var context = ContextFor(main);
 
         var first = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
         var enumerationsAfterFirst = countingModules.EnumerationCount;
         var second = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
 
-        first.Should().Be("Other.Pkg.Thing.ForeignArg");
+        first.Should().Be("global::N.Thing.ForeignArg");
         second.Should().Be(first);
         enumerationsAfterFirst.Should().BeGreaterThan(0, "the first resolve builds the foreign-choice-arg map by walking the package's modules");
         countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
@@ -441,14 +494,14 @@ public class DarCrossPackageResolverTests
             DependencyReferences = []
         };
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), new CodeGenOptions());
         var context = ContextFor(main);
 
         var first = resolver.Resolve(new DamlTypeRef("other-id", "Splice.Holding", "Holding"), context);
         var enumerationsAfterFirst = countingModules.EnumerationCount;
         var second = resolver.Resolve(new DamlTypeRef("other-id", "Splice.Holding", "Holding"), context);
 
-        first.Should().Be("Other.Pkg.IHolding");
+        first.Should().Be("global::Splice.Holding.IHolding");
         second.Should().Be(first);
         enumerationsAfterFirst.Should().BeGreaterThan(0, "the first resolve builds the foreign-interface set by walking the package's modules");
         countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
@@ -478,14 +531,50 @@ public class DarCrossPackageResolverTests
         };
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var dep = Package("dep-id", "dep-pkg", Module("D", Record("DepThing")));
-        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other, dep));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other, dep), new CodeGenOptions());
 
         var fromMain = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), ContextFor(main));
         var fromDep = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), ContextFor(dep));
 
-        fromMain.Should().Be("Other.Pkg.Thing.ForeignArg");
+        fromMain.Should().Be("global::N.Thing.ForeignArg");
         fromDep.Should().Be(fromMain);
         resolver.DiscoveredExternalPackageIds.Should().BeEquivalentTo("other-id");
+    }
+
+    [Fact]
+    public void DarCrossPackageResolver_the_foreign_data_type_index_is_built_once_across_repeated_lookups()
+    {
+        var countingModules = new CountingModules([Module("N", Record("Widget"))]);
+        var other = new DamlPackage
+        {
+            PackageId = "other-id",
+            Name = "other-pkg",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = countingModules,
+            DependencyReferences = []
+        };
+        var main = Package("main-id", "my-pkg", Module("M", Record("Thing")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main, other), new CodeGenOptions());
+
+        var first = resolver.DataTypeDefinitions("other-id")[("N", "Widget")];
+        var enumerationsAfterFirst = countingModules.EnumerationCount;
+        var second = resolver.DataTypeDefinitions("other-id")[("N", "Widget")];
+
+        first.Should().ContainSingle().Which.Should().BeOfType<DamlRecordDefinition>();
+        second.Should().BeEquivalentTo(first);
+        enumerationsAfterFirst.Should().BeGreaterThan(0, "the first lookup builds the index by walking the package's modules");
+        countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
+            "the memo must serve the second lookup without rebuilding the index — so the foreign package's modules are not walked again");
+    }
+
+    [Fact]
+    public void DarCrossPackageResolver_the_data_type_index_of_a_package_absent_from_the_dar_is_empty()
+    {
+        var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
+        var resolver = new DarCrossPackageResolver(new FakeDarSource(main), new CodeGenOptions());
+
+        resolver.DataTypeDefinitions("absent-id").Should().BeEmpty();
     }
 
     [Fact]
@@ -494,7 +583,7 @@ public class DarCrossPackageResolverTests
         var main = Package("main-id", "my-pkg", Module("M", Record("Widget")));
         var stdlib = Package("stdlib-id", "daml-stdlib", Module("DA.Mystery.Types", Record("Mystery")));
         var resolver = new DarCrossPackageResolver(
-            new FakeDarSource(main, stdlib));
+            new FakeDarSource(main, stdlib), new CodeGenOptions());
 
         var result = resolver.Resolve(new DamlTypeRef("stdlib-id", "DA.Mystery.Types", "Mystery"), ContextFor(main));
 

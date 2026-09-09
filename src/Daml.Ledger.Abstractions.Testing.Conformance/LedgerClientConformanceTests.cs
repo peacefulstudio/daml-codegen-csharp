@@ -21,8 +21,8 @@ namespace Daml.Ledger.Abstractions.Testing.Conformance;
 /// The documented behavioral contract for an <see cref="ILedgerClient"/> implementation.
 /// Adopters subclass with a concrete client factory and a probe Daml marker; the seeded
 /// client must expose the canonical scenario: at least one active contract, one
-/// unclassifiable row, a terminal checkpoint, at least one event on both the ACS-delta
-/// subscription
+/// unclassifiable row, a terminal checkpoint, one archived <typeparamref name="TProbe"/>
+/// reachable on both the ACS-delta subscription
 /// (<see cref="ILedgerStreamer.SubscribeAsync{T}(SubmitterInfo, LedgerOffset?, LedgerOffset?, CancellationToken)"/>,
 /// which surfaces archival as a first-class <see cref="ContractStreamEvent{T}.Archived"/> and never an
 /// <see cref="ContractStreamEvent{T}.Exercised"/>) and the ledger-effects subscription
@@ -39,7 +39,14 @@ namespace Daml.Ledger.Abstractions.Testing.Conformance;
 public abstract class LedgerClientConformanceTests<TProbe>
     where TProbe : ITemplate, IDamlRecord<TProbe>
 {
-    /// <summary>Creates a client seeded with the canonical conformance scenario.</summary>
+    /// <summary>
+    /// Creates a client seeded with the canonical conformance scenario. The seed must include
+    /// one archived <typeparamref name="TProbe"/> at an offset no later than the offset
+    /// <see cref="ILedgerReader.GetLedgerEndAsync"/> returns, surfaced as a
+    /// <see cref="ContractStreamEvent{T}.Archived"/> on the ACS-delta subscription and as a
+    /// consuming <see cref="ContractStreamEvent{T}.Exercised"/> on the ledger-effects
+    /// subscription, so both stream-shape checks read a real archival signal.
+    /// </summary>
     protected abstract ILedgerClient CreateClient();
 
     /// <summary>The submitter whose visibility scopes the reads.</summary>
@@ -224,6 +231,9 @@ public abstract class LedgerClientConformanceTests<TProbe>
     /// The ledger-effects subscription signals archival with a consuming
     /// <see cref="ContractStreamEvent{T}.Exercised"/>, never an
     /// <see cref="ContractStreamEvent{T}.Archived"/> variant — the shape's defining contract.
+    /// The seeded scenario's archived <typeparamref name="TProbe"/> must reach this stream as
+    /// that consuming <see cref="ContractStreamEvent{T}.Exercised"/>: a projector that drops
+    /// archival altogether satisfies the exclusion vacuously and conveys nothing.
     /// </summary>
     [Fact]
     public async Task Ledger_effects_subscription_never_yields_Archived()
@@ -240,12 +250,20 @@ public abstract class LedgerClientConformanceTests<TProbe>
         events.Should().NotContain(
             e => e is ContractStreamEvent<TProbe>.Archived,
             "the ledger-effects shape signals archival via a consuming Exercised, never an Archived variant");
+        events.OfType<ContractStreamEvent<TProbe>.Exercised>().Should().Contain(
+            x => x.Consuming,
+            "the ledger-effects shape conveys archival as a consuming Exercised event, so the seeded "
+            + "scenario must archive one TProbe at an offset within the seeded ledger end; a stream "
+            + "carrying no archival signal certifies nothing on this axis");
     }
 
     /// <summary>
     /// The ACS-delta subscription surfaces archival as a first-class
     /// <see cref="ContractStreamEvent{T}.Archived"/> event, never an
     /// <see cref="ContractStreamEvent{T}.Exercised"/> variant — the shape's defining contract.
+    /// The seeded scenario's archived <typeparamref name="TProbe"/> must reach this stream as
+    /// that <see cref="ContractStreamEvent{T}.Archived"/>: a projector that drops archival
+    /// altogether satisfies the exclusion vacuously and conveys nothing.
     /// </summary>
     [Fact]
     public async Task Acs_delta_subscription_never_yields_Exercised()
@@ -260,6 +278,11 @@ public abstract class LedgerClientConformanceTests<TProbe>
         events.Should().NotContain(
             e => e is ContractStreamEvent<TProbe>.Exercised,
             "the ACS-delta shape surfaces archival as a first-class Archived event, never an Exercised variant");
+        events.Should().Contain(
+            e => e is ContractStreamEvent<TProbe>.Archived,
+            "the ACS-delta shape conveys archival as a first-class Archived event, so the seeded "
+            + "scenario must archive one TProbe at an offset within the seeded ledger end; a stream "
+            + "carrying no archival signal certifies nothing on this axis");
     }
 
     /// <summary>
@@ -482,12 +505,18 @@ public abstract class LedgerClientConformanceTests<TProbe>
     private async Task DrainWithinBudget<TItem>(
         IAsyncEnumerable<TItem> stream, string cancellationContract)
     {
+        using var timer = new CancellationTokenSource();
+
         var drain = DrainToCompletion(stream);
-        if (await Task.WhenAny(drain, Task.Delay(StreamTimeout)) != drain)
+
+        if (await Task.WhenAny(drain, Task.Delay(StreamTimeout, timer.Token)) != drain)
         {
+            ObserveFault(drain);
+
             throw new TimeoutException($"{cancellationContract}; nothing observed within {StreamTimeout}.");
         }
 
+        await timer.CancelAsync();
         await drain;
     }
 
@@ -501,22 +530,80 @@ public abstract class LedgerClientConformanceTests<TProbe>
     private async Task<IReadOnlyList<TItem>> CollectWithinBudget<TItem>(
         IAsyncEnumerable<TItem> stream, string terminationContract)
     {
-        using var cts = new CancellationTokenSource(StreamTimeout);
+        using var enumeration = new CancellationTokenSource();
+        using var timer = new CancellationTokenSource();
+
+        var deadline = Task.Delay(StreamTimeout, timer.Token);
+        var enumerator = stream.GetAsyncEnumerator(enumeration.Token);
         var items = new List<TItem>();
+        var abandoned = false;
+
         try
         {
-            await foreach (var item in stream.WithCancellation(cts.Token))
+            while (true)
             {
-                items.Add(item);
+                var step = enumerator.MoveNextAsync().AsTask();
+
+                if (await Task.WhenAny(step, deadline) != step)
+                {
+                    abandoned = true;
+                    await enumeration.CancelAsync();
+                    ObserveFault(step);
+                    ObserveFault(DisposeOnceSettled(enumerator, step));
+
+                    throw new TimeoutException(
+                        $"{terminationContract}; not observed within {StreamTimeout}.");
+                }
+
+                if (!await step)
+                {
+                    return items;
+                }
+
+                items.Add(enumerator.Current);
             }
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        finally
         {
-            throw new TimeoutException($"{terminationContract}; not observed within {StreamTimeout}.");
+            await timer.CancelAsync();
+
+            if (!abandoned)
+            {
+                await enumerator.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task DisposeOnceSettled<TItem>(
+        IAsyncEnumerator<TItem> enumerator, Task<bool> abandonedStep)
+    {
+        if (!await SettlesWithinBudget(abandonedStep))
+        {
+            return;
         }
 
-        return items;
+        var disposal = enumerator.DisposeAsync().AsTask();
+        ObserveFault(disposal);
+
+        await SettlesWithinBudget(disposal);
     }
+
+    private async Task<bool> SettlesWithinBudget(Task task)
+    {
+        using var timer = new CancellationTokenSource();
+
+        var settled = await Task.WhenAny(task, Task.Delay(StreamTimeout, timer.Token)) == task;
+        await timer.CancelAsync();
+
+        return settled;
+    }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            static settled => _ = settled.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static LedgerOffset? PositionOf(ContractStreamEvent<TProbe> e) => e switch
     {

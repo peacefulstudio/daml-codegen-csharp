@@ -43,8 +43,8 @@ public class DamlLfJsonReaderWireSamplesTests
     }
 
     [Theory]
-    [MemberData(nameof(UnsupportedWireSamplePayloads))]
-    public void ReadRecord_should_pin_the_first_gap_for_captured_payloads_outside_the_reader_type_mapping(
+    [MemberData(nameof(NonRecordWireSamplePayloads))]
+    public void ReadRecord_should_refuse_captured_payloads_whose_top_level_shape_is_not_a_record(
         string fileName, string payloadPath, string shapeName, string expectedGap)
     {
         using var document = LoadWireSample(fileName);
@@ -53,6 +53,75 @@ public class DamlLfJsonReaderWireSamplesTests
         var act = () => DamlLfJsonReader.ReadRecord(payload, DeclaredShapes[shapeName]);
 
         act.Should().Throw<NotSupportedException>().WithMessage($"*{expectedGap}*");
+    }
+
+    [Theory]
+    [MemberData(nameof(SupportedWireSamplePayloads))]
+    public void ReadValue_should_decode_every_captured_payload_ReadRecord_decodes(
+        string fileName, string payloadPath, string shapeName, (string Label, Type DamlType)[] expectedFields)
+    {
+        using var document = LoadWireSample(fileName);
+        var payload = ResolvePayload(document.RootElement, payloadPath);
+
+        var value = DamlLfJsonReader.ReadValue(payload, DeclaredShapes[shapeName]);
+
+        value.Should().BeOfType<DamlRecord>().Which.Fields
+            .Select(field => (field.Label, DamlType: field.Value.GetType()))
+            .Should().Equal(expectedFields);
+    }
+
+    [Theory]
+    [MemberData(nameof(TopLevelValueWireSamplePayloads))]
+    public void ReadValue_should_decode_captured_payloads_whose_top_level_shape_is_not_a_record(
+        string fileName, string payloadPath, string shapeName, Type expectedDamlType)
+    {
+        using var document = LoadWireSample(fileName);
+        var payload = ResolvePayload(document.RootElement, payloadPath);
+
+        var value = DamlLfJsonReader.ReadValue(payload, DeclaredShapes[shapeName]);
+
+        value.Should().BeOfType(expectedDamlType);
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_the_captured_exercise_result_as_its_variant_arm()
+    {
+        using var document = LoadWireSample("exercise_describe.json");
+        var payload = ResolvePayload(
+            document.RootElement, "response/transaction/events/0/ExercisedEvent/exerciseResult");
+
+        var variant = DamlLfJsonReader.ReadValue<Outcome>(payload).Should().BeOfType<DamlVariant>().Which;
+
+        variant.Constructor.Should().Be("Win");
+        var details = variant.GetValue<DamlRecord>();
+        details.Fields.Select(field => field.Label).Should().Equal("prize", "tier");
+        details.GetRequiredField("prize").Should().BeOfType<DamlNumeric>().Which.Value.Should().Be(1.25m);
+        details.GetRequiredField("tier").Should().Be(new DamlText("gold"));
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_the_captured_unit_exercise_result()
+    {
+        using var document = LoadWireSample("exercise_ping.json");
+        var payload = ResolvePayload(
+            document.RootElement, "response/transaction/events/0/ExercisedEvent/exerciseResult");
+
+        DamlLfJsonReader.ReadValue<Unit>(payload).Should().BeSameAs(DamlUnit.Instance);
+    }
+
+    [Fact]
+    public void ReadValue_should_refuse_the_captured_contract_key_addressed_as_a_bare_stdlib_tuple()
+    {
+        using var document = LoadWireSample("create_keyed_contract_key.json");
+        var capturedKey = ResolvePayload(
+            document.RootElement, "response/transaction/events/0/CreatedEvent/contractKey");
+
+        var act = () => DamlLfJsonReader.ReadValue<Tuple2<Party, string>>(capturedKey);
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{typeof(Tuple2<Party, string>)}' at '{typeof(Tuple2<Party, string>).Name}' names a generic Daml "
+            + "type family the reader does not decode as a top-level value; decode it as a field of a generated "
+            + "Daml record, or decode this value without the reader.");
     }
 
     [Fact]
@@ -119,7 +188,8 @@ public class DamlLfJsonReaderWireSamplesTests
     public void WireSamplesCorpus_should_fail_when_a_capture_is_not_consumed_by_these_tests()
     {
         var consumed = FileNamesOf(SupportedWireSamplePayloads)
-            .Concat(FileNamesOf(UnsupportedWireSamplePayloads))
+            .Concat(FileNamesOf(NonRecordWireSamplePayloads))
+            .Concat(FileNamesOf(TopLevelValueWireSamplePayloads))
             .Concat(FactConsumedWireSamples)
             .Distinct();
 
@@ -300,10 +370,16 @@ public class DamlLfJsonReaderWireSamplesTests
         { "acs_interface_view_holding.json", "response/0/contractEntry/JsActiveContract/createdEvent/interfaceViews/0/viewValue", nameof(HoldingView), [("amount", typeof(DamlNumeric))] },
     };
 
-    public static TheoryData<string, string, string, string> UnsupportedWireSamplePayloads => new()
+    public static TheoryData<string, string, string, string> NonRecordWireSamplePayloads => new()
     {
         { "exercise_describe.json", "response/transaction/events/0/ExercisedEvent/exerciseResult", nameof(Outcome), "at 'Outcome' is not a generated Daml record" },
         { "exercise_ping.json", "response/transaction/events/0/ExercisedEvent/exerciseResult", nameof(Unit), "at 'Unit' is not a generated Daml record" },
+    };
+
+    public static TheoryData<string, string, string, Type> TopLevelValueWireSamplePayloads => new()
+    {
+        { "exercise_describe.json", "response/transaction/events/0/ExercisedEvent/exerciseResult", nameof(Outcome), typeof(DamlVariant) },
+        { "exercise_ping.json", "response/transaction/events/0/ExercisedEvent/exerciseResult", nameof(Unit), typeof(DamlUnit) },
     };
 
     internal static readonly IReadOnlyDictionary<string, Type> DeclaredShapes = new Dictionary<string, Type>

@@ -45,32 +45,73 @@ public class PackageEmitContextTests
     private static DamlDataType Variant(string name, params DamlVariantConstructor[] ctors) =>
         new() { Name = name, Definition = new DamlVariantDefinition(ctors) };
 
-    private static CodeGenOptions Options(string? rootNamespace = null) =>
-        new() { RootNamespace = rootNamespace };
+    private static CodeGenOptions Options(string? namespacePrefix = null) =>
+        new() { NamespacePrefix = namespacePrefix };
 
     [Fact]
-    public void ForPackage_derives_root_namespace_from_package_name()
+    public void ForPackage_maps_each_module_to_its_own_namespace_named_after_the_module()
     {
-        var context = PackageEmitContext.ForPackage(Package("cats-markets"), Options());
+        var contexts = PackageEmitContext.ForPackage(
+            Package("splice-amulet-name-service", Module("Splice.Ans"), Module("Splice.Ans.AmuletConversionRateFeed")),
+            Options(),
+            isMainPackage: true);
 
-        context.RootNamespace.Should().Be("Cats.Markets");
+        contexts.Select(context => (context.Module.Name, context.Namespace)).Should().Equal(
+            ("Splice.Ans", "Splice.Ans"),
+            ("Splice.Ans.AmuletConversionRateFeed", "Splice.Ans.AmuletConversionRateFeed"));
+        contexts[0].ModuleNamespaces.Should().BeEquivalentTo(new Dictionary<string, string>
+        {
+            ["Splice.Ans"] = "Splice.Ans",
+            ["Splice.Ans.AmuletConversionRateFeed"] = "Splice.Ans.AmuletConversionRateFeed",
+        });
     }
 
     [Fact]
-    public void ForPackage_honours_the_root_namespace_override()
+    public void ForPackage_applies_the_namespace_prefix_override_to_the_main_package_only()
     {
-        var context = PackageEmitContext.ForPackage(Package("cats-markets"), Options("My.Override"));
+        var main = PackageEmitContext.ForPackage(Package("p", Module("M")), Options("My.Override"), isMainPackage: true).Single();
+        var dependency = PackageEmitContext.ForPackage(Package("p", Module("M")), Options("My.Override"), isMainPackage: false).Single();
 
-        context.RootNamespace.Should().Be("My.Override");
+        main.Namespace.Should().Be("My.Override.M");
+        dependency.Namespace.Should().Be("M");
     }
 
     [Fact]
-    public void ForPackage_scopes_the_qualifier_to_the_root_namespace()
+    public void ForPackage_scopes_the_qualifier_to_the_module_namespace()
     {
-        var context = PackageEmitContext.ForPackage(Package("canton-party-replication"), Options());
+        var context = PackageEmitContext.ForPackage(
+            Package("canton-party-replication", Module("Canton.Party.Replication")), Options(), isMainPackage: true).Single();
 
         context.Qualifier.AllNamespaces.Should().BeEquivalentTo(
             "Canton", "Canton.Party", "Canton.Party.Replication");
+    }
+
+    [Fact]
+    public void ForPackage_shadows_imported_names_only_with_types_declared_in_the_module_namespace_or_its_ancestors()
+    {
+        var contexts = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module("A", dataTypes: [Record("Unit")]),
+                Module("A.B", dataTypes: [Record("Widget")]),
+                Module("C", dataTypes: [Record("Party")])),
+            Options(),
+            isMainPackage: true);
+
+        var child = contexts.Single(context => context.Module.Name == "A.B");
+        child.Qualifier.DeclaredTypeNames.Should().BeEquivalentTo("Unit", "Widget");
+        child.Qualifier.Qualify("Unit").Should().Be("global::Daml.Runtime.Stdlib.Unit");
+        child.Qualifier.Qualify("Party").Should().Be("Party");
+    }
+
+    [Fact]
+    public void NamespaceOf_fails_for_a_module_the_package_does_not_declare()
+    {
+        var context = PackageEmitContext.ForPackage(Package("p", Module("M")), Options(), isMainPackage: true).Single();
+
+        var act = () => context.NamespaceOf("Elsewhere");
+
+        act.Should().Throw<CodegenException>().WithMessage("*Elsewhere*").WithMessage("*p*");
     }
 
     [Fact]
@@ -81,7 +122,7 @@ public class PackageEmitContextTests
                 "p",
                 Module("M1", dataTypes: [Record("Alpha")]),
                 Module("M2", dataTypes: [Record("Beta")])),
-            Options());
+            Options(), isMainPackage: true)[0];
 
         context.DataTypes.Keys.Should().BeEquivalentTo("M1:Alpha", "M2:Beta");
     }
@@ -96,7 +137,7 @@ public class PackageEmitContextTests
                 "p",
                 Module("Splice.Amulet", dataTypes: [first]),
                 Module("Splice.AmuletConfig", dataTypes: [second])),
-            Options());
+            Options(), isMainPackage: true)[0];
 
         context.DataTypes["Splice.Amulet:Amulet"].Should().BeSameAs(first);
         context.DataTypes["Splice.AmuletConfig:Amulet"].Should().BeSameAs(second);
@@ -107,7 +148,7 @@ public class PackageEmitContextTests
     {
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("Splice.AmuletConfig", dataTypes: [Enum("Amulet", "Free", "Paid")])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalEnumQualifiedNames.Should().BeEquivalentTo("Splice.AmuletConfig:Amulet");
     }
@@ -120,7 +161,7 @@ public class PackageEmitContextTests
             [
                 Variant("Shape", new DamlVariantConstructor("Circle", null))
             ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalVariantQualifiedNames.Should().BeEquivalentTo("M:Shape");
     }
@@ -136,7 +177,7 @@ public class PackageEmitContextTests
                 "p",
                 Module("Splice.Holding", dataTypes: [holdingRecord], interfaces: [iface]),
                 Module("Other", dataTypes: [unrelatedHolding])),
-            Options());
+            Options(), isMainPackage: true)[0];
 
         context.LocalInterfaceQualifiedNames.Should().BeEquivalentTo("Splice.Holding:Holding");
     }
@@ -159,7 +200,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "AssetView"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().Contain("M:AssetView", "IAsset");
     }
@@ -188,7 +229,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "SharedView"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().BeEmpty();
     }
@@ -229,7 +270,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "GenericView"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().BeEmpty();
     }
@@ -253,7 +294,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "Placeholder"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().BeEmpty();
     }
@@ -282,7 +323,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "Shape"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().BeEmpty();
     }
@@ -309,7 +350,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "AssetView"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().BeEmpty();
     }
@@ -332,7 +373,7 @@ public class PackageEmitContextTests
                             ViewType = new DamlTypeRef("", "M", "AssetView"),
                         },
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalViewRecordMarkerNames.Should().Contain("M:AssetView", "IAsset");
     }
@@ -354,7 +395,7 @@ public class PackageEmitContextTests
         };
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("M", dataTypes: [Record("AssetView")], interfaces: [localRecordView, foreignView])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.HasWitnessableViewRecord(localRecordView).Should().BeTrue();
         context.HasWitnessableViewRecord(foreignView).Should().BeTrue();
@@ -409,7 +450,7 @@ public class PackageEmitContextTests
                         placeholderView,
                         danglingView,
                     ])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.HasWitnessableViewRecord(viewless).Should().BeFalse();
         context.HasWitnessableViewRecord(enumView).Should().BeFalse();
@@ -428,7 +469,7 @@ public class PackageEmitContextTests
                     "M",
                     dataTypes: [Record("IFactory")],
                     interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalReservedTypeNames.Should().Contain("IFactory");
         context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory_");
@@ -448,7 +489,7 @@ public class PackageEmitContextTests
                         new DamlTemplate { Name = "IFactory", Choices = [] },
                     ],
                     interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalReservedTypeNames.Should().Contain("IFactory_");
         context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory__");
@@ -464,7 +505,7 @@ public class PackageEmitContextTests
                     "M",
                     dataTypes: [Record("Factory")],
                     interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalReservedTypeNames.Should().NotContain("Factory");
         context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory");
@@ -480,13 +521,13 @@ public class PackageEmitContextTests
                 "p",
                 Module("Alpha", interfaces: [Factory()]),
                 Module("Beta", interfaces: [Factory()])),
-            Options());
+            Options(), isMainPackage: true)[0];
         var declaredBetaFirst = PackageEmitContext.ForPackage(
             Package(
                 "p",
                 Module("Beta", interfaces: [Factory()]),
                 Module("Alpha", interfaces: [Factory()])),
-            Options());
+            Options(), isMainPackage: true)[0];
 
         declaredAlphaFirst.LocalInterfaceMarkerNames["Alpha:Factory"].Should().Be("IFactory");
         declaredAlphaFirst.LocalInterfaceMarkerNames["Beta:Factory"].Should().Be("IFactory_");
@@ -515,7 +556,7 @@ public class PackageEmitContextTests
                     dataTypes: [argType],
                     templates: [template],
                     interfaces: [new DamlInterface { Name = "Factory", Choices = [] }])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalReservedTypeNames.Should().NotContain("IFactory");
         context.LocalInterfaceMarkerNames["M:Factory"].Should().Be("IFactory");
@@ -539,10 +580,31 @@ public class PackageEmitContextTests
         };
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("M", dataTypes: [argType], templates: [template])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalChoiceArgToTemplate.Should().ContainKey("M:TransferArg")
-            .WhoseValue.Should().Be("Account");
+            .WhoseValue.Should().Be(new NestingTemplate("M", "Account"));
+    }
+
+    [Fact]
+    public void ForPackage_records_the_module_of_the_template_a_choice_argument_declared_elsewhere_nests_inside()
+    {
+        var choice = new DamlChoice
+        {
+            Name = "Transfer",
+            Consuming = true,
+            ArgumentType = new DamlTypeRef("", "Args", "TransferArg"),
+            ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit)
+        };
+        var context = PackageEmitContext.ForPackage(
+            Package(
+                "p",
+                Module("Args", dataTypes: [Record("TransferArg")]),
+                Module("Banking", templates: [new DamlTemplate { Name = "Account", Choices = [choice] }])),
+            Options(),
+            isMainPackage: true)[0];
+
+        context.LocalChoiceArgToTemplate["Args:TransferArg"].Should().Be(new NestingTemplate("Banking", "Account"));
     }
 
     [Fact]
@@ -562,7 +624,7 @@ public class PackageEmitContextTests
         };
         var context = PackageEmitContext.ForPackage(
             Package("p", Module("M", templates: [template])),
-            Options());
+            Options(), isMainPackage: true).Single();
 
         context.LocalChoiceArgToTemplate.Should().NotContainKey("M:NotDeclaredHere");
     }
@@ -596,10 +658,10 @@ public class PackageEmitContextTests
                 "p",
                 ModuleWithTransferChoice("Banking", "Account"),
                 ModuleWithTransferChoice("Custody", "Vault")),
-            Options());
+            Options(), isMainPackage: true)[0];
 
-        context.LocalChoiceArgToTemplate["Banking:Transfer"].Should().Be("Account");
-        context.LocalChoiceArgToTemplate["Custody:Transfer"].Should().Be("Vault");
+        context.LocalChoiceArgToTemplate["Banking:Transfer"].Should().Be(new NestingTemplate("Banking", "Account"));
+        context.LocalChoiceArgToTemplate["Custody:Transfer"].Should().Be(new NestingTemplate("Custody", "Vault"));
     }
 
     [Fact]
@@ -629,9 +691,10 @@ public class PackageEmitContextTests
                     dataTypes: [Record("Transfer", new DamlFieldDefinition("to", new DamlPrimitiveType(DamlPrimitive.Party)))],
                     templates: [TemplateWithTransferChoice("Account"), TemplateWithTransferChoice("Vault")])),
             Options(),
-            logger);
+            isMainPackage: true,
+            logger).Single();
 
-        context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be("Account");
+        context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be(new NestingTemplate("M", "Account"));
         logger.Warnings.Should().ContainSingle()
             .Which.Should().Contain("M:Transfer").And.Contain("Account").And.Contain("Vault").And.Contain("in the same package");
     }

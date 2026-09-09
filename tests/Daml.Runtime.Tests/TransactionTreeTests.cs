@@ -37,6 +37,12 @@ public class TransactionTreeTests
     }
 
     [Fact]
+    public void TreeEventCreated_defaults_InterfaceIds_to_empty()
+    {
+        MakeCreated("00solo").InterfaceIds.Should().BeEmpty();
+    }
+
+    [Fact]
     public void DescendantEvents_is_empty_for_created_event()
     {
         var created = MakeCreated("00solo");
@@ -73,12 +79,7 @@ public class TransactionTreeTests
     {
         const int depth = 5000;
         var leaf = MakeCreated("leaf");
-        TreeEvent deepTree = leaf;
-
-        for (int i = 0; i < depth; i++)
-        {
-            deepTree = MakeExercised($"level-{i:D5}", children: [deepTree]);
-        }
+        var deepTree = ChainAbove(leaf, depth);
 
         var descendants = deepTree.DescendantEvents().ToList();
 
@@ -88,12 +89,137 @@ public class TransactionTreeTests
     }
 
     [Fact]
+    public void TreeEventExercised_hashes_a_deep_tree_without_recursing_into_its_subtree()
+    {
+        var first = ChainAbove(MakeCreated("leaf"), depth: 5000);
+        var second = ChainAbove(MakeCreated("leaf"), depth: 5000);
+
+        first.GetHashCode().Should().Be(second.GetHashCode());
+    }
+
+    [Fact]
+    public void TreeEventExercised_compares_child_events_by_content()
+    {
+        var first = MakeExercised("00outer", children: [MakeExercised("00inner", children: [MakeCreated("00leaf")])]);
+        var second = MakeExercised("00outer", children: [MakeExercised("00inner", children: [MakeCreated("00leaf")])]);
+        var otherLeaf = MakeExercised("00outer", children: [MakeExercised("00inner", children: [MakeCreated("00other")])]);
+
+        first.Should().Be(second);
+        first.GetHashCode().Should().Be(second.GetHashCode());
+        first.Should().NotBe(otherLeaf);
+    }
+
+    [Fact]
+    public void TransactionTree_compares_root_events_by_content()
+    {
+        var first = new TransactionTree("u1", LedgerOffset.At(1), [MakeCreated("00alice")]);
+        var second = new TransactionTree("u1", LedgerOffset.At(1), [MakeCreated("00alice")]);
+        var other = new TransactionTree("u1", LedgerOffset.At(1), [MakeCreated("00bob")]);
+
+        first.Should().Be(second);
+        first.GetHashCode().Should().Be(second.GetHashCode());
+        first.Should().NotBe(other);
+    }
+
+    [Fact]
+    public void TreeEventExercised_hash_distinguishes_nodes_differing_in_choice_name()
+    {
+        var node = MakeExercised("00node", children: []);
+
+        node.GetHashCode().Should().NotBe((node with { ChoiceName = "Other" }).GetHashCode());
+    }
+
+    [Fact]
+    public void TreeEventExercised_hash_distinguishes_nodes_differing_in_acting_parties()
+    {
+        var node = MakeExercised("00node", children: []);
+
+        node.GetHashCode().Should().NotBe(
+            (node with { ActingParties = [new Party("mallory")] }).GetHashCode());
+    }
+
+    [Fact]
+    public void TreeEventExercised_hash_distinguishes_nodes_differing_in_witness_parties()
+    {
+        var node = MakeExercised("00node", children: []);
+
+        node.GetHashCode().Should().NotBe(
+            (node with { WitnessParties = [new Party("mallory")] }).GetHashCode());
+    }
+
+    [Fact]
+    public void TreeEventExercised_hash_distinguishes_nodes_differing_in_child_count()
+    {
+        var node = MakeExercised("00node", children: []);
+
+        node.GetHashCode().Should().NotBe(
+            (node with { ChildEvents = [MakeCreated("00child")] }).GetHashCode());
+    }
+
+    [Fact]
+    public void TreeEventExercised_ToString_renders_the_child_events_as_a_count()
+    {
+        var node = MakeExercised("00parent", children: [MakeCreated("00child"), MakeCreated("00sibling")]);
+
+        node.ToString().Should().Be(
+            "Exercised { EventId = evt-00parent, ContractId = 00parent, "
+            + $"TemplateId = {FooTemplateId}, InterfaceId = , ChoiceName = DoThing, "
+            + $"ChoiceArgument = {DamlUnit.Instance}, ExerciseResult = {DamlUnit.Instance}, "
+            + "Consuming = False, ActingParties = [alice], WitnessParties = [alice], "
+            + "ChildEvents.Count = 2 }");
+    }
+
+    [Fact]
+    public void TreeEventExercised_ToString_bounds_a_deep_tree_to_the_node()
+    {
+        MakeExercised("00guard", children: [MakeCreated("00child")]).ToString().Should().Contain(
+            "ChildEvents.Count = 1",
+            "rendering the children instead overflows the stack on the deep tree below, and a "
+            + "stack overflow kills the whole test process rather than failing this test");
+
+        var deepTree = ChainAbove(MakeCreated("00leaf"), depth: 5000);
+        string? rendered = null;
+        Exception? failure = null;
+        var render = new Thread(
+            () =>
+            {
+                try
+                {
+                    rendered = deepTree.ToString();
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+            },
+            maxStackSize: 1024 * 1024);
+
+        render.Start();
+        render.Join();
+
+        failure.Should().BeNull();
+        rendered.Should().Contain("ChildEvents.Count = 1").And.NotContain("00leaf");
+        rendered!.Length.Should().BeLessThan(500, "the render costs the node, not its subtree");
+    }
+
+    private static TreeEvent ChainAbove(TreeEvent leaf, int depth)
+    {
+        var tree = leaf;
+        for (var level = 0; level < depth; level++)
+        {
+            tree = MakeExercised($"level-{level:D5}", children: [tree]);
+        }
+
+        return tree;
+    }
+
+    [Fact]
     public void DescendantEvents_enumerates_many_siblings_in_declared_order()
     {
         var children = Enumerable.Range(0, 50)
             .Select(i => (TreeEvent)MakeCreated($"00child-{i:D2}"))
             .ToList();
-        var exercise = MakeExercised("00parent", children: children);
+        var exercise = MakeExercised("00parent", children: [.. children]);
 
         var descendants = exercise.DescendantEvents().ToList();
 
@@ -265,7 +391,7 @@ public class TransactionTreeTests
 
     private static TreeEvent.Exercised MakeExercised(
         string contractId,
-        IReadOnlyList<TreeEvent> children,
+        EquatableArray<TreeEvent> children,
         string choiceName = "DoThing",
         bool consuming = false) =>
         new(

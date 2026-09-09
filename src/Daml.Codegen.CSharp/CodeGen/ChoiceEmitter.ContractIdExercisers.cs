@@ -204,10 +204,10 @@ internal sealed partial class ChoiceEmitter
         }
 
         var asyncModifier = staticControllers ? string.Empty : "async ";
-        indent.AppendLine($"public static {asyncModifier}Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.AppendLine($"public static {asyncModifier}Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argument.ParameterType(templateClassName)} argument,");
@@ -217,16 +217,16 @@ internal sealed partial class ChoiceEmitter
         {
             foreach (var paramName in controllerParams)
             {
-                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} {paramName},");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party)} {paramName},");
             }
             foreach (var paramName in readAsParams)
             {
-                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)} {paramName},");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.Party)} {paramName},");
             }
         }
         else
         {
-            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
+            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter,");
         }
         WriteSubmissionParametersAndCloseSignature(indent);
         indent.Dedent();
@@ -240,23 +240,23 @@ internal sealed partial class ChoiceEmitter
             indent.AppendLine();
             if (controllerParams.Count == 1 && readAsParams.Count == 0)
             {
-                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter = {controllerParams[0]};");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter = {controllerParams[0]};");
             }
             else if (readAsParams.Count == 0)
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// SubmitterInfo's actAs unions every named controller.");
-                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", controllerParams)} }});");
+                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)}(new {context.Qualifier.Qualify("HashSet")}<{context.Qualifier.Qualify(RuntimeTypeNames.Party)}> {{ {string.Join(", ", controllerParams)} }});");
             }
             else
             {
                 indent.Require("System.Collections.Generic");
                 indent.AppendLine("// actAs unions every named controller; readAs unions every observer that is");
                 indent.AppendLine("// not also a controller, so the wire format reflects Daml's stakeholder model.");
-                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(");
+                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)}(");
                 indent.Indent();
-                indent.AppendLine($"actAs: new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", controllerParams)} }},");
-                indent.AppendLine($"readAs: new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> {{ {string.Join(", ", readAsParams)} }});");
+                indent.AppendLine($"actAs: new {context.Qualifier.Qualify("HashSet")}<{context.Qualifier.Qualify(RuntimeTypeNames.Party)}> {{ {string.Join(", ", controllerParams)} }},");
+                indent.AppendLine($"readAs: new {context.Qualifier.Qualify("HashSet")}<{context.Qualifier.Qualify(RuntimeTypeNames.Party)}> {{ {string.Join(", ", readAsParams)} }});");
                 indent.Dedent();
             }
 

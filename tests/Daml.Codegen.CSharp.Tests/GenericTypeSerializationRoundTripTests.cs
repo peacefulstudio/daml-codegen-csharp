@@ -6,6 +6,7 @@ using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.Intermediate.Model;
 using Daml.Runtime.Data;
+using Daml.Testing.Roslyn;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -93,8 +94,6 @@ public class GenericTypeSerializationRoundTripTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
         };
         var files = new CSharpCodeGenerator(options)
             .Generate(new DarModel { MainPackage = package, Dependencies = [] });
@@ -110,22 +109,10 @@ public class GenericTypeSerializationRoundTripTests
             .Select(f => CSharpSyntaxTree.ParseText(f.Content, parseOptions, path: f.RelativePath))
             .ToArray();
 
-        var references = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(a => MetadataReference.CreateFromFile(a.Location))
-            .Cast<MetadataReference>()
-            .ToList();
-
-        var damlRuntime = typeof(DamlValue).Assembly;
-        if (!references.Any(r => r is PortableExecutableReference per && per.FilePath == damlRuntime.Location))
-        {
-            references.Add(MetadataReference.CreateFromFile(damlRuntime.Location));
-        }
-
         var compilation = CSharpCompilation.Create(
             assemblyName: "GenericTypeSerializationRoundTripTests-emit",
             syntaxTrees: trees,
-            references: references,
+            references: ConsumerReferenceSet.Assemblies,
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));

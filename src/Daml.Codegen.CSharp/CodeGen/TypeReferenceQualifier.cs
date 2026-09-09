@@ -18,8 +18,6 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </summary>
 internal sealed class TypeReferenceQualifier
 {
-    private const string GlobalPrefix = "global::";
-
     /// <remarks>
     /// Implicit usings import <c>System</c> into every generated file, so a stdlib type sharing a
     /// BCL simple name — <c>DayOfWeek</c> against <c>System.DayOfWeek</c> — is an ambiguous
@@ -36,6 +34,7 @@ internal sealed class TypeReferenceQualifier
             [RuntimeTypeNames.DamlRecord] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlField] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlFieldAttribute] = RuntimeNamespaces.Data,
+            [RuntimeTypeNames.DamlFieldCollections] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlValue] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.IDamlValue] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.IDamlRecord] = RuntimeNamespaces.Data,
@@ -56,6 +55,7 @@ internal sealed class TypeReferenceQualifier
             [RuntimeTypeNames.DamlParty] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.Identifier] = RuntimeNamespaces.Data,
             [RuntimeTypeNames.DamlContractId] = RuntimeNamespaces.Contracts,
+            [RuntimeTypeNames.EquatableArray] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ContractId] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.Contract] = RuntimeNamespaces.Contracts,
             [RuntimeTypeNames.ITemplate] = RuntimeNamespaces.Contracts,
@@ -98,53 +98,49 @@ internal sealed class TypeReferenceQualifier
             ["IReadOnlyList"] = "System.Collections.Generic",
             ["IReadOnlyDictionary"] = "System.Collections.Generic",
             ["HashSet"] = "System.Collections.Generic",
+            ["EqualityComparer"] = "System.Collections.Generic",
+            ["HashCode"] = "System",
         };
 
-    /// <summary>Every generated namespace plus all its ancestor prefixes, used for shadowing checks.</summary>
+    private readonly string _generatedNamespace;
+
+    /// <summary>The emitting module's namespace plus all its ancestor prefixes, used for shadowing checks.</summary>
     public IReadOnlySet<string> AllNamespaces { get; }
 
     /// <summary>
-    /// Sanitised C# names of every top-level type the target Daml package declares (see
-    /// <see cref="PackageEmitContext.LocalReservedTypeNames"/>), used for shadowing checks
-    /// alongside <see cref="AllNamespaces"/>. Since the package's C# namespace is flat
-    /// across all its modules, any name in this set shadows the corresponding imported
-    /// runtime/BCL type everywhere in the package regardless of which module the reference
-    /// is emitted into.
+    /// Sanitised C# names of the top-level types that shadow an imported runtime/BCL name
+    /// inside the emitting module's namespace — every type the Daml package declares in that
+    /// namespace or in one of its ancestor namespaces — used for shadowing checks alongside
+    /// <see cref="AllNamespaces"/>. C# binds a simple name by walking the enclosing
+    /// namespaces outward before consulting <c>using</c> directives, so a type declared in a
+    /// sibling module's namespace does not belong here.
     /// </summary>
     public IReadOnlySet<string> DeclaredTypeNames { get; }
 
     /// <summary>
-    /// Creates a qualifier scoped to the given generated namespaces (ancestors are derived
-    /// automatically) and the package's own declared top-level type names.
+    /// Creates a qualifier scoped to the emitting module's namespace (ancestors are derived
+    /// automatically) and the top-level type names visible from it.
     /// </summary>
     public TypeReferenceQualifier(
-        IEnumerable<string> generatedNamespaces, IEnumerable<string>? declaredTypeNames = null)
+        string generatedNamespace, IEnumerable<string>? declaredTypeNames = null)
     {
-        var all = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var ns in generatedNamespaces)
-        {
-            AddWithAncestors(all, ns);
-        }
-
-        AllNamespaces = all;
+        _generatedNamespace = generatedNamespace;
+        AllNamespaces = new HashSet<string>(Identifiers.NamespaceWithAncestors(generatedNamespace), StringComparer.Ordinal);
         DeclaredTypeNames = new HashSet<string>(declaredTypeNames ?? [], StringComparer.Ordinal);
     }
 
     /// <summary>
     /// Qualifies the head symbol of a C# type reference. Returns
     /// <c>global::Owning.Namespace.<paramref name="simpleName"/></c> when
-    /// <paramref name="simpleName"/> is an imported runtime/BCL type shadowed by a
-    /// generated namespace segment reachable from <paramref name="currentNamespace"/>;
+    /// <paramref name="simpleName"/> is an imported runtime/BCL type shadowed by a segment
+    /// of the emitting module's namespace, or by a top-level type visible from it;
     /// returns the name unchanged otherwise. Generic arguments are composed by the
-    /// caller, e.g. <c>$"{Qualify("ContractId", ns)}&lt;{inner}&gt;"</c>. Names already
+    /// caller, e.g. <c>$"{Qualify("ContractId")}&lt;{inner}&gt;"</c>. Names already
     /// <c>global::</c>-qualified or namespace-qualified are returned unchanged.
     /// </summary>
-    public string Qualify(string simpleName, string currentNamespace) =>
-        QualifyHead(simpleName, currentNamespace);
-
-    private string QualifyHead(string simpleName, string currentNamespace)
+    public string Qualify(string simpleName)
     {
-        if (simpleName.StartsWith(GlobalPrefix, StringComparison.Ordinal)
+        if (simpleName.StartsWith(Identifiers.GlobalPrefix, StringComparison.Ordinal)
             || simpleName.Contains('.')
             || !ImportedSimpleNames.TryGetValue(simpleName, out var owningNamespace))
         {
@@ -152,15 +148,15 @@ internal sealed class TypeReferenceQualifier
         }
 
         if (!NamesCollidingWithImplicitBclImports.Contains(simpleName)
-            && !IsShadowed(simpleName, currentNamespace))
+            && !IsShadowed(simpleName))
         {
             return simpleName;
         }
 
-        return $"{GlobalPrefix}{owningNamespace}.{simpleName}";
+        return Identifiers.GlobalQualified(owningNamespace, simpleName);
     }
 
-    private bool IsShadowed(string simpleName, string currentNamespace)
+    private bool IsShadowed(string simpleName)
     {
         if (DeclaredTypeNames.Contains(simpleName))
         {
@@ -172,25 +168,7 @@ internal sealed class TypeReferenceQualifier
             return true;
         }
 
-        var segments = currentNamespace.Split('.');
-        for (var length = 1; length <= segments.Length; length++)
-        {
-            var prefix = string.Join('.', segments[..length]);
-            if (AllNamespaces.Contains($"{prefix}.{simpleName}"))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void AddWithAncestors(HashSet<string> target, string ns)
-    {
-        var segments = ns.Split('.');
-        for (var length = 1; length <= segments.Length; length++)
-        {
-            target.Add(string.Join('.', segments[..length]));
-        }
+        return Identifiers.NamespaceWithAncestors(_generatedNamespace)
+            .Any(prefix => AllNamespaces.Contains($"{prefix}.{simpleName}"));
     }
 }

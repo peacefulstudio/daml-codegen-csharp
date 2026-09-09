@@ -250,6 +250,39 @@ public class DamlLfJsonReaderLimitsTests
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
 
+    public sealed record NestedChainHolder(
+        [property: DamlFieldAttribute("nested")] Optional<Optional<NestedChainHolder>> Nested) : IDamlRecord
+    {
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "nested",
+            Nested.ToChainValue(carried => carried.ToChainValue(child => child.ToRecord()))));
+    }
+
+    private const int ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach = 42;
+
+    private static string NestedChainJson(int levels) =>
+        string.Concat(Enumerable.Repeat("""{"nested":[[""", levels))
+        + """{"nested":[]}"""
+        + string.Concat(Enumerable.Repeat("]]}", levels));
+
+    [Fact]
+    public void ReadRecord_should_decode_nested_optional_chain_nesting_exactly_at_the_supported_depth()
+    {
+        var record = DamlLfJsonReader.ReadRecord<NestedChainHolder>(
+            NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach));
+
+        record.GetRequiredField("nested").Should().BeOfType<DamlOptionalChain>();
+    }
+
+    [Fact]
+    public void ReadRecord_should_reject_nested_optional_chain_nesting_one_level_beyond_the_supported_depth()
+    {
+        var act = () => DamlLfJsonReader.ReadRecord<NestedChainHolder>(
+            NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach + 1));
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
+    }
+
     [Fact]
     public void ReadRecord_should_decode_a_document_over_the_size_limit_when_the_caller_already_parsed_it()
     {
@@ -263,5 +296,126 @@ public class DamlLfJsonReaderLimitsTests
                 new DamlParty("a::1220ab"),
                 new DamlParty("b::1220cd"),
                 new DamlParty("c::1220ef"));
+    }
+
+    private static readonly DamlJsonDeserializationLimits UnusableLimits = new(MaxInputCharacters: 0);
+
+    [Fact]
+    public void ReadValue_should_reject_an_unusable_limit_configuration_from_json_text_and_a_type_argument()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, UnusableLimits);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_an_unusable_limit_configuration_from_json_text_and_a_runtime_type()
+    {
+        var act = () => DamlLfJsonReader.ReadValue(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, UnusableLimits);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_an_unusable_limit_configuration_from_a_parsed_element_and_a_type_argument()
+    {
+        using var document = JsonDocument.Parse(ThreeOwnersJson);
+        var element = document.RootElement;
+
+        var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(element, UnusableLimits);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_an_unusable_limit_configuration_from_a_parsed_element_and_a_runtime_type()
+    {
+        using var document = JsonDocument.Parse(ThreeOwnersJson);
+        var element = document.RootElement;
+
+        var act = () => DamlLfJsonReader.ReadValue(element, OwnerListHolderKnownOnlyAtRuntime, UnusableLimits);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_json_text_larger_than_the_configured_limit()
+    {
+        var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
+
+        var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_json_text_larger_than_the_configured_limit_for_a_runtime_type()
+    {
+        var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
+
+        var act = () => DamlLfJsonReader.ReadValue(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_a_document_over_the_size_limit_when_the_caller_already_parsed_it()
+    {
+        using var document = JsonDocument.Parse(ThreeOwnersJson);
+        var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: 1);
+
+        var value = DamlLfJsonReader.ReadValue<OwnerListHolder>(document.RootElement, limits);
+
+        value.Should().BeOfType<DamlRecord>().Which.GetRequiredField("owners")
+            .Should().BeOfType<DamlList>().Which.Values.Should().Equal(
+                new DamlParty("a::1220ab"),
+                new DamlParty("b::1220cd"),
+                new DamlParty("c::1220ef"));
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_arrays_wider_than_the_configured_limit()
+    {
+        var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
+
+        var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_arrays_wider_than_the_configured_limit_from_a_parsed_element()
+    {
+        using var document = JsonDocument.Parse(ThreeOwnersJson);
+        var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
+
+        var act = () => DamlLfJsonReader.ReadValue(document.RootElement, OwnerListHolderKnownOnlyAtRuntime, limits);
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_value_nesting_beyond_the_supported_depth()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<NestingHolder>(
+            NestedJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach));
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_value_nesting_exactly_at_the_supported_depth()
+    {
+        var value = DamlLfJsonReader.ReadValue<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound));
+
+        value.Should().BeOfType<DamlRecord>().Which.GetRequiredField("nested").Should().BeOfType<DamlList>();
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_value_nesting_one_level_beyond_the_supported_depth()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound + 1));
+
+        act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
 }

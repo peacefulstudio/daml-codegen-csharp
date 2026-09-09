@@ -191,8 +191,6 @@ public partial class CodeGenEdgeCaseTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             GenerateXmlDocs = true,
             GenerateProjectFile = routing.GenerateProjectFile
         });

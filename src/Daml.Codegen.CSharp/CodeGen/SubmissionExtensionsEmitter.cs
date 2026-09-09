@@ -151,13 +151,13 @@ internal sealed class SubmissionExtensionsEmitter(
             indent.AppendLine("/// <param name=\"cancellationToken\">Cancellation token.</param>");
         }
 
-        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}>>> CreateAsync(");
+        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{className}>>> CreateAsync(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         indent.AppendLine($"{className} payload,");
         if (!staticParties)
         {
-            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
+            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter,");
         }
         indent.AppendLine("CancellationToken cancellationToken = default)");
         indent.Dedent();
@@ -173,7 +173,7 @@ internal sealed class SubmissionExtensionsEmitter(
         {
             if (multipleStatic)
             {
-                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)}(new {context.Qualifier.Qualify("HashSet", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}>");
+                indent.AppendLine($"var submitter = new {context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)}(new {context.Qualifier.Qualify("HashSet")}<{context.Qualifier.Qualify(RuntimeTypeNames.Party)}>");
                 indent.AppendLine("{");
                 indent.Indent();
                 for (var i = 0; i < signatories.Parties.Count; i++)
@@ -198,7 +198,7 @@ internal sealed class SubmissionExtensionsEmitter(
                 }
 
                 var prop = Identifiers.MemberName(pf.FieldName, className);
-                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter = payload.{prop};");
+                indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter = payload.{prop};");
             }
             indent.AppendLine();
         }
@@ -247,11 +247,11 @@ internal sealed class SubmissionExtensionsEmitter(
             indent.AppendLine("/// <param name=\"payload\">The contract payload.</param>");
         }
 
-        indent.AppendLine($"public static {context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}> Observers({className} payload)");
+        indent.AppendLine($"public static {context.Qualifier.Qualify("IReadOnlyList")}<{context.Qualifier.Qualify(RuntimeTypeNames.Party)}> Observers({className} payload)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("ArgumentNullException.ThrowIfNull(payload);");
-        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.Party, context.RootNamespace)}[]");
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.Party)}[]");
         indent.AppendLine("{");
         indent.Indent();
         for (var i = 0; i < observers.Parties.Count; i++)

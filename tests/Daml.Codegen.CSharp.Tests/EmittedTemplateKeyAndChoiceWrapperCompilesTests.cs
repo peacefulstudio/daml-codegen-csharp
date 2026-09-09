@@ -117,19 +117,6 @@ public class EmittedTemplateKeyAndChoiceWrapperCompilesTests
     }
 
     [Fact]
-    public void Emitted_class_template_with_key_compiles_standalone()
-    {
-        var files = GenerateKeyBearingTemplate(useRecordTypes: false);
-
-        var diagnostics = CompileEmittedFiles(files);
-        var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-
-        errors.Should().BeEmpty(
-            "a class-mode key-bearing package must compile with no consumer contribution, but got: {0}",
-            string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
-    }
-
-    [Fact]
     public void Emitted_non_contract_choice_wrapper_compiles_for_optional_unit_return()
     {
         // Regression: GetFromValueConversion previously had no DamlPrimitive.Unit

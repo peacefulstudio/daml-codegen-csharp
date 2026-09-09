@@ -44,6 +44,7 @@ public static class DamlLfJsonReader
     /// <exception cref="NotSupportedException">A CLR property type lies outside the Daml type mapping, or a generated enum companion cannot name the wire constructor of one of its members.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
     /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadValue{T}(JsonElement, DamlJsonDeserializationLimits?)"/>
     public static DamlRecord ReadRecord<T>(JsonElement json, DamlJsonDeserializationLimits? limits = null)
         where T : IDamlRecord =>
         ReadRecord(json, typeof(T), limits);
@@ -61,6 +62,7 @@ public static class DamlLfJsonReader
     /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
     /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadValue{T}(string, DamlJsonDeserializationLimits?)"/>
     public static DamlRecord ReadRecord<T>(string json, DamlJsonDeserializationLimits? limits = null)
         where T : IDamlRecord =>
         ReadRecord(json, typeof(T), limits);
@@ -84,6 +86,7 @@ public static class DamlLfJsonReader
     /// <exception cref="ArgumentNullException"><paramref name="recordType"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
     /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadValue(JsonElement, Type, DamlJsonDeserializationLimits?)"/>
     public static DamlRecord ReadRecord(JsonElement json, Type recordType, DamlJsonDeserializationLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(recordType);
@@ -105,6 +108,7 @@ public static class DamlLfJsonReader
     /// <exception cref="ArgumentNullException"><paramref name="json"/> or <paramref name="recordType"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
     /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadValue(string, Type, DamlJsonDeserializationLimits?)"/>
     public static DamlRecord ReadRecord(string json, Type recordType, DamlJsonDeserializationLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(json);
@@ -114,6 +118,160 @@ public static class DamlLfJsonReader
         using var document = JsonDocument.Parse(json, DamlJsonSerializer.DocumentOptions);
         return ReadRecordValue(document.RootElement, recordType, effectiveLimits, depth: 0, recordType.Name);
     }
+
+    /// <summary>
+    /// Decodes an already-parsed LF-JSON value against the shape of <typeparamref name="T"/>, whatever
+    /// Daml shape that type names — a generated record, variant or enum, a scalar, a <c>ContractId</c> or <c>Unit</c>.
+    /// A top-level enum must be a generated Daml enum; a plain CLR enum is refused here even though it decodes
+    /// as a record field. Scalars, <c>ContractId</c> and <c>Unit</c> are also accepted in their wire spelling:
+    /// <see cref="DamlText"/>, <see cref="DamlParty"/>, <see cref="DamlBool"/>, <see cref="DamlInt64"/>,
+    /// <see cref="DamlNumeric"/>, <see cref="DamlDate"/>, <see cref="DamlTimestamp"/>, <see cref="DamlUnit"/>
+    /// and <see cref="DamlContractId"/>.
+    /// </summary>
+    /// <typeparam name="T">The Daml type describing the expected shape.</typeparam>
+    /// <param name="json">The LF-JSON value to decode.</param>
+    /// <param name="limits">
+    /// Decode limits; the shared hardened defaults apply when omitted.
+    /// <see cref="DamlJsonDeserializationLimits.MaxInputCharacters"/> is accepted and ignored here:
+    /// the caller already parsed the document, so the parse-time size, duplicate-property and
+    /// parse-depth caps were theirs to apply. What this overload bounds is the reader's own
+    /// allocation amplification and recursion depth while walking an already-materialized
+    /// document — decode bounds, not a boundary defence against hostile input.
+    /// </param>
+    /// <returns>A value carrying its Daml type.</returns>
+    /// <exception cref="JsonException">The JSON does not match the expected shape, or a decode limit is exceeded.</exception>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> names no top-level Daml shape the reader decodes, a CLR property type lies outside the Daml type mapping, or a generated enum companion cannot name the wire constructor of one of its members.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
+    /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadRecord{T}(JsonElement, DamlJsonDeserializationLimits?)"/>
+    public static DamlValue ReadValue<T>(JsonElement json, DamlJsonDeserializationLimits? limits = null) =>
+        ReadValue(json, typeof(T), limits);
+
+    /// <summary>
+    /// Parses LF-JSON under the shared hardened document options and decodes it against the
+    /// shape of <typeparamref name="T"/>, whatever Daml shape that type names — a generated record, variant
+    /// or enum, a scalar, a <c>ContractId</c> or <c>Unit</c>. A top-level enum must be a generated Daml enum;
+    /// a plain CLR enum is refused here even though it decodes as a record field. Scalars, <c>ContractId</c>
+    /// and <c>Unit</c> are also accepted in their wire spelling: <see cref="DamlText"/>, <see cref="DamlParty"/>,
+    /// <see cref="DamlBool"/>, <see cref="DamlInt64"/>, <see cref="DamlNumeric"/>, <see cref="DamlDate"/>,
+    /// <see cref="DamlTimestamp"/>, <see cref="DamlUnit"/> and <see cref="DamlContractId"/>.
+    /// </summary>
+    /// <typeparam name="T">The Daml type describing the expected shape.</typeparam>
+    /// <param name="json">The LF-JSON text to parse and decode.</param>
+    /// <param name="limits">Decode limits; the shared hardened defaults apply when omitted.</param>
+    /// <returns>A value carrying its Daml type.</returns>
+    /// <exception cref="JsonException">The JSON is malformed, does not match the expected shape, or exceeds a limit.</exception>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> names no top-level Daml shape the reader decodes, a CLR property type lies outside the Daml type mapping, or a generated enum companion cannot name the wire constructor of one of its members.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
+    /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadRecord{T}(string, DamlJsonDeserializationLimits?)"/>
+    public static DamlValue ReadValue<T>(string json, DamlJsonDeserializationLimits? limits = null) =>
+        ReadValue(json, typeof(T), limits);
+
+    /// <summary>
+    /// Decodes an already-parsed LF-JSON value against the shape of <paramref name="valueType"/>, whatever
+    /// Daml shape that type names — a generated record, variant or enum, a scalar, a <c>ContractId</c> or <c>Unit</c>.
+    /// A top-level enum must be a generated Daml enum; a plain CLR enum is refused here even though it decodes
+    /// as a record field. Scalars, <c>ContractId</c> and <c>Unit</c> are also accepted in their wire spelling:
+    /// <see cref="DamlText"/>, <see cref="DamlParty"/>, <see cref="DamlBool"/>, <see cref="DamlInt64"/>,
+    /// <see cref="DamlNumeric"/>, <see cref="DamlDate"/>, <see cref="DamlTimestamp"/>, <see cref="DamlUnit"/>
+    /// and <see cref="DamlContractId"/>.
+    /// </summary>
+    /// <param name="json">The LF-JSON value to decode.</param>
+    /// <param name="valueType">The Daml type describing the expected shape.</param>
+    /// <param name="limits">
+    /// Decode limits; the shared hardened defaults apply when omitted.
+    /// <see cref="DamlJsonDeserializationLimits.MaxInputCharacters"/> is accepted and ignored here:
+    /// the caller already parsed the document, so the parse-time size, duplicate-property and
+    /// parse-depth caps were theirs to apply. What this overload bounds is the reader's own
+    /// allocation amplification and recursion depth while walking an already-materialized
+    /// document — decode bounds, not a boundary defence against hostile input.
+    /// </param>
+    /// <returns>A value carrying its Daml type.</returns>
+    /// <exception cref="JsonException">The JSON does not match the expected shape, or a decode limit is exceeded.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="valueType"/> names no top-level Daml shape the reader decodes, a CLR property type lies outside the Daml type mapping, or a generated enum companion cannot name the wire constructor of one of its members.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="valueType"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
+    /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadRecord(JsonElement, Type, DamlJsonDeserializationLimits?)"/>
+    public static DamlValue ReadValue(JsonElement json, Type valueType, DamlJsonDeserializationLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(valueType);
+        var effectiveLimits = limits ?? DamlJsonSerializer.DefaultDeserializationLimits;
+        DamlJsonSerializer.ValidateLimits(effectiveLimits);
+        return ReadTopLevelValue(json, valueType, effectiveLimits, valueType.Name);
+    }
+
+    /// <summary>
+    /// Parses LF-JSON under the shared hardened document options and decodes it against the
+    /// shape of <paramref name="valueType"/>, whatever Daml shape that type names — a generated record, variant
+    /// or enum, a scalar, a <c>ContractId</c> or <c>Unit</c>. A top-level enum must be a generated Daml enum;
+    /// a plain CLR enum is refused here even though it decodes as a record field. Scalars, <c>ContractId</c>
+    /// and <c>Unit</c> are also accepted in their wire spelling: <see cref="DamlText"/>, <see cref="DamlParty"/>,
+    /// <see cref="DamlBool"/>, <see cref="DamlInt64"/>, <see cref="DamlNumeric"/>, <see cref="DamlDate"/>,
+    /// <see cref="DamlTimestamp"/>, <see cref="DamlUnit"/> and <see cref="DamlContractId"/>.
+    /// </summary>
+    /// <param name="json">The LF-JSON text to parse and decode.</param>
+    /// <param name="valueType">The Daml type describing the expected shape.</param>
+    /// <param name="limits">Decode limits; the shared hardened defaults apply when omitted.</param>
+    /// <returns>A value carrying its Daml type.</returns>
+    /// <exception cref="JsonException">The JSON is malformed, does not match the expected shape, or exceeds a limit.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="valueType"/> names no top-level Daml shape the reader decodes, a CLR property type lies outside the Daml type mapping, or a generated enum companion cannot name the wire constructor of one of its members.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="json"/> or <paramref name="valueType"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limits"/> is not a valid limit configuration.</exception>
+    /// <remarks>JSON properties the target type does not declare are ignored by design, for tolerance of payloads produced by newer Daml package versions.</remarks>
+    /// <seealso cref="ReadRecord(string, Type, DamlJsonDeserializationLimits?)"/>
+    public static DamlValue ReadValue(string json, Type valueType, DamlJsonDeserializationLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        ArgumentNullException.ThrowIfNull(valueType);
+        var effectiveLimits = limits ?? DamlJsonSerializer.DefaultDeserializationLimits;
+        DamlJsonSerializer.EnsureWithinInputLimit(json, effectiveLimits);
+        using var document = JsonDocument.Parse(json, DamlJsonSerializer.DocumentOptions);
+        return ReadTopLevelValue(document.RootElement, valueType, effectiveLimits, valueType.Name);
+    }
+
+    private static DamlValue ReadTopLevelValue(
+        JsonElement json, Type valueType, DamlJsonDeserializationLimits limits, string path)
+    {
+        if (TopLevelScalarArms.TryGetValue(valueType, out var readScalar))
+        {
+            return readScalar(json, path);
+        }
+        if (IsGeneratedDamlEnum(valueType))
+        {
+            return ReadEnum(json, valueType, path);
+        }
+        if (IsContractId(valueType) || valueType == typeof(DamlContractId))
+        {
+            return new DamlContractId(ReadWireString(json, path));
+        }
+        if (CarriesDamlTypeArguments(valueType))
+        {
+            throw GenericFamilyAtTopLevel(valueType, path);
+        }
+        if (typeof(IDamlVariant).IsAssignableFrom(valueType))
+        {
+            return ReadVariant(json, valueType, limits, depth: 0, path);
+        }
+        if (typeof(IDamlRecord).IsAssignableFrom(valueType))
+        {
+            return ReadRecordValue(json, valueType, limits, depth: 0, path);
+        }
+        throw UnsupportedTopLevelValueType(valueType, path);
+    }
+
+    private static bool CarriesDamlTypeArguments(Type clrType) =>
+        Nullable.GetUnderlyingType(clrType) is not null
+        || IsList(clrType)
+        || IsDictionary(clrType)
+        || IsStdlibTuple(clrType)
+        || IsEither(clrType)
+        || IsWrappedOptional(clrType)
+        || IsStdlibSet(clrType)
+        || IsStdlibNonEmpty(clrType)
+        || IsStdlibMap(clrType);
 
     private static DamlRecord ReadRecordValue(JsonElement json, Type recordType, DamlJsonDeserializationLimits limits, int depth, string path)
     {
@@ -138,7 +296,7 @@ public static class DamlLfJsonReader
             {
                 throw MissingRecordField(fieldPath);
             }
-            fields.Add(new DamlField(label, ReadValue(element, slot, limits, depth + 1, fieldPath)));
+            fields.Add(new DamlField(label, ReadFieldValue(element, slot, limits, depth + 1, fieldPath)));
         }
         return new DamlRecord(null, fields);
     }
@@ -174,7 +332,7 @@ public static class DamlLfJsonReader
         public ValueSlot TypeArgument(int index) => new(Nullability.GenericTypeArguments[index]);
     }
 
-    private static DamlValue ReadValue(JsonElement json, ValueSlot slot, DamlJsonDeserializationLimits limits, int depth, string path)
+    private static DamlValue ReadFieldValue(JsonElement json, ValueSlot slot, DamlJsonDeserializationLimits limits, int depth, string path)
     {
         if (depth > DamlJsonSerializer.MaximumNestingDepth)
         {
@@ -262,6 +420,32 @@ public static class DamlLfJsonReader
             [typeof(DamlUnit)] = ReadUnit
         }.ToFrozenDictionary();
 
+    private static readonly (Type Alias, Type Canonical)[] TopLevelScalarAliases =
+    [
+        (typeof(DamlParty), typeof(Party)),
+        (typeof(DamlText), typeof(string)),
+        (typeof(DamlBool), typeof(bool)),
+        (typeof(DamlInt64), typeof(long)),
+        (typeof(DamlNumeric), typeof(decimal)),
+        (typeof(DamlDate), typeof(DateOnly)),
+        (typeof(DamlTimestamp), typeof(DateTimeOffset)),
+        (typeof(Unit), typeof(DamlUnit))
+    ];
+
+    private static readonly FrozenDictionary<Type, Func<JsonElement, string, DamlValue>> TopLevelScalarArms =
+        ScalarArms
+            .Concat(TopLevelScalarAliases.Select(alias =>
+            {
+                if (!ScalarArms.TryGetValue(alias.Canonical, out var reader))
+                {
+                    throw new InvalidOperationException(
+                        $"TopLevelScalarAliases accepts '{alias.Alias}' as a top-level spelling of "
+                        + $"'{alias.Canonical}', but '{alias.Canonical}' has no entry in ScalarArms.");
+                }
+                return KeyValuePair.Create(alias.Alias, reader);
+            }))
+            .ToFrozenDictionary();
+
     private static string ReadWireString(JsonElement json, string path) =>
         json.ValueKind == JsonValueKind.String
             ? json.GetString()!
@@ -335,12 +519,23 @@ public static class DamlLfJsonReader
         return new EnumConstructors(names.ToFrozenSet(), names.Order(StringComparer.Ordinal).ToList());
     }
 
+    private static bool IsGeneratedDamlEnum(Type clrType) =>
+        clrType.IsEnum && GeneratedEnumCompanion(clrType) is not null;
+
+    private static MethodInfo? GeneratedEnumCompanion(Type enumType)
+    {
+        if (enumType.FullName is not { } fullName)
+        {
+            return null;
+        }
+        var toDamlEnum = enumType.Assembly.GetType(fullName + GeneratedCompanionSuffix)
+            ?.GetMethod(ToDamlEnumMethod, BindingFlags.Public | BindingFlags.Static, null, [enumType], null);
+        return toDamlEnum?.ReturnType == typeof(DamlEnum) ? toDamlEnum : null;
+    }
+
     private static IReadOnlyList<string> WireConstructorNames(Type enumType, string path)
     {
-        var toDamlEnum = enumType.FullName is { } fullName
-            ? enumType.Assembly.GetType(fullName + GeneratedCompanionSuffix)
-                ?.GetMethod(ToDamlEnumMethod, BindingFlags.Public | BindingFlags.Static, null, [enumType], null)
-            : null;
+        var toDamlEnum = GeneratedEnumCompanion(enumType);
         if (toDamlEnum is null)
         {
             return Enum.GetNames(enumType);
@@ -390,7 +585,7 @@ public static class DamlLfJsonReader
 
         var payloadPath = $"{path}.{VariantValueKey}";
         return DamlVariant.Create(tag, PayloadSlotOf(arm, payloadPath) is { } payloadSlot
-            ? ReadValue(valueElement, payloadSlot, limits, depth + 1, payloadPath)
+            ? ReadFieldValue(valueElement, payloadSlot, limits, depth + 1, payloadPath)
             : ReadUnit(valueElement, payloadPath));
     }
 
@@ -493,7 +688,7 @@ public static class DamlLfJsonReader
             }
             fields.Add(new DamlField(
                 label,
-                ReadValue(element, slot.TypeArgument(component), limits, depth + 1, componentPath)));
+                ReadFieldValue(element, slot.TypeArgument(component), limits, depth + 1, componentPath)));
         }
         return new DamlRecord(null, fields);
     }
@@ -510,7 +705,7 @@ public static class DamlLfJsonReader
         JsonElement json, ValueSlot slot, DamlJsonDeserializationLimits limits, int depth, string path) =>
         json.ValueKind == JsonValueKind.Null
             ? DamlOptional.None
-            : DamlOptional.Some(ReadValue(json, slot.TypeArgument(0), limits, depth + 1, path));
+            : DamlOptional.Some(ReadFieldValue(json, slot.TypeArgument(0), limits, depth + 1, path));
 
     private static bool IsOptionalChainRoot(Type wrappedOptional)
     {
@@ -541,7 +736,7 @@ public static class DamlLfJsonReader
         return DamlOptionalChain.Some(
             IsWrappedOptional(carried.ClrType)
                 ? ReadOptionalChain(json[0], carried, limits, depth + 1, carriedPath)
-                : ReadValue(json[0], carried, limits, depth + 1, carriedPath));
+                : ReadFieldValue(json[0], carried, limits, depth + 1, carriedPath));
     }
 
     private static DamlVariant ReadEither(JsonElement json, ValueSlot slot, DamlJsonDeserializationLimits limits, int depth, string path)
@@ -565,7 +760,7 @@ public static class DamlLfJsonReader
         var payloadPath = $"{path}.{VariantValueKey}";
         return DamlVariant.Create(
             tag,
-            ReadValue(valueElement, slot.TypeArgument(component), limits, depth + 1, payloadPath));
+            ReadFieldValue(valueElement, slot.TypeArgument(component), limits, depth + 1, payloadPath));
     }
 
     private const string StdlibMapFieldLabel = "map";
@@ -596,7 +791,7 @@ public static class DamlLfJsonReader
         return WrapStdlibMap(ReadGenMapEntries(
             entries,
             slot.TypeArgument(0),
-            (value, valuePath) => ReadValue(value, valueSlot, limits, depth + 2, valuePath),
+            (value, valuePath) => ReadFieldValue(value, valueSlot, limits, depth + 2, valuePath),
             StdlibMapContainerName,
             limits,
             depth + 1,
@@ -640,7 +835,7 @@ public static class DamlLfJsonReader
         }
 
         return new DamlRecord(null, [
-            new DamlField(NonEmptyHeadFieldLabel, ReadValue(head, elementSlot, limits, depth + 1, headPath)),
+            new DamlField(NonEmptyHeadFieldLabel, ReadFieldValue(head, elementSlot, limits, depth + 1, headPath)),
             new DamlField(NonEmptyTailFieldLabel, ReadList(tail, elementSlot, limits, depth + 1, tailPath))]);
     }
 
@@ -676,7 +871,7 @@ public static class DamlLfJsonReader
         ReadGenMapEntries(
             json,
             keySlot,
-            (value, valuePath) => ReadValue(value, valueSlot, limits, depth + 1, valuePath),
+            (value, valuePath) => ReadFieldValue(value, valueSlot, limits, depth + 1, valuePath),
             GenMapContainerName,
             limits,
             depth,
@@ -721,7 +916,7 @@ public static class DamlLfJsonReader
                     $"Expected a two-element key/value pair at '{entryPath}' but found {entry.GetArrayLength()} element(s)");
             }
 
-            var key = ReadValue(entry[0], keySlot, limits, depth + 1, $"{entryPath}.key");
+            var key = ReadFieldValue(entry[0], keySlot, limits, depth + 1, $"{entryPath}.key");
             if (!seenKeys.Add(key))
             {
                 throw new JsonException($"Duplicate key at '{entryPath}' in a Daml {containerName}");
@@ -742,7 +937,7 @@ public static class DamlLfJsonReader
         var values = new Dictionary<string, DamlValue>(count);
         foreach (var entry in json.EnumerateObject())
         {
-            if (!values.TryAdd(entry.Name, ReadValue(entry.Value, valueSlot, limits, depth + 1, MapEntryPath(path, entry.Name))))
+            if (!values.TryAdd(entry.Name, ReadFieldValue(entry.Value, valueSlot, limits, depth + 1, MapEntryPath(path, entry.Name))))
             {
                 throw new JsonException($"Duplicate key '{entry.Name}' at '{path}' in a Daml TextMap");
             }
@@ -772,7 +967,7 @@ public static class DamlLfJsonReader
         var values = new List<DamlValue>(length);
         foreach (var element in json.EnumerateArray())
         {
-            values.Add(ReadValue(element, elementSlot, limits, depth + 1, $"{path}[{values.Count}]"));
+            values.Add(ReadFieldValue(element, elementSlot, limits, depth + 1, $"{path}[{values.Count}]"));
         }
         return new DamlList(values);
     }
@@ -829,4 +1024,12 @@ public static class DamlLfJsonReader
     private static NotSupportedException UnmappedClrType(Type clrType, string path) =>
         new($"CLR type '{clrType}' at '{path}' lies outside the Daml type mapping; "
             + "give the property a mapped Daml type or decode this field without the reader.");
+
+    private static NotSupportedException GenericFamilyAtTopLevel(Type clrType, string path) =>
+        new($"Type '{clrType}' at '{path}' names a generic Daml type family the reader does not decode as a "
+            + "top-level value; decode it as a field of a generated Daml record, or decode this value without the reader.");
+
+    private static NotSupportedException UnsupportedTopLevelValueType(Type clrType, string path) =>
+        new($"Type '{clrType}' at '{path}' lies outside the Daml type mapping for a top-level value; "
+            + "pass a generated Daml record, variant or enum, a Daml scalar, a ContractId or Unit.");
 }

@@ -48,7 +48,7 @@ internal sealed class RecordEmitter(
 
         var recordInterface = InterfaceDeclaration(module, dataType, className);
 
-        if (options.UseRecordTypes && options.UsePrimaryConstructors && record.Fields.Count > 0)
+        if (record.Fields.Count > 0)
         {
             indent.Append($"public sealed record {fullClassName}(");
             serialization.WriteRecordParameters(indent, record.Fields);
@@ -62,6 +62,7 @@ internal sealed class RecordEmitter(
         indent.AppendLine("{");
         indent.Indent();
 
+        serialization.WriteCollectionValueSemantics(indent, fullClassName, record.Fields);
         serialization.WriteToRecordMethod(indent, record.Fields, dataType.TypeParams);
         serialization.WriteFromRecordMethod(indent, fullClassName, record.Fields, dataType.TypeParams);
 
@@ -89,7 +90,7 @@ internal sealed class RecordEmitter(
             return string.Empty;
         }
 
-        var recordFacet = $"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}<{className}>";
+        var recordFacet = $"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}<{className}>";
         return context.LocalViewRecordMarkerNames.TryGetValue($"{module.Name}:{dataType.Name}", out var marker)
             ? $" : {marker}, {recordFacet}"
             : $" : {recordFacet}";

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -57,17 +56,19 @@ public static class CreateByExercise
 
     /// <summary>
     /// Exercises <paramref name="choice"/> and lifts every created
-    /// <typeparamref name="TTemplate"/> into an <see cref="ExerciseOutcome{T}"/> over a
-    /// read-only list of <see cref="ContractId{T}"/>. A conforming writer yields only
-    /// <see cref="ExerciseOutcome{T}.One"/> (whose list holds all created
-    /// <typeparamref name="TTemplate"/> contracts, in transaction order — it may be empty
-    /// when the choice created none), <see cref="ExerciseOutcome{T}.DamlError"/>, or
+    /// <typeparamref name="TTemplate"/> into an <see cref="ExerciseOutcome{T}"/> over the
+    /// <see cref="EquatableArray{T}">EquatableArray&lt;ContractId&lt;TTemplate&gt;&gt;</see>
+    /// that <see cref="TransactionResultExtensions.All{T}"/> projects, so two outcomes over the
+    /// same created contracts compare equal.
+    /// A conforming writer yields only <see cref="ExerciseOutcome{T}.One"/> (whose array holds
+    /// all created <typeparamref name="TTemplate"/> contracts, in transaction order — it may be
+    /// empty when the choice created none), <see cref="ExerciseOutcome{T}.DamlError"/>, or
     /// <see cref="ExerciseOutcome{T}.InfraError"/>. A writer-level
     /// <see cref="ExerciseOutcome{T}.None"/> or <see cref="ExerciseOutcome{T}.Many"/> is
     /// only reachable from a non-conforming writer and is propagated faithfully rather
     /// than collapsed.
     /// </summary>
-    public static async Task<ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>> TryCreateManyByExerciseAsync<TTemplate>(
+    public static async Task<ExerciseOutcome<EquatableArray<ContractId<TTemplate>>>> TryCreateManyByExerciseAsync<TTemplate>(
         this ILedgerWriter writer,
         ExerciseCommand choice,
         SubmitterInfo submitter,
@@ -85,7 +86,7 @@ public static class CreateByExercise
 
         return RemapExerciseOutcome(
             outcome,
-            result => new ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>.One(result.All<TTemplate>()));
+            result => new ExerciseOutcome<EquatableArray<ContractId<TTemplate>>>.One(result.All<TTemplate>()));
     }
 
     /// <summary>
@@ -122,13 +123,17 @@ public static class CreateByExercise
     /// <summary>
     /// Exercises <paramref name="choice"/> and returns every created
     /// <typeparamref name="TTemplate"/> contract id in transaction order, throwing on
-    /// error. The returned list may be empty when the choice created no
-    /// <typeparamref name="TTemplate"/>. Throws <see cref="LedgerOperationException"/> on
-    /// a Daml or infrastructure error, or when a non-conforming writer yields a
-    /// <c>None</c> / <c>Many</c> outcome. For structured handling, use
+    /// error. Carried as the
+    /// <see cref="EquatableArray{T}">EquatableArray&lt;ContractId&lt;TTemplate&gt;&gt;</see>
+    /// <see cref="TransactionResultExtensions.All{T}"/> projects, so two results over the same
+    /// created contracts compare equal; it may be empty when the choice created no
+    /// <typeparamref name="TTemplate"/>. Throws
+    /// <see cref="LedgerOperationException"/> on a Daml or infrastructure error, or when a
+    /// non-conforming writer yields a <c>None</c> / <c>Many</c> outcome. For structured
+    /// handling, use
     /// <see cref="TryCreateManyByExerciseAsync{TTemplate}(ILedgerWriter,ExerciseCommand,SubmitterInfo,string?,CommandId?,TimeSpan?,CancellationToken)"/>.
     /// </summary>
-    public static async Task<IReadOnlyList<ContractId<TTemplate>>> CreateManyByExerciseAsync<TTemplate>(
+    public static async Task<EquatableArray<ContractId<TTemplate>>> CreateManyByExerciseAsync<TTemplate>(
         this ILedgerWriter writer,
         ExerciseCommand choice,
         SubmitterInfo submitter,
@@ -157,7 +162,7 @@ public static class CreateByExercise
         {
             ExerciseOutcome<TransactionResult>.One one => projectCreated(one.Result),
             ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<TCreated>.None(),
-            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TCreated>.Many(many.Count, many.ContractIds),
+            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TCreated>.Many(many.ContractIds),
             ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<TCreated>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
             ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TCreated>.InfraError(e.StatusCode, e.Message, e.Category, e.SourceException),
             _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitSingleAsync."),
@@ -172,7 +177,7 @@ public static class CreateByExercise
         {
             1 => new ExerciseOutcome<ContractId<TTemplate>>.One(created[0]),
             0 => new ExerciseOutcome<ContractId<TTemplate>>.None(),
-            _ => new ExerciseOutcome<ContractId<TTemplate>>.Many(created.Count, [.. created.Select(id => id.Value)]),
+            _ => new ExerciseOutcome<ContractId<TTemplate>>.Many([.. created.Select(id => id.Value)]),
         };
     }
 }

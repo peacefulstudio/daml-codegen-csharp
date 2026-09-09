@@ -39,16 +39,11 @@ public class TemplateEmitterTests
             UpgradedPackageId = upgradedPackageId,
         };
 
-    private static CodeGenOptions Options(
-        bool generateXmlDocs = true,
-        bool useRecordTypes = true,
-        bool usePrimaryConstructors = true) =>
+    private static CodeGenOptions Options(bool generateXmlDocs = true) =>
         new()
         {
-            RootNamespace = "Test.Package",
+            NamespacePrefix = "Test.Package",
             GenerateXmlDocs = generateXmlDocs,
-            UseRecordTypes = useRecordTypes,
-            UsePrimaryConstructors = usePrimaryConstructors,
         };
 
     private static string EmitTemplate(
@@ -69,7 +64,7 @@ public class TemplateEmitterTests
         };
         options ??= Options();
         var package = Package(module, version, upgradedPackageId);
-        var context = PackageEmitContext.ForPackage(package, options);
+        var context = PackageEmitContext.ForPackage(package, options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var party = new PartyAnalysis();
@@ -174,13 +169,13 @@ public class TemplateEmitterTests
             dataTypes: [RecordDataType("AccountKey", Field("custodian", DamlPrimitive.Party))]);
 
         output.Should().Contain(
-            ": ITemplate, IHasKey<Account, global::Test.Package.AccountKey>");
+            ": ITemplate, IHasKey<Account, global::Test.Package.Test.Module.AccountKey>");
         output.Should().Contain(
-            "public static KeyDescriptor<Account, global::Test.Package.AccountKey> Key { get; } =");
+            "public static KeyDescriptor<Account, global::Test.Package.Test.Module.AccountKey> Key { get; } =");
         output.Should().Contain(
             "KeyEncoder = key => key.ToRecord(),");
         output.Should().Contain(
-            "KeyDecoder = value => global::Test.Package.AccountKey.FromRecord(value.As<DamlRecord>()),");
+            "KeyDecoder = value => global::Test.Package.Test.Module.AccountKey.FromRecord(value.As<DamlRecord>()),");
     }
 
     [Fact]
@@ -437,27 +432,6 @@ public class TemplateEmitterTests
     }
 
     [Fact]
-    public void TemplateEmitter_emits_required_properties_when_primary_constructors_are_disabled()
-    {
-        var output = EmitTemplate(
-            Template("NoConstructor", [Field("value", DamlPrimitive.Text)]),
-            options: Options(usePrimaryConstructors: false));
-
-        output.Should().Contain("public sealed partial record NoConstructor : ITemplate");
-        output.Should().Contain("public required string Value { get; init; }");
-    }
-
-    [Fact]
-    public void TemplateEmitter_emits_a_class_when_record_types_are_disabled()
-    {
-        var output = EmitTemplate(
-            Template("ClassTemplate", [Field("value", DamlPrimitive.Text)]),
-            options: Options(useRecordTypes: false, usePrimaryConstructors: false));
-
-        output.Should().Contain("public sealed partial class ClassTemplate : ITemplate");
-    }
-
-    [Fact]
     public void TemplateEmitter_handles_a_template_with_no_fields()
     {
         var output = EmitTemplate(Template("EmptyTemplate"));
@@ -589,7 +563,7 @@ public class TemplateEmitterTests
         };
         var options = Options();
         var package = Package(module);
-        var context = PackageEmitContext.ForPackage(package, options);
+        var context = PackageEmitContext.ForPackage(package, options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var party = new PartyAnalysis();
@@ -629,8 +603,6 @@ public class TemplateEmitterTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             RootFilter = "Test\\.Module:Include.*",
         };
 

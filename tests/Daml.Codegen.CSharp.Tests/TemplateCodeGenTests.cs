@@ -77,7 +77,7 @@ public class TemplateCodeGenTests
     }
 
     [Fact]
-    public void Generate_should_place_the_template_file_under_the_root_namespace_directory()
+    public void Generate_should_place_the_template_file_under_the_module_namespace_directory()
     {
         var generator = CreateGenerator();
 
@@ -85,7 +85,7 @@ public class TemplateCodeGenTests
         var templateFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("MyTemplate.cs", StringComparison.Ordinal));
 
         templateFile.Should().NotBeNull();
-        templateFile!.RelativePath.Should().Contain("Test/Package/");
+        templateFile!.RelativePath.Should().Be("Deeply/Nested/Module/MyTemplate.cs");
     }
 
     private static DamlModule ModuleWithTemplateButNoDataTypes(string moduleName, string templateName) =>

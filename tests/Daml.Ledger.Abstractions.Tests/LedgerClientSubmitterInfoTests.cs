@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using Daml.Ledger.Abstractions.Extensions;
+using Daml.Ledger.Abstractions.Testing.Conformance;
 using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
@@ -397,7 +398,7 @@ public class LedgerClientSubmitterInfoTests
     /// and create-by-exercise extensions compute, and the <c>fromOffset</c> a
     /// <see cref="StakeholderResume"/> ticket resolves to on the default interface member.
     /// </summary>
-    private class RecordingLedgerClient : ILedgerClient
+    private class RecordingLedgerClient : NotSupportedLedgerClient
     {
         private static readonly TransactionResult SampleTransaction = new(
             "update-id", LedgerOffset.Begin, [], [], new CommandId("cmd-id"));
@@ -413,7 +414,7 @@ public class LedgerClientSubmitterInfoTests
         public CommandId? LastExerciseCommandId { get; private set; }
         public LedgerOffset? LastSubscribeFromOffset { get; private set; }
 
-        public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
+        public override Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
             SubmitterInfo submitter,
             string? workflowId = null,
@@ -427,14 +428,7 @@ public class LedgerClientSubmitterInfoTests
             return Task.FromResult<ExerciseOutcome<TResult>>(new ExerciseOutcome<TResult>.One(default(TResult)!));
         }
 
-        public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
-            CommandsSubmission submission,
-            SubmitterInfo submitter,
-            TimeSpan? timeout = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(new SubmitAndWaitResult(new CommandId("cmd-id"), "update-id", LedgerOffset.Begin));
-
-        public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
+        public override Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
             CommandsSubmission submission,
             SubmitterInfo submitter,
             TimeSpan? timeout = null,
@@ -450,90 +444,53 @@ public class LedgerClientSubmitterInfoTests
                 new ExerciseOutcome<TransactionResult>.One(SampleTransaction));
         }
 
-        public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
+        public override Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
             SubmitterInfo submitter,
             string? workflowId = null,
             CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
-            where TTemplate : ITemplate
         {
             LastCreateSubmitter = submitter;
             return Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(
                 new ExerciseOutcome<ContractId<TTemplate>>.None());
         }
 
-        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+        public override IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeSubmitter = submitter;
             LastSubscribeFromOffset = fromOffset;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
-        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        public override IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeLedgerEffectsSubmitter = submitter;
             return EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
         }
 
-        public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
+        public override IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
         {
             LastSubscribeActiveSubmitter = submitter;
             return EmptyAsync<AcsSnapshotEntry<T>>(cancellationToken);
         }
 
-        public Task<LedgerOffset> GetLedgerEndAsync(
+        public override Task<LedgerOffset> GetLedgerEndAsync(
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(LedgerOffset.Begin);
-
-        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
-            ViewDescriptor<TInterface, TView> view,
-            SubmitterInfo submitter,
-            LedgerOffset? fromOffset = null,
-            LedgerOffset? toOffset = null,
-            CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView> =>
-            throw new NotSupportedException();
-
-        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
-            ViewDescriptor<TInterface, TView> view,
-            SubmitterInfo submitter,
-            LedgerOffset? fromOffset = null,
-            LedgerOffset? toOffset = null,
-            CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView> =>
-            throw new NotSupportedException();
-
-        public IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
-            ViewDescriptor<TInterface, TView> view,
-            SubmitterInfo submitter,
-            LedgerOffset? activeAtOffset = null,
-            CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView> =>
-            throw new NotSupportedException();
-
-        public void Dispose()
-        {
-        }
 
         private static async IAsyncEnumerable<TItem> EmptyAsync<TItem>(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)

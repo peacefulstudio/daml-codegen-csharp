@@ -56,7 +56,7 @@ public class CliErrorReportingTests : IDisposable
         var args = new CodegenArgs(
             new FileInfo(FixtureIntermediatePath),
             new DirectoryInfo(_workspace),
-            RootNamespace: null,
+            NamespacePrefix: null,
             Verbosity: 1,
             RootFilter: null,
             EnableNullable: true,

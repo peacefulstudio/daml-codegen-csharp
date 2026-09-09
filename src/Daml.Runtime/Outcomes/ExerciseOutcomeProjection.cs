@@ -25,7 +25,7 @@ public static class ExerciseOutcomeProjection
     ///   <paramref name="projectCommitted"/> is invoked on it and its result returned unchanged (so
     ///   the projector may itself yield <c>One</c>, <c>None</c>, or <c>Many</c>).</item>
     ///   <item><see cref="ExerciseOutcome{T}.None"/> / <see cref="ExerciseOutcome{T}.Many"/> — re-wrapped
-    ///   over <typeparamref name="TProjected"/>, carrying the same <c>Count</c> and <c>ContractIds</c>.
+    ///   over <typeparamref name="TProjected"/>, <c>Many</c> carrying the same <c>ContractIds</c>.
     ///   These are only reachable from a non-conforming writer — a conforming
     ///   <c>TrySubmitAndWaitForTransactionAsync</c> yields <c>One</c>, <c>DamlError</c>, or
     ///   <c>InfraError</c> — and are propagated faithfully rather than collapsed into a success shape or a
@@ -51,7 +51,7 @@ public static class ExerciseOutcomeProjection
         {
             ExerciseOutcome<TransactionResult>.One one => projectCommitted(one.Result),
             ExerciseOutcome<TransactionResult>.None => new ExerciseOutcome<TProjected>.None(),
-            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TProjected>.Many(many.Count, many.ContractIds),
+            ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TProjected>.Many(many.ContractIds),
             ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<TProjected>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
             ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TProjected>.InfraError(e.StatusCode, e.Message, e.Category, e.SourceException),
             _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),

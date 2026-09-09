@@ -35,7 +35,7 @@ public partial class CodeGenEdgeCaseTests
     [InlineData(
         "App.Config",
         false,
-        ".ToDamlEnum()",
+        "global::App.Config.TokenExtensions.ToDamlEnum(T)",
         ".ToRecord()")]
     public void Generate_dispatches_same_named_token_field_by_module_qualifier(
         string referencedModule,

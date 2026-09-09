@@ -9,10 +9,16 @@ namespace Daml.Codegen.CSharp.CodeGen;
 public sealed class CodeGenOptions
 {
     /// <summary>
-    /// Gets or sets the root namespace for generated code.
-    /// If null, the namespace is derived from the package name.
+    /// Gets or sets the namespace prefix for the main package's generated code. Every Daml
+    /// module is emitted into a C# namespace named after the module; when this is set, the
+    /// main package's modules are emitted under <c>{NamespacePrefix}.{Module}</c>, except a
+    /// module whose name already equals or starts with the prefix at a segment boundary,
+    /// which keeps its own name. Dependency packages emitted with
+    /// <see cref="IncludeDependencies"/> are never prefixed, so a locally generated
+    /// dependency is interchangeable with the same package's published bindings. If null,
+    /// the namespace is the module name.
     /// </summary>
-    public string? RootNamespace { get; init; }
+    public string? NamespacePrefix { get; init; }
 
     /// <summary>
     /// Gets or sets a regex pattern to filter which templates to generate.
@@ -34,16 +40,6 @@ public sealed class CodeGenOptions
     /// Gets or sets whether to use file-scoped namespaces.
     /// </summary>
     public bool UseFileScopedNamespaces { get; init; } = true;
-
-    /// <summary>
-    /// Gets or sets whether to generate record types instead of classes.
-    /// </summary>
-    public bool UseRecordTypes { get; init; } = true;
-
-    /// <summary>
-    /// Gets or sets whether to generate primary constructors.
-    /// </summary>
-    public bool UsePrimaryConstructors { get; init; } = true;
 
     /// <summary>
     /// Gets or sets whether to generate a .csproj project file.

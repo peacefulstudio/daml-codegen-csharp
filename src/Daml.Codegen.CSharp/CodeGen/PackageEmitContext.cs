@@ -7,21 +7,46 @@ using Microsoft.Extensions.Logging;
 namespace Daml.Codegen.CSharp.CodeGen;
 
 /// <summary>
-/// Immutable per-package value the C# emitter threads through its emit methods: the
-/// root namespace, the <see cref="TypeReferenceQualifier"/>, the per-package
-/// data-type lookup, and the local enum / variant / interface / choice-argument
-/// name sets. Built once per package by
-/// <see cref="ForPackage"/>; read-only during emission.
+/// The template a choice-argument record is emitted nested inside, identified by the
+/// module that declares the template and the template's Daml name. The record's own
+/// declaring module may differ, so a reference to the record must be qualified with the
+/// template's namespace, not the record's.
+/// </summary>
+/// <param name="Module">The Daml module declaring the template.</param>
+/// <param name="Name">The template's Daml name, before sanitisation.</param>
+internal sealed record NestingTemplate(string Module, string Name);
+
+/// <summary>
+/// Immutable value the C# emitter threads through its emit methods. Built once per package
+/// by <see cref="ForPackage"/>, which hands back one context per module: the package-wide
+/// scan — the data-type lookup, the reserved and marker names, the choice-argument homes —
+/// is shared by all of them, while <see cref="Module"/>, <see cref="Namespace"/> and
+/// <see cref="Qualifier"/> belong to the module being emitted. Read-only during emission.
 /// </summary>
 internal sealed partial class PackageEmitContext
 {
     /// <summary>The Daml package this context was built for.</summary>
     public DamlPackage Package { get; }
 
-    /// <summary>Root C# namespace every emitted type in the package lives in.</summary>
-    public string RootNamespace { get; }
+    /// <summary>The module of <see cref="Package"/> whose types this context emits.</summary>
+    public DamlModule Module { get; }
 
-    /// <summary>Qualifier scoped to the package's generated namespaces.</summary>
+    /// <summary>
+    /// The C# namespace <see cref="Module"/>'s types are emitted into — the module name
+    /// itself, prefixed by <see cref="CodeGenOptions.NamespacePrefix"/> on the main package
+    /// (see <see cref="Identifiers.ModuleNamespace"/>).
+    /// </summary>
+    public string Namespace { get; }
+
+    /// <summary>
+    /// The C# namespace of every module in <see cref="Package"/>, keyed by module name.
+    /// Identical across the package's module contexts; consulted when a reference from one
+    /// module names a type declared in another, which must then be qualified with the
+    /// declaring module's namespace.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ModuleNamespaces { get; }
+
+    /// <summary>Qualifier scoped to <see cref="Namespace"/>.</summary>
     public TypeReferenceQualifier Qualifier { get; }
 
     /// <summary>
@@ -37,14 +62,23 @@ internal sealed partial class PackageEmitContext
     /// every template plus every record/enum/variant, excluding the records LF declares
     /// alongside a same-named interface (they are replaced by the marker itself, so counting
     /// them would falsely self-disambiguate) and choice-argument records (they are emitted nested inside
-    /// their parent template, not at the top level). The package's C# namespace is flat
-    /// across all its modules, so this set has two consumers: it is the reserved-name
-    /// input <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker
-    /// names against, and it is passed to <see cref="Qualifier"/> so a package-declared
-    /// type that collides with an imported runtime/BCL name (e.g. a Daml <c>enum Unit</c>)
-    /// is qualified with <c>global::</c> instead of silently shadowing it.
+    /// their parent template, not at the top level). This is the reserved-name input
+    /// <see cref="Identifiers.InterfaceMarkerName"/> disambiguates interface marker names
+    /// against: reserving across the whole package rather than per namespace keeps the marker
+    /// assignment independent of how modules map to namespaces, so every reference to an
+    /// interface — local or foreign — derives the same marker. The shadow set handed to
+    /// <see cref="Qualifier"/> is narrower: only the types declared in <see cref="Namespace"/>
+    /// or one of its ancestor namespaces can shadow an imported name there.
     /// </summary>
     public IReadOnlySet<string> LocalReservedTypeNames { get; }
+
+    /// <summary>
+    /// Sanitised C# names of the top-level types emitted for <see cref="Module"/>: its
+    /// templates, its records/enums/variants other than interface placeholders and
+    /// choice-argument records, and its interface markers. The input the namespace guards
+    /// compare against every emitted namespace.
+    /// </summary>
+    public IReadOnlySet<string> TopLevelTypeNames { get; }
 
     /// <summary>
     /// Every interface declared in the package, keyed by its module-qualified
@@ -79,13 +113,15 @@ internal sealed partial class PackageEmitContext
     public IReadOnlySet<string> LocalInterfaceQualifiedNames { get; }
 
     /// <summary>
-    /// Maps a choice-argument type's module-qualified (<c>Module:Name</c>) name to its
-    /// parent template name, for qualifying nested choice-argument types declared in this
-    /// package. Module-qualified because Daml allows the same simple name in multiple
-    /// modules — keying on the simple name alone would let one module's choice-arg type
-    /// silently shadow another's and mis-resolve cross-references.
+    /// Maps a choice-argument type's module-qualified (<c>Module:Name</c>) name to the
+    /// template it is emitted nested inside, for qualifying nested choice-argument types
+    /// declared in this package. Module-qualified because Daml allows the same simple name in
+    /// multiple modules — keying on the simple name alone would let one module's choice-arg
+    /// type silently shadow another's and mis-resolve cross-references. The value carries the
+    /// template's module because the argument record may be declared in a different module
+    /// than the template that nests it.
     /// </summary>
-    public IReadOnlyDictionary<string, string> LocalChoiceArgToTemplate { get; }
+    public IReadOnlyDictionary<string, NestingTemplate> LocalChoiceArgToTemplate { get; }
 
     /// <summary>
     /// Maps a record's module-qualified (<c>Module:Name</c>) name to the C# marker name
@@ -110,6 +146,32 @@ internal sealed partial class PackageEmitContext
     public bool IsLocalRef(DamlTypeRef typeRef) =>
         string.IsNullOrEmpty(typeRef.PackageId)
         || typeRef.PackageId == Package.PackageId;
+
+    /// <summary>
+    /// Returns the C# namespace of <paramref name="moduleName"/>, which must be a module of
+    /// <see cref="Package"/>; a local reference into a module the package does not declare
+    /// is a malformed model and fails the emit rather than being spelled as a name nothing
+    /// declares.
+    /// </summary>
+    public string NamespaceOf(string moduleName) =>
+        ModuleNamespaces.TryGetValue(moduleName, out var moduleNamespace)
+            ? moduleNamespace
+            : throw new CodegenException(
+                $"Module '{moduleName}' is referenced as local to package '{Package.Name}', which declares no such module. " +
+                "The Daml model is malformed: a same-package reference must name a module of that package.");
+
+    /// <summary>
+    /// Spells a type name so it binds to the type even where a nearer member or nested type
+    /// of the same spelling would otherwise capture it: a bare name — a type declared in
+    /// <see cref="Module"/>'s own namespace — comes back <c>global::</c>-rooted under
+    /// <see cref="Namespace"/>; a name that already carries a dot was spelled with its own
+    /// qualifier by the resolver, another module's or another package's namespace, and is
+    /// returned unchanged.
+    /// </summary>
+    public string QualifyInModule(string typeName) =>
+        typeName.Contains('.', StringComparison.Ordinal)
+            ? typeName
+            : Identifiers.GlobalQualified(Namespace, typeName);
 
     /// <summary>
     /// Returns true when <paramref name="iface"/>'s view type can stand as the
@@ -153,55 +215,132 @@ internal sealed partial class PackageEmitContext
     }
 
     private PackageEmitContext(
-        DamlPackage package,
-        string rootNamespace,
+        PackageScan scan,
+        DamlModule module,
+        string moduleNamespace,
         TypeReferenceQualifier qualifier,
-        IReadOnlyDictionary<string, DamlDataType> dataTypes,
-        IReadOnlySet<string> localReservedTypeNames,
-        IReadOnlyDictionary<string, string> localInterfaceMarkerNames,
-        IReadOnlySet<string> localEnumQualifiedNames,
-        IReadOnlySet<string> localVariantQualifiedNames,
-        IReadOnlySet<string> localInterfaceQualifiedNames,
-        IReadOnlyDictionary<string, string> localChoiceArgToTemplate,
-        IReadOnlyDictionary<string, string> localViewRecordMarkerNames)
+        IReadOnlySet<string> topLevelTypeNames)
     {
-        Package = package;
-        RootNamespace = rootNamespace;
+        Package = scan.Package;
+        Module = module;
+        Namespace = moduleNamespace;
+        ModuleNamespaces = scan.ModuleNamespaces;
         Qualifier = qualifier;
-        DataTypes = dataTypes;
-        LocalReservedTypeNames = localReservedTypeNames;
-        LocalInterfaceMarkerNames = localInterfaceMarkerNames;
-        LocalEnumQualifiedNames = localEnumQualifiedNames;
-        LocalVariantQualifiedNames = localVariantQualifiedNames;
-        LocalInterfaceQualifiedNames = localInterfaceQualifiedNames;
-        LocalChoiceArgToTemplate = localChoiceArgToTemplate;
-        LocalViewRecordMarkerNames = localViewRecordMarkerNames;
+        TopLevelTypeNames = topLevelTypeNames;
+        DataTypes = scan.DataTypes;
+        LocalReservedTypeNames = scan.ReservedTypeNames;
+        LocalInterfaceMarkerNames = scan.InterfaceMarkerNames;
+        LocalEnumQualifiedNames = scan.EnumQualifiedNames;
+        LocalVariantQualifiedNames = scan.VariantQualifiedNames;
+        LocalInterfaceQualifiedNames = scan.InterfaceQualifiedNames;
+        LocalChoiceArgToTemplate = scan.ChoiceArgToTemplate;
+        LocalViewRecordMarkerNames = scan.ViewRecordMarkerNames;
     }
 
+    private sealed record PackageScan(
+        DamlPackage Package,
+        IReadOnlyDictionary<string, string> ModuleNamespaces,
+        IReadOnlyDictionary<string, DamlDataType> DataTypes,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> ReservedTypeNamesByModule,
+        IReadOnlySet<string> ReservedTypeNames,
+        IReadOnlyDictionary<string, string> InterfaceMarkerNames,
+        IReadOnlySet<string> EnumQualifiedNames,
+        IReadOnlySet<string> VariantQualifiedNames,
+        IReadOnlySet<string> InterfaceQualifiedNames,
+        IReadOnlyDictionary<string, NestingTemplate> ChoiceArgToTemplate,
+        IReadOnlyDictionary<string, string> ViewRecordMarkerNames);
+
     /// <summary>
-    /// Scans <paramref name="package"/> and returns a fully-populated immutable context:
-    /// derives the root namespace (honouring <see cref="CodeGenOptions.RootNamespace"/>),
-    /// builds the global data-type lookup, and populates the local enum / variant /
-    /// interface / choice-argument name sets. When two templates in the
-    /// package map the same module-qualified choice-argument type, <paramref name="logger"/>
-    /// (when supplied) receives a warning and the first-seen mapping is kept.
+    /// Scans <paramref name="package"/> once and returns one fully-populated immutable
+    /// context per module, in declaration order: maps every module to its namespace
+    /// (honouring <see cref="CodeGenOptions.NamespacePrefix"/> when
+    /// <paramref name="isMainPackage"/>), builds the package-wide data-type lookup and the
+    /// local enum / variant / interface / choice-argument name sets, and scopes each
+    /// context's <see cref="Qualifier"/> to its module's namespace. When two templates in
+    /// the package map the same module-qualified choice-argument type,
+    /// <paramref name="logger"/> (when supplied) receives a warning and the first-seen mapping
+    /// is kept.
     /// </summary>
-    public static PackageEmitContext ForPackage(
+    public static IReadOnlyList<PackageEmitContext> ForPackage(
         DamlPackage package,
         CodeGenOptions options,
+        bool isMainPackage,
         ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(options);
 
-        var rootNamespace = options.RootNamespace ?? Identifiers.DeriveNamespace(package.Name);
-        var localReservedTypeNames = ReservedTopLevelTypeNames(package);
-        var qualifier = new TypeReferenceQualifier([rootNamespace], localReservedTypeNames);
+        var scan = Scan(package, NamespacesByModule(package, options, isMainPackage), logger);
+
+        return package.Modules
+            .Select(module => new PackageEmitContext(
+                scan,
+                module,
+                scan.ModuleNamespaces[module.Name],
+                new TypeReferenceQualifier(scan.ModuleNamespaces[module.Name], ShadowingTypeNames(scan, module)),
+                TopLevelTypeNamesOf(scan, module)))
+            .ToList();
+    }
+
+    private static IReadOnlyDictionary<string, string> NamespacesByModule(
+        DamlPackage package, CodeGenOptions options, bool isMainPackage)
+    {
+        var namespaces = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var module in package.Modules)
+        {
+            if (!namespaces.TryAdd(module.Name, Identifiers.ModuleNamespace(module.Name, isMainPackage, options)))
+            {
+                throw new CodegenException(
+                    $"Package '{package.Name}' declares module '{module.Name}' more than once. " +
+                    "The Daml model is malformed: module names are unique within a package.");
+            }
+        }
+        return namespaces;
+    }
+
+    /// <summary>
+    /// The top-level type names that shadow an imported runtime/BCL name inside
+    /// <paramref name="module"/>'s namespace: C# binds a simple name by walking the
+    /// enclosing namespaces outward before consulting <c>using</c> directives, so a type
+    /// declared in the module's own namespace or in any ancestor namespace binds first,
+    /// while a type in a sibling namespace does not.
+    /// </summary>
+    private static IReadOnlySet<string> ShadowingTypeNames(PackageScan scan, DamlModule module)
+    {
+        var emittingNamespace = scan.ModuleNamespaces[module.Name];
+        var shadowing = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (moduleName, moduleNamespace) in scan.ModuleNamespaces)
+        {
+            if (Identifiers.StartsWithSegments(emittingNamespace, moduleNamespace))
+            {
+                shadowing.UnionWith(scan.ReservedTypeNamesByModule[moduleName]);
+            }
+        }
+        return shadowing;
+    }
+
+    private static IReadOnlySet<string> TopLevelTypeNamesOf(PackageScan scan, DamlModule module)
+    {
+        var names = new HashSet<string>(scan.ReservedTypeNamesByModule[module.Name], StringComparer.Ordinal);
+        foreach (var iface in module.Interfaces)
+        {
+            names.Add(scan.InterfaceMarkerNames[$"{module.Name}:{iface.Name}"]);
+        }
+        return names;
+    }
+
+    private static PackageScan Scan(
+        DamlPackage package,
+        IReadOnlyDictionary<string, string> moduleNamespaces,
+        ILogger? logger)
+    {
+        var reservedTypeNamesByModule = ReservedTopLevelTypeNamesByModule(package);
+        var reservedTypeNames = Union(reservedTypeNamesByModule.Values);
 
         var dataTypes = new Dictionary<string, DamlDataType>();
-        var localEnumQualifiedNames = new HashSet<string>();
-        var localVariantQualifiedNames = new HashSet<string>();
-        var localInterfaceQualifiedNames = new HashSet<string>();
+        var enumQualifiedNames = new HashSet<string>();
+        var variantQualifiedNames = new HashSet<string>();
+        var interfaceQualifiedNames = new HashSet<string>();
         foreach (var module in package.Modules)
         {
             var interfaceNames = module.Interfaces.Select(i => i.Name).ToHashSet();
@@ -211,20 +350,20 @@ internal sealed partial class PackageEmitContext
                 dataTypes[$"{module.Name}:{dataType.Name}"] = dataType;
                 if (dataType.Definition is DamlEnumDefinition)
                 {
-                    localEnumQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                    enumQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
                 if (dataType.Definition is DamlVariantDefinition)
                 {
-                    localVariantQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                    variantQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
                 if (interfaceNames.Contains(dataType.Name))
                 {
-                    localInterfaceQualifiedNames.Add($"{module.Name}:{dataType.Name}");
+                    interfaceQualifiedNames.Add($"{module.Name}:{dataType.Name}");
                 }
             }
         }
 
-        var localChoiceArgToTemplate = new Dictionary<string, string>();
+        var choiceArgToTemplate = new Dictionary<string, NestingTemplate>();
         foreach (var module in package.Modules)
         {
             foreach (var template in module.Templates)
@@ -236,38 +375,38 @@ internal sealed partial class PackageEmitContext
                         var key = $"{typeRef.Module}:{typeRef.Name}";
                         if (dataTypes.ContainsKey(key))
                         {
-                            if (localChoiceArgToTemplate.TryGetValue(key, out var existingTemplate)
-                                && existingTemplate != template.Name)
+                            if (choiceArgToTemplate.TryGetValue(key, out var existingTemplate)
+                                && existingTemplate.Name != template.Name)
                             {
                                 if (logger is not null)
                                 {
-                                    LogAmbiguousLocalChoiceArgument(logger, key, existingTemplate, template.Name);
+                                    LogAmbiguousLocalChoiceArgument(logger, key, existingTemplate.Name, template.Name);
                                 }
                                 continue;
                             }
-                            localChoiceArgToTemplate[key] = template.Name;
+                            choiceArgToTemplate[key] = new NestingTemplate(module.Name, template.Name);
                         }
                     }
                 }
             }
         }
 
-        var localInterfaceMarkerNames = InterfaceMarkerNames(package, localReservedTypeNames);
-        var localViewRecordMarkerNames = ViewRecordMarkerNames(
-            package, dataTypes, localInterfaceQualifiedNames, localInterfaceMarkerNames);
+        var interfaceMarkerNames = InterfaceMarkerNames(package, reservedTypeNames);
+        var viewRecordMarkerNames = ViewRecordMarkerNames(
+            package, dataTypes, interfaceQualifiedNames, interfaceMarkerNames);
 
-        return new PackageEmitContext(
+        return new PackageScan(
             package,
-            rootNamespace,
-            qualifier,
+            moduleNamespaces,
             dataTypes,
-            localReservedTypeNames,
-            localInterfaceMarkerNames,
-            localEnumQualifiedNames,
-            localVariantQualifiedNames,
-            localInterfaceQualifiedNames,
-            localChoiceArgToTemplate,
-            localViewRecordMarkerNames);
+            reservedTypeNamesByModule,
+            reservedTypeNames,
+            interfaceMarkerNames,
+            enumQualifiedNames,
+            variantQualifiedNames,
+            interfaceQualifiedNames,
+            choiceArgToTemplate,
+            viewRecordMarkerNames);
     }
 
     /// <summary>
@@ -363,7 +502,15 @@ internal sealed partial class PackageEmitContext
     /// <see cref="ForPackage"/> (for the emitting package) and the cross-package
     /// resolver (for foreign packages) so both sides derive the same marker name.
     /// </summary>
-    internal static IReadOnlySet<string> ReservedTopLevelTypeNames(DamlPackage package)
+    internal static IReadOnlySet<string> ReservedTopLevelTypeNames(DamlPackage package) =>
+        Union(ReservedTopLevelTypeNamesByModule(package).Values);
+
+    /// <summary>
+    /// The per-module breakdown of <see cref="ReservedTopLevelTypeNames"/>, keyed by module
+    /// name: the source of each module's <see cref="TopLevelTypeNames"/> and of the shadow
+    /// set its <see cref="Qualifier"/> is scoped to.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlySet<string>> ReservedTopLevelTypeNamesByModule(DamlPackage package)
     {
         var localInterfaceQualifiedNames = new HashSet<string>();
         var dataTypeNames = new HashSet<string>();
@@ -395,9 +542,10 @@ internal sealed partial class PackageEmitContext
             }
         }
 
-        var reserved = new HashSet<string>();
+        var reservedByModule = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
         foreach (var module in package.Modules)
         {
+            var reserved = new HashSet<string>(StringComparer.Ordinal);
             foreach (var template in module.Templates)
             {
                 reserved.Add(Identifiers.Sanitize(template.Name));
@@ -412,8 +560,19 @@ internal sealed partial class PackageEmitContext
                 }
                 reserved.Add(Identifiers.Sanitize(dataType.Name));
             }
+            reservedByModule[module.Name] = reserved;
         }
-        return reserved;
+        return reservedByModule;
+    }
+
+    private static IReadOnlySet<string> Union(IEnumerable<IReadOnlySet<string>> sets)
+    {
+        var union = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var set in sets)
+        {
+            union.UnionWith(set);
+        }
+        return union;
     }
 
     /// <summary>

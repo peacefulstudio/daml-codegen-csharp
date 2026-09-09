@@ -26,17 +26,20 @@ Generated template classes implement `ITemplate` and provide:
 - Contract ID types
 
 Given a Daml `Iou` template with a `Transfer` choice, the generated code is
-used like this (taken from the compiled `samples/QuickstartExample`):
+used like this (taken from the compiled `samples/QuickstartExample`). The
+C# namespace is the Daml module name, so the `Iou` module's template is
+`Iou.Iou` from outside that namespace; the sample binds an alias for it:
 
 ```csharp
+using System;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Data;
-using Quickstart;
+using IouContract = Iou.Iou;
 
 var alice = new Party("Alice::1220deadbeef");
 var charlie = new Party("Charlie::1220deadbeef");
 
-var iou = new Iou(
+var iou = new IouContract(
     Issuer: alice,
     Owner: new Party("Bob::1220deadbeef"),
     Currency: "USD",
@@ -45,11 +48,11 @@ var iou = new Iou(
 
 var createCmd = CreateCommand.For(iou);
 
-var contractId = new Iou.ContractId("00abc123");
+var contractId = new IouContract.ContractId("00abc123");
 var exerciseCmd = ExerciseCommand.For(
     contractId,
-    Iou.ChoiceTransfer.Name,
-    new Iou.Transfer(NewOwner: charlie).ToRecord());
+    IouContract.ChoiceTransfer.Name,
+    new IouContract.Transfer(NewOwner: charlie).ToRecord());
 
 var submission = CommandsSubmission.Single(createCmd)
     .WithActAs(alice)
@@ -67,19 +70,19 @@ projection back to typed contract ids — `TransactionResultExtensions` in
 
 ```csharp
 using Daml.Runtime.Contracts;
-using Quickstart;
+using IouContract = Iou.Iou;
 
 // tx is a TransactionResult from a committed submission.
 
 // Every created Iou, in transaction order:
-IReadOnlyList<ContractId<Iou>> all = tx.All<Iou>();
+EquatableArray<ContractId<IouContract>> all = tx.All<IouContract>();
 
 // Exactly-one-or-null: null when none was created,
 // throws InvalidOperationException when more than one was:
-ContractId<Iou>? maybe = tx.TrySingle<Iou>();
+ContractId<IouContract>? maybe = tx.TrySingle<IouContract>();
 
 // Exactly one: throws InvalidOperationException on zero or many:
-ContractId<Iou> single = tx.Single<Iou>();
+ContractId<IouContract> single = tx.Single<IouContract>();
 ```
 
 Matching is by qualified name (module + entity), deliberately ignoring the
@@ -118,19 +121,51 @@ and produces the right node for each slot:
 
 ```csharp
 using Daml.Runtime.Serialization;
-using Quickstart;
+using IouContract = Iou.Iou;
 
-var iou = Iou.FromRecord(DamlLfJsonReader.ReadRecord<Iou>(json));
+// json is a JSON rendering of an Iou.
+
+var iou = IouContract.FromRecord(DamlLfJsonReader.ReadRecord<IouContract>(json));
 ```
 
 ### System.Text.Json Converters
 
-`Party`, `ContractId<T>` and `SynchronizerId` each travel as a bare JSON string in PQS
-rows and JSON Ledger API payloads, and each carries its converter as a `[JsonConverter]`
-attribute — so plain `System.Text.Json` needs no setup:
+`Party`, `ContractId<T>`, `SynchronizerId`, `CommandId`, `ChoiceName` and `WorkflowId`
+each serialize as a bare JSON string — the same spelling PQS rows and JSON Ledger API
+payloads give them — `LedgerOffset` as the bare JSON number a participant puts on its
+`offset` fields, and `EquatableArray<T>` — the type every list member of the event and
+stream records carries — as a plain JSON array. `Set<T>` (`Daml.Runtime.Stdlib`) travels as a
+plain array too — `["alice","bob"]`, and `[]` when empty — written in the order the set
+enumerates and collapsing a repeated element on read, as set semantics require. Each carries
+its converter as a `[JsonConverter]` attribute, so plain `System.Text.Json` reads and writes
+them with no setup:
 
 ```csharp
-var iou = JsonSerializer.Deserialize<Iou>(pqsRowJson);
+using System.Text.Json;
+using Daml.Runtime.Data;
+
+var json = JsonSerializer.Serialize(new Party("alice"));
+
+var party = JsonSerializer.Deserialize<Party>(json);
+```
+
+**`System.Text.Json` is a CLR round-trip, not a wire decoder.** What it guarantees is that
+a value reads back as itself. It is not a way to decode a payload Canton produced: above
+the scalars listed here the shapes differ from the Daml-LF JSON encoding a participant and
+PQS speak. A `Map<K,V>` writes `{"Entries":[…],"Count":…}`, a `NonEmpty<T>` writes
+`{"Hd":…,"Tl":…,"All":…}`, a `Set<T>` writes the bare array above where Daml-LF spells the same
+value `{"map":[["alice",{}]]}`, and a generated record whose Daml field name had to be escaped
+in C# is read under the C# name, not the `[DamlField]` label the wire carries. Use it for
+a cache, a log line or a snapshot on disk; read a ledger or PQS payload with the schema-directed
+`DamlLfJsonReader` shown above — a PQS row is decoded by exactly that call:
+
+```csharp
+using Daml.Runtime.Serialization;
+using IouContract = Iou.Iou;
+
+// pqsRowJson is the contract payload of a PQS row.
+
+var iou = IouContract.FromRecord(DamlLfJsonReader.ReadRecord<IouContract>(pqsRowJson));
 ```
 
 `System.Text.Json` reads `[JsonConverter]` off the declared type and does not walk its
@@ -144,18 +179,87 @@ Register explicitly for that case, and whenever a host builds its own
 inherited from attributes:
 
 ```csharp
+using System.Text.Json;
 using Daml.Runtime.Serialization;
 
 var options = new JsonSerializerOptions().AddDamlConverters();
 ```
 
-`AddDamlConverters` also sets `RespectNullableAnnotations`, which is what makes the three
-identity types agree on what a JSON `null` means: rejected wherever the declared type
-forbids one, read as absent wherever it permits one. `Party` and `SynchronizerId` are
-structs and enforce that themselves; `ContractId<T>` is a reference type, so it and
+`AddDamlConverters` also sets `RespectNullableAnnotations`, which is what makes the scalar
+types agree on what a JSON `null` means: rejected wherever the declared type
+forbids one, read as absent wherever it permits one. Every one of them but `ContractId<T>`
+is a struct and enforces that itself; `ContractId<T>` is a reference type, so it and
 `ContractId<T>?` — the C# rendering of `Optional (ContractId T)` — are the same type at
 runtime and only the annotation separates a required contract id from an optional one.
 The flag is serializer-wide, so it applies to a host's own types in the same options too.
+
+It also lists the converter for `EquatableArray<T>` explicitly, though the struct carries the
+same factory as a `[JsonConverter]` attribute of its own, so a list member reads and writes
+on bare options with or without the registration — the two produce byte-identical JSON. What
+`AddDamlConverters` adds is the half no converter can supply: a `JsonTypeInfo` modifier that
+turns a member the payload never mentions into a `JsonException` naming it, for the five types
+whose absence binds a value the payload never stated — `EquatableArray<T>`, whose default is
+the empty list, `LedgerOffset`, whose default is `Begin`, and the Daml stdlib collections
+`Set<T>`, `Map<TKey, TValue>` and `NonEmpty<T>`, whose default is a `null` the slot's own
+declared type forbids.
+`WitnessParties`, `Signatories` and `Observers` are constructor parameters precisely because
+an empty list means the event named nobody, not that a producer skipped the slot; the same
+holds for `CompletionOffset`, where `Begin` means the participant reported the start of the
+stream. Unlike the flag above, the modifier is not serializer-wide — it marks required only
+the constructor parameters typed `EquatableArray<T>`, `LedgerOffset`, `Set<T>`,
+`Map<TKey, TValue>` or `NonEmpty<T>`, so an ordinary
+optional such as `TransactionResult.CommandId`, which the Ledger API omits on transactions
+this participant did not submit, still reads as absent. The members that are meant to default
+— `InterfaceIds`, `ExercisedEvents` — are init-only properties, and stay absent-means-empty,
+as does a member declared `EquatableArray<T>?`, `LedgerOffset?`, `Set<T>?`,
+`Map<TKey, TValue>?` or `NonEmpty<T>?` — the shape the stream
+events already carry for an offset a participant need not report, and the shape codegen emits
+for a Daml `Optional` of one of the collections. The modifier composes onto
+a `TypeInfoResolver` the host has already installed rather than replacing it.
+
+Like `RespectNullableAnnotations` above, the modifier reads the declaring type's nullable
+annotations, so it reaches a nullable-annotated declaration only: a type compiled under
+`#nullable disable` — or generated with `DamlNullable=false` / `--nullable false`, which omits
+the `#nullable enable` the emitter otherwise writes — carries no annotation to read, none of its
+parameters is marked required, and an absent member binds to `null`. The CHANGELOG records that
+limit in full.
+
+Not every record round-trips on these options alone, and the gaps below are older than the
+converter rather than introduced by it. `DamlValue` is abstract and `DamlValueJsonConverter` is
+registered only inside `DamlJsonSerializer`'s own options rather than in
+`DamlJsonConverters.All`, so a record carrying a `DamlRecord` writes its field values as `{}`
+and throws `NotSupportedException` reading them back — add `DamlValueJsonConverter` to the same
+options and `CreatedEvent` and `CreatedContract` round-trip.
+
+Two gaps have no converter to add, both for the same reason. `TreeEvent` is abstract and
+carries no `[JsonDerivedType]`, so a `TransactionTree` writes its root events as `{}`; and
+`ICommand` is a bare interface, so a `CommandsSubmission` writes each of its commands as
+`{"CommandType":"Exercise"}` and cannot read one back at all. Of the event records carrying
+`EquatableArray<T>` members, `ArchivedEvent` is the only one that round-trips on these
+options alone.
+
+`TransactionResult` round-trips — with `DamlValueJsonConverter` added alongside for the
+`DamlRecord` payloads its created contracts carry — and the converters on its two scalar
+members are what make it. `CompletionOffset` and `CommandId` are `readonly record struct`s
+exposing only a get-only
+`Value`, and `System.Text.Json` prefers a struct's implicit parameterless constructor unless
+told otherwise, so before those converters existed it default-constructed both and never
+assigned the value back: an offset of `7` wrote `{"Value":7}` and read back `0`, restarting a
+resumed stream from the beginning, while a command id read back as a non-null `CommandId?`
+whose `Value` threw `InvalidOperationException` far from the read that caused it. The same
+loss reached `ChoiceName` on the exercise commands and `WorkflowId` on a submission; all four
+now travel as their bare wire scalar, `WorkflowId` alone accepting the blank one the Ledger
+API declares `workflow_id` may carry — though a whole `ExerciseCommand` or `CommandsSubmission`
+still does not read back, for the `ICommand` reason above.
+
+Every one of the four recovers only a member the payload actually names — a converter never
+runs for a property that is absent. For `LedgerOffset` the modifier above closes that second
+route: on `AddDamlConverters` options a document with no `CompletionOffset` is refused rather
+than read as `Begin`, as is one omitting a non-nullable `Set<T>`, `Map<TKey, TValue>` or
+`NonEmpty<T>` member. The identity structs stop short of it deliberately, because
+`default(CommandId)` and its siblings are never a valid representation of an absent id and
+throw on any access to `Value`, so an omitted id is already loud rather than silently
+plausible.
 
 ## Type Mappings
 
@@ -192,6 +296,19 @@ also account for a level the use site substitutes in.
 The two wire nodes are not interchangeable. A flat `DamlOptional` writes JSON `null` or
 its bare value; each `DamlOptionalChain` level writes the array form, `[]` when absent and
 `[v]` when present, which is what a participant accepts in a nested position.
+
+### Collection fields compare by content
+
+A generated record carrying a `List`, `TextMap` or `GenMap` field keeps the member types
+above and overrides `Equals` and `GetHashCode` over them, calling
+`DamlFieldCollections` in `Daml.Runtime.Data`: list members compare element by element in
+order, map members key by key independently of insertion order, and every other member
+through `EqualityComparer<T>.Default`, as the record would have done on its own. The
+member is also copied at the constructor and at each `init` accessor, so a producer that
+retains the collection it passed cannot change an already-computed hash and strand the
+value in a set or dictionary that holds it. Two such records decoded from the same ledger
+payload are therefore equal, which record-synthesized equality — a reference comparison on
+`IReadOnlyList<T>` and `IReadOnlyDictionary<TKey,TValue>` — did not give.
 
 ## License
 

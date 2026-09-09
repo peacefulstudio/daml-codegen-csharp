@@ -60,13 +60,92 @@ public class ExerciseOutcomeTests
     }
 
     [Fact]
-    public void Many_carries_count_and_contract_ids()
+    public void Many_derives_its_count_from_the_contract_ids_it_carries()
     {
         var ids = new[] { "00a", "00b", "00c" };
-        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(3, ids);
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(EquatableArray.Create(ids));
 
         outcome.Count.Should().Be(3);
         outcome.ContractIds.Should().Equal(ids);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Many_refuses_the_candidate_counts_the_None_and_One_arms_are_for(int candidateCount)
+    {
+        var candidates = Enumerable.Range(0, candidateCount).Select(index => $"00{index}").ToArray();
+
+        var construct = () => new ExerciseOutcome<ContractId<FooBar>>.Many(EquatableArray.Create(candidates));
+
+        construct.Should().Throw<ArgumentException>()
+            .WithMessage($"*at least two*got {candidateCount}*")
+            .And.ParamName.Should().Be("ContractIds");
+    }
+
+    [Fact]
+    public void Many_refuses_a_with_expression_that_drops_it_below_two_contract_ids()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+
+        var narrow = () => outcome with { ContractIds = ["00a"] };
+
+        narrow.Should().Throw<ArgumentException>()
+            .WithMessage("*at least two*got 1*")
+            .And.ParamName.Should().Be("ContractIds");
+    }
+
+    [Fact]
+    public void Many_takes_a_with_expression_that_widens_its_contract_ids()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+
+        var widened = outcome with { ContractIds = ["00a", "00b", "00c"] };
+
+        widened.ContractIds.Should().Equal("00a", "00b", "00c");
+        widened.Count.Should().Be(3);
+        widened.Should().Be(new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b", "00c"]));
+    }
+
+    [Fact]
+    public void Many_deconstructs_to_the_single_contract_ids_member()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+
+        outcome.Deconstruct(out var contractIds);
+
+        contractIds.Should().Equal("00a", "00b");
+    }
+
+    [Fact]
+    public void Many_compares_equal_when_the_same_contract_ids_arrive_in_separate_sequences()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+        var rebuilt = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+
+        outcome.Should().Be(rebuilt);
+        outcome.GetHashCode().Should().Be(rebuilt.GetHashCode());
+    }
+
+    [Fact]
+    public void Many_keeps_its_contract_ids_when_the_producer_mutates_the_list_it_kept()
+    {
+        var ids = new List<string> { "00a", "00b" };
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(EquatableArray.Create(ids));
+
+        ids[0] = "00z";
+        ids.Add("00c");
+
+        outcome.ContractIds.Should().Equal("00a", "00b");
+    }
+
+    [Fact]
+    public void Many_compares_unequal_when_a_contract_id_differs()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00b"]);
+        var other = new ExerciseOutcome<ContractId<FooBar>>.Many(["00a", "00c"]);
+
+        outcome.Should().NotBe(other);
     }
 
     [Fact]
@@ -99,6 +178,125 @@ public class ExerciseOutcomeTests
         outcome.ErrorId.Should().Be("CONTRACT_NOT_FOUND");
         outcome.Message.Should().Be("contract not found");
         outcome.Metadata.Should().Equal(metadata);
+    }
+
+    [Fact]
+    public void DamlError_compares_equal_when_the_same_metadata_arrives_in_separate_dictionaries()
+    {
+        var outcome = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00abc" });
+        var rebuilt = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00abc" });
+
+        outcome.Should().Be(rebuilt);
+        outcome.GetHashCode().Should().Be(rebuilt.GetHashCode());
+    }
+
+    [Fact]
+    public void DamlError_compares_equal_when_the_same_metadata_was_built_in_a_different_order()
+    {
+        var outcome = ContractNotFoundWith(
+            new Dictionary<string, string> { ["cid"] = "00abc", ["retryable"] = "false" });
+        var rebuilt = ContractNotFoundWith(
+            new Dictionary<string, string> { ["retryable"] = "false", ["cid"] = "00abc" });
+
+        outcome.Should().Be(rebuilt);
+        outcome.GetHashCode().Should().Be(rebuilt.GetHashCode());
+    }
+
+    [Fact]
+    public void DamlError_compares_unequal_when_a_metadata_value_differs()
+    {
+        var outcome = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00abc" });
+        var other = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00zzz" });
+
+        outcome.Should().NotBe(other);
+    }
+
+    [Fact]
+    public void DamlError_compares_unequal_when_the_other_carries_metadata_it_does_not()
+    {
+        var outcome = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00abc" });
+        var other = ContractNotFoundWith(
+            new Dictionary<string, string> { ["cid"] = "00abc", ["retryable"] = "false" });
+
+        outcome.Should().NotBe(other);
+    }
+
+    [Fact]
+    public void DamlError_keeps_its_metadata_when_the_producer_mutates_the_dictionary_it_kept()
+    {
+        var metadata = new Dictionary<string, string> { ["cid"] = "00abc" };
+        var outcome = ContractNotFoundWith(metadata);
+        var hashBeforeTheProducerMutatedItsDictionary = outcome.GetHashCode();
+
+        metadata["cid"] = "00zzz";
+        metadata["retryable"] = "false";
+
+        outcome.Metadata.Should().ContainSingle();
+        outcome.Metadata["cid"].Should().Be("00abc");
+        outcome.GetHashCode().Should().Be(hashBeforeTheProducerMutatedItsDictionary);
+    }
+
+    [Fact]
+    public void DamlError_keeps_the_metadata_a_with_expression_supplied_once_the_producer_mutates_it()
+    {
+        var replacement = new Dictionary<string, string> { ["cid"] = "00abc" };
+        var outcome = ContractNotFoundWith(new Dictionary<string, string>()) with { Metadata = replacement };
+
+        replacement["cid"] = "00zzz";
+
+        outcome.Metadata["cid"].Should().Be("00abc");
+    }
+
+    [Fact]
+    public void DamlError_compares_unequal_when_the_metadata_keys_are_disjoint()
+    {
+        var outcome = ContractNotFoundWith(new Dictionary<string, string> { ["cid"] = "00abc" });
+        var other = ContractNotFoundWith(new Dictionary<string, string> { ["offset"] = "00abc" });
+
+        outcome.Should().NotBe(other);
+    }
+
+    [Theory]
+    [InlineData(DamlErrorCategory.Unknown, ContractNotFoundId, ContractNotFoundMessage)]
+    [InlineData(ContractNotFoundCategory, "CONTRACT_KEY_NOT_FOUND", ContractNotFoundMessage)]
+    [InlineData(ContractNotFoundCategory, ContractNotFoundId, "contract was archived")]
+    public void DamlError_compares_unequal_when_a_member_beside_the_metadata_differs(
+        DamlErrorCategory category,
+        string errorId,
+        string message)
+    {
+        var outcome = ContractNotFoundWith(EmptyMetadata);
+        var other = ContractNotFoundWith(EmptyMetadata, category, errorId, message);
+
+        outcome.Should().NotBe(other);
+    }
+
+    [Fact]
+    public void DamlError_compares_unequal_to_another_outcome_variant_and_to_null()
+    {
+        ExerciseOutcome<ContractId<FooBar>> outcome = ContractNotFoundWith(EmptyMetadata);
+        ExerciseOutcome<ContractId<FooBar>> infra =
+            new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.Unavailable, "network down");
+
+        outcome.Should().NotBe(infra);
+        infra.Should().NotBe(outcome);
+        outcome.Equals(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void DamlError_rejects_null_metadata_at_the_producer()
+    {
+        Action act = () => _ = ContractNotFoundWith(null!);
+
+        act.Should().Throw<ArgumentNullException>().WithParameterName("Metadata");
+    }
+
+    [Fact]
+    public void DamlError_rejects_null_metadata_supplied_by_a_with_expression()
+    {
+        Action act = () => _ = ContractNotFoundWith(EmptyMetadata) with { Metadata = null! };
+
+        act.Should().Throw<ArgumentNullException>().WithParameterName("Metadata");
     }
 
     [Fact]
@@ -149,7 +347,7 @@ public class ExerciseOutcomeTests
         [
             new ExerciseOutcome<ContractId<FooBar>>.One(new ContractId<FooBar>("c")),
             new ExerciseOutcome<ContractId<FooBar>>.None(),
-            new ExerciseOutcome<ContractId<FooBar>>.Many(2, ["c1", "c2"]),
+            new ExerciseOutcome<ContractId<FooBar>>.Many(["c1", "c2"]),
             new ExerciseOutcome<ContractId<FooBar>>.DamlError(DamlErrorCategory.Unknown, "X", "x", new Dictionary<string, string>()),
             new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.Unavailable, "u"),
         ];
@@ -178,6 +376,18 @@ public class ExerciseOutcomeTests
         public const int DeadlineExceeded = 4;
         public const int PermissionDenied = 7;
     }
+
+    private const DamlErrorCategory ContractNotFoundCategory = DamlErrorCategory.ContentionOnSharedResources;
+    private const string ContractNotFoundId = "CONTRACT_NOT_FOUND";
+    private const string ContractNotFoundMessage = "contract not found";
+
+    private static IReadOnlyDictionary<string, string> EmptyMetadata => new Dictionary<string, string>();
+
+    private static ExerciseOutcome<ContractId<FooBar>>.DamlError ContractNotFoundWith(
+        IReadOnlyDictionary<string, string> metadata,
+        DamlErrorCategory category = ContractNotFoundCategory,
+        string errorId = ContractNotFoundId,
+        string message = ContractNotFoundMessage) => new(category, errorId, message, metadata);
 
     private sealed record SwapChoiceResult(
         ContractId<FooBar> Agreement,

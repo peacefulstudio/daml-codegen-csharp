@@ -39,103 +39,20 @@ public sealed record SubmitAndWaitResult(
 public sealed record TransactionResult(
     string UpdateId,
     LedgerOffset CompletionOffset,
-    IReadOnlyList<CreatedContract> CreatedContracts,
-    IReadOnlyList<string> ArchivedContractIds,
+    EquatableArray<CreatedContract> CreatedContracts,
+    EquatableArray<string> ArchivedContractIds,
     CommandId? CommandId)
 {
-    private readonly IReadOnlyList<CreatedContract> _createdContracts =
-        EventCollections.Copy(CreatedContracts, nameof(CreatedContracts));
-
-    private readonly IReadOnlyList<string> _archivedContractIds =
-        EventCollections.Copy(ArchivedContractIds, nameof(ArchivedContractIds));
-
-    private readonly IReadOnlyList<ExercisedEvent> _exercisedEvents = Array.Empty<ExercisedEvent>();
-
-    /// <summary>
-    /// Contracts created by the transaction. Copied at construction and on <c>init</c>, so a
-    /// producer that retains the list it supplied cannot change this value's equality or
-    /// hash code afterwards.
-    /// </summary>
-    public IReadOnlyList<CreatedContract> CreatedContracts
-    {
-        get => _createdContracts;
-        init => _createdContracts = EventCollections.Copy(value, nameof(CreatedContracts));
-    }
-
-    /// <summary>
-    /// Raw contract IDs archived by the transaction. Copied on the same terms as
-    /// <see cref="CreatedContracts"/>.
-    /// </summary>
-    public IReadOnlyList<string> ArchivedContractIds
-    {
-        get => _archivedContractIds;
-        init => _archivedContractIds = EventCollections.Copy(value, nameof(ArchivedContractIds));
-    }
-
     /// <summary>
     /// Choice-exercise events observed in the transaction, in transaction order.
-    /// Defaults to an empty list — populated by ledger-client transport
+    /// Defaults to empty — populated by ledger-client transport
     /// implementations when the transaction was requested with
     /// ledger-effects shape. Codegen-emitted choice wrappers deserialize each
     /// <see cref="ExercisedEvent.ExerciseResult"/> through the appropriate typed
     /// projector to surface a typed <c>ExerciseOutcome&lt;TResult&gt;</c> for choices
     /// whose return type is not a contract id (e.g. <c>choice C : Decimal</c>).
-    /// Copied on the same terms as <see cref="CreatedContracts"/>.
     /// </summary>
-    public IReadOnlyList<ExercisedEvent> ExercisedEvents
-    {
-        get => _exercisedEvents;
-        init => _exercisedEvents = EventCollections.Copy(value, nameof(ExercisedEvents));
-    }
-
-    /// <summary>
-    /// Compares two transaction results field-by-field, comparing
-    /// <see cref="CreatedContracts"/>, <see cref="ArchivedContractIds"/> and
-    /// <see cref="ExercisedEvents"/> element by element rather than by list identity —
-    /// each element then using its own equality. The record-synthesized equality compares
-    /// the backing <see cref="IReadOnlyList{T}"/> by reference — a footgun for a
-    /// value type — so we override it with structural element comparison, as
-    /// <see cref="CreatedContract"/> and <see cref="DamlRecord"/> already do.
-    /// </summary>
-    /// <remarks>
-    /// The comparison is structural all the way down: <see cref="CreatedContract"/>,
-    /// <see cref="ExercisedEvent"/> and <see cref="string"/> each compare by content
-    /// themselves, so two results projected from two separately-decoded trees of the same
-    /// transaction compare equal.
-    /// </remarks>
-    public bool Equals(TransactionResult? other) =>
-        other is not null
-        && UpdateId == other.UpdateId
-        && CompletionOffset == other.CompletionOffset
-        && CommandId == other.CommandId
-        && CreatedContracts.SequenceEqual(other.CreatedContracts)
-        && ArchivedContractIds.SequenceEqual(other.ArchivedContractIds)
-        && ExercisedEvents.SequenceEqual(other.ExercisedEvents);
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(UpdateId);
-        hash.Add(CompletionOffset);
-        hash.Add(CommandId);
-        hash.Add(CreatedContracts.Count);
-        foreach (var created in CreatedContracts)
-        {
-            hash.Add(created);
-        }
-        hash.Add(ArchivedContractIds.Count);
-        foreach (var archivedContractId in ArchivedContractIds)
-        {
-            hash.Add(archivedContractId);
-        }
-        hash.Add(ExercisedEvents.Count);
-        foreach (var exercised in ExercisedEvents)
-        {
-            hash.Add(exercised);
-        }
-        return hash.ToHashCode();
-    }
+    public EquatableArray<ExercisedEvent> ExercisedEvents { get; init; }
 }
 
 /// <summary>
@@ -183,124 +100,18 @@ public sealed record CreatedContract(
     string ContractId,
     Identifier TemplateId,
     DamlRecord Payload,
-    IReadOnlyList<Party> WitnessParties,
-    IReadOnlyList<Party> Signatories,
-    IReadOnlyList<Party> Observers,
+    EquatableArray<Party> WitnessParties,
+    EquatableArray<Party> Signatories,
+    EquatableArray<Party> Observers,
     ContractKey? ContractKey = null,
     DateTimeOffset? CreatedAt = null)
 {
-    private readonly IReadOnlyList<Party> _witnessParties =
-        EventCollections.Copy(WitnessParties, nameof(WitnessParties));
-
-    private readonly IReadOnlyList<Party> _signatories =
-        EventCollections.Copy(Signatories, nameof(Signatories));
-
-    private readonly IReadOnlyList<Party> _observers =
-        EventCollections.Copy(Observers, nameof(Observers));
-
-    private readonly IReadOnlyList<Identifier> _interfaceIds = Array.Empty<Identifier>();
-
-    /// <summary>
-    /// Parties notified of this event. Copied at construction and on <c>init</c>, so a
-    /// producer that retains the list it supplied cannot change this value's equality or
-    /// hash code afterwards.
-    /// </summary>
-    public IReadOnlyList<Party> WitnessParties
-    {
-        get => _witnessParties;
-        init => _witnessParties = EventCollections.Copy(value, nameof(WitnessParties));
-    }
-
-    /// <summary>
-    /// Parties that authorized the contract's creation. Copied on the same terms as
-    /// <see cref="WitnessParties"/>.
-    /// </summary>
-    public IReadOnlyList<Party> Signatories
-    {
-        get => _signatories;
-        init => _signatories = EventCollections.Copy(value, nameof(Signatories));
-    }
-
-    /// <summary>
-    /// Parties the template names as observers. Copied on the same terms as
-    /// <see cref="WitnessParties"/>.
-    /// </summary>
-    public IReadOnlyList<Party> Observers
-    {
-        get => _observers;
-        init => _observers = EventCollections.Copy(value, nameof(Observers));
-    }
-
     /// <summary>
     /// Interface ids the participant computed for this created event
     /// (Canton gRPC <c>CreatedEvent.interface_views[].interface_id</c>).
-    /// Defaults to an empty list — populated by ledger-client transport
+    /// Defaults to empty — populated by ledger-client transport
     /// implementations for interface-only consumption, where a contract is
     /// known only as an interface and must be dispatched at runtime.
-    /// Copied on the same terms as <see cref="WitnessParties"/>.
     /// </summary>
-    public IReadOnlyList<Identifier> InterfaceIds
-    {
-        get => _interfaceIds;
-        init => _interfaceIds = EventCollections.Copy(value, nameof(InterfaceIds));
-    }
-
-    /// <summary>
-    /// Compares two created contracts field-by-field, including element-wise
-    /// <see cref="WitnessParties"/>, <see cref="Signatories"/>, <see cref="Observers"/>
-    /// and <see cref="InterfaceIds"/> content. The record-synthesized equality compares
-    /// the backing <see cref="IReadOnlyList{T}"/> by reference — a footgun for a
-    /// value type — so we override it with structural element comparison.
-    /// </summary>
-    /// <remarks>
-    /// One corner is not literally field-by-field: <see cref="ContractKey"/> compares by the
-    /// key it names and deliberately ignores <see cref="Contracts.ContractKey.KeyHash"/>, so
-    /// a create read off the wire equals the same create rebuilt by a caller. That is the
-    /// intended propagation of that type's own rule, not an oversight here.
-    /// </remarks>
-    public bool Equals(CreatedContract? other) =>
-        other is not null
-        && EventId == other.EventId
-        && ContractId == other.ContractId
-        && TemplateId == other.TemplateId
-        && Equals(Payload, other.Payload)
-        && ContractKey == other.ContractKey
-        && CreatedAt == other.CreatedAt
-        && WitnessParties.SequenceEqual(other.WitnessParties)
-        && Signatories.SequenceEqual(other.Signatories)
-        && Observers.SequenceEqual(other.Observers)
-        && InterfaceIds.SequenceEqual(other.InterfaceIds);
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(EventId);
-        hash.Add(ContractId);
-        hash.Add(TemplateId);
-        hash.Add(Payload);
-        hash.Add(ContractKey);
-        hash.Add(CreatedAt);
-        hash.Add(WitnessParties.Count);
-        foreach (var witness in WitnessParties)
-        {
-            hash.Add(witness);
-        }
-        hash.Add(Signatories.Count);
-        foreach (var signatory in Signatories)
-        {
-            hash.Add(signatory);
-        }
-        hash.Add(Observers.Count);
-        foreach (var observer in Observers)
-        {
-            hash.Add(observer);
-        }
-        hash.Add(InterfaceIds.Count);
-        foreach (var interfaceId in InterfaceIds)
-        {
-            hash.Add(interfaceId);
-        }
-        return hash.ToHashCode();
-    }
+    public EquatableArray<Identifier> InterfaceIds { get; init; }
 }

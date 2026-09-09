@@ -87,8 +87,7 @@ public class ContractIdentifiersTests
 
         // Assert
         identifiersFile.Should().NotBeNull();
-        // File should be placed one level above the package folder (beside it, not inside)
-        identifiersFile!.RelativePath.Should().Be("Test/ContractIdentifiers.cs");
+        identifiersFile!.RelativePath.Should().Be("Test/Module/ContractIdentifiers.cs");
     }
 
     [Fact]
@@ -145,7 +144,7 @@ public class ContractIdentifiersTests
     }
 
     [Fact]
-    public void Generate_should_include_templates_from_multiple_modules()
+    public void Generate_should_emit_one_contract_identifiers_class_per_module()
     {
         // Arrange
         var module1 = new DamlModule
@@ -197,16 +196,18 @@ public class ContractIdentifiersTests
         var dar = CreateTestDar([module1, module2]);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
-        var identifiersFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("ContractIdentifiers.cs", StringComparison.Ordinal));
+        var identifiersFiles = files
+            .Where(f => f.RelativePath.EndsWith("ContractIdentifiers.cs", StringComparison.Ordinal))
+            .ToDictionary(f => f.RelativePath, f => f.Content);
 
-        // Assert
-        identifiersFile.Should().NotBeNull();
-        var code = identifiersFile!.Content;
-
-        code.Should().Contain("public static string TemplateA { get; } = GetTemplateId<TemplateA>();");
-        code.Should().Contain("public static string TemplateB { get; } = GetTemplateId<TemplateB>();");
+        identifiersFiles.Keys.Should().BeEquivalentTo("Module/One/ContractIdentifiers.cs", "Module/Two/ContractIdentifiers.cs");
+        identifiersFiles["Module/One/ContractIdentifiers.cs"].Should().Contain("namespace Module.One;")
+            .And.Contain("public static string TemplateA { get; } = GetTemplateId<TemplateA>();")
+            .And.NotContain("TemplateB");
+        identifiersFiles["Module/Two/ContractIdentifiers.cs"].Should().Contain("namespace Module.Two;")
+            .And.Contain("public static string TemplateB { get; } = GetTemplateId<TemplateB>();")
+            .And.NotContain("TemplateA");
     }
 
     #endregion
@@ -425,7 +426,7 @@ public class ContractIdentifiersTests
         identifiersFile.Should().NotBeNull();
         var code = identifiersFile!.Content;
 
-        code.Should().Contain("namespace Test.Package;");
+        code.Should().Contain("namespace Test.Module;");
     }
 
     [Fact]
@@ -467,7 +468,7 @@ public class ContractIdentifiersTests
         var code = identifiersFile!.Content;
 
         code.Should().Contain("/// <summary>");
-        code.Should().Contain("/// Provides fully qualified contract identifiers for all templates in this package.");
+        code.Should().Contain("/// Provides fully qualified contract identifiers for all templates in this module.");
         code.Should().Contain("/// These identifiers can be used for PQS queries.");
     }
 
@@ -633,7 +634,7 @@ public class ContractIdentifiersTests
         identifiersFile.Should().NotBeNull();
         var code = identifiersFile!.Content;
 
-        code.Should().Contain("namespace Test.Package\n{");
+        code.Should().Contain("namespace Test.Module\n{");
     }
 
     #endregion

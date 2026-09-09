@@ -253,8 +253,8 @@ public class EmittedTemplateChoiceCompilesTests
 
         var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
         code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
-        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Package.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Package.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Module.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Module.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
         code.Should().NotContain(
             "\"Holdable\", StringComparison.Ordinal",
             "a local interface now resolves to a marker carrying InterfaceId, so the projector reads that "
@@ -378,7 +378,7 @@ public class EmittedTemplateChoiceCompilesTests
         var consumerHoldingFromCreatedEventResult = GeneratedFile.Text(
             "ReachabilityProbe.cs",
             """
-            namespace Test.Package
+            namespace Test.Module
             {
                 internal static class ReachabilityProbe
                 {
@@ -476,7 +476,7 @@ public class EmittedTemplateChoiceCompilesTests
         var consumerHoldingFromCreatedEventResult = GeneratedFile.Text(
             "ReachabilityProbe.cs",
             """
-            namespace Test.Package
+            namespace Test.Module
             {
                 internal static class ReachabilityProbe
                 {

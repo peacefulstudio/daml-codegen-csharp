@@ -96,6 +96,33 @@ public class DamlJsonSerializerStructuralTests
     }
 
     [Fact]
+    public void RoundTrip_top_level_Deserialize_should_resolve_a_DamlOptionalChain_to_DamlList_per_documented_contract()
+    {
+        const string because =
+            "the untyped entry point has no type schema, and the array form a chain writes is "
+            + "indistinguishable on the wire from a list, so the chain is the seventh member of "
+            + "the lossy family DamlJsonSerializer.Deserialize documents";
+
+        var none = DamlJsonSerializer.Deserialize(DamlJsonSerializer.Serialize(DamlOptionalChain.None));
+        var carryingNone = DamlJsonSerializer.Deserialize(
+            DamlJsonSerializer.Serialize(DamlOptionalChain.Some(DamlOptionalChain.None)));
+        var carryingValue = DamlJsonSerializer.Deserialize(
+            DamlJsonSerializer.Serialize(
+                DamlOptionalChain.Some(DamlOptionalChain.Some(new DamlText("deep")))));
+
+        none.Should().BeOfType<DamlList>(because).Subject.Values.Should().BeEmpty();
+
+        carryingNone.Should().BeOfType<DamlList>(because)
+            .Subject.Values.Single().Should().BeOfType<DamlList>(because)
+            .Subject.Values.Should().BeEmpty();
+
+        carryingValue.Should().BeOfType<DamlList>(because)
+            .Subject.Values.Single().Should().BeOfType<DamlList>(because)
+            .Subject.Values.Single().Should().BeOfType<DamlText>()
+            .Subject.Value.Should().Be("deep");
+    }
+
+    [Fact]
     public void Deserialize_pair_with_null_key_should_surface_array_null_error_not_GenMap_error()
     {
         var act = () => DamlJsonSerializer.Deserialize("[[null, 5]]");

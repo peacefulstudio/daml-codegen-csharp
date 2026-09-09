@@ -49,6 +49,32 @@ public class CaughtExceptionTests
         exercised.CaughtExceptions[1].Should().Be(second);
     }
 
+    [Fact]
+    public void CaughtException_copies_the_metadata_it_is_constructed_from()
+    {
+        var metadata = new Dictionary<string, string> { ["required"] = "100" };
+        var caught = new CaughtException("Acme.Errors:InsufficientFunds", "not enough funds", metadata);
+        var hashBefore = caught.GetHashCode();
+
+        metadata["required"] = "200";
+        metadata["available"] = "40";
+
+        caught.Metadata.Should().ContainSingle();
+        caught.Metadata["required"].Should().Be("100");
+        caught.GetHashCode().Should().Be(hashBefore);
+    }
+
+    [Fact]
+    public void CaughtException_rejects_null_metadata_at_the_producer()
+    {
+        Action act = () => _ = new CaughtException(
+            ErrorId: "Acme.Errors:InsufficientFunds",
+            Message: "not enough funds",
+            Metadata: null!);
+
+        act.Should().Throw<ArgumentNullException>().WithParameterName("Metadata");
+    }
+
     private static ExercisedEvent MakeExercisedEvent() => new(
         ContractId: "00alice",
         TemplateId: new RuntimeIdentifier("test-pkg", "Acme.Foo", "FooBar"),

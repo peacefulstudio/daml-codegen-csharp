@@ -115,6 +115,63 @@ public class ChoiceCodeGenTests
             "the nested record signature must be indented one level, carry one parameter per line indented one level further, and close on its own line with the base list");
     }
 
+    [Fact]
+    public void Generate_should_apply_root_filter_to_nested_choice_argument_types()
+    {
+        var module = TwoTemplatesEachWithNestedChoiceArgument();
+        var dar = new DamlModelBuilder().WithModule(module).WithDependency(StdlibStub).Build();
+        var generator = CreateGenerator(new CodeGenOptions { RootFilter = "Test\\.Module:KeepAsset" });
+
+        var files = generator.Generate(dar).ToList();
+
+        files.Should().Contain(
+            f => f.RelativePath.EndsWith("KeepAsset.Transfer.cs", StringComparison.Ordinal),
+            "the root filter admits KeepAsset, so its nested choice-argument type is still generated");
+        files.Should().NotContain(
+            f => f.RelativePath.EndsWith("SkipAsset.Transfer.cs", StringComparison.Ordinal),
+            "the choice-argument loop walks every template in the module independently of the payload-record "
+            + "loop above it, so it must apply the same root filter or a filtered-out template still leaks its "
+            + "nested choice-argument file");
+    }
+
+    private static DamlModule TwoTemplatesEachWithNestedChoiceArgument()
+    {
+        DamlTemplate TemplateWithTransfer(string name) => new()
+        {
+            Name = name,
+            Choices =
+            [
+                new DamlChoice
+                {
+                    Name = "Transfer",
+                    Consuming = true,
+                    ArgumentType = new DamlTypeRef("", "Test.Module", $"{name}Transfer"),
+                    ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                }
+            ]
+        };
+
+        DamlDataType RecordType(string name) => new()
+        {
+            Name = name,
+            Definition = new DamlRecordDefinition([new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
+        };
+
+        return new DamlModule
+        {
+            Name = "Test.Module",
+            Templates = [TemplateWithTransfer("KeepAsset"), TemplateWithTransfer("SkipAsset")],
+            DataTypes =
+            [
+                RecordType("KeepAsset"),
+                RecordType("SkipAsset"),
+                RecordType("KeepAssetTransfer"),
+                RecordType("SkipAssetTransfer"),
+            ],
+            Interfaces = []
+        };
+    }
+
     private static DamlModule NestedTransferArgumentModule()
     {
         DamlFieldDefinition[] transferArgFields =

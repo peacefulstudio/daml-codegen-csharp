@@ -34,14 +34,14 @@ public class EnumEmitterTests
         };
 
     private static CodeGenOptions Options(bool generateXmlDocs) =>
-        new() { RootNamespace = "Test.Package", GenerateXmlDocs = generateXmlDocs };
+        new() { NamespacePrefix = "Test.Package", GenerateXmlDocs = generateXmlDocs };
 
     private static string EmitEnum(string name, string[] constructors, bool generateXmlDocs = true)
     {
         var enumDef = new DamlEnumDefinition(constructors);
         var dataType = new DamlDataType { Name = name, Definition = enumDef };
         var options = Options(generateXmlDocs);
-        var context = PackageEmitContext.ForPackage(Package(dataType), options);
+        var context = PackageEmitContext.ForPackage(Package(dataType), options, isMainPackage: true).Single();
         var emitter = new EnumEmitter(context, options);
         var sb = new StringBuilder();
         emitter.WriteEnumType(new IndentWriter(sb), dataType, enumDef);

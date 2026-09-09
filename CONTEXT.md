@@ -72,10 +72,11 @@ as a NuGet library for programmatic use.)
 _Avoid_: "the cli", "codegen-cs tool", "codegen-cs plugin", "the container"
 
 **`PackageEmitContext`**:
-The immutable per-package value the C# emitter threads through its emit methods: the root
-namespace, the `TypeReferenceQualifier`, the per-package data-type lookup, and the local
-enum / variant / interface / choice-argument name sets. Built once per package by
-`PackageEmitContext.ForPackage`; read-only during emission. Replaces the mutable `_current*`
+The immutable value the C# emitter threads through its emit methods, one per Daml module:
+the module's namespace, the `TypeReferenceQualifier` scoped to it, and the package-wide
+data-type lookup and local enum / variant / interface / choice-argument name sets shared by
+every module of the package. `PackageEmitContext.ForPackage` scans a package once and hands
+back one context per module; read-only during emission. Replaces the mutable `_current*`
 / `_local*` instance fields the emitter used to clear at the start of each package.
 _Avoid_: "codegen state", "the current-package fields", "emit scratch"
 
@@ -141,6 +142,34 @@ on a facet interface, so generic code finds it without reflection — that is th
 convention new descriptors follow, not a description of the existing two.
 _Avoid_: "marker", "phantom type" (those name the facet interface, not the value), "the
 metadata object", "type token"
+
+**Active contract**:
+A contract the participant reports as currently in its active contract set, together with the
+provenance the snapshot delivers alongside it — the synchronizer it sits on, and the offset of
+the update that last created or assigned it. A drained snapshot returning only the payload has
+*discarded* that provenance, not been denied it. `ActiveContract<TContract>` is where the pair
+lives. It composes over the contract shapes rather than widening them, so contract equality
+stays contract equality and two snapshots of one contract remain one contract observed twice.
+_Avoid_: "ACS row", "live contract", "current contract"
+
+**Last-update offset**:
+The offset of the most recent update that created or assigned a contract. It orders and it
+identifies — active contracts can be sequenced by it, and one can be quoted by it — but it does
+**not** resume, because it may point at an already-pruned update. A consumer persisting resume
+state takes it from the snapshot's terminal checkpoint, never from a per-contract offset.
+_Avoid_: "offset" unqualified, "creation offset", "contract offset", "recency"
+
+**Equatable array**:
+`EquatableArray<T>`, the type every list member of the event and stream records carries: a
+read-only struct that owns a copy of its elements, compares by content, and whose `default` is
+empty. It makes "never `null`, equal by content" a property of the member's *type* rather than
+of a guard a reviewer has to remember at each entry point — nothing a caller passes, sets
+through `with`, or reaches by reflection can put a `null` there, and two records built from
+equal lists are equal. Construction copies, through `EquatableArray.Create` or a collection
+expression; reads through `IReadOnlyList<T>` still work. Not `Daml`-prefixed, because it carries
+no Daml semantics: the Daml `List a` *payload* type stays `IReadOnlyList<T>`.
+_Avoid_: "owned list", "value list", "immutable list" (a BCL family with reference equality),
+"borrowed list" (every list member owns its elements)
 
 **Contract key**:
 The identifier a keyed template's contracts can be looked up by. It is a property of an

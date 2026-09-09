@@ -45,13 +45,7 @@ public class DriftDetectionTests
     /// the snapshot is removed from the list and joins the gate.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> SnapshotsWithKnownEmitterCompileDefects =
-        new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["cross-module-collision"] =
-                "two modules of one package each declare a choice named Retag, and the emitter writes both "
-                + "of their `RetagResult` created-contract projections into the same C# namespace as "
-                + "duplicate top-level records (CS0101, CS8863, CS0111, CS1739, CS0121)",
-        };
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Enumerates every sub-directory under <c>Snapshots/</c> that has an
@@ -151,7 +145,9 @@ public class DriftDetectionTests
             $"Codegen output drifted from the snapshot. If the change is intentional, refresh the snapshot " +
             $"per tests/Daml.Codegen.CSharp.Tests/Snapshots/{snapshotName}/README.md and re-commit. " +
             $"If the change is unintentional, fix the codegen. " +
-            $"Re-run only this snapshot with: dotnet test --filter \"FullyQualifiedName~DriftDetectionTests&DisplayName~{snapshotName}\"";
+            $"Re-run only this snapshot with: dotnet test " +
+            $"--project tests/Daml.Codegen.CSharp.Tests/Daml.Codegen.CSharp.Tests.csproj --minimum-expected-tests 1 " +
+            $"--filter \"FullyQualifiedName~DriftDetectionTests&DisplayName~{snapshotName}\"";
 
         var pinnedEmpty = File.Exists(Path.Combine(snapshotDir, "emits-no-types"));
 

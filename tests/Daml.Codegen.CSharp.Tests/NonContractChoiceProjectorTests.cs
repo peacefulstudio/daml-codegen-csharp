@@ -8,6 +8,7 @@ using Daml.Codegen.Intermediate.Model;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
+using Daml.Testing.Roslyn;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -35,7 +36,7 @@ public class NonContractChoiceProjectorTests
     private const string ChoiceName = "GetCount";
     private const string PackageId = "test-package-id";
 
-    private const string GeneratedNamespace = "Test.Package";
+    private const string GeneratedNamespace = ModuleName;
     private const string NonContractExtensionsSuffix = "NonContractExtensions";
     private const string ProjectorMethodPrefix = "Project";
     private const string ProjectorMethodSuffix = "Result";
@@ -90,8 +91,6 @@ public class NonContractChoiceProjectorTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
         };
         var generator = new CSharpCodeGenerator(options);
         var files = generator.Generate(new DarModel { MainPackage = package, Dependencies = [] });
@@ -107,26 +106,10 @@ public class NonContractChoiceProjectorTests
             .Select(f => CSharpSyntaxTree.ParseText(f.Content, parseOptions, path: f.RelativePath))
             .ToArray();
 
-        var references = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(a => MetadataReference.CreateFromFile(a.Location))
-            .Cast<MetadataReference>()
-            .ToList();
-
-        var damlRuntime = typeof(Daml.Runtime.Contracts.ITemplate).Assembly;
-        var damlAbstractions = typeof(Daml.Ledger.Abstractions.ILedgerClient).Assembly;
-        foreach (var location in new[] { damlRuntime.Location, damlAbstractions.Location })
-        {
-            if (!references.Any(r => r is PortableExecutableReference per && per.FilePath == location))
-            {
-                references.Add(MetadataReference.CreateFromFile(location));
-            }
-        }
-
         var compilation = CSharpCompilation.Create(
             assemblyName: "NonContractChoiceProjectorTests-emit",
             syntaxTrees: trees,
-            references: references,
+            references: ConsumerReferenceSet.Assemblies,
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
@@ -186,7 +169,7 @@ public class NonContractChoiceProjectorTests
             ArchivedContractIds: [],
             CommandId: default)
         {
-            ExercisedEvents = events,
+            ExercisedEvents = [.. events],
         };
 
     private static readonly Assembly WrapperAssembly = CompileWrapperAssembly();

@@ -58,7 +58,7 @@ public class SubmissionExtensionsEmitterTests
             ],
             DependencyReferences = [],
         };
-        return PackageEmitContext.ForPackage(package, new CodeGenOptions());
+        return PackageEmitContext.ForPackage(package, new CodeGenOptions(), isMainPackage: true).Single();
     }
 
     private string Emit(TemplateFixture fixture, CodeGenOptions? options = null)

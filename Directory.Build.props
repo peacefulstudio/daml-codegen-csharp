@@ -17,7 +17,13 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <EnablePackageValidation>true</EnablePackageValidation>
+
+    <!-- EnablePackageValidation is deliberately absent, not overlooked. It is inert without a
+         PackageValidationBaselineVersion, and no reachable feed carries one: NuGet.config maps
+         Daml.* to the GitHub Packages feed alone, which stops at 0.1.8-preview.4 and holds five of
+         the eight ids packed here, while the published baselines are on nuget.org, which that
+         mapping excludes for Daml.*. It goes back on per published project, once Daml.* resolves
+         from the feed the baselines are on. -->
 
     <!-- Package metadata -->
     <Authors>Peaceful Studio OÜ</Authors>
@@ -30,7 +36,7 @@
     <PackageIcon>icon.png</PackageIcon>
 
     <!-- Versioning -->
-    <Version>0.5.0-preview.1</Version>
+    <Version>0.5.0-preview.2</Version>
     <AssemblyVersion>0.5.0.0</AssemblyVersion>
     <FileVersion>0.5.0.0</FileVersion>
 

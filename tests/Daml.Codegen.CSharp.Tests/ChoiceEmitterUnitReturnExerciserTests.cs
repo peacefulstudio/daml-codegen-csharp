@@ -62,9 +62,9 @@ public class ChoiceEmitterUnitReturnExerciserTests
     private static (string Code, IReadOnlyCollection<string> Usings) EmitNonContract(DamlTemplate template)
     {
         var package = Package(template);
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var resolver = new StubResolver();
-        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
         var sb = new StringBuilder();
         var indent = new IndentWriter(sb) { CurrentTypeName = template.Name };
         emitter.TryWriteNonContractChoiceExtensions(indent, template, context.DataTypes);
@@ -123,6 +123,40 @@ public class ChoiceEmitterUnitReturnExerciserTests
 
         code.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<string, Unit>>> MapOfUnitsAsync(");
         code.Should().Contain(".As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => Unit.Value)");
+        usings.Should().Contain(StdlibNamespace);
+    }
+
+    [Fact]
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_emits_stdlib_unit_wrapper_for_genmap_of_unit()
+    {
+        var genMapOfUnit = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.GenMap),
+            [new DamlPrimitiveType(DamlPrimitive.Text), new DamlPrimitiveType(DamlPrimitive.Unit)]);
+
+        var (code, usings) = EmitNonContract(Template(Choice("UnitsByText", genMapOfUnit)));
+
+        code.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<string, Unit>>> UnitsByTextAsync(");
+        code.Should().Contain(".As<DamlGenMap>().Entries.ToDictionary(kv => kv.Key.As<DamlText>().Value, kv => Unit.Value)");
+        usings.Should().Contain(StdlibNamespace);
+        code.Should().NotContain("IReadOnlyDictionary<string, DamlUnit>");
+    }
+
+    [Fact]
+    public void ChoiceEmitterUnitReturnExerciser_non_contract_exerciser_decodes_the_genmap_key_and_value_with_their_own_decoders()
+    {
+        var genMapOfListOfUnit = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.GenMap),
+            [
+                new DamlPrimitiveType(DamlPrimitive.Party),
+                new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.List), [new DamlPrimitiveType(DamlPrimitive.Unit)]),
+            ]);
+
+        var (code, usings) = EmitNonContract(Template(Choice("UnitListsByParty", genMapOfListOfUnit)));
+
+        code.Should().Contain("public static async Task<ExerciseOutcome<IReadOnlyDictionary<Party, IReadOnlyList<Unit>>>> UnitListsByPartyAsync(");
+        code.Should().Contain(
+            ".As<DamlGenMap>().Entries.ToDictionary(kv => Party.FromDamlValue(kv.Key.As<DamlParty>()), "
+            + "kv => kv.Value.As<DamlList>().Values.Select(x => Unit.Value).ToList())");
         usings.Should().Contain(StdlibNamespace);
     }
 }

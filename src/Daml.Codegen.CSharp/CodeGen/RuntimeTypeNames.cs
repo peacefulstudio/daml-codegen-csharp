@@ -9,6 +9,7 @@ internal static class RuntimeTypeNames
     public const string DamlRecord = nameof(Daml.Runtime.Data.DamlRecord);
     public const string DamlField = nameof(Daml.Runtime.Data.DamlField);
     public const string DamlFieldAttribute = nameof(Daml.Runtime.Data.DamlFieldAttribute);
+    public const string DamlFieldCollections = nameof(Daml.Runtime.Data.DamlFieldCollections);
     public const string DamlValue = nameof(Daml.Runtime.Data.DamlValue);
     public const string IDamlValue = nameof(Daml.Runtime.Data.IDamlValue);
     public const string IDamlRecord = nameof(Daml.Runtime.Data.IDamlRecord);
@@ -30,6 +31,7 @@ internal static class RuntimeTypeNames
     public const string Identifier = nameof(Daml.Runtime.Data.Identifier);
 
     public const string DamlContractId = nameof(Daml.Runtime.Contracts.DamlContractId);
+    public const string EquatableArray = nameof(Daml.Runtime.Contracts.EquatableArray);
     public const string ContractId = nameof(Daml.Runtime.Contracts.ContractId);
     public const string ITemplate = nameof(Daml.Runtime.Contracts.ITemplate);
     public const string IHasKey = nameof(Daml.Runtime.Contracts.IHasKey<,>);

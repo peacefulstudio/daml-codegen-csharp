@@ -4,7 +4,7 @@
 using Daml.Runtime.Commands;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
-using Quickstart;
+using IouContract = Iou.Iou;
 
 Console.WriteLine("Daml C# Codegen - Quickstart Example");
 Console.WriteLine("=====================================\n");
@@ -14,7 +14,7 @@ var bob = new Party("Bob::1220deadbeef");
 var charlie = new Party("Charlie::1220deadbeef");
 
 Console.WriteLine("1. Creating an Iou payload:");
-var iou = new Iou(
+var iou = new IouContract(
     Issuer: alice,
     Owner: bob,
     Currency: "USD",
@@ -53,11 +53,11 @@ Console.WriteLine($"   Template: {createCmd.TemplateId.FullyQualifiedName}");
 Console.WriteLine($"   Type: {createCmd.CommandType}\n");
 
 Console.WriteLine("5. Building an ExerciseCommand (Transfer):");
-var contractId = new Iou.ContractId("00abc123");
+var contractId = new IouContract.ContractId("00abc123");
 var exerciseCmd = ExerciseCommand.For(
     contractId,
-    Iou.ChoiceTransfer.Name,
-    new Iou.Transfer(NewOwner: charlie).ToRecord());
+    IouContract.ChoiceTransfer.Name,
+    new IouContract.Transfer(NewOwner: charlie).ToRecord());
 Console.WriteLine($"   Contract: {exerciseCmd.ContractId.Value}");
 Console.WriteLine($"   Choice: {exerciseCmd.Choice}");
 Console.WriteLine($"   Type: {exerciseCmd.CommandType}\n");
@@ -73,13 +73,13 @@ Console.WriteLine($"   WorkflowId: {submission.WorkflowId}");
 Console.WriteLine($"   CommandId: {submission.CommandId}\n");
 
 Console.WriteLine("7. Reconstructing from DamlRecord (as a Ledger API read path would):");
-var reconstructed = Iou.FromRecord(record);
+var reconstructed = IouContract.FromRecord(record);
 Console.WriteLine($"   Issuer: {reconstructed.Issuer}");
 Console.WriteLine($"   Owner: {reconstructed.Owner}");
 Console.WriteLine($"   Match: {iou == reconstructed}\n");
 
 Console.WriteLine("8. PQS-style fully qualified template identifier:");
-Console.WriteLine($"   {ContractIdentifiers.Iou}\n");
+Console.WriteLine($"   {Iou.ContractIdentifiers.Iou}\n");
 
 Console.WriteLine("Done!");
 Console.WriteLine();

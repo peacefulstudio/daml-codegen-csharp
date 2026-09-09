@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Contractkeys;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.ContractKeys;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
@@ -43,7 +43,7 @@ public class SerializeThenReadRecordRoundTripTests
     /// test and forces <c>TypeCorners</c> into the round-trip theory.
     /// </summary>
     private const string TypeCornersReaderGap =
-        "CLR type 'Daml.Codegen.Testing.Conformance.Richtypes.Box`1[System.String]' at "
+        "CLR type 'Daml.Codegen.Testing.Conformance.RichTypes.Box`1[System.String]' at "
         + "'TypeCorners.boxedText' lies outside the Daml type mapping";
 
     public static TheoryData<string> RoundTrippableCorpusEntries =>

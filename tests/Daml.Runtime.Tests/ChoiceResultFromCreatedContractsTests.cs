@@ -98,7 +98,7 @@ public class ChoiceResultFromCreatedContractsTests
             }
             if (matches0.Count > 1)
             {
-                return new ExerciseOutcome<ExecuteSwapResult>.Many(matches0.Count, matches0);
+                return new ExerciseOutcome<ExecuteSwapResult>.Many(EquatableArray.Create(matches0));
             }
             if (matches1.Count == 0)
             {
@@ -106,11 +106,11 @@ public class ChoiceResultFromCreatedContractsTests
             }
             if (matches1.Count > 1)
             {
-                return new ExerciseOutcome<ExecuteSwapResult>.Many(matches1.Count, matches1);
+                return new ExerciseOutcome<ExecuteSwapResult>.Many(EquatableArray.Create(matches1));
             }
             if (matches2.Count > 1)
             {
-                return new ExerciseOutcome<ExecuteSwapResult>.Many(matches2.Count, matches2);
+                return new ExerciseOutcome<ExecuteSwapResult>.Many(EquatableArray.Create(matches2));
             }
 
             return new ExerciseOutcome<ExecuteSwapResult>.One(new ExecuteSwapResult(
@@ -315,7 +315,7 @@ public class ChoiceResultFromCreatedContractsTests
             }
             if (matches0.Count > 1)
             {
-                return new ExerciseOutcome<SplitResult>.Many(matches0.Count, matches0);
+                return new ExerciseOutcome<SplitResult>.Many(EquatableArray.Create(matches0));
             }
             if (matches1.Count == 0)
             {
@@ -323,7 +323,7 @@ public class ChoiceResultFromCreatedContractsTests
             }
             if (matches1.Count > 1)
             {
-                return new ExerciseOutcome<SplitResult>.Many(matches1.Count, matches1);
+                return new ExerciseOutcome<SplitResult>.Many(EquatableArray.Create(matches1));
             }
 
             return new ExerciseOutcome<SplitResult>.One(new SplitResult(

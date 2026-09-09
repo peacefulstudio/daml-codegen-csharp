@@ -75,8 +75,8 @@ public class ChoiceEmitterByKeyCommandTests
             Modules = [module],
             DependencyReferences = [],
         };
-        var options = new CodeGenOptions { RootNamespace = "Test.Package" };
-        var context = PackageEmitContext.ForPackage(package, options);
+        var options = new CodeGenOptions { NamespacePrefix = "Test.Package" };
+        var context = PackageEmitContext.ForPackage(package, options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var party = new PartyAnalysis();
@@ -109,7 +109,7 @@ public class ChoiceEmitterByKeyCommandTests
 
         emitted.SiblingTypes.Should().Contain("public static ExerciseCommand SpawnCommand(");
         emitted.RecordBody.Should().Contain("public static ExerciseByKeyCommand SpawnByKeyCommand(");
-        emitted.RecordBody.Should().Contain("global::Test.Package.VaultKey key)");
+        emitted.RecordBody.Should().Contain("global::Test.Package.Main.VaultKey key)");
         emitted.RecordBody.Should().Contain("key.ToRecord(),");
     }
 

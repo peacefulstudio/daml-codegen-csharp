@@ -6,33 +6,26 @@ using System.Collections.ObjectModel;
 namespace Daml.Runtime.Contracts;
 
 /// <summary>
-/// Null guards and defensive copies for the collection-typed members of the event records
-/// in this namespace and of the <c>Daml.Runtime.Stdlib</c> value types. The <c>Copy</c>
-/// overloads materialize, mirroring what
-/// <see cref="Data.DamlList"/>, <see cref="Data.DamlTextMap"/> and <see cref="Data.DamlGenMap"/>
-/// already do for the value shapes; <see cref="Borrow{T}"/> only checks, keeping the
-/// producer's own instance.
+/// Null guards and defensive copies for the collection-typed members that still take a caller's
+/// <see cref="IReadOnlyList{T}"/>, <see cref="IEnumerable{T}"/> or
+/// <see cref="IReadOnlyDictionary{TKey,TValue}"/>: <see cref="CaughtException.Metadata"/>,
+/// <see cref="Outcomes.ExerciseOutcome{T}.DamlError.Metadata"/>, and
+/// the emitter-facing command and value shapes — <c>Commands.CommandsSubmission</c>,
+/// <see cref="Data.DamlRecord"/> and the <c>Daml.Runtime.Stdlib</c> collection types — that
+/// generated code is compiled against. The event records' list members carry
+/// <see cref="EquatableArray{T}"/> instead, which copies at construction and has no <c>null</c>
+/// state, so they need nothing from here.
 /// </summary>
 /// <remarks>
-/// <see cref="IReadOnlyList{T}"/> and <see cref="IReadOnlyDictionary{TKey,TValue}"/> are
-/// read-only <em>views</em>, not immutable collections: a producer that keeps its backing
-/// <see cref="List{T}"/> can mutate it after handing it over. On the records whose equality
-/// and hash codes read the contents, that would silently change an already-computed hash and
-/// make the value unfindable in a set or dictionary that already holds it, so those copy at
-/// every entry point — the primary constructor and each <c>init</c> accessor, so <c>with</c>
-/// expressions are covered too. The records that keep record-synthesized equality compare
-/// their collection member by reference, so no hash can be corrupted and copying would
-/// instead narrow their equality to near-identity while allocating on the read path; those
-/// borrow, and their doc-comments state the caller's obligation not to mutate.
+/// A read-only interface is a view, not an immutable collection: a producer that keeps its
+/// backing collection can mutate it after handing it over, and on a record whose equality and
+/// hash code read the contents that would silently change an already-computed hash and make the
+/// value unfindable in a set or dictionary that already holds it. Every caller here therefore
+/// copies at each entry point — every constructor and <c>init</c> accessor, so <c>with</c>
+/// expressions are covered too.
 /// </remarks>
 internal static class EventCollections
 {
-    internal static IReadOnlyList<T> Borrow<T>(IReadOnlyList<T> values, string parameterName)
-    {
-        ArgumentNullException.ThrowIfNull(values, parameterName);
-        return values;
-    }
-
     internal static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values, string parameterName)
     {
         ArgumentNullException.ThrowIfNull(values, parameterName);

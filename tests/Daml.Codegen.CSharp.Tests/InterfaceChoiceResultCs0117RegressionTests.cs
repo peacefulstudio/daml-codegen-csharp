@@ -230,8 +230,6 @@ public class InterfaceChoiceResultCs0117RegressionTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
         var files = CreateGenerator(options).Generate(dar);

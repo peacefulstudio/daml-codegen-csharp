@@ -39,6 +39,30 @@ public class CommandTypesTests
             new(new Identifier("test-package", "Test.Module", "TestInterfaceMarker"), DamlTypeKind.Interface, "test-package-name");
     }
 
+    private sealed class TraversalCountingList<T>(T value) : IReadOnlyList<T>
+    {
+        public int Traversals { get; private set; }
+
+        public int Count => 1;
+
+        public T this[int index]
+        {
+            get
+            {
+                Traversals++;
+                return value;
+            }
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            Traversals++;
+            return Enumerable.Repeat(value, 1).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     [Fact]
     public void CreateCommand_should_have_correct_command_type()
     {
@@ -753,6 +777,243 @@ public class CommandTypesTests
         submission.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
         submission.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
         submission.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_not_observe_mutation_of_the_source_commands_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var commands = new ICommand[] { command };
+        var submission = new CommandsSubmission(commands);
+
+        commands[0] = new CreateCommand(
+            new Identifier("pkg", "Module", "Replaced"),
+            DamlRecord.Create());
+
+        submission.Commands.Should().ContainSingle().Which.Should().Be(command);
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_not_observe_mutation_of_the_source_actAs_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var actAs = new[] { new Party("Alice") };
+        var submission = new CommandsSubmission([command], ActAs: actAs);
+
+        actAs[0] = new Party("Mallory");
+
+        submission.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_not_observe_mutation_of_the_source_readAs_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var readAs = new[] { new Party("Bob") };
+        var submission = new CommandsSubmission([command], ReadAs: readAs);
+
+        readAs[0] = new Party("Mallory");
+
+        submission.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_not_observe_mutation_of_the_source_disclosed_contracts_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var disclosedContracts = new[] { disclosedContract };
+        var submission = new CommandsSubmission([command], DisclosedContracts: disclosedContracts);
+
+        disclosedContracts[0] = new DisclosedContract(
+            "contract-id-2",
+            new Identifier("pkg", "Module", "Template"),
+            "replacement-event-blob"u8.ToArray());
+
+        submission.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithActAs_should_not_observe_mutation_of_the_source_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var actAs = new[] { new Party("Alice") };
+        var submission = CommandsSubmission.Single(command).WithActAs(actAs);
+
+        actAs[0] = new Party("Mallory");
+
+        submission.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithReadAs_should_not_observe_mutation_of_the_source_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var readAs = new[] { new Party("Bob") };
+        var submission = CommandsSubmission.Single(command).WithReadAs(readAs);
+
+        readAs[0] = new Party("Mallory");
+
+        submission.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
+    }
+
+    [Fact]
+    public void CommandsSubmission_WithDisclosedContracts_should_not_observe_mutation_of_the_source_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+        var disclosedContracts = new[] { disclosedContract };
+        var submission = CommandsSubmission.Single(command).WithDisclosedContracts(disclosedContracts);
+
+        disclosedContracts[0] = new DisclosedContract(
+            "contract-id-2",
+            new Identifier("pkg", "Module", "Template"),
+            "replacement-event-blob"u8.ToArray());
+
+        submission.DisclosedContracts.Should().ContainSingle().Which.Should().Be(disclosedContract);
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_copy_each_list_exactly_once_on_primary_construction()
+    {
+        var commands = new TraversalCountingList<ICommand>(new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create()));
+        var actAs = new TraversalCountingList<Party>(new Party("Alice"));
+        var readAs = new TraversalCountingList<Party>(new Party("Bob"));
+        var disclosedContracts = new TraversalCountingList<DisclosedContract>(new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray()));
+
+        var submission = new CommandsSubmission(
+            commands,
+            ActAs: actAs,
+            ReadAs: readAs,
+            DisclosedContracts: disclosedContracts);
+
+        commands.Traversals.Should().Be(1);
+        actAs.Traversals.Should().Be(1);
+        readAs.Traversals.Should().Be(1);
+        disclosedContracts.Traversals.Should().Be(1);
+        submission.Commands.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_copy_each_list_exactly_once_through_a_with_expression()
+    {
+        var submission = CommandsSubmission.Single(new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create()));
+        var actAs = new TraversalCountingList<Party>(new Party("Alice"));
+        var readAs = new TraversalCountingList<Party>(new Party("Bob"));
+
+        var replaced = submission with { ActAs = actAs, ReadAs = readAs };
+
+        actAs.Traversals.Should().Be(1);
+        readAs.Traversals.Should().Be(1);
+        replaced.ActAs.Should().ContainSingle().Which.Should().Be(new Party("Alice"));
+        replaced.ReadAs.Should().ContainSingle().Which.Should().Be(new Party("Bob"));
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_reject_a_null_command_list()
+    {
+        var construct = () => new CommandsSubmission(null!);
+
+        construct.Should().Throw<ArgumentNullException>()
+            .WithParameterName("Commands");
+    }
+
+    [Fact]
+    public void CommandsSubmission_equality_should_compare_its_lists_element_by_element_across_allocations()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var disclosedContract = new DisclosedContract(
+            "contract-id-1",
+            new Identifier("pkg", "Module", "Template"),
+            "created-event-blob"u8.ToArray());
+
+        var left = new CommandsSubmission(
+            [command],
+            ActAs: [new Party("Alice")],
+            ReadAs: [new Party("Bob")],
+            DisclosedContracts: [disclosedContract]);
+        var right = new CommandsSubmission(
+            [command],
+            ActAs: [new Party("Alice")],
+            ReadAs: [new Party("Bob")],
+            DisclosedContracts: [disclosedContract]);
+
+        left.Should().Be(right);
+        left.GetHashCode().Should().Be(right.GetHashCode());
+    }
+
+    [Fact]
+    public void CommandsSubmission_equality_should_survive_two_submissions_sharing_one_source_array()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var commands = new ICommand[] { command };
+        var actAs = new[] { new Party("Alice") };
+
+        var left = new CommandsSubmission(commands, ActAs: actAs);
+        var right = new CommandsSubmission(commands, ActAs: actAs);
+
+        left.Should().Be(right);
+    }
+
+    [Fact]
+    public void CommandsSubmission_equality_should_distinguish_absent_parties_from_an_empty_party_list()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+
+        var absent = new CommandsSubmission([command]);
+        var empty = new CommandsSubmission([command], ActAs: []);
+
+        absent.Should().NotBe(empty);
+    }
+
+    [Fact]
+    public void CommandsSubmission_should_stay_findable_in_a_hash_set_after_the_source_party_array_mutates()
+    {
+        var command = new CreateCommand(
+            new Identifier("pkg", "Module", "Template"),
+            DamlRecord.Create());
+        var actAs = new[] { new Party("Alice") };
+        var submission = new CommandsSubmission([command], ActAs: actAs);
+        var submissions = new HashSet<CommandsSubmission> { submission };
+
+        actAs[0] = new Party("Mallory");
+
+        submissions.Contains(submission).Should().BeTrue();
+        submissions.Contains(new CommandsSubmission([command], ActAs: [new Party("Alice")]))
+            .Should().BeTrue();
     }
 
     [Fact]
