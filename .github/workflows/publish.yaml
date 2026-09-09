@@ -90,7 +90,7 @@ jobs:
           user: ${{ secrets.NUGET_USER }}
       - name: Build, test, pack & push
         if: steps.ver.outputs.should_publish == 'true' && inputs.dry_run != true
-        uses: peacefulstudio/github-actions/.github/actions/csharp-publish@v1
+        uses: peacefulstudio/github-actions/.github/actions/csharp-publish@v2
         with:
           api-key: ${{ steps.login.outputs.NUGET_API_KEY }}
           version_override: ${{ steps.ver.outputs.version }}
