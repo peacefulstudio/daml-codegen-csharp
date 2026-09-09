@@ -88,6 +88,31 @@ public sealed class AcsSnapshotEntryTests
     }
 
     [Fact]
+    public void StreamError_carries_the_error_id_the_transport_parsed()
+    {
+        var error = new AcsSnapshotEntry<TestTemplate>.StreamError(
+            10,
+            "the stream authorization is stale",
+            DamlErrorCategory.ContentionOnSharedResources,
+            "STALE_STREAM_AUTHORIZATION");
+
+        error.ErrorId.Should().Be(
+            "STALE_STREAM_AUTHORIZATION",
+            "a snapshot that faults terminally leaves the caller nothing to classify the fault by unless "
+            + "the participant's error id survives to this entry");
+    }
+
+    [Fact]
+    public void StreamError_leaves_the_error_id_null_when_no_structured_error_was_attached()
+    {
+        var error = new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
+
+        error.ErrorId.Should().BeNull(
+            "a transport that decoded no structured error has to say so, rather than invent a sentinel "
+            + "a consumer would then have to recognise as meaning nothing was parsed");
+    }
+
+    [Fact]
     public void StreamError_with_same_payload_should_be_value_equal()
     {
         var a = new AcsSnapshotEntry<TestTemplate>.StreamError(14, "unavailable");
@@ -102,7 +127,7 @@ public sealed class AcsSnapshotEntryTests
         var payload = new TestTemplate("alice");
         var offset = LedgerOffset.At(4);
         var synchronizerId = new SynchronizerId("sync");
-        IReadOnlyList<Party> witnessParties = [new Party("alice")];
+        EquatableArray<Party> witnessParties = [new Party("alice")];
 
         var entry = new AcsSnapshotEntry<TestTemplate>.Created(contractId, payload, null, offset, synchronizerId, witnessParties);
 
@@ -140,7 +165,9 @@ public sealed class AcsSnapshotEntryTests
         var act = () => new AcsSnapshotEntry<TestTemplate>.Unclassified(
             LedgerOffset.At(7), UnclassifiedKind.DecodeFailure, "ACTIVE_CONTRACT");
 
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("An Unclassified snapshot row with the enumerated Kind 'DecodeFailure' must not carry a RawKind; RawKind is populated only for Unknown.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -149,7 +176,9 @@ public sealed class AcsSnapshotEntryTests
         var act = () => new AcsSnapshotEntry<TestTemplate>.Unclassified(
             LedgerOffset.At(7), UnclassifiedKind.Unknown, null);
 
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("An Unclassified snapshot row with Kind Unknown must carry the transport's raw descriptor in RawKind.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -171,7 +200,9 @@ public sealed class AcsSnapshotEntryTests
             null, UnclassifiedKind.DecodeFailure, "ACTIVE_CONTRACT");
 
         act.Should().Throw<ArgumentException>(
-            "widening Offset to a nullable must not relax the Kind and RawKind invariant: an enumerated kind carrying a raw descriptor stays a construction error");
+            "widening Offset to a nullable must not relax the Kind and RawKind invariant: an enumerated kind carrying a raw descriptor stays a construction error")
+            .WithMessage("An Unclassified snapshot row with the enumerated Kind 'DecodeFailure' must not carry a RawKind; RawKind is populated only for Unknown.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -181,7 +212,9 @@ public sealed class AcsSnapshotEntryTests
             null, UnclassifiedKind.Unknown, null);
 
         act.Should().Throw<ArgumentException>(
-            "widening Offset to a nullable must not relax the Kind and RawKind invariant: Unknown without the transport's raw descriptor stays a construction error");
+            "widening Offset to a nullable must not relax the Kind and RawKind invariant: Unknown without the transport's raw descriptor stays a construction error")
+            .WithMessage("An Unclassified snapshot row with Kind Unknown must carry the transport's raw descriptor in RawKind.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -260,6 +293,69 @@ public sealed class AcsSnapshotEntryTests
             LedgerKeyHash,
             "Contract is what the snapshot bridge hands back, so a hash dropped here is unreachable "
             + "no matter what the transport read off the wire");
+    }
+
+    [Fact]
+    public void ToActiveContract_carries_the_rows_last_update_offset_and_synchronizer()
+    {
+        var created = new AcsSnapshotEntry<DecodableTemplate>.Created(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            null,
+            LedgerOffset.At(4),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var active = created.ToActiveContract();
+
+        active.Contract.Id.Value.Should().Be("c1");
+        active.LastUpdateOffset.Should().Be(
+            LedgerOffset.At(4),
+            "the carrier exists to keep the row's provenance reachable after the projection");
+        active.SynchronizerId.Should().Be(new SynchronizerId("sync"));
+    }
+
+    [Fact]
+    public void ToActiveContract_carries_the_decoded_key_and_its_hash_alongside_the_provenance()
+    {
+        var created = new AcsSnapshotEntry<DecodableTemplate>.Created(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            new ContractKey(
+                DamlRecord.Create(new DamlField("owner", new DamlParty("alice"))),
+                DecodableTemplate.TemplateId)
+            {
+                KeyHash = LedgerKeyHash,
+            },
+            LedgerOffset.At(4),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var active = created.ToActiveContract<DecodableTemplate, Party>();
+
+        active.Contract.Key.Value.Should().Be(new Party("alice"));
+        active.Contract.Key.Hash.Should().Be(LedgerKeyHash);
+        active.LastUpdateOffset.Should().Be(LedgerOffset.At(4));
+        active.SynchronizerId.Should().Be(new SynchronizerId("sync"));
+    }
+
+    [Fact]
+    public void ToActiveContract_rejects_a_keyed_projection_of_a_row_carrying_no_key()
+    {
+        var created = new AcsSnapshotEntry<DecodableTemplate>.Created(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            null,
+            LedgerOffset.At(4),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var projecting = () => created.ToActiveContract<DecodableTemplate, Party>();
+
+        projecting.Should().Throw<InvalidOperationException>(
+            "wrapping the projection in a provenance carrier must not soften the keyed shape's "
+            + "own failure: a row with no key still has to fail loudly rather than reach a caller "
+            + "through a shape whose type says the key is present");
     }
 
     private sealed record DecodableTemplate(Party Owner)

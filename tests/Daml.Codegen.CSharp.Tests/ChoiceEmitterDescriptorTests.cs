@@ -49,10 +49,10 @@ public class ChoiceEmitterDescriptorTests
         };
 
     private static PackageEmitContext Context(DamlPackage package) =>
-        PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
 
     private static ChoiceEmitter Emitter(PackageEmitContext context, StubResolver resolver) =>
-        new(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        new(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
 
     private static string EmitDescriptors(DamlTemplate template, DamlPackage package, StubResolver? resolver = null)
     {
@@ -197,7 +197,9 @@ public class ChoiceEmitterDescriptorTests
             ],
             DependencyReferences = [],
         };
-        var context = Context(package);
+        var context = PackageEmitContext
+            .ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true)
+            .Single(moduleContext => moduleContext.Module.Name == "Agreement");
         var emitter = Emitter(context, new StubResolver());
         var choice = Choice("Expire", new DamlTypeRef(LocalPackageId, "Agreement", "Expire"), new DamlPrimitiveType(DamlPrimitive.Unit));
 

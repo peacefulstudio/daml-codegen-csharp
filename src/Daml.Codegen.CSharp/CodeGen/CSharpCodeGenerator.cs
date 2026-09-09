@@ -18,6 +18,8 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </param>
 public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<CSharpCodeGenerator>? logger = null)
 {
+    private const string ContractIdentifiersClassName = "ContractIdentifiers";
+
     private readonly ILogger _log = logger ?? NullLogger<CSharpCodeGenerator>.Instance;
 
     private readonly Regex? _rootFilter = options.RootFilter is not null
@@ -27,23 +29,30 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
     private readonly PartyAnalysis _party = new();
 
     /// <summary>
-    /// Generates C# code for all types in the DAR.
+    /// Generates C# code for all types in the DAR. Every module of every emitted package is
+    /// mapped to its namespace first and the map is checked as a whole — two modules sharing
+    /// a namespace, or a namespace spelled like an emitted type — before any file is produced.
     /// </summary>
     public IReadOnlyList<GeneratedFile> Generate(IDarSource dar)
     {
         var files = new List<GeneratedFile>();
 
-        var resolver = new DarCrossPackageResolver(dar, _log);
+        var resolver = new DarCrossPackageResolver(dar, options, _log);
 
-        files.AddRange(GeneratePackage(resolver, dar.MainPackage));
+        var mainModules = PackageEmitContext.ForPackage(dar.MainPackage, options, isMainPackage: true, logger);
+        var dependencyModules = options.IncludeDependencies
+            ? dar.Dependencies.Select(dep => PackageEmitContext.ForPackage(dep, options, isMainPackage: false, logger)).ToList()
+            : [];
 
-        if (options.IncludeDependencies)
+        ModuleNamespaceGuards.Check(
+            mainModules.Concat(dependencyModules.SelectMany(modules => modules)).Select(EmittedModuleOf).ToList());
+
+        files.AddRange(GeneratePackage(resolver, mainModules));
+
+        foreach (var (dep, modules) in dar.Dependencies.Zip(dependencyModules))
         {
-            foreach (var dep in dar.Dependencies)
-            {
-                LogGeneratingDependency(_log, dep.Name);
-                files.AddRange(GeneratePackage(resolver, dep));
-            }
+            LogGeneratingDependency(_log, dep.Name);
+            files.AddRange(GeneratePackage(resolver, modules));
         }
 
         if (options.GenerateProjectFile)
@@ -77,11 +86,51 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
     private static bool IsPlaceholderPackageName(string packageName) => StdlibPackages.IsPlaceholderPackageName(packageName);
 
     /// <summary>
-    /// Generates C# code for a single package.
+    /// Whether <paramref name="typeName"/> in <paramref name="moduleName"/> passes
+    /// <see cref="CodeGenOptions.RootFilter"/> — the single place that answers this question, so
+    /// every file kind (template, its nested choice-argument types, interface,
+    /// <c>ContractIdentifiers</c> entry) is filtered by the same rule instead of by copies that
+    /// could drift apart. An absent filter admits everything.
     /// </summary>
-    private IEnumerable<GeneratedFile> GeneratePackage(ICrossPackageResolver resolver, DamlPackage package)
+    private bool IsIncludedByRootFilter(string moduleName, string typeName) =>
+        _rootFilter is null || _rootFilter.IsMatch($"{moduleName}:{typeName}");
+
+    private IReadOnlyList<DamlTemplate> IncludedTemplates(DamlModule module) =>
+        module.Templates.Where(template => IsIncludedByRootFilter(module.Name, template.Name)).ToList();
+
+    private bool EmitsContractIdentifiers(DamlModule module) =>
+        options.GenerateContractIdentifiers && IncludedTemplates(module).Count > 0;
+
+    private EmittedModule EmittedModuleOf(PackageEmitContext context)
     {
-        var context = PackageEmitContext.ForPackage(package, options, logger);
+        var topLevelTypeNames = new HashSet<string>(context.TopLevelTypeNames, StringComparer.Ordinal);
+        if (EmitsContractIdentifiers(context.Module))
+        {
+            topLevelTypeNames.Add(ContractIdentifiersClassName);
+        }
+        return new EmittedModule(context.Package.Name, context.Module.Name, context.Namespace, topLevelTypeNames);
+    }
+
+    /// <summary>
+    /// Generates C# code for a single package, one module at a time: every file of a module
+    /// is written into that module's namespace and directory.
+    /// </summary>
+    private IEnumerable<GeneratedFile> GeneratePackage(ICrossPackageResolver resolver, IReadOnlyList<PackageEmitContext> moduleContexts)
+    {
+        foreach (var context in moduleContexts)
+        {
+            foreach (var file in GenerateModule(resolver, context))
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private IEnumerable<GeneratedFile> GenerateModule(ICrossPackageResolver resolver, PackageEmitContext context)
+    {
+        var package = context.Package;
+        var module = context.Module;
+        var moduleNamespace = context.Namespace;
         var mapper = new DamlTypeMapper(context, resolver);
         var choiceEmitter = new ChoiceEmitter(context, resolver, options, mapper, _party);
         var enumEmitter = new EnumEmitter(context, options);
@@ -89,133 +138,106 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
         var recordSerialization = new RecordSerializationEmitter(context, resolver, options, mapper);
         var recordEmitter = new RecordEmitter(context, options, recordSerialization);
         var interfaceEmitter = new InterfaceEmitter(context, mapper, resolver, choiceEmitter, options);
-        var rootNamespace = context.RootNamespace;
         var submissionExtensions = new SubmissionExtensionsEmitter(context, options, _party);
         var templateEmitter = new TemplateEmitter(context, resolver, recordSerialization, choiceEmitter, submissionExtensions, options, logger);
 
-        var allTemplateNames = package.Modules
-            .SelectMany(m => m.Templates)
-            .Select(t => t.Name)
-            .ToHashSet();
+        var templateNames = module.Templates.Select(t => t.Name).ToHashSet();
+        var dataTypesByName = module.DataTypes
+            .Where(dt => dt.Definition is DamlRecordDefinition)
+            .ToDictionary(dt => dt.Name, dt => (DamlRecordDefinition)dt.Definition!);
 
-        foreach (var module in package.Modules)
+        foreach (var template in module.Templates)
         {
-            var dataTypesByName = module.DataTypes
-                .Where(dt => dt.Definition is DamlRecordDefinition)
-                .ToDictionary(dt => dt.Name, dt => (DamlRecordDefinition)dt.Definition!);
-
-            foreach (var template in module.Templates)
+            if (!IsIncludedByRootFilter(module.Name, template.Name))
             {
-                if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{template.Name}"))
-                {
-                    LogSkippingTemplate(_log, module.Name, template.Name);
-                    continue;
-                }
-
-                if (!dataTypesByName.TryGetValue(template.Name, out var recordDef))
-                {
-                    var sameNamed = module.DataTypes.FirstOrDefault(dt => dt.Name == template.Name);
-                    var cause = sameNamed is null
-                        ? "no data type of that name exists in the module"
-                        : $"the same-named data type is a {sameNamed.Definition.GetType().Name}";
-
-                    throw new CodegenException(
-                        $"Template '{module.Name}:{template.Name}' has no same-named record definition in its module: {cause}. " +
-                        "An LF template payload is always a same-named record carrying the template's fields, so " +
-                        "this means the model is malformed and no payload type can be emitted.");
-                }
-
-                var code = GenerateTemplate(context, templateEmitter, package, module, template, recordDef.Fields);
-                var path = RelativeFilePath(rootNamespace, $"{EmitterHelpers.SanitizeIdentifier(template.Name)}.cs");
-
-                yield return GeneratedFile.Text(path, code);
+                LogSkippingTemplate(_log, module.Name, template.Name);
+                continue;
             }
 
-            foreach (var dataType in module.DataTypes)
+            if (!dataTypesByName.TryGetValue(template.Name, out var recordDef))
             {
-                if (allTemplateNames.Contains(dataType.Name))
-                {
-                    continue;
-                }
+                var sameNamed = module.DataTypes.FirstOrDefault(dt => dt.Name == template.Name);
+                var cause = sameNamed is null
+                    ? "no data type of that name exists in the module"
+                    : $"the same-named data type is a {sameNamed.Definition.GetType().Name}";
 
-                if (context.LocalInterfaceQualifiedNames.Contains($"{module.Name}:{dataType.Name}"))
-                {
-                    continue;
-                }
-
-                if (context.LocalChoiceArgToTemplate.ContainsKey($"{module.Name}:{dataType.Name}"))
-                {
-                    continue;
-                }
-
-                var code = GenerateDataType(context, recordEmitter, enumEmitter, variantEmitter, module, dataType);
-                var path = RelativeFilePath(rootNamespace, $"{EmitterHelpers.SanitizeIdentifier(dataType.Name)}.cs");
-
-                yield return GeneratedFile.Text(path, code);
+                throw new CodegenException(
+                    $"Template '{module.Name}:{template.Name}' has no same-named record definition in its module: {cause}. " +
+                    "An LF template payload is always a same-named record carrying the template's fields, so " +
+                    "this means the model is malformed and no payload type can be emitted.");
             }
 
-            foreach (var template in module.Templates)
+            var code = GenerateTemplate(context, templateEmitter, package, module, template, recordDef.Fields);
+            var path = RelativeFilePath(moduleNamespace, $"{EmitterHelpers.SanitizeIdentifier(template.Name)}.cs");
+
+            yield return GeneratedFile.Text(path, code);
+        }
+
+        foreach (var dataType in module.DataTypes)
+        {
+            if (templateNames.Contains(dataType.Name))
             {
-                if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{template.Name}"))
-                {
-                    continue;
-                }
-
-                foreach (var choice in template.Choices)
-                {
-                    if (choice.ArgumentType is DamlTypeRef typeRef &&
-                        context.DataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var argDataType) &&
-                        argDataType.Definition is DamlRecordDefinition)
-                    {
-                        var code = GenerateNestedChoiceArgumentType(context, templateEmitter,
-                            template, choice, argDataType);
-                        var path = RelativeFilePath(
-                            rootNamespace,
-                            $"{EmitterHelpers.SanitizeIdentifier(template.Name)}.{EmitterHelpers.SanitizeIdentifier(choice.Name)}.cs");
-
-                        yield return GeneratedFile.Text(path, code);
-                    }
-                }
+                continue;
             }
 
-            foreach (var iface in module.Interfaces)
+            if (context.LocalInterfaceQualifiedNames.Contains($"{module.Name}:{dataType.Name}"))
             {
-                if (_rootFilter is not null && !_rootFilter.IsMatch($"{module.Name}:{iface.Name}"))
+                continue;
+            }
+
+            if (context.LocalChoiceArgToTemplate.ContainsKey($"{module.Name}:{dataType.Name}"))
+            {
+                continue;
+            }
+
+            var code = GenerateDataType(context, recordEmitter, enumEmitter, variantEmitter, module, dataType);
+            var path = RelativeFilePath(moduleNamespace, $"{EmitterHelpers.SanitizeIdentifier(dataType.Name)}.cs");
+
+            yield return GeneratedFile.Text(path, code);
+        }
+
+        foreach (var template in module.Templates)
+        {
+            if (!IsIncludedByRootFilter(module.Name, template.Name))
+            {
+                continue;
+            }
+
+            foreach (var choice in template.Choices)
+            {
+                if (choice.ArgumentType is DamlTypeRef typeRef &&
+                    context.DataTypes.TryGetValue($"{typeRef.Module}:{typeRef.Name}", out var argDataType) &&
+                    argDataType.Definition is DamlRecordDefinition)
                 {
-                    LogSkippingInterface(_log, module.Name, iface.Name);
-                    continue;
+                    var code = GenerateNestedChoiceArgumentType(context, templateEmitter,
+                        template, choice, argDataType);
+                    var path = RelativeFilePath(
+                        moduleNamespace,
+                        $"{EmitterHelpers.SanitizeIdentifier(template.Name)}.{EmitterHelpers.SanitizeIdentifier(choice.Name)}.cs");
+
+                    yield return GeneratedFile.Text(path, code);
                 }
-
-                var code = GenerateInterface(context, interfaceEmitter, package, module, iface);
-                var path = RelativeFilePath(rootNamespace, $"{context.LocalInterfaceMarkerNames[$"{module.Name}:{iface.Name}"]}.cs");
-
-                yield return GeneratedFile.Text(path, code);
             }
         }
 
-        if (options.GenerateContractIdentifiers)
+        foreach (var iface in module.Interfaces)
         {
-            var allTemplates = package.Modules
-                .SelectMany(m => m.Templates.Select(t => (Module: m, Template: t)))
-                .Where(x => _rootFilter is null || _rootFilter.IsMatch($"{x.Module.Name}:{x.Template.Name}"))
-                .ToList();
-
-            if (allTemplates.Count > 0)
+            if (!IsIncludedByRootFilter(module.Name, iface.Name))
             {
-                var identifiersFile = GenerateContractIdentifiersFile(allTemplates, rootNamespace);
-                yield return identifiersFile;
+                LogSkippingInterface(_log, module.Name, iface.Name);
+                continue;
             }
-        }
-    }
 
-    /// <summary>
-    /// Gets the base module name (first component) from a full module name.
-    /// e.g., "Markets.MarketMembershipRequest" -> "Markets"
-    /// </summary>
-    private static string GetBaseModuleName(string moduleName)
-    {
-        var dotIndex = moduleName.IndexOf('.');
-        return dotIndex > 0 ? moduleName[..dotIndex] : moduleName;
+            var code = GenerateInterface(context, interfaceEmitter, package, module, iface);
+            var path = RelativeFilePath(moduleNamespace, $"{context.LocalInterfaceMarkerNames[$"{module.Name}:{iface.Name}"]}.cs");
+
+            yield return GeneratedFile.Text(path, code);
+        }
+
+        if (EmitsContractIdentifiers(module))
+        {
+            yield return GenerateContractIdentifiersFile(module, IncludedTemplates(module), moduleNamespace);
+        }
     }
 
     /// <summary>
@@ -228,7 +250,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
         DamlModule module,
         DamlTemplate template,
         IReadOnlyList<DamlFieldDefinition> fields) =>
-        EmitFile(context.RootNamespace, indent =>
+        EmitFile(context.Namespace, indent =>
         {
             RequireCommonNamespaces(indent);
             templateEmitter.WriteTemplateType(indent, package, module, template, fields);
@@ -244,7 +266,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
         VariantEmitter variantEmitter,
         DamlModule module,
         DamlDataType dataType) =>
-        EmitFile(context.RootNamespace, indent =>
+        EmitFile(context.Namespace, indent =>
         {
             RequireCommonNamespaces(indent);
 
@@ -271,17 +293,21 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
         DamlPackage package,
         DamlModule module,
         DamlInterface iface) =>
-        EmitFile(context.RootNamespace, indent =>
+        EmitFile(context.Namespace, indent =>
         {
             RequireCommonNamespaces(indent);
             interfaceEmitter.WriteInterfaceType(indent, package, module, iface);
         });
 
     /// <summary>
-    /// Generates the ContractIdentifiers helper class with fully qualified identifiers for all templates.
+    /// Generates the module's <c>ContractIdentifiers</c> helper class — fully qualified
+    /// identifiers for every template the module declares — written into the module's own
+    /// namespace and directory. A template belongs to exactly one module, so the bare
+    /// template names stay unambiguous within the class.
     /// </summary>
     private GeneratedFile GenerateContractIdentifiersFile(
-        IReadOnlyList<(DamlModule Module, DamlTemplate Template)> templates,
+        DamlModule module,
+        IReadOnlyList<DamlTemplate> templates,
         string moduleNamespace)
     {
         var content = EmitFile(moduleNamespace, indent =>
@@ -292,18 +318,18 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
             if (options.GenerateXmlDocs)
             {
                 indent.AppendLine("/// <summary>");
-                indent.AppendLine("/// Provides fully qualified contract identifiers for all templates in this package.");
+                indent.AppendLine("/// Provides fully qualified contract identifiers for all templates in this module.");
                 indent.AppendLine("/// These identifiers can be used for PQS queries.");
                 indent.AppendLine("/// </summary>");
             }
 
-            indent.AppendLine("public static class ContractIdentifiers");
+            indent.AppendLine($"public static class {ContractIdentifiersClassName}");
             indent.AppendLine("{");
             indent.Indent();
 
             for (int i = 0; i < templates.Count; i++)
             {
-                var (module, template) = templates[i];
+                var template = templates[i];
                 var templateClassName = EmitterHelpers.SanitizeIdentifier(template.Name);
 
                 if (options.GenerateXmlDocs)
@@ -326,15 +352,11 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
             indent.AppendLine("}");
         });
 
-        var lastDot = moduleNamespace.LastIndexOf('.');
-        var namespaceBesidePackageFolder = lastDot < 0 ? string.Empty : moduleNamespace[..lastDot];
-        var path = RelativeFilePath(namespaceBesidePackageFolder, "ContractIdentifiers.cs");
-
-        return GeneratedFile.Text(path, content);
+        return GeneratedFile.Text(RelativeFilePath(moduleNamespace, $"{ContractIdentifiersClassName}.cs"), content);
     }
 
     private static string RelativeFilePath(string dottedNamespace, string fileName) =>
-        dottedNamespace.Length == 0 ? fileName : $"{dottedNamespace.Replace('.', '/')}/{fileName}";
+        $"{dottedNamespace.Replace('.', '/')}/{fileName}";
 
     /// <summary>
     /// Generates a partial file with the choice argument type nested inside the template.
@@ -345,7 +367,7 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
         DamlTemplate template,
         DamlChoice choice,
         DamlDataType argDataType) =>
-        EmitFile(context.RootNamespace, indent =>
+        EmitFile(context.Namespace, indent =>
         {
             RequireCommonNamespaces(indent);
             templateEmitter.WriteNestedChoiceArgumentType(indent, template, choice, argDataType);

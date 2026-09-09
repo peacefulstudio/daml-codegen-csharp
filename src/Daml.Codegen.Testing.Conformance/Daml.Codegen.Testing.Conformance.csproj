@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Generated.regen.*/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Daml.Runtime\Daml.Runtime.csproj" />
     <ProjectReference Include="..\Daml.Ledger.Abstractions\Daml.Ledger.Abstractions.csproj" />
   </ItemGroup>

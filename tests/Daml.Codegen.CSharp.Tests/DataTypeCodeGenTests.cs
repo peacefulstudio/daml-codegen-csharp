@@ -17,13 +17,10 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_use_block_scoped_namespace_when_configured()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = false,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true
         };
 
         var module = new DamlModule
@@ -47,23 +44,19 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator(options);
 
-        // Act
         var files = generator.Generate(dar);
         var simpleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Simple.cs", StringComparison.Ordinal));
 
-        // Assert
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        // Block-scoped namespace has { } braces (uses root namespace from package)
-        code.Should().Contain("namespace Test.Package");
+        code.Should().Contain("namespace Test.Module");
         code.Should().Contain("{");
     }
 
     [Fact]
     public void Generate_should_include_nullable_enable_when_configured()
     {
-        // Arrange
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -85,11 +78,9 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
         var simpleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Simple.cs", StringComparison.Ordinal));
 
-        // Assert
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
@@ -131,13 +122,10 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_skip_json_serialization_using_when_disabled()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true
         };
 
         var module = new DamlModule
@@ -161,11 +149,9 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator(options);
 
-        // Act
         var files = generator.Generate(dar);
         var simpleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Simple.cs", StringComparison.Ordinal));
 
-        // Assert
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
@@ -177,16 +163,13 @@ public class DataTypeCodeGenTests
     #region Namespace and Identifier Tests
 
     [Fact]
-    public void Generate_should_use_custom_root_namespace_when_configured()
+    public void Generate_should_prefix_the_module_namespace_with_the_configured_prefix()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
-            RootNamespace = "Custom.Namespace"
+            NamespacePrefix = "Custom.Namespace"
         };
 
         var module = new DamlModule
@@ -210,22 +193,18 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator(options);
 
-        // Act
         var files = generator.Generate(dar);
         var simpleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("Simple.cs", StringComparison.Ordinal));
 
-        // Assert
         simpleFile.Should().NotBeNull();
         var code = simpleFile!.Content;
 
-        // When custom root namespace is specified, all types go into that namespace directly
-        code.Should().Contain("namespace Custom.Namespace;");
+        code.Should().Contain("namespace Custom.Namespace.Test.Module;");
     }
 
     [Fact]
     public void Generate_should_sanitize_identifier_with_csharp_keyword()
     {
-        // Arrange
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -234,7 +213,7 @@ public class DataTypeCodeGenTests
             [
                 new DamlDataType
                 {
-                    Name = "class", // C# keyword
+                    Name = "class",
                     Definition = new DamlRecordDefinition(
                     [
                         new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
@@ -247,10 +226,8 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert - The generated file should have @ prefix for the keyword
         files.Should().NotBeEmpty();
         var classFile = files.FirstOrDefault(f => f.RelativePath.Contains("@class.cs"));
         classFile.Should().NotBeNull();
@@ -261,7 +238,6 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_sanitize_identifier_starting_with_digit()
     {
-        // Arrange
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -270,7 +246,7 @@ public class DataTypeCodeGenTests
             [
                 new DamlDataType
                 {
-                    Name = "123Type", // Starts with digit
+                    Name = "123Type",
                     Definition = new DamlRecordDefinition(
                     [
                         new DamlFieldDefinition("value", new DamlPrimitiveType(DamlPrimitive.Text))
@@ -283,10 +259,8 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert
         files.Should().NotBeEmpty();
         var typeFile = files.FirstOrDefault(f => f.RelativePath.Contains("_u003123Type.cs"));
         typeFile.Should().NotBeNull();
@@ -297,7 +271,6 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_convert_field_names_to_pascal_case()
     {
-        // Arrange
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -321,11 +294,9 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
         var casingFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("CasingTest.cs", StringComparison.Ordinal));
 
-        // Assert
         casingFile.Should().NotBeNull();
         var code = casingFile!.Content;
 
@@ -337,7 +308,6 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_handle_tuple_field_names()
     {
-        // Arrange - tuple fields in Daml are named _1, _2, etc.
         var module = new DamlModule
         {
             Name = "Test.Module",
@@ -361,20 +331,16 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator();
 
-        // Act
         var files = generator.Generate(dar);
         var tupleFile = files.FirstOrDefault(f => f.RelativePath.EndsWith("TupleType.cs", StringComparison.Ordinal));
 
-        // Assert
         tupleFile.Should().NotBeNull();
         var code = tupleFile!.Content;
 
-        // Tuple fields _1, _2, _3 should become valid C# identifiers _1, _2, _3
         code.Should().Contain("string _1");
         code.Should().Contain("long _2");
         code.Should().Contain("bool _3");
 
-        // The ToRecord should reference the original field names
         code.Should().Contain("DamlField.Create(\"_1\"");
         code.Should().Contain("DamlField.Create(\"_2\"");
         code.Should().Contain("DamlField.Create(\"_3\"");
@@ -387,13 +353,10 @@ public class DataTypeCodeGenTests
     [Fact]
     public void Generate_should_filter_templates_with_root_filter()
     {
-        // Arrange
         var options = new CodeGenOptions
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             RootFilter = "Test\\.Module:Include.*"
         };
 
@@ -432,10 +395,8 @@ public class DataTypeCodeGenTests
         var dar = CreateTestDar(module);
         var generator = CreateGenerator(options);
 
-        // Act
         var files = generator.Generate(dar);
 
-        // Assert - Only IncludeThis template should be generated
         var templateFiles = files.Where(f => f.RelativePath.Contains("IncludeThis") || f.RelativePath.Contains("ExcludeThis")).ToList();
         templateFiles.Should().HaveCount(1);
         templateFiles[0].RelativePath.Should().Contain("IncludeThis");

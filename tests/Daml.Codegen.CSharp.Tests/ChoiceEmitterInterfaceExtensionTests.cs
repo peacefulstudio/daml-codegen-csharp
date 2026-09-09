@@ -30,7 +30,7 @@ public class ChoiceEmitterInterfaceExtensionTests
             Name = "test-package",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [],
+            Modules = [new DamlModule { Name = "Main", Templates = [], DataTypes = [], Interfaces = [] }],
             DependencyReferences = [],
         };
 
@@ -47,9 +47,9 @@ public class ChoiceEmitterInterfaceExtensionTests
 
     private static ChoiceEmitter Emitter()
     {
-        var context = PackageEmitContext.ForPackage(Package(), new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(Package(), new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var resolver = new StubResolver();
-        return new ChoiceEmitter(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        return new ChoiceEmitter(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
     }
 
     private static string EmitExtensions(DamlInterface iface)

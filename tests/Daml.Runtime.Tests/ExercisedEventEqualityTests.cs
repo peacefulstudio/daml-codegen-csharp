@@ -23,8 +23,6 @@ public class ExercisedEventEqualityTests
         var first = MakeExercised();
         var second = MakeExercised();
 
-        first.ActingParties.Should().NotBeSameAs(second.ActingParties);
-        first.WitnessParties.Should().NotBeSameAs(second.WitnessParties);
         first.Should().Be(second);
         first.GetHashCode().Should().Be(second.GetHashCode());
     }
@@ -118,8 +116,8 @@ public class ExercisedEventEqualityTests
     }
 
     private static ExercisedEvent MakeExercised(
-        IReadOnlyList<Party>? actingParties = null,
-        IReadOnlyList<Party>? witnessParties = null) =>
+        EquatableArray<Party>? actingParties = null,
+        EquatableArray<Party>? witnessParties = null) =>
         new(
             ContractId: "00c",
             TemplateId: new RuntimeIdentifier("test-pkg", "Acme.Foo", "FooBar"),

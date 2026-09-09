@@ -77,13 +77,13 @@ public class ChoiceEmitterContractIdExerciserTests
     {
         var template = fixture.Template;
         var package = Package(template);
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var resolver = new StubResolver();
-        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
 
         var structsSb = new StringBuilder();
         var structsIndent = new IndentWriter(structsSb) { CurrentTypeName = template.Name };
-        emitter.WriteChoiceResultStructs(structsIndent, template, "Test.Package");
+        emitter.WriteChoiceResultStructs(structsIndent, template);
 
         var exerciserSb = new StringBuilder();
         var exerciserIndent = new IndentWriter(exerciserSb) { CurrentTypeName = template.Name };

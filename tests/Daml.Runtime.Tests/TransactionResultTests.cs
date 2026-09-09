@@ -105,6 +105,24 @@ public class TransactionResultTests
     }
 
     [Fact]
+    public void All_returns_the_same_value_for_two_transactions_over_the_same_created_contracts()
+    {
+        var first = MakeTransaction(("00first", FooBar.TemplateId), ("00second", FooBar.TemplateId));
+        var second = MakeTransaction(("00first", FooBar.TemplateId), ("00second", FooBar.TemplateId));
+
+        first.All<FooBar>().Equals(second.All<FooBar>()).Should().BeTrue();
+    }
+
+    [Fact]
+    public void All_returns_a_different_value_when_a_contract_id_differs()
+    {
+        var first = MakeTransaction(("00first", FooBar.TemplateId), ("00second", FooBar.TemplateId));
+        var second = MakeTransaction(("00first", FooBar.TemplateId), ("00third", FooBar.TemplateId));
+
+        first.All<FooBar>().Equals(second.All<FooBar>()).Should().BeFalse();
+    }
+
+    [Fact]
     public void Match_helpers_ignore_package_id_difference()
     {
         // Same module/entity but a different package id (e.g. upgrade) should still match —
@@ -293,8 +311,8 @@ public class TransactionResultTests
     public void CreatedContract_equality_compares_structurally_equal_interface_ids_as_equal()
     {
         var holding = new RuntimeIdentifier("splice-pkg", "Splice.Api.Token.HoldingV1", "Holding");
-        var first = MakeCreated("00alice") with { InterfaceIds = new List<RuntimeIdentifier> { holding } };
-        var second = MakeCreated("00alice") with { InterfaceIds = new List<RuntimeIdentifier> { holding } };
+        var first = MakeCreated("00alice") with { InterfaceIds = [holding] };
+        var second = MakeCreated("00alice") with { InterfaceIds = [holding] };
 
         first.Should().Be(second);
         first.GetHashCode().Should().Be(second.GetHashCode());
@@ -502,15 +520,15 @@ public class TransactionResultTests
     {
         var first = MakeCreated("00alice") with
         {
-            WitnessParties = new List<Party> { new("alice"), new("bob") },
-            Signatories = new List<Party> { new("alice") },
-            Observers = new List<Party> { new("bob") },
+            WitnessParties = [new("alice"), new("bob")],
+            Signatories = [new("alice")],
+            Observers = [new("bob")],
         };
         var second = MakeCreated("00alice") with
         {
-            WitnessParties = new List<Party> { new("alice"), new("bob") },
-            Signatories = new List<Party> { new("alice") },
-            Observers = new List<Party> { new("bob") },
+            WitnessParties = [new("alice"), new("bob")],
+            Signatories = [new("alice")],
+            Observers = [new("bob")],
         };
 
         first.Should().Be(second);
@@ -556,7 +574,6 @@ public class TransactionResultTests
         var first = MakeTransaction(("00alice", FooBar.TemplateId));
         var second = MakeTransaction(("00alice", FooBar.TemplateId));
 
-        first.CreatedContracts.Should().NotBeSameAs(second.CreatedContracts);
         first.Should().Be(second);
         (first == second).Should().BeTrue();
         first.GetHashCode().Should().Be(second.GetHashCode());
@@ -583,8 +600,8 @@ public class TransactionResultTests
     [Fact]
     public void TransactionResult_equality_compares_archived_contract_ids_element_wise()
     {
-        var first = MakeResult(archived: new List<string> { "00a", "00b" });
-        var second = MakeResult(archived: new List<string> { "00a", "00b" });
+        var first = MakeResult(archived: ["00a", "00b"]);
+        var second = MakeResult(archived: ["00a", "00b"]);
 
         first.Should().Be(second);
         first.GetHashCode().Should().Be(second.GetHashCode());
@@ -602,10 +619,9 @@ public class TransactionResultTests
     [Fact]
     public void TransactionResult_equality_compares_ExercisedEvents_by_list_content_not_by_list_identity()
     {
-        var first = MakeResult(exercised: new List<ExercisedEvent> { MakeExercised("DoThing") });
-        var second = MakeResult(exercised: new List<ExercisedEvent> { MakeExercised("DoThing") });
+        var first = MakeResult(exercised: [MakeExercised("DoThing")]);
+        var second = MakeResult(exercised: [MakeExercised("DoThing")]);
 
-        first.ExercisedEvents.Should().NotBeSameAs(second.ExercisedEvents);
         first.ExercisedEvents[0].Should().NotBeSameAs(second.ExercisedEvents[0]);
         first.Should().Be(second);
         first.GetHashCode().Should().Be(second.GetHashCode());
@@ -614,9 +630,9 @@ public class TransactionResultTests
     [Fact]
     public void TransactionResult_equality_distinguishes_ExercisedEvents_lists_of_different_length()
     {
-        var first = MakeResult(exercised: new List<ExercisedEvent> { MakeExercised("DoThing") });
+        var first = MakeResult(exercised: [MakeExercised("DoThing")]);
         var second = MakeResult(
-            exercised: new List<ExercisedEvent> { MakeExercised("DoThing"), MakeExercised("DoThing") });
+            exercised: [MakeExercised("DoThing"), MakeExercised("DoThing")]);
 
         first.Should().NotBe(second);
     }
@@ -626,8 +642,8 @@ public class TransactionResultTests
     {
         var doThing = MakeExercised("DoThing");
         var doOther = MakeExercised("DoOther");
-        var first = MakeResult(exercised: new List<ExercisedEvent> { doThing, doOther });
-        var second = MakeResult(exercised: new List<ExercisedEvent> { doOther, doThing });
+        var first = MakeResult(exercised: [doThing, doOther]);
+        var second = MakeResult(exercised: [doOther, doThing]);
 
         first.Should().NotBe(second);
     }
@@ -722,6 +738,18 @@ public class TransactionResultTests
         act.Should().Throw<InvalidOperationException>();
     }
 
+    [Fact]
+    public void CreatedContract_stays_findable_in_a_set_after_the_producer_mutates_its_list()
+    {
+        var witnesses = new List<Party> { new("alice") };
+        var created = MakeCreated("00alice") with { WitnessParties = EquatableArray.Create(witnesses) };
+        var set = new HashSet<CreatedContract> { created };
+
+        witnesses.Add(new Party("mallory"));
+
+        set.Should().Contain(created);
+    }
+
     private static CreatedContract MakeCreated(
         string contractId,
         RuntimeIdentifier? templateId = null,
@@ -736,16 +764,16 @@ public class TransactionResultTests
             Observers: []);
 
     private static TransactionResult MakeResult(
-        IReadOnlyList<string>? archived = null,
-        IReadOnlyList<ExercisedEvent>? exercised = null) =>
+        EquatableArray<string> archived = default,
+        EquatableArray<ExercisedEvent> exercised = default) =>
         new(
             UpdateId: "u1",
             CompletionOffset: LedgerOffset.At(1),
             CreatedContracts: [],
-            ArchivedContractIds: archived ?? [],
+            ArchivedContractIds: archived,
             CommandId: null)
         {
-            ExercisedEvents = exercised ?? [],
+            ExercisedEvents = exercised,
         };
 
     private static ExercisedEvent MakeExercised(string choiceName) =>
@@ -770,7 +798,7 @@ public class TransactionResultTests
         return new TransactionResult(
             UpdateId: "u1",
             CompletionOffset: LedgerOffset.At(1),
-            CreatedContracts: contracts,
+            CreatedContracts: [.. contracts],
             ArchivedContractIds: [],
             CommandId: null);
     }
@@ -781,12 +809,12 @@ public class TransactionResultTests
         var contracts = new List<CreatedContract>();
         foreach (var (cid, tid, interfaceIds) in created)
         {
-            contracts.Add(MakeCreated(cid, tid) with { InterfaceIds = interfaceIds });
+            contracts.Add(MakeCreated(cid, tid) with { InterfaceIds = [.. interfaceIds] });
         }
         return new TransactionResult(
             UpdateId: "u1",
             CompletionOffset: LedgerOffset.At(1),
-            CreatedContracts: contracts,
+            CreatedContracts: [.. contracts],
             ArchivedContractIds: [],
             CommandId: null);
     }

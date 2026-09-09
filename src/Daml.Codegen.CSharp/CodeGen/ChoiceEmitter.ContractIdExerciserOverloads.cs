@@ -47,15 +47,15 @@ internal sealed partial class ChoiceEmitter
             WriteSubmissionParameterDocs(indent);
         }
 
-        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argument.ParameterType(templateClassName)} argument,");
         }
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter,");
         WriteSubmissionParametersAndCloseSignature(indent);
         indent.Dedent();
         indent.AppendLine("{");
@@ -196,17 +196,17 @@ internal sealed partial class ChoiceEmitter
             WriteSubmissionParameterDocs(indent);
         }
 
-        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>> {choiceName}Async(");
+        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>> {choiceName}Async(");
         indent.Indent();
         indent.AppendLine($"this {templateClassName}.Contract contract,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argument.ParameterType(templateClassName)} argument,");
         }
         if (declaresSubmitterInfoParameter)
         {
-            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo, context.RootNamespace)} submitter,");
+            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.SubmitterInfo)} submitter,");
         }
         WriteSubmissionParametersAndCloseSignature(indent);
         indent.Dedent();

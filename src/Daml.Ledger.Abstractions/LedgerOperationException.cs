@@ -7,7 +7,8 @@ namespace Daml.Ledger.Abstractions;
 
 /// <summary>
 /// Thrown by the throwing convenience wrappers in <see cref="Extensions.ThrowingExercise"/>
-/// when the underlying <c>Try*</c> method yields a non-success outcome. Carries the
+/// when the underlying <c>Try*</c> method yields a non-success outcome, and by
+/// <see cref="Extensions.StreamerSnapshot"/> when a snapshot cannot be completed. Carries the
 /// structured data of a <see cref="ExerciseOutcome{T}.DamlError"/> /
 /// <see cref="ExerciseOutcome{T}.InfraError"/> outcome so catch sites keep access to
 /// the detail the structured API exposes; a classified infrastructure failure carries its
@@ -20,21 +21,28 @@ public sealed class LedgerOperationException : InvalidOperationException
 {
     /// <summary>
     /// Canton error category when the failed outcome was a
-    /// <see cref="ExerciseOutcome{T}.DamlError"/>, or when it was an
+    /// <see cref="ExerciseOutcome{T}.DamlError"/>, when it was an
     /// <see cref="ExerciseOutcome{T}.InfraError"/> the transport classified without a
-    /// structured Canton error attached; <c>null</c> when neither applies.
+    /// structured Canton error attached, or when a faulted stream carried one on the
+    /// <c>StreamError</c> entry this exception was raised from, whether the transport read
+    /// that one off the participant's structured Canton error or determined it without one;
+    /// <c>null</c> when none applies.
     /// </summary>
     public DamlErrorCategory? Category { get; }
 
     /// <summary>
     /// Canton built-in or Daml-defined error identifier when the failed outcome was a
-    /// <see cref="ExerciseOutcome{T}.DamlError"/>; otherwise <c>null</c>.
+    /// <see cref="ExerciseOutcome{T}.DamlError"/>, or when a faulted stream carried one on the
+    /// <c>StreamError</c> entry this exception was raised from; otherwise <c>null</c>. A stream
+    /// fault supplies it without any <see cref="Metadata"/>, so a non-null identifier no longer
+    /// implies a non-null <see cref="Metadata"/> the way it did before the stream path filled it.
     /// </summary>
     public string? ErrorId { get; }
 
     /// <summary>
     /// Structured detail from <c>ErrorInfo.metadata</c> when the failed outcome was a
-    /// <see cref="ExerciseOutcome{T}.DamlError"/>; otherwise <c>null</c>.
+    /// <see cref="ExerciseOutcome{T}.DamlError"/>; otherwise <c>null</c>, including when
+    /// <see cref="ErrorId"/> came from a faulted stream.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Metadata { get; }
 
@@ -81,16 +89,19 @@ public sealed class LedgerOperationException : InvalidOperationException
     /// <summary>
     /// Creates an exception carrying an <see cref="ExerciseOutcome{T}.InfraError"/> outcome,
     /// its classification when the transport determined one, and the transport exception that
-    /// caused it when available.
+    /// caused it when available, and the error identifier when the failure came from a stream
+    /// fault that carried one.
     /// </summary>
     public LedgerOperationException(
         string message,
         int statusCode,
         DamlErrorCategory? category = null,
-        Exception? innerException = null)
+        Exception? innerException = null,
+        string? errorId = null)
         : base(message, innerException)
     {
         StatusCode = statusCode;
         Category = category;
+        ErrorId = errorId;
     }
 }

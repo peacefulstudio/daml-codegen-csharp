@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 
 namespace Daml.Runtime.Commands;
@@ -8,6 +9,13 @@ namespace Daml.Runtime.Commands;
 /// <summary>
 /// Represents a submission of commands to the ledger.
 /// </summary>
+/// <remarks>
+/// Every collection-typed member is copied at construction and on <c>init</c> — so through
+/// <c>with</c> expressions and the <c>With…</c> builders too — because a submission carries
+/// authorization data and must not change under a caller that retains the array it passed.
+/// Equality is structural over those copies, so two submissions built from equal contents
+/// compare equal however they were allocated.
+/// </remarks>
 /// <param name="Commands">The commands to submit.</param>
 /// <param name="WorkflowId">Optional workflow identifier for correlation.</param>
 /// <param name="CommandId">Unique command identifier for deduplication.</param>
@@ -34,6 +42,60 @@ public sealed record CommandsSubmission(
     IReadOnlyList<DisclosedContract>? DisclosedContracts = null,
     MinLedgerTime? MinLedgerTime = null)
 {
+    private readonly IReadOnlyList<ICommand> _commands =
+        EventCollections.Copy(Commands, nameof(Commands));
+
+    private readonly IReadOnlyList<Party>? _actAs = CopiedOrNull(ActAs, nameof(ActAs));
+
+    private readonly IReadOnlyList<Party>? _readAs = CopiedOrNull(ReadAs, nameof(ReadAs));
+
+    private readonly IReadOnlyList<DisclosedContract>? _disclosedContracts =
+        CopiedOrNull(DisclosedContracts, nameof(DisclosedContracts));
+
+    /// <summary>
+    /// The commands to submit. Copied at construction and on <c>init</c>, so a caller that
+    /// retains the list it supplied cannot change the submission, its equality or its hash
+    /// code afterwards.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The supplied list is <c>null</c>.</exception>
+    public IReadOnlyList<ICommand> Commands
+    {
+        get => _commands;
+        init => _commands = EventCollections.Copy(value, nameof(Commands));
+    }
+
+    /// <summary>
+    /// Parties to act as when submitting, or <c>null</c> when the submission carries none —
+    /// which is not the same as carrying an empty set. Copied on the same terms as
+    /// <see cref="Commands"/>.
+    /// </summary>
+    public IReadOnlyList<Party>? ActAs
+    {
+        get => _actAs;
+        init => _actAs = CopiedOrNull(value, nameof(ActAs));
+    }
+
+    /// <summary>
+    /// Parties whose contracts are visible, or <c>null</c> when the submission carries none.
+    /// Copied on the same terms as <see cref="Commands"/>.
+    /// </summary>
+    public IReadOnlyList<Party>? ReadAs
+    {
+        get => _readAs;
+        init => _readAs = CopiedOrNull(value, nameof(ReadAs));
+    }
+
+    /// <summary>
+    /// Contracts explicitly disclosed alongside this submission, or <c>null</c> when none
+    /// are. Copied on the same terms as <see cref="Commands"/>; each
+    /// <see cref="DisclosedContract"/> already owns its own payload bytes.
+    /// </summary>
+    public IReadOnlyList<DisclosedContract>? DisclosedContracts
+    {
+        get => _disclosedContracts;
+        init => _disclosedContracts = CopiedOrNull(value, nameof(DisclosedContracts));
+    }
+
     /// <summary>
     /// Creates a submission with a single command.
     /// </summary>
@@ -134,5 +196,70 @@ public sealed record CommandsSubmission(
         return submitter.ReadAs.Count == 0
             ? withActAs with { ReadAs = null }
             : withActAs with { ReadAs = [.. submitter.ReadAs] };
+    }
+
+    /// <summary>
+    /// Compares two submissions field-by-field, comparing <see cref="Commands"/>,
+    /// <see cref="ActAs"/>, <see cref="ReadAs"/> and <see cref="DisclosedContracts"/> element
+    /// by element rather than by list identity — each element then using its own equality, as
+    /// <see cref="Contracts.TransactionResult"/> and <see cref="DisclosedContract"/> already do.
+    /// </summary>
+    /// <remarks>
+    /// The record-synthesized equality compares the backing <see cref="IReadOnlyList{T}"/>
+    /// members by reference. Left alone it would narrow to near-identity once the members are
+    /// copied at every entry point, because no two submissions could then share a list
+    /// instance; comparing the contents instead keeps two submissions built from the same
+    /// values equal however they were allocated. An absent list stays distinct from an empty
+    /// one, so a submission carrying no <c>act_as</c> parties never compares equal to one
+    /// carrying an empty set.
+    /// </remarks>
+    /// <param name="other">The submission to compare against.</param>
+    /// <returns><c>true</c> when both describe the same submission.</returns>
+    public bool Equals(CommandsSubmission? other) =>
+        other is not null
+        && WorkflowId == other.WorkflowId
+        && CommandId == other.CommandId
+        && SynchronizerId == other.SynchronizerId
+        && Equals(MinLedgerTime, other.MinLedgerTime)
+        && Commands.SequenceEqual(other.Commands)
+        && ContentsEqual(ActAs, other.ActAs)
+        && ContentsEqual(ReadAs, other.ReadAs)
+        && ContentsEqual(DisclosedContracts, other.DisclosedContracts);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(WorkflowId);
+        hash.Add(CommandId);
+        hash.Add(SynchronizerId);
+        hash.Add(MinLedgerTime);
+        hash.Add(ContentsHash(Commands));
+        hash.Add(ContentsHash(ActAs));
+        hash.Add(ContentsHash(ReadAs));
+        hash.Add(ContentsHash(DisclosedContracts));
+        return hash.ToHashCode();
+    }
+
+    private static IReadOnlyList<T>? CopiedOrNull<T>(IReadOnlyList<T>? values, string parameterName) =>
+        values is null ? null : EventCollections.Copy(values, parameterName);
+
+    private static bool ContentsEqual<T>(IReadOnlyList<T>? left, IReadOnlyList<T>? right) =>
+        left is null ? right is null : right is not null && left.SequenceEqual(right);
+
+    private static int ContentsHash<T>(IReadOnlyList<T>? values)
+    {
+        if (values is null)
+        {
+            return 0;
+        }
+
+        var hash = new HashCode();
+        hash.Add(values.Count);
+        foreach (var value in values)
+        {
+            hash.Add(value);
+        }
+        return hash.ToHashCode();
     }
 }

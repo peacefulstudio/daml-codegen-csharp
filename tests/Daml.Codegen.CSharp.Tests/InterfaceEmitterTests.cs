@@ -37,7 +37,7 @@ public class InterfaceEmitterTests
         };
 
     private static CodeGenOptions Options(bool generateXmlDocs) =>
-        new() { RootNamespace = "Test.Package", GenerateXmlDocs = generateXmlDocs };
+        new() { NamespacePrefix = "Test.Package", GenerateXmlDocs = generateXmlDocs };
 
     private static string EmitInterface(
         DamlInterface iface,
@@ -53,7 +53,7 @@ public class InterfaceEmitterTests
             Interfaces = [iface, .. siblingInterfaces ?? []],
         };
         var options = Options(generateXmlDocs);
-        var context = PackageEmitContext.ForPackage(Package(module), options);
+        var context = PackageEmitContext.ForPackage(Package(module), options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var choiceEmitter = new ChoiceEmitter(context, resolver, options, mapper, new PartyAnalysis());
@@ -310,8 +310,6 @@ public class InterfaceEmitterTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             RootFilter = "Test\\.Module:Include.*",
         };
 

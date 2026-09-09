@@ -91,4 +91,45 @@ public class DamlLfJsonReaderRepeatedDecodeTests
 
         records.Should().AllSatisfy(record => record.Should().Be(expected));
     }
+
+    public abstract record Verdict : IDamlVariant
+    {
+        public abstract string Tag { get; }
+
+        public abstract DamlVariant ToVariant();
+
+        public sealed record Cleared(string Value) : Verdict
+        {
+            public override string Tag => "Cleared";
+
+            public override DamlVariant ToVariant() => DamlVariant.Create("Cleared", new DamlText(Value));
+        }
+    }
+
+    [Fact]
+    public void ReadValue_should_produce_equal_variants_across_repeated_decodes_of_one_type()
+    {
+        const string json = """{"tag":"Cleared","value":"ok"}""";
+
+        var first = DamlLfJsonReader.ReadValue<Verdict>(json);
+        var second = DamlLfJsonReader.ReadValue<Verdict>(json);
+
+        second.Should().Be(first);
+        second.Should().Be(new Verdict.Cleared("ok").ToVariant());
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_one_variant_concurrently_from_its_first_touch_onwards()
+    {
+        const string json = """{"tag":"Cleared","value":"ok"}""";
+        var expected = new Verdict.Cleared("ok").ToVariant();
+
+        var variants = Enumerable.Range(0, 64)
+            .AsParallel()
+            .WithDegreeOfParallelism(8)
+            .Select(_ => DamlLfJsonReader.ReadValue<Verdict>(json))
+            .ToList();
+
+        variants.Should().AllSatisfy(variant => variant.Should().Be(expected));
+    }
 }

@@ -65,7 +65,7 @@ internal sealed class EnumEmitter(
         {
             indent.AppendLine("/// <summary>Converts to a DamlEnum value.</summary>");
         }
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum, context.RootNamespace)} ToDamlEnum(this {enumName} value)");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum)} ToDamlEnum(this {enumName} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value switch");
@@ -73,7 +73,7 @@ internal sealed class EnumEmitter(
         indent.Indent();
         foreach (var ctor in enumDef.Constructors)
         {
-            indent.AppendLine($"{enumName}.{EmitterHelpers.SanitizeIdentifier(ctor)} => {context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum, context.RootNamespace)}.Create(\"{ctor}\"),");
+            indent.AppendLine($"{enumName}.{EmitterHelpers.SanitizeIdentifier(ctor)} => {context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum)}.Create(\"{ctor}\"),");
         }
         indent.AppendLine("_ => throw new ArgumentOutOfRangeException(nameof(value), value, null)");
         indent.Dedent();
@@ -86,7 +86,7 @@ internal sealed class EnumEmitter(
         {
             indent.AppendLine("/// <summary>Creates an instance from a DamlEnum value.</summary>");
         }
-        indent.AppendLine($"public static {enumName} FromDamlEnum({context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum, context.RootNamespace)} value)");
+        indent.AppendLine($"public static {enumName} FromDamlEnum({context.Qualifier.Qualify(RuntimeTypeNames.DamlEnum)} value)");
         indent.AppendLine("{");
         indent.Indent();
         indent.AppendLine("return value.Constructor switch");

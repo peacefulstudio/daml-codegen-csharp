@@ -9,18 +9,18 @@ internal sealed partial class ChoiceEmitter
 {
     private string MapNonContractReturnType(DamlType returnType) => returnType switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit, context.RootNamespace),
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
                       Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } or DamlTypeVar] } =>
             mapper.MapType(returnType),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{MapNonContractReturnType(arg)}?",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"{context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{MapNonContractReturnType(arg)}>",
+            $"{context.Qualifier.Qualify("IReadOnlyList")}<{MapNonContractReturnType(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"{context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<string, {MapNonContractReturnType(arg)}>",
+            $"{context.Qualifier.Qualify("IReadOnlyDictionary")}<string, {MapNonContractReturnType(arg)}>",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"{context.Qualifier.Qualify("IReadOnlyDictionary", context.RootNamespace)}<{MapNonContractReturnType(keyArg)}, {MapNonContractReturnType(valueArg)}>",
+            $"{context.Qualifier.Qualify("IReadOnlyDictionary")}<{MapNonContractReturnType(keyArg)}, {MapNonContractReturnType(valueArg)}>",
         _ => mapper.MapType(returnType),
     };
 
@@ -42,18 +42,18 @@ internal sealed partial class ChoiceEmitter
         DamlType returnType,
         string valueExpr) => returnType switch
     {
-        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit, context.RootNamespace) + ".Value",
+        DamlPrimitiveType { Primitive: DamlPrimitive.Unit } => context.Qualifier.Qualify(RuntimeTypeNames.Unit) + ".Value",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional },
                       Arguments: [DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional } } or DamlTypeVar] } =>
             mapper.FromValue(returnType, valueExpr),
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.Optional }, Arguments: [var arg] } =>
             $"{valueExpr}.AsOptional().HasValue ? {RenderNonContractReturnDecoder(arg, $"{valueExpr}.AsOptional().Value!")} : null",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.List }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlList, context.RootNamespace)}>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x")}).ToList()",
+            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlList)}>().Values.Select(x => {RenderNonContractReturnDecoder(arg, "x")}).ToList()",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.TextMap }, Arguments: [var arg] } =>
-            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap, context.RootNamespace)}>().Values.ToDictionary(kv => kv.Key, kv => {RenderNonContractReturnDecoder(arg, "kv.Value")})",
+            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlTextMap)}>().Values.ToDictionary(kv => kv.Key, kv => {RenderNonContractReturnDecoder(arg, "kv.Value")})",
         DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.GenMap }, Arguments: [var keyArg, var valueArg] } =>
-            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap, context.RootNamespace)}>().Entries.ToDictionary(kv => {RenderNonContractReturnDecoder(keyArg, "kv.Key")}, kv => {RenderNonContractReturnDecoder(valueArg, "kv.Value")})",
+            $"{valueExpr}.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlGenMap)}>().Entries.ToDictionary(kv => {RenderNonContractReturnDecoder(keyArg, "kv.Key")}, kv => {RenderNonContractReturnDecoder(valueArg, "kv.Value")})",
         _ => mapper.FromValue(returnType, valueExpr),
     };
 
@@ -154,10 +154,10 @@ internal sealed partial class ChoiceEmitter
             WriteSubmissionParameterDocs(indent);
         }
 
-        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>> {choiceName}Async(");
+        indent.AppendLine($"public static async Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>> {choiceName}Async(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateClassName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateClassName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argument.ParameterType(templateClassName)} argument,");
@@ -209,7 +209,7 @@ internal sealed partial class ChoiceEmitter
         var returnTypeName = MapNonContractReturnType(choice.ReturnType);
         var needsStdlibUnitDecoder = ReturnTypeNeedsStdlibUnitDecoder(choice.ReturnType);
 
-        indent.AppendLine($"private static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}> Project{choiceName}Result({context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)} tx, string contractId)");
+        indent.AppendLine($"private static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}> Project{choiceName}Result({context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult)} tx, string contractId)");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -228,12 +228,12 @@ internal sealed partial class ChoiceEmitter
             var decoderExpr = RenderNonContractReturnDecoder(
                 choice.ReturnType,
                 "exercised.ExerciseResult");
-            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>.One({decoderExpr});");
+            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.One({decoderExpr});");
         }
         else
         {
             indent.AppendLine($"var decoded = {templateClassName}.Choice{choiceName}.ResultDecoder!(exercised.ExerciseResult);");
-            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{returnTypeName}>.One(decoded);");
+            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.One(decoded);");
         }
 
         indent.Dedent();

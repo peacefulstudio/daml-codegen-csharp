@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.Intermediate.Model;
+using Daml.Testing.Roslyn;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.GeneratorFactory;
@@ -22,10 +23,12 @@ namespace Daml.Codegen.CSharp.Tests;
 /// </summary>
 internal static class EmittedCodeCompilesTestHelpers
 {
-    internal static DamlType ContractIdOf(string templateName) =>
+    internal static DamlType ContractIdOf(string templateName) => ContractIdOf("Test.Module", templateName);
+
+    internal static DamlType ContractIdOf(string moduleName, string templateName) =>
         new DamlTypeApp(
             new DamlPrimitiveType(DamlPrimitive.ContractId),
-            [new DamlTypeRef("", "Test.Module", templateName)]);
+            [new DamlTypeRef("", moduleName, templateName)]);
 
     internal static DamlType TupleType(params DamlType[] componentTypes) =>
         new DamlTypeApp(
@@ -35,7 +38,7 @@ internal static class EmittedCodeCompilesTestHelpers
     internal static DamlType OptionalOf(DamlType inner) =>
         new DamlTypeApp(new DamlPrimitiveType(DamlPrimitive.Optional), [inner]);
 
-    internal static IReadOnlyList<GeneratedFile> GenerateKeyBearingTemplate(bool useRecordTypes = true)
+    internal static IReadOnlyList<GeneratedFile> GenerateKeyBearingTemplate()
     {
         var module = new DamlModule
         {
@@ -91,8 +94,6 @@ internal static class EmittedCodeCompilesTestHelpers
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = useRecordTypes,
-            UsePrimaryConstructors = useRecordTypes,
         };
         return CreateGenerator(options).Generate(dar);
     }
@@ -150,51 +151,10 @@ internal static class EmittedCodeCompilesTestHelpers
             .Select(f => CSharpSyntaxTree.ParseText(f.Content, parseOptions, path: f.RelativePath))
             .ToArray();
 
-        // The TFM is net10.0 — pull system assemblies via reflection on a known type
-        // (object lives in System.Private.CoreLib, GetReferenceAssemblies pattern
-        // would require a separate package). We grab everything Daml.Runtime and
-        // Daml.Ledger.Abstractions transitively reference, which covers the surface
-        // emitted code touches.
-        var runtimeAssemblies = new[]
-        {
-            typeof(object).Assembly,
-            typeof(System.Linq.Enumerable).Assembly,
-            typeof(System.Collections.Generic.IEnumerable<>).Assembly,
-            typeof(System.Threading.Tasks.Task).Assembly,
-            typeof(System.Console).Assembly,
-        };
-
-        var runtimeRefs = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(a => MetadataReference.CreateFromFile(a.Location))
-            .Cast<MetadataReference>()
-            .ToList();
-
-        // Add explicit refs that may not be loaded yet.
-        foreach (var asm in runtimeAssemblies)
-        {
-            if (!runtimeRefs.Any(r => r is PortableExecutableReference per && per.FilePath == asm.Location))
-            {
-                runtimeRefs.Add(MetadataReference.CreateFromFile(asm.Location));
-            }
-        }
-
-        // Daml.Runtime + Daml.Ledger.Abstractions — referenced via project-ref.
-        var damlRuntime = typeof(Daml.Runtime.Contracts.ITemplate).Assembly;
-        var damlAbstractions = typeof(Daml.Ledger.Abstractions.ILedgerClient).Assembly;
-        if (!runtimeRefs.Any(r => r is PortableExecutableReference per && per.FilePath == damlRuntime.Location))
-        {
-            runtimeRefs.Add(MetadataReference.CreateFromFile(damlRuntime.Location));
-        }
-        if (!runtimeRefs.Any(r => r is PortableExecutableReference per && per.FilePath == damlAbstractions.Location))
-        {
-            runtimeRefs.Add(MetadataReference.CreateFromFile(damlAbstractions.Location));
-        }
-
         var compilation = CSharpCompilation.Create(
             assemblyName: "EmittedCodeCompilesTests-emit",
             syntaxTrees: trees,
-            references: runtimeRefs,
+            references: ConsumerReferenceSet.Assemblies,
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));

@@ -63,8 +63,6 @@ public class EmittedViewFieldCollisionCompilesTests
             {
                 EnableNullableReferenceTypes = true,
                 UseFileScopedNamespaces = true,
-                UseRecordTypes = true,
-                UsePrimaryConstructors = true,
             })
             .Generate(CreateTestDar(module));
     }
@@ -160,8 +158,6 @@ public class EmittedViewFieldCollisionCompilesTests
             {
                 EnableNullableReferenceTypes = true,
                 UseFileScopedNamespaces = true,
-                UseRecordTypes = true,
-                UsePrimaryConstructors = true,
             })
             .Generate(CreateTestDar(module));
 

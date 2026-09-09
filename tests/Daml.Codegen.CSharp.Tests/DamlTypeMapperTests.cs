@@ -1,8 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.Intermediate.Model;
+using Daml.Runtime.Data;
+using Daml.Runtime.Stdlib;
 using AwesomeAssertions;
 using Xunit;
 
@@ -39,8 +42,11 @@ public class DamlTypeMapperTests
             DependencyReferences = []
         };
 
+    private static DamlModule EmptyModule(string name) =>
+        new() { Name = name, Templates = [], DataTypes = [], Interfaces = [] };
+
     private static PackageEmitContext Context() =>
-        PackageEmitContext.ForPackage(Package("test-package"), new CodeGenOptions { RootNamespace = "Test.Package" });
+        PackageEmitContext.ForPackage(Package("test-package", EmptyModule("Test.Module")), new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
 
     private static DamlTypeMapper Mapper(StubResolver? resolver = null) =>
         new(Context(), resolver ?? new StubResolver());
@@ -559,6 +565,78 @@ public class DamlTypeMapperTests
     private static DamlTypeApp GenericAppOfText(string module, string name) =>
         new(new DamlTypeRef(CrossPackageId, module, name), [Prim(DamlPrimitive.Text)]);
 
+    private static DamlPackage PackageWithDataTypes(params (string Module, string Name, DamlDataTypeDefinition Definition)[] declarations) =>
+        new()
+        {
+            PackageId = CrossPackageId,
+            Name = "acme",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = declarations
+                .GroupBy(declaration => declaration.Module)
+                .Select(moduleDeclarations => new DamlModule
+                {
+                    Name = moduleDeclarations.Key,
+                    Templates = [],
+                    Interfaces = [],
+                    DataTypes = moduleDeclarations
+                        .Select(declaration => new DamlDataType { Name = declaration.Name, Definition = declaration.Definition })
+                        .ToList(),
+                })
+                .ToList(),
+            DependencyReferences = [],
+        };
+
+    private static readonly DamlEnumDefinition Colours = new(["Red", "Blue"]);
+
+    [Fact]
+    public void ToValue_converts_a_cross_package_enum_through_its_qualified_extensions_class()
+    {
+        var resolver = ResolverWith("Acme.Colour", PackageWithDataTypes(("Acme.Palette", "Colour", Colours)));
+
+        Mapper(resolver).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Palette", "Colour"), "Shade")
+            .Should().Be("Acme.ColourExtensions.ToDamlEnum(Shade)");
+    }
+
+    [Fact]
+    public void ToValue_serializes_a_cross_package_variant_through_ToVariant()
+    {
+        var shape = new DamlVariantDefinition([new DamlVariantConstructor("Circle", Prim(DamlPrimitive.Text))]);
+        var resolver = ResolverWith("Acme.Shape", PackageWithDataTypes(("Acme.Shapes", "Shape", shape)));
+
+        Mapper(resolver).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Shapes", "Shape"), "Figure")
+            .Should().Be("Figure.ToVariant()");
+    }
+
+    [Fact]
+    public void ToValue_leaves_a_cross_package_ref_unclassified_when_its_module_is_absent_from_the_package()
+    {
+        var resolver = ResolverWith("Acme.Colour", PackageWithDataTypes(("Acme.Palette", "Colour", Colours)));
+
+        Mapper(resolver).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Absent", "Colour"), "Shade")
+            .Should().Be("Shade.ToRecord()");
+    }
+
+    [Fact]
+    public void ToValue_leaves_a_cross_package_ref_unclassified_when_its_package_is_absent_from_the_dar()
+    {
+        Mapper(new StubResolver("Acme.Colour")).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Palette", "Colour"), "Shade")
+            .Should().Be("Shade.ToRecord()");
+    }
+
+    [Fact]
+    public void ToValue_classifies_a_cross_package_enum_by_the_exact_module_when_another_module_name_extends_it()
+    {
+        var resolver = ResolverWith("Acme.Colour", PackageWithDataTypes(
+            ("Acme.Palette", "Colour", new DamlRecordDefinition([])),
+            ("Acme.Palette.Extended", "Colour", Colours)));
+
+        Mapper(resolver).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Palette.Extended", "Colour"), "Shade")
+            .Should().Be("Acme.ColourExtensions.ToDamlEnum(Shade)");
+        Mapper(resolver).ToValue(new DamlTypeRef(CrossPackageId, "Acme.Palette", "Colour"), "Shade")
+            .Should().Be("Shade.ToRecord()");
+    }
+
     [Fact]
     public void ToValue_serializes_a_user_generic_record_through_converter_lambdas()
     {
@@ -735,6 +813,124 @@ public class DamlTypeMapperTests
         publicStdlibTypeNames.Should().Contain(returnedTypeName,
             "MapStdlibType returns {0} as a C# reference into {1}; a renamed runtime record must fail loudly here instead of drifting into broken generated code",
             returnedTypeName, Daml.Runtime.RuntimeNamespaces.Stdlib);
+    }
+
+    /// <summary>Carries a <see cref="Tuple2{T1, T2}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record Tuple2ProbeHolder(
+        [property: DamlFieldAttribute("probe")] Tuple2<string, long> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe", Probe.ToRecord(label => new DamlText(label), count => new DamlInt64(count))));
+    }
+
+    /// <summary>Carries a <see cref="Tuple3{T1, T2, T3}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record Tuple3ProbeHolder(
+        [property: DamlFieldAttribute("probe")] Tuple3<string, long, bool> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe",
+            Probe.ToRecord(
+                label => new DamlText(label),
+                count => new DamlInt64(count),
+                flag => new DamlBool(flag))));
+    }
+
+    /// <summary>Carries an <see cref="Either{TL, TR}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record EitherProbeHolder(
+        [property: DamlFieldAttribute("probe")] Either<string, long> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe", Probe.ToValue(label => new DamlText(label), count => new DamlInt64(count))));
+    }
+
+    /// <summary>Carries a <see cref="Set{T}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record SetProbeHolder(
+        [property: DamlFieldAttribute("probe")] Set<string> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe", Probe.ToRecord(element => new DamlText(element))));
+    }
+
+    /// <summary>Carries a <see cref="NonEmpty{T}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record NonEmptyProbeHolder(
+        [property: DamlFieldAttribute("probe")] NonEmpty<string> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe", Probe.ToRecord(element => new DamlText(element))));
+    }
+
+    /// <summary>Carries a <see cref="Map{TKey, TValue}"/> in a slot the LF-JSON reader must dispatch on.</summary>
+    /// <param name="Probe">The decoded shape.</param>
+    public sealed record MapProbeHolder(
+        [property: DamlFieldAttribute("probe")] Map<string, long> Probe) : IDamlRecord
+    {
+        /// <inheritdoc />
+        public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
+            "probe", Probe.ToRecord(label => new DamlText(label), count => new DamlInt64(count))));
+    }
+
+    private static readonly IReadOnlyDictionary<Type, string> ReaderDispatchProbes =
+        new Dictionary<Type, string>
+        {
+            [typeof(Tuple2ProbeHolder)] = """{"probe":{"_1":"a","_2":"1"}}""",
+            [typeof(Tuple3ProbeHolder)] = """{"probe":{"_1":"a","_2":"1","_3":true}}""",
+            [typeof(EitherProbeHolder)] = """{"probe":{"tag":"Left","value":"a"}}""",
+            [typeof(SetProbeHolder)] = """{"probe":{"map":[["a",{}]]}}""",
+            [typeof(NonEmptyProbeHolder)] = """{"probe":{"hd":"a","tl":["b"]}}""",
+            [typeof(MapProbeHolder)] = """{"probe":{"map":[["a","1"]]}}""",
+        };
+
+    private static Type ProbedStdlibType(Type holder) =>
+        holder.GetProperties()
+            .Single(property => property.GetCustomAttribute<DamlFieldAttribute>() is not null)
+            .PropertyType.GetGenericTypeDefinition();
+
+    private static Type ParametricStdlibClrType(string module, string name)
+    {
+        var mapped = StdlibPackages.MapStdlibType(module, name);
+        return typeof(Unit).Assembly.GetExportedTypes()
+            .Single(candidate => candidate.Namespace == Daml.Runtime.RuntimeNamespaces.Stdlib
+                                 && candidate.IsGenericTypeDefinition
+                                 && StripGenericArity(candidate.Name) == mapped);
+    }
+
+    [Fact]
+    public void DamlTypeMapper_every_parametric_stdlib_type_has_an_lf_json_reader_probe()
+    {
+        var emitted = StdlibPackages.ParametricStdlibTypes
+            .Select(entry => ParametricStdlibClrType(entry.Module, entry.Name))
+            .Distinct();
+
+        ReaderDispatchProbes.Keys.Select(ProbedStdlibType)
+            .Should().BeEquivalentTo(
+                emitted,
+                "the emitter's parametric stdlib set and the LF-JSON reader's dispatch arms are two "
+                + "hand-maintained lists that nothing else compares, and no corpus carries these shapes, "
+                + "so an entry emitted without a reader arm is invisible to every other gate");
+    }
+
+    [Fact]
+    public void DamlTypeMapper_every_parametric_stdlib_type_is_dispatched_by_the_lf_json_reader()
+    {
+        foreach (var (holder, json) in ReaderDispatchProbes)
+        {
+            var read = () => Daml.Runtime.Serialization.DamlLfJsonReader.ReadRecord(json, holder);
+
+            read.Should().NotThrow(
+                "an emitted parametric stdlib type the reader has no arm for falls through to the "
+                + "unmapped-CLR-type throw at decode time, which is what {0} would hit",
+                ProbedStdlibType(holder));
+        }
     }
 
     [Fact]

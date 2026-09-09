@@ -15,17 +15,15 @@ namespace Daml.Codegen.CSharp.Tests;
 public class EmittedNamespaceCollisionShadowingCompilesTests
 {
     [Theory]
-    [InlineData("acme-IHasView", "Acme.IHasView")]
-    [InlineData("acme-IDamlInterface", "Acme.IDamlInterface")]
-    [InlineData("acme-ExerciseCommand", "Acme.ExerciseCommand")]
-    [InlineData("daml", "Daml")]
-    public void Emitted_interface_code_compiles_when_package_namespace_shadows_a_runtime_type(
-        string packageName,
-        string expectedNamespace)
+    [InlineData("Acme.IHasView")]
+    [InlineData("Acme.IDamlInterface")]
+    [InlineData("Acme.ExerciseCommand")]
+    [InlineData("Daml")]
+    public void Emitted_interface_code_compiles_when_module_namespace_shadows_a_runtime_type(string moduleName)
     {
         var module = new DamlModule
         {
-            Name = "Holdings",
+            Name = moduleName,
             Templates =
             [
                 new DamlTemplate
@@ -38,7 +36,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                             Name = "Reissue",
                             Consuming = true,
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
-                            ReturnType = ContractIdOf("Asset"),
+                            ReturnType = ContractIdOf(moduleName, "Asset"),
                         },
                     ],
                 },
@@ -63,7 +61,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
                 new DamlInterface
                 {
                     Name = "Holding",
-                    ViewType = new DamlTypeRef("", "Holdings", "HoldingView"),
+                    ViewType = new DamlTypeRef("", moduleName, "HoldingView"),
                     Choices =
                     [
                         new DamlChoice
@@ -81,7 +79,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
         var package = new DamlPackage
         {
             PackageId = "acme-iface-shadow-id",
-            Name = packageName,
+            Name = "acme-iface-shadow",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
             Modules = [module],
@@ -92,8 +90,8 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
         var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(
-            f => f.Content.Contains($"namespace {expectedNamespace}", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in the runtime type name");
+            f => f.Content.Contains($"namespace {moduleName}", StringComparison.Ordinal),
+            "the test only guards the shadowing bug if the module namespace actually ends in the runtime type name");
 
         var iface = files.First(f => f.RelativePath.EndsWith("IHolding.cs", StringComparison.Ordinal));
         iface.Content.Should().NotContain(
@@ -126,7 +124,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Replication",
+            Name = "Canton.Party",
             Templates =
             [
                 new DamlTemplate
@@ -173,7 +171,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
-            "the test only guards the cref-shadowing path if the derived namespace actually ends in .Party");
+            "the test only guards the cref-shadowing path if the module namespace actually ends in .Party");
 
         var diagnostics = CompileEmittedFilesWithDocDiagnostics(files);
         var crefDiagnostics = diagnostics
@@ -189,7 +187,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Replication",
+            Name = "Canton.Party",
             Templates =
             [
                 new DamlTemplate
@@ -254,17 +252,17 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
     }
 
     [Theory]
-    [InlineData("acme-Daml")]
-    [InlineData("acme-Stdlib-V1")]
-    [InlineData("acme-Either-V1")]
-    [InlineData("acme-RelTime-V1")]
-    [InlineData("acme-Unit-V1")]
-    [InlineData("acme-Set-V1")]
-    [InlineData("acme-Map-V1")]
-    [InlineData("acme-Tuple2-V1")]
-    [InlineData("acme-Tuple3-V1")]
-    [InlineData("acme-NonEmpty-V1")]
-    public void Emitted_stdlib_types_compile_when_package_namespace_shadows_a_stdlib_type(string packageName)
+    [InlineData("Acme.Daml")]
+    [InlineData("Acme.Stdlib.V1")]
+    [InlineData("Acme.Either.V1")]
+    [InlineData("Acme.RelTime.V1")]
+    [InlineData("Acme.Unit.V1")]
+    [InlineData("Acme.Set.V1")]
+    [InlineData("Acme.Map.V1")]
+    [InlineData("Acme.Tuple2.V1")]
+    [InlineData("Acme.Tuple3.V1")]
+    [InlineData("Acme.NonEmpty.V1")]
+    public void Emitted_stdlib_types_compile_when_module_namespace_shadows_a_stdlib_type(string moduleName)
     {
         // Phase 2 of routing Daml.Runtime.Stdlib.* through the central qualifier:
         // a record field typed as RelTime plus parametric stdlib types
@@ -381,7 +379,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
 
         var module = new DamlModule
         {
-            Name = "Holdings",
+            Name = moduleName,
             Templates =
             [
                 new DamlTemplate
@@ -433,7 +431,7 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
         var package = new DamlPackage
         {
             PackageId = "main-pkg-id",
-            Name = packageName,
+            Name = "acme-stdlib-shadow",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
             Modules = [module],

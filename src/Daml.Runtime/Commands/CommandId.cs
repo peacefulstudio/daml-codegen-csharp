@@ -1,6 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json.Serialization;
+using Daml.Runtime.Serialization;
+
 namespace Daml.Runtime.Commands;
 
 /// <summary>
@@ -21,6 +24,7 @@ namespace Daml.Runtime.Commands;
 /// which returns <see langword="null"/> for an absent value.
 /// </para>
 /// </remarks>
+[JsonConverter(typeof(CommandIdJsonConverter))]
 public readonly record struct CommandId
 {
     private readonly string? _value;
@@ -68,4 +72,19 @@ public readonly record struct CommandId
     /// handling, and a throw here would mask the original exception.
     /// </remarks>
     public override string ToString() => _value ?? "<uninitialized CommandId>";
+}
+
+/// <summary>
+/// System.Text.Json converter for <see cref="CommandId"/>. Serializes as a plain JSON string
+/// so the id round-trips through the JSON Ledger API payloads that encode
+/// <c>command_id</c> as a raw string, rather than reading back as a value whose
+/// <see cref="CommandId.Value"/> throws where it is used.
+/// </summary>
+internal sealed class CommandIdJsonConverter : OpaqueStringIdJsonConverter<CommandId>
+{
+    /// <inheritdoc/>
+    protected override CommandId Parse(string id) => new(id);
+
+    /// <inheritdoc/>
+    protected override string Format(CommandId value) => value.Value;
 }

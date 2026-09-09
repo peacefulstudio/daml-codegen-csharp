@@ -40,6 +40,34 @@ public class IdentifiersTests
         Identifiers.MemberName("period_", "Period").Should().Be("Period_");
     }
 
+    [Theory]
+    [InlineData("Iou", true, null, "Iou")]
+    [InlineData("Splice.Testing.Tokens.TestTokenV1", true, null, "Splice.Testing.Tokens.TestTokenV1")]
+    [InlineData("Daml.Finance.Holding", true, null, "Daml.Finance.Holding")]
+    [InlineData("Splice.Amulet", true, "Acme.Ledger", "Acme.Ledger.Splice.Amulet")]
+    [InlineData("Acme.Ledger.Token", true, "Acme.Ledger", "Acme.Ledger.Token")]
+    [InlineData("Acme.Ledger", true, "Acme.Ledger", "Acme.Ledger")]
+    [InlineData("Acme.LedgerX", true, "Acme.Ledger", "Acme.Ledger.Acme.LedgerX")]
+    [InlineData("Ledger.Token", true, "Acme.Ledger", "Acme.Ledger.Ledger.Token")]
+    [InlineData("Splice.Amulet", false, "Acme.Ledger", "Splice.Amulet")]
+    [InlineData("Acme.Ledger.Token", false, "Acme.Ledger", "Acme.Ledger.Token")]
+    [InlineData("RichTypes", true, "Daml.Codegen.Testing.Conformance", "Daml.Codegen.Testing.Conformance.RichTypes")]
+    public void ModuleNamespace_is_the_module_name_prefixed_only_for_the_main_package_and_only_when_it_does_not_already_start_with_the_prefix(
+        string moduleName, bool isMainPackage, string? namespacePrefix, string expected)
+    {
+        var options = new CodeGenOptions { NamespacePrefix = namespacePrefix };
+
+        Identifiers.ModuleNamespace(moduleName, isMainPackage, options).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Foo$u0027.Bar", "Foo_u0027.Bar")]
+    [InlineData("A.0x", "A._u0030x")]
+    public void ModuleNamespace_sanitises_each_segment_and_keeps_the_dots(string moduleName, string expected)
+    {
+        Identifiers.ModuleNamespace(moduleName, isMainPackage: true, new CodeGenOptions()).Should().Be(expected);
+    }
+
     [Fact]
     public void InterfaceMarkerName_prefixes_the_sanitized_name_with_i_when_unreserved()
     {

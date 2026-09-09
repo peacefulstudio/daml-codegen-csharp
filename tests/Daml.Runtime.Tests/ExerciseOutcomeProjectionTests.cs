@@ -61,7 +61,7 @@ public class ExerciseOutcomeProjectionTests
     {
         var projectorInvoked = false;
         var ids = new[] { "00a", "00b" };
-        var outcome = new ExerciseOutcome<TransactionResult>.Many(2, ids);
+        var outcome = new ExerciseOutcome<TransactionResult>.Many(EquatableArray.Create(ids));
 
         var result = outcome.ProjectCommitted<int>(_ =>
         {

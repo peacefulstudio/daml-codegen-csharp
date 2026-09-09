@@ -4,7 +4,7 @@
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;
@@ -55,9 +55,9 @@ public class MarkerTests
             ContractId: "cid-1",
             TemplateId: Marker.TemplateId,
             CreateArguments: payload.ToRecord(),
-            WitnessParties: Array.Empty<Party>(),
-            Signatories: Array.Empty<Party>(),
-            Observers: Array.Empty<Party>(),
+            WitnessParties: [],
+            Signatories: [],
+            Observers: [],
             ContractKey: null);
 
         var contract = Marker.Contract.FromCreatedEvent(@event);

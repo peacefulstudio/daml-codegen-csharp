@@ -128,8 +128,6 @@ public class EmittedRecordFieldCompilesTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             IncludeDependencies = true,
         };
         var generator = new CSharpCodeGenerator(options);

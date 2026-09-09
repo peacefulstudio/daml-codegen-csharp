@@ -16,7 +16,7 @@ internal sealed partial class ChoiceEmitter
     private void WriteSubmissionParametersAndCloseSignature(IndentWriter indent)
     {
         indent.AppendLine("string? workflowId = null,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId, context.RootNamespace)}? commandId = null,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.CommandId)}? commandId = null,");
         indent.AppendLine("TimeSpan? timeout = null,");
         indent.AppendLine("CancellationToken cancellationToken = default)");
     }

@@ -37,6 +37,581 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.5.0-preview.2] — 2026-09-08
+
+### Changed — BREAKING
+
+- **Every generated type moves: the C# namespace is now the Daml module name** (`Daml.Codegen.CSharp`,
+  `Daml.Codegen.Testing.Conformance`, the `dpm codegen-cs` CLI). The package-derived namespace is gone:
+  module `Splice.Ans` emits into `namespace Splice.Ans;` under `Splice/Ans/`, and a package with several
+  modules emits one namespace per module (`splice-amulet` goes from one namespace to twelve) instead of
+  flattening them into one. `-n`/`--namespace` (`CodeGenOptions.NamespacePrefix`) is now a prefix on the
+  main package's modules only — `-n Acme.Ledger` + module `Splice.Amulet` → `Acme.Ledger.Splice.Amulet`,
+  with the prefix elided when the module already starts with it (`Acme.Ledger.Token` stays
+  `Acme.Ledger.Token`) — and dependency packages emitted with `--include-dependencies` keep their bare
+  module names, so a locally generated dependency tree is interchangeable with the published bindings.
+  The emit now fails, naming every module involved, when two or more modules would share a namespace or a
+  namespace would spell an emitted type's fully qualified name. `ContractIdentifiers` is one class per
+  module, written inside the module directory (`Generated/RichTypes/ContractIdentifiers.cs`, not
+  `Generated/ContractIdentifiers.cs`). Two modules of one package declaring a same-named choice now emit
+  two `<Choice>Result` records in two namespaces, a shape the flattened namespace could not express.
+
+  Migration: rename `using` directives to the module names, which for the conformance package is a
+  case-only change — `using Daml.Codegen.Testing.Conformance.Richtypes;` →
+  `using Daml.Codegen.Testing.Conformance.RichTypes;` (`ContractKeys` and `DefaultTarget` likewise, and
+  the `contractkeys` corpus's second module surfaces: `ScheduleKey` and `ScheduleView` now live in
+  `Daml.Codegen.Testing.Conformance.KeyBuilders`) — and update any
+  `<Compile Include … Link="Generated\Richtypes\…">` paths to the new directory case; add one `using` per
+  module you consume from a multi-module package; drop any code that relied on `-n` prefixing a
+  dependency. A single-segment module that declares a same-named type (`Iou:Iou`) yields `namespace Iou`
+  containing `record Iou`, so a consumer writes `Iou.Iou` or binds an alias
+  (`using IouContract = Iou.Iou;`). `-n` combined with `--include-dependencies` now compiles for the first
+  time: cross-package references are spelled with the referent module's namespace, which is a namespace
+  the run actually emits.
+- **`CodeGenOptions.RootNamespace` is renamed `CodeGenOptions.NamespacePrefix`**
+  (`Daml.Codegen.CSharp`). The option never named a root namespace: it is prepended to the main package's
+  module namespaces, elided when a module name equals the prefix or starts with it at a segment boundary,
+  and never applied to dependency packages. The old name also spelled MSBuild's own `RootNamespace`
+  property, which means something else — a project's default namespace for newly added files and resource
+  manifest names — inside the same toolchain. Note this was a vocabulary collision, not a wiring one: the
+  MSBuild integration reads `$(DamlNamespace)` and never fell back to `$(RootNamespace)`, so a consumer's
+  `<RootNamespace>` could not steer codegen under either name. Rename the assignment; the accepted values
+  and the emitted output are unchanged. The rest of the surface keeps its names: the CLI still takes
+  `-n`/`--namespace`, and the MSBuild integration still reads `$(DamlNamespace)`.
+- **The list members of the event and stream records are now `EquatableArray<T>`**
+  (`Daml.Runtime.Contracts`, `Daml.Runtime.Streams`): a `readonly struct`, declared in
+  `Daml.Runtime.Contracts`, that owns a copy of its elements, compares by content, and whose `default` is
+  the empty array. The members: on `CreatedEvent` — `WitnessParties`, `Signatories`, `Observers`;
+  `ArchivedEvent` — `WitnessParties`; `ExercisedEvent` — `ActingParties`, `WitnessParties`,
+  `CaughtExceptions`; `TransactionResult` — `CreatedContracts`, `ArchivedContractIds`, `ExercisedEvents`;
+  `CreatedContract` — `WitnessParties`, `Signatories`, `Observers`, `InterfaceIds`; `TransactionTree` —
+  `RootEvents`; `TreeEvent.Created` — `WitnessParties`, `Signatories`, `Observers`, `InterfaceIds`;
+  `TreeEvent.Exercised` — `ActingParties`, `WitnessParties`, `ChildEvents`; and `WitnessParties` on every
+  contract-bearing arm of `ContractStreamEvent<T>`, `InterfaceStreamEvent<TInterface, TView>`,
+  `AcsSnapshotEntry<T>` and `InterfaceAcsSnapshotEntry<TInterface, TView>`. `CaughtException.Metadata`,
+  `CommandsSubmission`, `DamlRecord` and the `Daml.Runtime.Stdlib` types are unchanged.
+
+  Reads typed as `IReadOnlyList<T>` compile unchanged — the struct implements it, and each such
+  conversion boxes; `[]` and `[a, b]` arguments compile unchanged too. A `List<T>` or array argument
+  becomes `EquatableArray.Create(x)` (`[.. x]` also compiles, at the cost of a second copy):
+
+  ```csharp
+  new CreatedEvent(witnessParties: EquatableArray.Create(parties), …);
+  ```
+
+  A `null` test on one of these members — `is null`, `?? []` — no longer compiles, since there is no
+  `null` to test for. Equality on those members is now content equality everywhere: `CreatedEvent`,
+  `ArchivedEvent`, `TransactionTree`, `TreeEvent.Created`, `TreeEvent.Exercised` and the four stream
+  families compared them by list identity, so two events built from equal but separately allocated lists
+  were unequal and now compare equal; `ExercisedEvent`, `TransactionResult` and `CreatedContract` already
+  compared by content and drop their hand-written `Equals`/`GetHashCode`. None of these members can hold
+  `null` any more: the type has no `null` state, so neither a constructor argument nor a `with`
+  expression can produce one. Reflection is the one place this shows up as a behaviour change rather than
+  a type change — a `ConstructorInfo.Invoke` passing `null` for one of these parameters used to throw
+  `ArgumentNullException` and now yields the empty array instead. Separately, `EquatableArray.Create` (and
+  so a collection expression) throws `ArgumentException` on a `null` element when the element type is a
+  reference type, so every reference-element member — `RootEvents`, `ChildEvents`, both `InterfaceIds`,
+  `ArchivedContractIds`, `CreatedContracts`, `ExercisedEvents` and `CaughtExceptions` — never holds a
+  `null` entry (the `Party` members were never at risk: `Party` is a struct).
+
+  Because `ChildEvents` and `RootEvents` are recursive, `TreeEvent.Exercised` and `TransactionTree` now
+  compare structurally over the whole subtree; `TreeEvent.Exercised.GetHashCode` hashes its children by
+  count rather than by content, so computing a deep tree's hash — as a set member or dictionary key —
+  costs the node, not its subtree, and cannot overflow the stack. Equality still recurses: comparing two
+  distinct but structurally equal trees, including a set lookup that finds an equal-hashing entry,
+  descends to their depth.
+- **`ExerciseOutcome<T>.Many` is now `Many(EquatableArray<string> ContractIds)` and holds at least two
+  ids** (`Daml.Runtime.Outcomes`). Three things about this one arm changed together. Its ids moved from
+  `IReadOnlyList<string>` to `EquatableArray<string>`, finishing the migration above: this was the last
+  list member on the outcome surface still carried as a raw `IReadOnlyList<string>` rather than a
+  deliberate carve-out, and unlike its neighbours it never took a defensive copy and compared by list
+  identity, so a producer could mutate the list after handing it over and the record silently changed
+  with it; `Many` now owns a copy of its ids and compares them by content. The `Count` argument is gone:
+  `Count` is a computed property returning `ContractIds.Count`. The two were independent members, so
+  `new Many(5, ["00a"])` was representable and silently wrong — and the runtime's only user-facing use of
+  a `Many` builds its exception message from `Count` alone, so a writer whose two members disagreed
+  produced a message telling the user to go collect contract ids that are not there. And the arm now
+  enforces the arity its name claims: `Many` means more than one candidate filled a slot that expected
+  exactly one, so fewer than two ids throws `ArgumentException` — at construction and through a `with`
+  expression alike. Zero candidates is what `None` says and one is what `One` says, so a `Many` below two
+  was a meaningless value every consumer's `switch` had to defend against or silently mis-handle.
+
+  Reads are unaffected: `many.Count` and `many.ContractIds` both compile unchanged, the struct implements
+  `IReadOnlyList<string>`, and a `["00a", "00b"]` argument compiles unchanged too. A construction site
+  drops its first argument — `new Many(ids.Count, ids)` becomes `new Many(EquatableArray.Create(ids))` —
+  a `List<string>` or `string[]` argument becomes `EquatableArray.Create(x)`, a positional pattern or
+  deconstruction now matches one element rather than two, `many with { Count = n }` no longer compiles
+  because there is no longer a `Count` to set, and a `null` test on the member no longer compiles because
+  there is no `null` to test for. A `null` *element* now fails at run time rather than being stored:
+  `EquatableArray.Create` throws `ArgumentException` on one, so `new Many(["00a", null])` throws at
+  construction where the old `new Many(2, new[] { "00a", null })` accepted and kept it. A producer that
+  builds a `Many` from a list of matches branches on its count the way generated code does: none to
+  `None`, one to `One`, more to `Many`. This reaches generated code — the emitter emits
+  `EquatableArray.Create(...)` and the one-argument form at the `Many` construction site, and reaches
+  that site only when more than one contract matched — so regenerate your bindings as part of this
+  upgrade rather than after it.
+- **`TransactionResultExtensions.All<T>()` now returns `EquatableArray<ContractId<T>>`**
+  (`Daml.Runtime.Contracts`) instead of `IReadOnlyList<ContractId<T>>`. It already allocated and owned the
+  array it handed back, and it sits directly beside `TransactionResult.CreatedContracts`, which moved to
+  `EquatableArray<T>` above; the two agree again. Callers using `var`, `foreach`, the indexer, `Count` or
+  LINQ compile unchanged, and the result still converts implicitly to `IReadOnlyList<ContractId<T>>`
+  wherever one is expected — including as a declared variable type or an argument — so in practice this
+  breaks only a caller who names the return type in a position that admits no conversion, such as an
+  `override` or an interface implementation. As with the members above, a `null` test on the result —
+  `tx.All<Iou>() ?? []`, `?.Count`, `is null` — no longer compiles, since there is no `null` to test for;
+  `All<T>()` never returned one.
+- **The create-by-exercise `*Many*` helpers now carry `EquatableArray<ContractId<TTemplate>>`**
+  (`Daml.Ledger.Abstractions.Extensions`) instead of `IReadOnlyList<ContractId<TTemplate>>` — the success
+  payload of `TryCreateManyByExerciseAsync`, and the return type of its throwing twin
+  `CreateManyByExerciseAsync`. Both project through `TransactionResultExtensions.All<T>()`, which the
+  entry above moved to `EquatableArray<ContractId<T>>`, so the old signatures boxed that array straight
+  back into an interface on the way out: a caller got a value-comparing sequence from `All<T>()` and, from
+  the helper feeding on it, one whose declared type compares by reference under `==`, with nothing at the
+  call site to mark the difference. The two shapes agree again and the box is gone.
+
+  Reads compile unchanged — `var`, `foreach`, the indexer, `Count`, LINQ — and the awaited result of
+  `CreateManyByExerciseAsync` still converts implicitly to `IReadOnlyList<ContractId<TTemplate>>` wherever
+  one is expected, including as a declared variable type or an argument. That one breaks only where the
+  task is handed on un-awaited and `Task<T>`'s invariance admits no conversion: a variable or field typed
+  `Task<IReadOnlyList<…>>`, or a member returning one straight through — an `override` or interface
+  implementation included. An `async` member that `return await`s compiles unchanged.
+  `TryCreateManyByExerciseAsync` is the sharper break, because the outcome type itself changed and
+  `ExerciseOutcome<T>` is invariant: a `switch` arm, `is` pattern or declared variable naming
+  `ExerciseOutcome<IReadOnlyList<ContractId<TTemplate>>>` no longer compiles and becomes
+  `ExerciseOutcome<EquatableArray<ContractId<TTemplate>>>`. The `None`, `Many`, `DamlError` and
+  `InfraError` arms are unaffected in shape, and the outcome object stays a record class, so a `null` test
+  on it compiles as before; it is the array — the `One` payload, and the awaited result of the throwing
+  twin — that loses `?? []`, `?.Count` and `is null`, since there is no `null` to test for and `All<T>()`
+  never handed one back. One change is silent, in code that still compiles: `==` on two of these arrays —
+  the awaited result of `CreateManyByExerciseAsync`, or two `One` payloads — was box identity, so
+  separately produced sequences were never equal, and it now compares content. `Equals` and a dictionary
+  keyed on one of them are unaffected, and so is `==` on the outcome records themselves: all three already
+  reached the boxed struct's own content equality.
+- **A generated record with a `List`, `TextMap` or `GenMap` field now compares by content**
+  (`Daml.Codegen.CSharp`, `Daml.Runtime`, and every binding regenerated from them). Such a record gains an
+  emitted `Equals` / `GetHashCode` pair and a copying `init` accessor per collection member: lists compare
+  element by element in order, maps key by key independently of insertion order, every other member
+  through `EqualityComparer<T>.Default` exactly as the synthesized equality did, and each collection is
+  copied at the constructor and at every `init` — so a producer that keeps the collection it passed can no
+  longer change an already-computed hash. Until now the record-synthesized equality read those members by
+  reference: two values decoded from the same ledger payload were unequal, a `with` expression handed the
+  caller's live collection through untouched, and neither value was findable in a `HashSet` or as a
+  dictionary key.
+
+  The member types are unchanged — `List a` is still `IReadOnlyList<T>`, `TextMap a` and `GenMap` still
+  `IReadOnlyDictionary<…>` — so no constructor signature or `Deconstruct` moves and no call site needs
+  editing. Every property of such a record is now declared in the record body instead of being synthesized
+  from its primary-constructor parameter, each carrying its own `DamlFieldAttribute` and XML-doc summary:
+  that keeps the property metadata order `DamlLfJsonReader` reads a record's Daml field order from, and
+  reflection over the attribute answers exactly as before. What changes is behaviour, in both directions:
+  code that relied on two such records being unequal (a de-duplication pass keyed on reference identity, a
+  cache expecting a miss, a test asserting `NotBe`) now sees them equal, and code that mutated a
+  collection after handing it to a record no longer sees the record follow. The comparison and the copy
+  live in the new public `Daml.Runtime.Data.DamlFieldCollections`, which the emitted members call and
+  which hand-written code carrying the same shapes can call too. Migration: regenerate your bindings
+  against this version, re-run any equality-sensitive assertions over generated types, and refresh any
+  vendored generated tree or pinned output hash — the emitted tree moves for every package carrying such a
+  field. This is the defect the runtime had already closed by hand on
+  `ExerciseOutcome<T>.Many.ContractIds`, `CaughtException.Metadata`, `DamlTextMap.Values` and
+  `ExerciseOutcome<T>.DamlError.Metadata`; those four sites are unchanged.
+- **`ExerciseOutcome<T>.DamlError` now owns its `Metadata` and compares it by content**
+  (`Daml.Runtime.Outcomes`), closing on the union's last remaining member the hole the `Many` entry above
+  closed for `ContractIds`. The member type is unchanged — still `IReadOnlyDictionary<string, string>`, so
+  every read compiles and behaves as before, `metadata["cid"]` included. What changes is what the value
+  means: the record-synthesized equality compared the dictionary by reference, so two errors decoded from
+  the same participant trailer were unequal and `==`, `Equals` and a dictionary lookup all disagreed with
+  what a consumer reading the fields saw, and a producer that kept its own dictionary could change an
+  outcome after handing it over. `DamlError` now copies the dictionary at construction and on `init` and
+  compares it key by key, independently of insertion order, with a `GetHashCode` that agrees — matching
+  what `CaughtException.Metadata` and `DamlTextMap` already do for the same shape. Four behaviour changes
+  follow: two `DamlError` values with equal metadata now compare equal where they used to be unequal
+  unless they shared the dictionary instance; `outcome.Metadata` is a copy, so it is no longer
+  reference-equal to the dictionary you passed; `new DamlError(…, null!)` now throws
+  `ArgumentNullException` naming `Metadata` instead of storing the `null`; and the copy uses the default
+  comparer, so a producer that supplied a `StringComparer.OrdinalIgnoreCase` dictionary loses
+  case-insensitive lookup — that normalization is what keeps equality symmetric, and both Canton parsers
+  already build their metadata ordinal. Nothing on the wire moves — the outcome has no JSON converter and
+  is not serialized.
+- **`AddDamlConverters` now registers `EquatableArrayJsonConverterFactory` and requires the
+  `EquatableArray<T>` constructor parameters of the types it serializes**
+  (`Daml.Runtime.Serialization`). The migration above left the event and stream records write-only:
+  `System.Text.Json` wrote their list members as JSON arrays because `EquatableArray<T>` implements
+  `IReadOnlyList<T>`, but reading any of them back — an empty array included — threw
+  `NotSupportedException`, so no migrated record round-tripped. The new converter reads and writes
+  `EquatableArray<T>` through the caller's own options, so element converters still apply and a `Party`
+  stays a bare string; a failure on any element is reported as a `JsonException` naming the index. A JSON
+  `null` for one of these members is rejected rather than read as the empty array: the struct has no
+  `null` state, so a wire `null` is a producer disagreement, not a value — write `[]`, or declare the
+  member `EquatableArray<T>?`.
+
+  **The breaking part is the omitted member**: a payload that simply left one out used to deserialize
+  silently to an empty array, which reads as "the event named no witnesses" rather than "the producer sent
+  no such field", and it now throws `JsonException` naming the parameter. No converter can close that — an
+  absent property never reaches one — so a `JsonTypeInfo` modifier does it instead, marking required
+  exactly those constructor parameters whose type is a closed `EquatableArray<T>`. Requiredness changes
+  nowhere else: an ordinary nullable parameter that carries no default, such as
+  `TransactionResult.CommandId` — which the Ledger API omits on transactions this participant did not
+  submit — still reads as `null`, and so does a generated record's `Optional` field. The modifier composes
+  onto whatever `TypeInfoResolver` the caller already installed, so a source-generated
+  `JsonSerializerContext` survives. Members that are init-only properties rather than constructor
+  parameters, such as `CreatedContract.InterfaceIds` and `TransactionResult.ExercisedEvents`, keep
+  absent-means-empty, as does one declared `EquatableArray<T>?`. Callers building `JsonSerializerOptions`
+  by hand pick the converter up by adding `DamlJsonConverters.All`, but only `AddDamlConverters` installs
+  the modifier.
+- **`EquatableArray<T>` carries its JSON converter in a type-level `[JsonConverter]` attribute**
+  (`Daml.Runtime`). The struct now names `EquatableArrayJsonConverterFactory` the way `ContractId<T>`,
+  `Party` and `SynchronizerId` already named theirs, and on the reflection path — the default — that is
+  purely additive: every write is byte-identical to what it was, `[]` and `["Alice::122012ab"]` included,
+  and `JsonSerializer.Deserialize<ArchivedEvent>(json)` on bare `JsonSerializerOptions` now converts the
+  list instead of throwing the `NotSupportedException` the migration left behind there.
+
+  **The breaking part is the source-generated path.** A type-level `[JsonConverter]` makes the
+  `System.Text.Json` generator emit the factory for a member of this type rather than collection metadata,
+  and the factory's converter converts elements through the reflection-based `JsonSerializer` overloads,
+  which need a `JsonTypeInfo` the context no longer registers. So a `JsonSerializerContext` that wrote
+  `record Holder(EquatableArray<long> Numbers)` as `{"Numbers":[1,2]}` now throws
+  `JsonException: Cannot write element 0 of EquatableArray<Int64>: JsonTypeInfo metadata for type
+  'System.Int64' was not provided by TypeInfoResolver`, and a consumer build that was clean now reports
+  `IL2026` and `IL3050` from the generated context — an error rather than a warning wherever
+  `TreatWarningsAsErrors` is set. Neither is earned by any change on the consumer's side. Migration:
+  declare the element type on the context — `[JsonSerializable(typeof(long))]`, and one per element type
+  actually serialized, which across the migrated event and stream records means `Party`, `string`,
+  `Identifier`, `CreatedContract`, `ExercisedEvent`, `TreeEvent` and `CaughtException`. Both directions
+  then work, which is a better position than this path held before, where the write worked and the read
+  threw. `EquatableArray<T>`'s is the only converter here that recurses back through the caller's options
+  for its elements, which is why `ContractId<T>`'s long-standing attribute never cost this. What the
+  attribute does not replace is `AddDamlConverters`, still what supplies the rest of the posture: only the
+  registered path refuses an omitted list rather than reading it as the empty array, and only it sets
+  `RespectNullableAnnotations`. A converter on `JsonSerializerOptions.Converters` continues to take
+  precedence over the attribute.
+- **`LedgerOffset`, `CommandId`, `ChoiceName` and `WorkflowId` change their JSON shape** (`Daml.Runtime`,
+  `Daml.Runtime.Commands`). Each wrote itself as an object wrapping its member — `{"Value":7}`,
+  `{"Value":"cmd-1"}` — and could not read that object back: all four are `readonly record struct`s
+  exposing only a get-only `Value`, and `System.Text.Json` prefers a struct's implicit parameterless
+  constructor unless told otherwise, so it default-constructed them and dropped the value. Each now
+  carries a `[JsonConverter]` of its own, also listed in `DamlJsonConverters.All`, and travels as the bare
+  scalar the participant puts on the wire: `LedgerOffset` as a JSON number (`7`), the other three as JSON
+  strings (`"cmd-1"`), joining `Party`, `SynchronizerId` and `ContractId<T>`. A consumer reading or
+  writing these payloads outside the runtime updates the field shape; a consumer who only persisted and
+  reloaded runtime types gets back what they wrote for the first time.
+
+  The loss was silent for `LedgerOffset`, whose offset of `7` read back as `Begin` and restarted a resumed
+  stream from the beginning of the ledger, and deferred for the three ids, whose read yielded a non-null
+  value throwing `InvalidOperationException` on every `Value` access at the use site. A JSON `null` on a
+  non-nullable member of any of the four is now a `JsonException` naming the type, and an offset that is
+  negative, fractional, in exponent form, or outside `Int64` is refused rather than read as some other
+  position; `WorkflowId` alone still accepts the blank id the Ledger API declares `workflow_id` may carry.
+  Recovery needs the member to be present either way: a converter never runs for a property the payload
+  omits, so an absent `CompletionOffset` still reads as `Begin`. No member, type or signature changed.
+
+  With these four converters registered, `TransactionResult`, `SubmitAndWaitResult` and
+  `StakeholderResume` round-trip to an equal value — `TransactionResult` with `DamlValueJsonConverter`
+  added alongside for the `DamlRecord` payloads its created contracts carry, an older gap of the same
+  kind: `DamlValue` is abstract and `DamlValueJsonConverter` is registered only inside
+  `DamlJsonSerializer`'s own options rather than in `DamlJsonConverters.All`, so without it a record
+  holding a `DamlRecord` writes its field values as `{}`; add it and `CreatedEvent` and `CreatedContract`
+  round-trip too. Two gaps have no such workaround. `TreeEvent` is abstract and carries no
+  `[JsonDerivedType]`, so a `TransactionTree` writes its root events as `{}`. And `ICommand` is a bare
+  interface with no `[JsonDerivedType]`, so an `ExerciseCommand` — and a `CommandsSubmission` carrying
+  one — still does not read back, whatever these converters recover from its `ChoiceName` and `WorkflowId`
+  members. Both are instances of a wider gap that predates this release: a declared-abstract type writes
+  only its base's members and cannot be read back.
+- **A payload that omits a `LedgerOffset` member is refused on `AddDamlConverters` options**
+  (`Daml.Runtime`). `LedgerOffset`'s default value is `Begin`, a real ledger position, so a document that
+  never mentioned `CompletionOffset` read back as a transaction committed at the start of the ledger, and
+  a `StakeholderResume` without its `Offset` resumed a stream from the beginning — a consumer could not
+  tell omission apart from a participant that actually reported `Begin`. A `JsonSerializerOptions` built
+  with `AddDamlConverters` now marks required every constructor parameter typed `LedgerOffset` that
+  carries no C# default, alongside the `EquatableArray<T>` parameters it already required, so an absent
+  one is a `JsonException` naming the member instead. `StakeholderResume` declares
+  `[method: JsonConstructor]` for it: as a `readonly record struct` it was read through the implicit
+  parameterless constructor, which left its `Offset` an init-only property no requiredness could reach.
+  Migration: a consumer whose payloads legitimately omit an offset declares the member `LedgerOffset?`,
+  the shape the stream events already carry for an offset a participant need not report, or gives the
+  parameter a C# default; both stay optional, as do init-only `LedgerOffset` properties. Bare
+  `JsonSerializer` options are unchanged — requiredness has never been reachable from the
+  `[JsonConverter]` attribute alone — and the identity structs are deliberately left out:
+  `default(CommandId)`, `default(ChoiceName)` and `default(WorkflowId)` throw on any access to `Value`, so
+  an omitted id is already loud rather than silently plausible.
+- **`Set<T>` (`Daml.Runtime`) reads and writes through `System.Text.Json` as a bare JSON array** —
+  `["alice","bob"]`, and `[]` when empty — where it used to write the object
+  `{"Elements":["alice","bob"],"Count":2}` and could read no object payload at all, its own write
+  included: the `Set(IEnumerable<T> elements)` parameter binds to no property, because the
+  `IReadOnlySet<T> Elements` beside it matches the name and not the type, so `System.Text.Json` refused
+  the type with `InvalidOperationException` before reading a byte. The array is the shape
+  `EquatableArray<T>` already travels as, and it is the CLR round trip that is this path's contract — the
+  Daml-LF spelling `{"map":[["alice",{}]]}` stays the Daml-LF path's and is not what `System.Text.Json`
+  owes. `Set<T>` names `SetJsonConverterFactory` in a `[JsonConverter]` attribute, so a host that never
+  calls `AddDamlConverters()` gets the shape too; the factory also joins `DamlJsonConverters.All`.
+  Elements are written in the order the set enumerates them, which for a set built from a sequence is the
+  order of first occurrence in it, so the payload is reproducible.
+
+  Migration: a payload persisted by an earlier version under the `{"Elements":…,"Count":…}` object is not
+  read by this one — nothing ever read it, so re-writing it from the `Set<T>` in hand is the whole of the
+  upgrade. A payload repeating an element collapses it, as set semantics require, so a read set can be
+  smaller than the array that stated it. A payload that *omits* a `Set<T>` member is refused on
+  `AddDamlConverters` options — see the entry below for that refusal and the annotation it depends on —
+  and read as `null` on bare ones, because `RespectNullableAnnotations` refuses a stated `null` token, not
+  an absent member, and the modifier that closes that gap rides on `AddDamlConverters`. The Ledger API
+  path is untouched: `ToRecord`/`FromRecord` still produce and consume the `Map k Unit` record.
+- **A payload that omits a non-nullable `Set<T>`, `Map<TKey, TValue>` or `NonEmpty<T>` member is now
+  refused** (`Daml.Runtime`). `JsonSerializerOptions` built with `AddDamlConverters` now mark required
+  every constructor parameter typed as one of those three Daml stdlib collections that is declared
+  non-nullable and carries no C# default, alongside the `EquatableArray<T>` and `LedgerOffset` parameters
+  they already required. An omitted member used to bind to `null` in silence even where the declared type
+  forbids one, because `RespectNullableAnnotations` refuses a *stated* `null` token and never sees an
+  absent member: `{"Name":"cold"}` read into `record Vault(string Name, Set<Party> Keyholders)` produced a
+  `Vault` whose non-nullable `Keyholders` was null, and the failure surfaced as a `NullReferenceException`
+  at the first use of it, arbitrarily far from the parse that caused it. It is now a `JsonException`
+  naming `Keyholders` at the parse.
+
+  Migration: a consumer whose payloads legitimately omit one of these collections declares the member
+  nullable —
+
+  ```csharp
+  record Vault(string Name, Set<Party>? Keyholders);
+  ```
+
+  — the shape codegen already emits for a Daml `Optional` of one, and the only shape a stated `null` was
+  ever read into — or gives the parameter a C# default; both stay optional, as do init-only properties of
+  those types.
+
+  **What the refusal does not reach.** Bare `JsonSerializer` options are unchanged: requiredness has never
+  been reachable from the `[JsonConverter]` attribute alone, so a host that never calls
+  `AddDamlConverters()` still reads an omitted member as `null`. The refusal also rides on the declaring
+  type's nullable annotations, which a nullable-oblivious declaration does not carry: every parameter on
+  one reads as nullable whether or not it was written `Set<T>?`, so none is marked required. Generated
+  code emitted with `DamlNullable=false` (`--nullable false`), which omits the `#nullable enable` the
+  emitter otherwise writes, and any hand-written type compiled under `#nullable disable`, therefore still
+  bind an absent member to `null` exactly as before — the refusal reaches nullable-annotated declarations
+  only. And the three collections are the whole of the change: an absent non-nullable `string`,
+  `ContractId<T>` or host-declared reference-type parameter still binds to `null`, and whether the runtime
+  should refuse those too is still open.
+- **All four stream-failure records — `AcsSnapshotEntry<T>.StreamError`,
+  `ContractStreamEvent<T>.StreamError`, `InterfaceAcsSnapshotEntry<TInterface, TView>.StreamError` and
+  `InterfaceStreamEvent<TInterface, TView>.StreamError` — gain a `string? ErrorId`**, the Canton built-in
+  or Daml-defined error identifier the transport decoded from the participant's structured error, under
+  the name `ExerciseOutcome<T>.DamlError.ErrorId` already carries on the write path — nullable here, where
+  the write path's is not, because one stream arm covers both the structured and the unstructured fault.
+  Until now a terminal stream fault arrived as a status code, a message and a category, and none of the
+  three classifies it: `ContentionOnSharedResources` covers both `STALE_STREAM_AUTHORIZATION`, which
+  Canton documents as resolved by reopening the stream, and
+  `JSON_API_MAXIMUM_LIST_ELEMENTS_NUMBER_REACHED`, which reopening reproduces exactly, and both map to the
+  same transport status (HTTP 409, gRPC `ABORTED`) — so a consumer deciding whether to retry had nothing
+  but the participant's prose to match on. Read the new member as an identity rather than parsing it. It
+  is `null` when the fault carried no structured error to decode; a transport that parsed none leaves it
+  `null` rather than inventing a sentinel.
+
+  **The parameter sits between `Category` and `SourceException`, not at the end**: `SourceException` stays
+  last on all four records, and appending would leave a transport re-wrapping a stream fault positionally
+  one silent bind away from dropping the id — the same reason `InfraError`'s own `Category` sits ahead of
+  `SourceException` rather than after it. A `string` does not convert to `Exception?`, so
+  `new StreamError(statusCode, message, category, exception)` fails to compile — pass the exception by
+  name:
+
+  ```csharp
+  new StreamError(statusCode, message, category, SourceException: exception);
+  ```
+
+  A bare `null` in that fourth slot still compiles and now binds `ErrorId`, which costs nothing: it left
+  `SourceException` null before and leaves both null now. `Deconstruct` moves from four parameters to
+  five, so a positional pattern binding four elements no longer matches, and the generated record equality
+  and `GetHashCode` weigh `ErrorId` too — two stream errors agreeing on status code, message, category and
+  source exception are unequal when only one carries an id. The change is binary-breaking either way.
+  `StreamerSnapshot.SnapshotAsync` forwards the id onto the `LedgerOperationException` it throws for a
+  faulted snapshot, whose `ErrorId` previously only a write-path `DamlError` filled, so the code survives
+  that rethrow instead of being dropped there; that exception's infrastructure constructor gains a
+  trailing optional `errorId`, which every existing call site still binds without change. That path sets
+  `ErrorId` with no `Metadata` beside it, so a non-null `ErrorId` no longer implies a non-null `Metadata`
+  the way it did while only a `DamlError` set it — a catch site that read one off the strength of the
+  other has to null-check it now. A transport that already parses the error id should now populate it.
+- **`CodeGenOptions.UseRecordTypes` and `CodeGenOptions.UsePrimaryConstructors` are removed**
+  (`Daml.Codegen.CSharp`). Both defaulted to `true`, and the emitter now always produces the positional
+  `sealed record` shape — the only shape it ever produced compilable code for. Set to `false`,
+  `UseRecordTypes` made `RecordEmitter` and the nested choice-argument path emit a record with no members
+  whose own `ToRecord` / `FromRecord` still referenced them, so the generated source did not build; the
+  template path only survived because it bolted `required` properties on afterwards. A caller deletes the
+  two assignments: one who left the defaults gets byte-identical output, and one who set either to `false`
+  has no replacement because there was never a working alternative shape. Zero-field records, templates
+  and nested choice arguments keep their memberless form, which is selected by the field count and is
+  unchanged. `UseFileScopedNamespaces` and `GenerateXmlDocs` are unaffected: each now carries a test
+  compiling its `false`-path output.
+- **`CreateClient()` on `LedgerClientConformanceTests<TProbe>` must now seed one archived `TProbe`**
+  (`Daml.Ledger.Abstractions.Testing.Conformance`), at an offset no later than the one `GetLedgerEndAsync`
+  returns, reaching the ACS-delta subscription as an `Archived` event and the ledger-effects subscription
+  as a consuming `Exercised` event. `Acs_delta_subscription_never_yields_Exercised` and
+  `Ledger_effects_subscription_never_yields_Archived` used to assert only that each shape omits the other
+  shape's variant, so an implementation whose projector drops every archival event passed both vacuously —
+  certified on the very axis those checks exist to convey, while conveying nothing. Each now also asserts
+  the archival signal is present. Both stay always-on and the nine opt-in checks are untouched. Adopters
+  already seeding a create plus its consuming archive on both streams within `(Begin, ledger end]` change
+  nothing; the rest add that pair to their fixture. Only presence is checked, so the archived contract id
+  need not match a `Created` earlier in the same window.
+
+### Added
+
+- **`DamlLfJsonReader.ReadValue` (`Daml.Runtime`): top-level LF-JSON decoding.** Four overloads —
+  `ReadValue<T>(JsonElement, DamlJsonDeserializationLimits?)`, `ReadValue<T>(string, ...)` and the two
+  `Type`-taking siblings — decode a top-level LF-JSON value against the Daml type it is expected to carry.
+  The reader previously exposed only `ReadRecord`, so `exerciseResult`, `choiceArgument` and `contractKey`
+  had no public entry point whenever the value at the top of the payload was not a generated record: a
+  choice returning `Unit`, a variant, an enum, a scalar or a `ContractId` could be parsed but not decoded.
+  `ReadValue` covers those and generated records alike, so a caller holding an unconstrained result type
+  parameter — the shape a typed exercise has at its call site — reaches one entry point instead of
+  branching on what the type turned out to be, which is why `T` carries no constraint. The limit guards
+  match `ReadRecord` exactly: the shared hardened defaults apply when `limits` is omitted, the
+  configuration is validated on every overload, and the two `string` overloads enforce the input-length
+  bound before parsing.
+
+  `ReadValue` refuses rather than guesses. A target outside the Daml type mapping throws
+  `NotSupportedException` instead of falling through to a plausible-looking arm, because an unconstrained
+  result type makes a wrong-but-decodable target easy to pass: a `string` requested against a
+  `Party`-returning choice would otherwise decode as `DamlText` with no diagnostic at all. For the same
+  reason a top-level enum must be a generated Daml enum, one carrying the companion the reader reads wire
+  constructor names from, so an arbitrary CLR enum is refused rather than decoded against its own member
+  names — reading an enum as a field of a generated record is unaffected. Top-level `Optional<T>`,
+  `IReadOnlyList<T>`, `IReadOnlyDictionary<K, V>`, `Tuple2`/`Tuple3`, `Either`, `Map`, `Set` and `NonEmpty`
+  are refused as a family, with a distinct message pointing at the same remedy: read them as a field of a
+  generated record, or decode the value without the reader.
+- `ContractStreamEventExtensions` (`Daml.Runtime`): `ToContract()` on the two contract-stream variants
+  that carry a payload — `ContractStreamEvent<T>.Created` and `ContractStreamEvent<T>.Assigned`. The
+  keyless overload pairs the row's contract ID with its decoded payload into `Contract<T>`; the keyed
+  `ToContract<T, TKey>()` also decodes the row's wire-level `Key` through the template's `Key` witness and
+  carries the ledger's hash of it, so a consumer reads `contract.Key.Value` and `contract.Key.Hash` off a
+  live stream instead of hand-decoding `created.Key!.Value` and dropping the hash — including across a
+  reassignment, which is why `Assigned` gets the hop too. A keyed projection of a row that carried no key
+  throws `InvalidOperationException` rather than guessing. This is the stream twin of
+  `AcsSnapshotEntryExtensions.ToContract`; the variants' raw `ContractKey? Key` slot is unchanged, and the
+  remaining variants carry no payload to project.
+- **`ActiveContract<TContract>` (`Daml.Runtime.Contracts`) pairs a contract with the provenance its
+  active-contract-set snapshot row carried**: `LastUpdateOffset`, the offset of the update that last
+  created or assigned the contract, and `SynchronizerId`. `TContract` is unconstrained, so a
+  `Contract<T>`, a `Contract<T, TKey>` or a consumer's own interface-view pairing all wrap in it. The
+  offset orders and identifies but does **not** resume — it may point at an already-pruned update, so a
+  consumer persisting resume state still takes it from the snapshot's terminal checkpoint.
+  `AcsSnapshotEntry<T>.Created.ToActiveContract()` (`Daml.Runtime.Streams`), keyless and keyed, and
+  `SnapshotActiveAsync<T>()` / `SnapshotActiveAsync<T, TKey>()`
+  (`Daml.Ledger.Abstractions.Extensions.StreamerSnapshot`) project a snapshot row, and a whole drained
+  snapshot, into those carriers. `ToContract()` and `SnapshotAsync()` are unchanged and still discard the
+  row's offset, synchronizer id and witness parties; their XML docs now say so and name the twin that
+  keeps the first two.
+- **`EquatableArray<T>` gains a read surface and a readable `ToString()`** (`Daml.Runtime.Contracts`): the
+  zero-copy `AsSpan()`, plus `ToArray()`, `CopyTo(T[], int)`, `IsEmpty`, `Contains(T)` and `IndexOf(T)`.
+  `ToString()` renders `[alice, bob]`, and `[]` for both an empty and a `default` array, so the 34
+  migrated event and stream members no longer print as
+  ``Daml.Runtime.Contracts.EquatableArray`1[Daml.Runtime.Data.Party]`` in assertion failures and logs. The
+  struct also implements `ICollection<T>` and `IList<T>`: LINQ sizes `ToArray` and `ToList` up front
+  instead of growing a buffer, `Count` reads the count instead of enumerating, and `Enumerable.Last`,
+  `ElementAt` and `Skip` — which probe `IList<T>` and never `IReadOnlyList<T>` — index straight to the
+  element rather than walking. Those interfaces' mutating members (`Insert`, `RemoveAt`, `Add`, `Remove`,
+  `Clear`, the settable indexer) are implemented explicitly and throw `NotSupportedException`, and
+  `IsReadOnly` is `true`, so the type's own surface stays read-only and a throwing member is unreachable
+  without casting. `ToArray()` returns the shared `Array.Empty<T>()` for an empty or `default` array and a
+  fresh copy otherwise, and `AsSpan()` on a `default` array yields an empty span rather than throwing.
+  `Contains` and `IndexOf` use `EqualityComparer<T>.Default`, so they agree with the type's equality.
+  `Enumerator.Reset()` is now an explicit `IEnumerator` implementation, matching `List<T>.Enumerator`: a
+  `foreach` is unaffected, and reaching `Reset` requires casting to `IEnumerator`. Because `ChildEvents`
+  and `RootEvents` are recursive, rendering an exercise node's children through the new `ToString()` would
+  have walked its whole subtree on the call stack, and a deep tree overflows it — which kills the process
+  rather than throwing. `TreeEvent.Exercised` therefore renders `ChildEvents.Count = n` in place of its
+  children, so rendering a node costs the node exactly as hashing one does; every other member renders its
+  elements.
+- `NotSupportedLedgerClient` (`Daml.Ledger.Abstractions.Testing.Conformance`): an abstract `ILedgerClient`
+  whose full 12-member surface throws `NotSupportedException` by default. A conformance fake written
+  against `ILedgerClient` directly had to stub every member it did not exercise itself — up to 10
+  `throw new NotSupportedException()` bodies per file — because the interface carries no
+  partial-implementation base. A transport author's own conformance fakes derive from this and override
+  only the behavior under test.
+
+### Changed
+
+- `CommandsSubmission` (`Daml.Runtime`) now compares its `Commands`, `ActAs`, `ReadAs` and
+  `DisclosedContracts` lists element by element instead of by list identity, and hashes their contents.
+  The record-synthesized equality compared the backing `IReadOnlyList<>` members by reference, which the
+  defensive copies below would otherwise have narrowed to near-identity — no two submissions can share a
+  list instance any more. Equality widens instead: two submissions holding separately-allocated but equal
+  lists used to be unequal and now compare equal, so an assertion that two submissions differ only because
+  their lists were allocated apart will flip. Two submissions built from one shared array stay equal, as
+  they were before. An absent list stays distinct from an empty one. No member, type or signature changed,
+  so this is not source- or binary-breaking.
+
+### Fixed
+
+- `CommandsSubmission` (`Daml.Runtime`) now copies the `Commands`, `ActAs`, `ReadAs` and
+  `DisclosedContracts` lists it is given, at the primary constructor and at every `init` accessor — so
+  through `with` expressions and the `WithActAs`/`WithReadAs`/`WithDisclosedContracts` builders too. The
+  record stored the caller's array, so a caller that kept the array it passed could change a built
+  submission afterwards, including the `ActAs`/`ReadAs` authorization data. `WithSubmitter` already
+  copied, so the type was internally inconsistent. A `null` command list now throws
+  `ArgumentNullException` at the boundary instead of failing later with an unattributed
+  `NullReferenceException`; the three optional list slots still accept `null` as "carries none".
+- `SubmitterInfo` (`Daml.Runtime`) now carries a `[JsonConverter]` of its own, so a record that holds one
+  round-trips. `ActAs` and `ReadAs` are get-only properties backed by private fields, and
+  `System.Text.Json` had neither a setter nor a `[JsonConstructor]` to assign through — a
+  `[JsonConstructor]` was never available to it, because the constructor takes `IReadOnlySet<Party>`,
+  which the serializer cannot instantiate. So it wrote `{"ActAs":["alice"],"ReadAs":["bob"]}` and read
+  back `default(SubmitterInfo)`, whose every `ActAs` access throws `InvalidOperationException` far from
+  the read that caused it — the same silent loss `LedgerOffset` and `CommandId` are fixed for above. No
+  shipped call site puts a `SubmitterInfo` in a serialized graph, so nothing exercised the path; the type
+  is closed here rather than when the first call site reaches it. The emitted shape is unchanged: the two
+  party sets stay JSON arrays of the bare party strings `Party` itself travels as, named under whatever
+  `JsonSerializerOptions.PropertyNamingPolicy` the surrounding record is serialized with. A payload that
+  omits `ActAs`, or carries it as null, empty, or a non-array, is now a `JsonException` naming
+  `SubmitterInfo` and the member, and writing a `default(SubmitterInfo)` raises that same `JsonException`
+  rather than the `InvalidOperationException` the property accessor used to let escape. The converter
+  joins `DamlJsonConverters.All` beside its siblings. No member or signature changed.
+- **`System.Text.Json` is a CLR round-trip contract, not a wire decoder.** The packaged `Daml.Runtime`
+  README and the `DamlJsonConverters` XML doc told consumers that `Party`, `ContractId<T>`,
+  `SynchronizerId`, `CommandId`, `ChoiceName` and `WorkflowId` travel as bare JSON strings "in PQS rows
+  and JSON Ledger API payloads … so plain `System.Text.Json` needs no setup", and showed
+  `JsonSerializer.Deserialize<IouContract>(pqsRowJson)`. The bare-string shape is real, but the conclusion
+  drawn from it is not: `System.Text.Json` agrees with the Daml-LF JSON encoding for those six scalars and
+  for nothing above them, because the agreement tracks which converters have been written rather than a
+  boundary in the design. A `Map<K,V>` reads back `{"Entries":[…],"Count":…}` and a `NonEmpty<T>`
+  `{"Hd":…,"Tl":…,"All":…}` — each a faithful CLR round trip of the value, and neither the shape the
+  Daml-LF wire carries — and a generated record whose Daml field name had to be escaped in C# is read
+  under the C# name rather than the `[DamlField]` label the wire carries, so a consumer following the
+  readme decoded a Canton payload wrongly, silently. Both documents now state the contract that holds:
+  `System.Text.Json` is a CLR round trip — a value reads back as itself — and a ledger or PQS payload is
+  read with `DamlLfJsonReader`, which is given the schema. The readme's PQS example is rewritten onto that
+  reader. Documentation only; no behaviour, member or signature changed.
+- `LedgerClientConformanceTests<TProbe>` (`Daml.Ledger.Abstractions.Testing.Conformance`) now holds the
+  `StreamTimeout` budget on the nine checks that collect a stream even when the transport's enumerator
+  ignores the enumeration token. The budget was applied through `WithCancellation`, which only reaches
+  `GetAsyncEnumerator` and cannot interrupt an in-flight `MoveNextAsync`, so an implementation whose
+  stream never terminates — ignoring `toOffset`, the token, or both — hung the adopter's run until their
+  own runner's wall-clock kill, with no message, instead of failing inside the budget the kit's README
+  promises. Each `MoveNextAsync` is now raced against one whole-stream deadline, so those checks fail with
+  the contract-naming `TimeoutException`; on timeout the enumeration is cancelled and the abandoned
+  enumerator is disposed in the background under the same budget. The cancellation check's losing drain
+  task is observed and its timer cancelled, so a timed-out check no longer leaves an unobserved faulted
+  task behind. `StreamTimeout` — still `protected virtual`, 30s by default — is now the real ceiling. No
+  member, type or signature changed.
+- The ten `cancellationToken` parameters across `ILedgerStreamer` and the `StreamerSnapshot` extensions
+  (`Daml.Ledger.Abstractions`) now state that cancellation surfaces as an `OperationCanceledException`
+  rather than a gracefully-completed stream, and each carries a matching `<exception>` tag. "Cancels the
+  underlying stream cleanly" said neither, and the surrounding `remarks` — which establish that transport
+  faults arrive in-band as a terminal `StreamError` — led a reader toward the graceful reading, under
+  which a `foreach`-and-accumulate consumer would hand back a silently partial snapshot indistinguishable
+  from a complete one. The conformance kit's cancellation check now fails an implementation that ends its
+  stream gracefully on cancel, rather than timing out on it. Shipped XML documentation only; no behaviour,
+  member or signature changed.
+- `InterfaceStreamEvent<TInterface, TView>` (`Daml.Runtime`) now documents every variant to the depth its
+  template sibling `ContractStreamEvent<T>` does. The two are the same union written twice, but only one
+  carried the type-level explanation — the variant list, the table of which stream shape emits which
+  variant, and the warning that an `Unclassified` event's `Offset` can be `null` and must not be persisted
+  as a resume offset, because substituting `LedgerOffset.Begin` re-reads the whole stream. A consumer who
+  filtered a subscription to an interface got a strictly worse interface for identical code. Where the
+  interface family genuinely differs it now says so rather than repeating the template wording: the
+  payload is the participant-computed view record, `TView` is bound to the marker by `IHasView`, and
+  `UnclassifiedKind.InterfaceViewUnavailable` is the reason only this family can report. Shipped XML
+  documentation only; no behaviour, member or signature changed.
+- The CHANGELOG and README described the `daml-dar-to-proto` jar and its
+  `intermediate_dar-<version>.proto` schema as assets attached to each GitHub release. No release has ever
+  attached them. Both documents now state the present fact — the tool is packaged for standalone
+  publication and its release assets are not published — and the README's usage recipes over the missing
+  assets are removed. Documentation only; no behaviour, member or signature changed.
+
 ## [0.5.0-preview.1] — 2026-09-01
 
 ### Added

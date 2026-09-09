@@ -226,7 +226,7 @@ public class EmittedRecordReferenceCompilesTests
             DependencyReferences = [],
         };
         var resolver = new DarCrossPackageResolver(
-            new DarModel { MainPackage = package, Dependencies = [] });
+            new DarModel { MainPackage = package, Dependencies = [] }, new CodeGenOptions());
 
         StdlibPackages.RequireForFieldType(resolver, package, indent, nestedAppCarryingContractId);
 

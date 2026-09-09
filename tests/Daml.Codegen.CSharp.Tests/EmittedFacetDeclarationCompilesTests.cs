@@ -14,15 +14,15 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Compiles emitted code carrying the <c>IDamlRecord&lt;TSelf&gt;</c> facet in the
-/// declaration shapes the conformance corpus does not cover: the class-based,
-/// no-primary-constructor emitter branch and the zero-field <c>FromRecord</c>
-/// short-circuit. The facet turns <c>FromRecord</c>'s shape from convention into
-/// a compile-time contract, so each branch is compile-verified, not string-matched.
+/// declaration shape the conformance corpus does not cover: the zero-field
+/// <c>FromRecord</c> short-circuit, which emits a memberless record rather than a
+/// positional one. The facet turns <c>FromRecord</c>'s shape from convention into
+/// a compile-time contract, so the branch is compile-verified, not string-matched.
 /// </summary>
 public class EmittedFacetDeclarationCompilesTests
 {
     [Fact]
-    public void Emitted_facet_compiles_without_record_types_and_on_zero_field_records()
+    public void Emitted_facet_compiles_on_zero_field_records()
     {
         var module = new DamlModule
         {
@@ -61,21 +61,14 @@ public class EmittedFacetDeclarationCompilesTests
             DependencyReferences = [],
         };
         var dar = new DarModel { MainPackage = package, Dependencies = [] };
-        var options = new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = false,
-            UsePrimaryConstructors = false,
-        };
 
-        var files = CreateGenerator(options).Generate(dar);
+        var files = CreateGenerator().Generate(dar);
 
         files.Should().Contain(f => f.Content.Contains("IDamlRecord<PlainAsset>", StringComparison.Ordinal));
         files.Should().Contain(f => f.Content.Contains("IDamlRecord<EmptyMarker>", StringComparison.Ordinal));
         var errors = CompileEmittedFiles(files).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
-            "the facet must hold in every emitted declaration shape, but got: {0}",
+            "the facet must hold in the zero-field declaration shape, but got: {0}",
             string.Join("\n", errors.Select(e => e.GetMessage(CultureInfo.InvariantCulture) + " @ " + e.Location)));
     }
 }

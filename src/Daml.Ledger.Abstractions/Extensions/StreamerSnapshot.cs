@@ -58,6 +58,12 @@ public static class StreamerSnapshot
     /// offset matters.
     /// </para>
     /// <para>
+    /// Each row's own offset, synchronizer id and witness parties are discarded too, by design:
+    /// this method hands back contracts, not observations of them. Use
+    /// <see cref="SnapshotActiveAsync{T}(ILedgerStreamer, SubmitterInfo, LedgerOffset?, CancellationToken)"/>
+    /// to keep the last-update offset and the synchronizer id.
+    /// </para>
+    /// <para>
     /// The returned contracts carry no contract key. A keyed template's snapshot goes through
     /// the <see cref="SnapshotAsync{T, TKey}(ILedgerStreamer, KeyDescriptor{T, TKey}, SubmitterInfo, LedgerOffset?, CancellationToken)"/>
     /// overload, which yields <see cref="Contract{T, TKey}"/> with the key decoded.
@@ -67,14 +73,19 @@ public static class StreamerSnapshot
     /// <param name="streamer">The streaming capability.</param>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="streamer"/> is <c>null</c>.</exception>
     /// <exception cref="LedgerOperationException">
     /// The snapshot faulted, carried an unclassified row, or ended without its terminal
     /// checkpoint.
     /// </exception>
     /// <exception cref="OperationCanceledException">
-    /// <paramref name="cancellationToken"/> was cancelled.
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
     /// </exception>
     public static async Task<IReadOnlyList<Contract<T>>> SnapshotAsync<T>(
         this ILedgerStreamer streamer,
@@ -98,6 +109,71 @@ public static class StreamerSnapshot
     }
 
     /// <summary>
+    /// Drains an active-contract-set snapshot into a materialized list of typed contracts, each
+    /// paired with the provenance its snapshot row carried.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The provenance-keeping twin of
+    /// <see cref="SnapshotAsync{T}(ILedgerStreamer, SubmitterInfo, LedgerOffset?, CancellationToken)"/>,
+    /// with identical fault, unclassified-row, truncation and cancellation behaviour. A distinct
+    /// name rather than an overload: the parameter list is the same and C# does not overload on
+    /// return type.
+    /// </para>
+    /// <para>
+    /// <see cref="ActiveContract{TContract}.LastUpdateOffset"/> is a per-contract fact, not a
+    /// resume point. The terminal checkpoint's <see cref="StakeholderResume"/> ticket is
+    /// consumed and discarded here too, so this method cannot feed the gapless
+    /// snapshot-to-stream handover; stay on
+    /// <see cref="ILedgerStreamer.SubscribeActiveAsync{T}"/> when the resume offset matters.
+    /// The rows' witness parties are not carried either.
+    /// </para>
+    /// <para>
+    /// The returned contracts carry no contract key. A keyed template's snapshot goes through
+    /// <see cref="SnapshotActiveAsync{T, TKey}(ILedgerStreamer, KeyDescriptor{T, TKey}, SubmitterInfo, LedgerOffset?, CancellationToken)"/>,
+    /// which yields <see cref="Contract{T, TKey}"/> with the key decoded.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The Daml template the snapshot is filtered to.</typeparam>
+    /// <param name="streamer">The streaming capability.</param>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="streamer"/> is <c>null</c>.</exception>
+    /// <exception cref="LedgerOperationException">
+    /// The snapshot faulted, carried an unclassified row, or ended without its terminal
+    /// checkpoint.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
+    public static async Task<IReadOnlyList<ActiveContract<Contract<T>>>> SnapshotActiveAsync<T>(
+        this ILedgerStreamer streamer,
+        SubmitterInfo submitter,
+        LedgerOffset? activeAtOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : ITemplate, IDamlRecord<T>
+    {
+        ArgumentNullException.ThrowIfNull(streamer);
+
+        var rows = await DrainAsync<T>(streamer, submitter, activeAtOffset, cancellationToken)
+            .ConfigureAwait(false);
+
+        var contracts = new List<ActiveContract<Contract<T>>>(rows.Count);
+        foreach (var row in rows)
+        {
+            contracts.Add(row.ToActiveContract());
+        }
+
+        return contracts;
+    }
+
+    /// <summary>
     /// Drains an active-contract-set snapshot of a keyed template into a materialized list of
     /// typed contracts, each carrying its contract key decoded into
     /// <typeparamref name="TKey"/>.
@@ -107,7 +183,9 @@ public static class StreamerSnapshot
     /// <see cref="SnapshotAsync{T}(ILedgerStreamer, SubmitterInfo, LedgerOffset?, CancellationToken)"/>
     /// for every fault, unclassified row and truncation case, and additionally throws
     /// <see cref="LedgerOperationException"/> when a create row of a keyed template arrives
-    /// without the key the keyed shape requires.
+    /// without the key the keyed shape requires. It discards the same per-row provenance;
+    /// <see cref="SnapshotActiveAsync{T, TKey}(ILedgerStreamer, KeyDescriptor{T, TKey}, SubmitterInfo, LedgerOffset?, CancellationToken)"/>
+    /// keeps it.
     /// </remarks>
     /// <typeparam name="T">The keyed Daml template the snapshot is filtered to.</typeparam>
     /// <typeparam name="TKey">The template's contract key type.</typeparam>
@@ -119,7 +197,10 @@ public static class StreamerSnapshot
     /// overload and <see cref="Contract{T, TKey}.FromCreatedEvent"/> decode identically.</param>
     /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
     /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
-    /// <param name="cancellationToken">Cancels the underlying stream cleanly.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="streamer"/> or
     /// <paramref name="key"/> is <c>null</c>.</exception>
     /// <exception cref="LedgerOperationException">
@@ -127,7 +208,9 @@ public static class StreamerSnapshot
     /// checkpoint, or carried a create row with no contract key.
     /// </exception>
     /// <exception cref="OperationCanceledException">
-    /// <paramref name="cancellationToken"/> was cancelled.
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
     /// </exception>
     public static async Task<IReadOnlyList<Contract<T, TKey>>> SnapshotAsync<T, TKey>(
         this ILedgerStreamer streamer,
@@ -148,6 +231,70 @@ public static class StreamerSnapshot
         foreach (var row in rows)
         {
             contracts.Add(ToKeyedContract<T, TKey>(row));
+        }
+
+        return contracts;
+    }
+
+    /// <summary>
+    /// Drains an active-contract-set snapshot of a keyed template into a materialized list of
+    /// typed contracts, each carrying its contract key decoded into <typeparamref name="TKey"/>
+    /// and paired with the provenance its snapshot row carried.
+    /// </summary>
+    /// <remarks>
+    /// The provenance-keeping twin of
+    /// <see cref="SnapshotAsync{T, TKey}(ILedgerStreamer, KeyDescriptor{T, TKey}, SubmitterInfo, LedgerOffset?, CancellationToken)"/>,
+    /// with identical behaviour for every fault, unclassified row, truncation and missing-key
+    /// case. <see cref="ActiveContract{TContract}.LastUpdateOffset"/> is a per-contract fact and
+    /// not a resume point; the terminal checkpoint's <see cref="StakeholderResume"/> ticket and
+    /// the rows' witness parties are still discarded.
+    /// </remarks>
+    /// <typeparam name="T">The keyed Daml template the snapshot is filtered to.</typeparam>
+    /// <typeparam name="TKey">The template's contract key type.</typeparam>
+    /// <param name="streamer">The streaming capability.</param>
+    /// <param name="key">The template's key witness. It is the type argument carrier — passing
+    /// <c>Account.Key</c> infers both <typeparamref name="T"/> and <typeparamref name="TKey"/>
+    /// from one argument, which C# cannot do from a partial type-argument list. The decode is
+    /// taken from the template's own <see cref="IHasKey{TSelf, TKey}.Key"/> witness, so this
+    /// method and <see cref="Contract{T, TKey}.FromCreatedEvent"/> decode identically.</param>
+    /// <param name="submitter">The submitter authorization whose combined parties scope visibility.</param>
+    /// <param name="activeAtOffset">Snapshot offset; <c>null</c> means the current ledger end.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the underlying stream, which surfaces as an
+    /// <see cref="OperationCanceledException"/> rather than a gracefully-completed stream.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="streamer"/> or
+    /// <paramref name="key"/> is <c>null</c>.</exception>
+    /// <exception cref="LedgerOperationException">
+    /// The snapshot faulted, carried an unclassified row, ended without its terminal
+    /// checkpoint, or carried a create row with no contract key.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled. Cancellation is surfaced as an
+    /// exception, never as a gracefully-completed stream and never as an in-band terminal
+    /// error event, so a caller draining into a list never observes a silently partial result.
+    /// </exception>
+    public static async Task<IReadOnlyList<ActiveContract<Contract<T, TKey>>>> SnapshotActiveAsync<T, TKey>(
+        this ILedgerStreamer streamer,
+        KeyDescriptor<T, TKey> key,
+        SubmitterInfo submitter,
+        LedgerOffset? activeAtOffset = null,
+        CancellationToken cancellationToken = default)
+        where T : ITemplate, IDamlRecord<T>, IHasKey<T, TKey>
+    {
+        ArgumentNullException.ThrowIfNull(streamer);
+        ArgumentNullException.ThrowIfNull(key);
+
+        var rows = await DrainAsync<T>(streamer, submitter, activeAtOffset, cancellationToken)
+            .ConfigureAwait(false);
+
+        var contracts = new List<ActiveContract<Contract<T, TKey>>>(rows.Count);
+        foreach (var row in rows)
+        {
+            contracts.Add(new ActiveContract<Contract<T, TKey>>(
+                ToKeyedContract<T, TKey>(row),
+                row.Offset,
+                row.SynchronizerId));
         }
 
         return contracts;
@@ -194,7 +341,8 @@ public static class StreamerSnapshot
                         + $"contract(s): {error.Message}. Use SubscribeActiveAsync for value-shaped fault handling.",
                         error.StatusCode,
                         error.Category,
-                        error.SourceException);
+                        error.SourceException,
+                        error.ErrorId);
                 case AcsSnapshotEntry<T>.Unclassified unclassified:
                     throw new LedgerOperationException(
                         $"The active-contract-set snapshot for {typeof(T).Name} carried an unclassified row "

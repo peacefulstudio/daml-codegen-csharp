@@ -112,13 +112,24 @@ public class ContractIdJsonTests
     }
 
     [Fact]
-    public void AddDamlConverters_should_register_the_scalar_identity_converters()
+    public void AddDamlConverters_should_register_every_converter_in_All()
     {
         var options = new JsonSerializerOptions().AddDamlConverters();
 
         options.Converters.Should().Contain(c => c is ContractIdJsonConverterFactory);
         options.Converters.Select(c => c.GetType().Name).Should().BeEquivalentTo(
-            ["PartyJsonConverter", "ContractIdJsonConverterFactory", "SynchronizerIdJsonConverter"],
+            [
+                "PartyJsonConverter",
+                "ContractIdJsonConverterFactory",
+                "SynchronizerIdJsonConverter",
+                "CommandIdJsonConverter",
+                "ChoiceNameJsonConverter",
+                "WorkflowIdJsonConverter",
+                "LedgerOffsetJsonConverter",
+                "SubmitterInfoJsonConverter",
+                "EquatableArrayJsonConverterFactory",
+                "SetJsonConverterFactory",
+            ],
             "naming the converters is what catches one silently dropping out of DamlJsonConverters.All, "
             + "which a count compared against All itself cannot");
     }

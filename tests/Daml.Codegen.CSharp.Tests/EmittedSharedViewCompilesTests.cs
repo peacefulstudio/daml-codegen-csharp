@@ -58,8 +58,6 @@ public class EmittedSharedViewCompilesTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
         };
 
         var files = CreateGenerator(options).Generate(CreateTestDar(module));

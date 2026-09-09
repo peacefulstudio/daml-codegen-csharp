@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Collections.Frozen;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Daml.Runtime.Data;
 
 namespace Daml.Runtime.Commands;
@@ -35,7 +37,17 @@ namespace Daml.Runtime.Commands;
 /// transport implementations consume this type via their <c>Daml.Runtime</c>
 /// package reference.
 /// </para>
+/// <para>
+/// As JSON it is the object <c>{"ActAs":["alice"],"ReadAs":["bob"]}</c> — two arrays of the
+/// bare party strings <see cref="Party"/> itself travels as, under whatever
+/// <see cref="System.Text.Json.JsonSerializerOptions.PropertyNamingPolicy"/> the caller
+/// serializes the surrounding record with. Without the converter the get-only
+/// <see cref="ActAs"/> and <see cref="ReadAs"/> have no setter for
+/// <see cref="System.Text.Json"/> to assign through, so a read produced a default value that
+/// threw on first use rather than the submitter that was written.
+/// </para>
 /// </remarks>
+[JsonConverter(typeof(SubmitterInfoJsonConverter))]
 public readonly record struct SubmitterInfo
 {
     /// <remarks>
@@ -175,4 +187,157 @@ public readonly record struct SubmitterInfo
         }
         return h;
     }
+}
+
+/// <summary>
+/// System.Text.Json converter for <see cref="SubmitterInfo"/>. Writes the two party sets as JSON
+/// arrays under the <see cref="SubmitterInfo.ActAs"/> and <see cref="SubmitterInfo.ReadAs"/>
+/// property names, so a submitter reads back as the one that was written rather than as a value
+/// whose <see cref="SubmitterInfo.ActAs"/> throws where it is used.
+/// </summary>
+internal sealed class SubmitterInfoJsonConverter : JsonConverter<SubmitterInfo>
+{
+    private const string TypeName = nameof(SubmitterInfo);
+
+    /// <remarks>
+    /// The family's posture on null: a JSON null is rejected wherever the declared type forbids
+    /// one and read as absent wherever it permits one — a slot declared <c>SubmitterInfo?</c>
+    /// short-circuits null before reaching here.
+    /// </remarks>
+    public override bool HandleNull => true;
+
+    /// <inheritdoc/>
+    public override SubmitterInfo Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            throw new JsonException(
+                $"{TypeName} cannot be null; declare the slot as {TypeName}? to accept an absent one.");
+        }
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new JsonException($"Expected object token for {TypeName}, got {reader.TokenType}.");
+        }
+
+        var actAsName = PropertyName(nameof(SubmitterInfo.ActAs), options);
+        var readAsName = PropertyName(nameof(SubmitterInfo.ReadAs), options);
+        var comparison = options.PropertyNameCaseInsensitive
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        IReadOnlySet<Party>? actAs = null;
+        IReadOnlySet<Party>? readAs = null;
+
+        while (true)
+        {
+            if (!reader.Read())
+            {
+                throw new JsonException($"Unexpected end of JSON while reading {TypeName}.");
+            }
+
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                break;
+            }
+
+            var property = reader.GetString()!;
+            if (!reader.Read())
+            {
+                throw new JsonException($"Unexpected end of JSON while reading {TypeName}.{property}.");
+            }
+
+            if (string.Equals(property, actAsName, comparison))
+            {
+                actAs = ReadParties(ref reader, actAsName, options);
+            }
+            else if (string.Equals(property, readAsName, comparison))
+            {
+                readAs = ReadParties(ref reader, readAsName, options);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        if (actAs is null)
+        {
+            throw new JsonException($"{TypeName} requires '{actAsName}'; the payload does not carry it.");
+        }
+
+        try
+        {
+            return new SubmitterInfo(actAs, readAs);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new JsonException($"Invalid {TypeName}: {ex.Message}", ex);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, SubmitterInfo value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(options);
+
+        IReadOnlySet<Party> actAs;
+        try
+        {
+            actAs = value.ActAs;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new JsonException($"Cannot serialize an uninitialized {TypeName}.", ex);
+        }
+
+        writer.WriteStartObject();
+        WriteParties(writer, PropertyName(nameof(SubmitterInfo.ActAs), options), actAs, options);
+        WriteParties(writer, PropertyName(nameof(SubmitterInfo.ReadAs), options), value.ReadAs, options);
+        writer.WriteEndObject();
+    }
+
+    private static IReadOnlySet<Party> ReadParties(
+        ref Utf8JsonReader reader, string property, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            throw new JsonException($"{TypeName}.{property} cannot be null; write [] for no parties.");
+        }
+
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException(
+                $"Expected array token for {TypeName}.{property}, got {reader.TokenType}.");
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<HashSet<Party>>(ref reader, options)!;
+        }
+        catch (Exception ex)
+        {
+            throw new JsonException($"Cannot read {TypeName}.{property}: {ex.Message}", ex);
+        }
+    }
+
+    private static void WriteParties(
+        Utf8JsonWriter writer, string property, IReadOnlySet<Party> parties, JsonSerializerOptions options)
+    {
+        writer.WritePropertyName(property);
+        try
+        {
+            JsonSerializer.Serialize(writer, parties, options);
+        }
+        catch (Exception ex)
+        {
+            throw new JsonException($"Cannot write {TypeName}.{property}: {ex.Message}", ex);
+        }
+    }
+
+    private static string PropertyName(string clrName, JsonSerializerOptions options) =>
+        options.PropertyNamingPolicy?.ConvertName(clrName) ?? clrName;
 }

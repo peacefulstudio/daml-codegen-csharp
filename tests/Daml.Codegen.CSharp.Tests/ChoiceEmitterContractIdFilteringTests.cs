@@ -64,9 +64,9 @@ public class ChoiceEmitterContractIdFilteringTests
     private static (string NonContract, string Exercisers) Emit(DamlTemplate template)
     {
         var package = Package(template);
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var resolver = new StubResolver();
-        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        var emitter = new ChoiceEmitter(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
 
         var nonContractSb = new StringBuilder();
         var nonContractIndent = new IndentWriter(nonContractSb) { CurrentTypeName = template.Name };

@@ -29,21 +29,30 @@ namespace Daml.Codegen.CSharp.Tests;
 /// The injected command must honour the shipped <c>dpm codegen-cs</c> interface:
 /// <c>&lt;cmd&gt; [base-args] --dar &lt;dar&gt; --out &lt;out&gt; -- &lt;emitter args&gt;</c>.
 ///
+/// The fixture's generated project references its Splice dependency
+/// (<c>splice-api-token-metadata-v1</c>, vendored under <c>Snapshots/</c> as its own
+/// upstream DAR) as a <c>PackageReference</c>. That dependency DAR is emitted and packed
+/// by the same injected generator into a workspace feed first, so the gate proves the
+/// generator under test against bindings it produced itself — never against the bindings
+/// a previously released emitter published to nuget.org.
+///
 /// Skipped unless <c>CODEGEN_CS_CMD</c> is set AND the local runtime packs exist
 /// under <c>&lt;repo&gt;/output/nuget/</c> (run <c>dotnet pack -c Release</c> first).
 /// </summary>
 public class NuGetPackIntegrationTests
 {
     private const string FixtureSnapshotName = "splice-api-token-holding-v1";
-    private const string ExpectedPackageIdPrefix = "Splice.Api.Token.Holding.V1.";
+    private const string DependencyPackageName = "splice-api-token-metadata-v1";
+    private const string GeneratedPackageIdRoot = "Splice.";
+    private const string ExpectedPackageId = $"{GeneratedPackageIdRoot}Api.Token.Holding.V1";
+    private const string DependencyPackageId = $"{GeneratedPackageIdRoot}Api.Token.Metadata.V1";
+    private const string GeneratedPackageIdPattern = $"{GeneratedPackageIdRoot}*";
 
     [Fact]
     public async Task NuGetPackIntegration_generated_csproj_packs_into_nupkg_for_splice_holding_v1_fixture()
     {
-        var snapshotDir = Path.Combine(AppContext.BaseDirectory, "Snapshots", FixtureSnapshotName);
-        var darPath = Path.Combine(snapshotDir, $"{FixtureSnapshotName}.dar");
-        File.Exists(darPath).Should().BeTrue(
-            $"the integration test requires the DAR fixture at {darPath}");
+        var darPath = RequireSnapshotDar(FixtureSnapshotName);
+        var dependencyDar = RequireSnapshotDar(DependencyPackageName);
 
         var generatorCmd = Environment.GetEnvironmentVariable("CODEGEN_CS_CMD");
         Assert.SkipUnless(
@@ -65,81 +74,44 @@ public class NuGetPackIntegrationTests
         var workspace = CreateTempWorkspace();
         try
         {
-            var outDir = Path.Combine(workspace, "out");
-            Directory.CreateDirectory(outDir);
+            var codegen = new CodegenCommand(generatorCmd!, LeadingGeneratorArgs(), runtimeVersion!, workspace);
 
-            // Optional leading args (e.g. "codegen-cs" for the dpm subcommand). The
-            // bundle entrypoints take none.
-            var baseArgs = (Environment.GetEnvironmentVariable("CODEGEN_CS_BASE_ARGS") ?? string.Empty)
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var dependencyFeed = Path.Combine(workspace, "dependency-feed");
+            Directory.CreateDirectory(dependencyFeed);
+            WriteLocalNuGetConfig(workspace, localNuGetSource!, dependencyFeed, Path.Combine(workspace, "nuget-packages"));
 
-            // The shipped `dpm codegen-cs` interface: --dar/--out before `--`, emitter
-            // flags after. Identical for every generator, so the gate only swaps the cmd.
-            var generatorArgs = new List<string>(baseArgs)
-            {
-                "--dar", darPath,
-                "--out", outDir,
-                "--",
-                "--generate-project",
-                "--runtime-version", runtimeVersion!,
-                "--package-license", "Apache-2.0",
-                "--target-framework", "net10.0",
-            };
+            var dependencyCsproj = await codegen.GenerateProjectAsync(
+                dependencyDar, Path.Combine(workspace, "dependency-out"), DependencyPackageId, ct);
+            await PackAsync(dependencyCsproj, dependencyFeed, ct);
+            RequireNupkg(dependencyFeed, DependencyPackageId);
 
-            var codegen = await RunProcessAsync(
-                generatorCmd!,
-                generatorArgs,
-                workspace,
-                TimeSpan.FromMinutes(10),
-                ct);
-
-            codegen.ExitCode.Should().Be(0,
-                $"`{generatorCmd}` codegen must succeed.\nSTDOUT:\n{codegen.StdOut}\nSTDERR:\n{codegen.StdErr}");
-
-            var csprojPath = FindMainCsproj(outDir);
-            csprojPath.Should().NotBeNull(
-                $"`--generate-project` must emit a .csproj for {ExpectedPackageIdPrefix}* under {outDir}");
-
-            // dotnet pack walks up from the csproj for NuGet.config; place it at the
-            // --out root (a csproj ancestor) so the generated Daml.* PackageReferences
-            // resolve against the local feed.
-            WriteLocalNuGetConfig(outDir, localNuGetSource!, Path.Combine(workspace, "nuget-packages"));
-
+            var csprojPath = await codegen.GenerateProjectAsync(
+                darPath, Path.Combine(workspace, "out"), ExpectedPackageId, ct);
             var packOutput = Path.Combine(workspace, "nupkg-out");
-            Directory.CreateDirectory(packOutput);
+            await PackAsync(csprojPath, packOutput, ct);
 
-            var packResult = await RunProcessAsync(
-                "dotnet",
-                new[] { "pack", csprojPath!, "-c", "Release", "-o", packOutput, "--verbosity", "minimal" },
-                outDir,
-                TimeSpan.FromMinutes(5),
-                ct);
+            var nupkg = RequireNupkg(packOutput, ExpectedPackageId);
 
-            packResult.ExitCode.Should().Be(0,
-                $"dotnet pack must succeed.\nSTDOUT:\n{packResult.StdOut}\nSTDERR:\n{packResult.StdErr}");
-
-            var producedNupkgs = Directory.GetFiles(packOutput, "*.nupkg");
-            producedNupkgs.Should().NotBeEmpty("dotnet pack should produce at least one .nupkg");
-
-            var nupkg = producedNupkgs.FirstOrDefault(
-                p => Path.GetFileName(p).StartsWith(ExpectedPackageIdPrefix, StringComparison.Ordinal));
-            nupkg.Should().NotBeNull(
-                $"a .nupkg whose id starts with '{ExpectedPackageIdPrefix}' must be produced — the id must match " +
-                "the Daml package name converted to PascalCase per the generated-package naming convention");
-
-            var nuspecVersion = ReadNuspecVersion(nupkg!);
+            var nuspecVersion = ReadNuspecVersion(nupkg);
             nuspecVersion.Should().MatchRegex(@"^\d+\.\d+\.\d+(\.\d+)?$",
                 "the .nuspec must carry an M.m.p[.r] version (4th segment is normalized away by NuGet when r=0)");
             nuspecVersion.Split('.').Length.Should().BeGreaterThanOrEqualTo(3,
                 "the M.m.p.g versioning scheme requires at least the 3-part DAR-intrinsic version in the manifest");
 
-            var nuspecLicense = ReadNuspecLicense(nupkg!);
+            var nuspecLicense = ReadNuspecLicense(nupkg);
             nuspecLicense.Should().Be("Apache-2.0",
                 "OSS-published NuGets must declare Apache-2.0 in the manifest");
 
-            var contents = ListNupkgEntries(nupkg!);
+            var contents = ListNupkgEntries(nupkg);
             contents.Should().Contain(e => e.EndsWith(".dll", StringComparison.OrdinalIgnoreCase),
                 "the pack must include the compiled assembly under lib/");
+
+            var nuspecDependencyIds = ReadNuspecDependencyIds(nupkg);
+            nuspecDependencyIds.Should().Contain(DependencyPackageId,
+                $"the fixture's bindings must reach {DependencyPackageName} through a PackageReference — that is the " +
+                "cross-package spelling this gate exists to prove, and an emitter that inlined the referent types or " +
+                "stopped discovering the dependency would still compile, pack and restore, leaving the dependency " +
+                $"feed written and never read — but the manifest declares {FormatList(nuspecDependencyIds)}");
         }
         finally
         {
@@ -148,16 +120,146 @@ public class NuGetPackIntegrationTests
     }
 
     /// <summary>
-    /// Locates the main generated project — the one whose file name matches the
-    /// fixture's package id. <c>--generate-project</c> may nest the csproj under a
-    /// per-package subdirectory, so this searches recursively.
+    /// Returns the vendored upstream DAR of <paramref name="snapshotName"/>, copied next to the
+    /// test assembly by the <c>Snapshots\**\*</c> content item, failing the test when it is absent.
     /// </summary>
-    private static string? FindMainCsproj(string outDir)
+    private static string RequireSnapshotDar(string snapshotName)
     {
-        var all = Directory.GetFiles(outDir, "*.csproj", SearchOption.AllDirectories);
-        var main = all.FirstOrDefault(
-            p => Path.GetFileName(p).StartsWith(ExpectedPackageIdPrefix, StringComparison.Ordinal));
-        return main ?? (all.Length == 1 ? all[0] : null);
+        var darPath = Path.Combine(AppContext.BaseDirectory, "Snapshots", snapshotName, $"{snapshotName}.dar");
+        File.Exists(darPath).Should().BeTrue(
+            $"the integration test requires the DAR fixture at {darPath}");
+        return darPath;
+    }
+
+    /// <summary>
+    /// The arguments the injected command takes before <c>--dar</c>, from
+    /// <c>CODEGEN_CS_BASE_ARGS</c> (<c>codegen-cs</c> for the dpm subcommand; the bundle
+    /// entrypoints take none).
+    /// </summary>
+    private static IReadOnlyList<string> LeadingGeneratorArgs() =>
+        (Environment.GetEnvironmentVariable("CODEGEN_CS_BASE_ARGS") ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>
+    /// One invocation shape of the shipped <c>dpm codegen-cs</c> interface — <c>--dar</c>/<c>--out</c>
+    /// before <c>--</c>, emitter flags after — identical for every DAR the gate generates, so the
+    /// dependency and the fixture are produced by exactly the same command.
+    /// </summary>
+    private sealed class CodegenCommand(string command, IReadOnlyList<string> baseArgs, string runtimeVersion, string workspace)
+    {
+        public async Task<string> GenerateProjectAsync(string darPath, string outDir, string packageId, CancellationToken ct)
+        {
+            Directory.CreateDirectory(outDir);
+            var generatorArgs = new List<string>(baseArgs)
+            {
+                "--dar", darPath,
+                "--out", outDir,
+                "--",
+                "--generate-project",
+                "--runtime-version", runtimeVersion,
+                "--package-license", "Apache-2.0",
+                "--target-framework", "net10.0",
+            };
+
+            var codegen = await RunProcessAsync(command, generatorArgs, workspace, TimeSpan.FromMinutes(10), ct);
+            codegen.ExitCode.Should().Be(0,
+                $"`{command}` codegen of {Path.GetFileName(darPath)} must succeed.\nSTDOUT:\n{codegen.StdOut}\nSTDERR:\n{codegen.StdErr}");
+
+            return RequireCsproj(outDir, packageId);
+        }
+    }
+
+    private static async Task PackAsync(string csprojPath, string packOutput, CancellationToken ct)
+    {
+        Directory.CreateDirectory(packOutput);
+        var packResult = await RunProcessAsync(
+            "dotnet",
+            ["pack", csprojPath, "-c", "Release", "-o", packOutput, "--verbosity", "minimal"],
+            Path.GetDirectoryName(csprojPath)!,
+            TimeSpan.FromMinutes(5),
+            ct);
+
+        packResult.ExitCode.Should().Be(0,
+            $"dotnet pack of {Path.GetFileName(csprojPath)} must succeed.\nSTDOUT:\n{packResult.StdOut}\nSTDERR:\n{packResult.StdErr}");
+    }
+
+    /// <summary>
+    /// Returns the generated project of <paramref name="packageId"/>, failing the test when none
+    /// carries that id — a project under any other name is a naming-convention regression, never a
+    /// match. <c>--generate-project</c> may nest the csproj under a per-package subdirectory, so
+    /// this searches recursively.
+    /// </summary>
+    private static string RequireCsproj(string outDir, string packageId)
+    {
+        var produced = Directory.GetFiles(outDir, "*.csproj", SearchOption.AllDirectories);
+        var csproj = produced.FirstOrDefault(p => CarriesPackageId(p, packageId));
+        csproj.Should().NotBeNull(
+            $"`--generate-project` must emit '{packageId}.csproj' under {outDir} — the project name is the Daml " +
+            "package name converted to PascalCase per the generated-package naming convention — " +
+            $"but it emitted {FileNamesOf(produced)}");
+        return csproj!;
+    }
+
+    /// <summary>
+    /// Returns the one pack of <paramref name="packageId"/> under <paramref name="packOutput"/>,
+    /// failing the test when the folder holds no such pack or more than one.
+    /// </summary>
+    private static string RequireNupkg(string packOutput, string packageId)
+    {
+        var produced = Directory.GetFiles(packOutput, "*.nupkg");
+        var packs = produced.Where(p => CarriesPackageId(p, packageId)).ToList();
+        packs.Should().ContainSingle(
+            $"packing must put exactly one '{packageId}' .nupkg in {packOutput} — the gate restores the fixture's " +
+            "bindings against the dependency bindings this generator produced itself, never against the pack a " +
+            "previously released emitter published to nuget.org, and the id must be the Daml package name " +
+            $"converted to PascalCase — but the folder holds {FileNamesOf(produced)}");
+        return packs[0];
+    }
+
+    private static bool CarriesPackageId(string path, string packageId) =>
+        Path.GetFileName(path).StartsWith($"{packageId}.", StringComparison.Ordinal);
+
+    private static string FileNamesOf(IReadOnlyList<string> paths) =>
+        FormatList(paths.Select(Path.GetFileName).ToList()!);
+
+    private static string FormatList(IReadOnlyList<string> values) =>
+        values.Count == 0 ? "nothing" : string.Join(", ", values);
+
+    /// <summary>
+    /// Writes the <c>NuGet.config</c> every generated project under <paramref name="workspace"/>
+    /// restores through (<c>dotnet pack</c> walks up from the csproj): <c>Daml.*</c> from the
+    /// repo's local runtime packs, the generated <c>Splice.*</c> dependency from the workspace
+    /// feed this test packs, everything else from nuget.org.
+    /// </summary>
+    private static void WriteLocalNuGetConfig(string workspace, string localSource, string dependencyFeed, string packagesFolder)
+    {
+        var configPath = Path.Combine(workspace, "NuGet.config");
+        var content =
+$@"<?xml version=""1.0"" encoding=""utf-8""?>
+<configuration>
+  <config>
+    <add key=""globalPackagesFolder"" value=""{packagesFolder}"" />
+  </config>
+  <packageSources>
+    <clear />
+    <add key=""local-output"" value=""{localSource}"" />
+    <add key=""dependency-feed"" value=""{dependencyFeed}"" />
+    <add key=""nuget.org"" value=""https://api.nuget.org/v3/index.json"" protocolVersion=""3"" />
+  </packageSources>
+  <packageSourceMapping>
+    <clear />
+    <packageSource key=""local-output"">
+      <package pattern=""Daml.*"" />
+    </packageSource>
+    <packageSource key=""dependency-feed"">
+      <package pattern=""{GeneratedPackageIdPattern}"" />
+    </packageSource>
+    <packageSource key=""nuget.org"">
+      <package pattern=""*"" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>";
+        File.WriteAllText(configPath, content);
     }
 
     private static string CreateTempWorkspace()
@@ -223,32 +325,6 @@ public class NuGetPackIntegrationTests
         return null;
     }
 
-    private static void WriteLocalNuGetConfig(string directory, string localSource, string packagesFolder)
-    {
-        var configPath = Path.Combine(directory, "NuGet.config");
-        var content =
-$@"<?xml version=""1.0"" encoding=""utf-8""?>
-<configuration>
-  <config>
-    <add key=""globalPackagesFolder"" value=""{packagesFolder}"" />
-  </config>
-  <packageSources>
-    <clear />
-    <add key=""local-output"" value=""{localSource}"" />
-    <add key=""nuget.org"" value=""https://api.nuget.org/v3/index.json"" protocolVersion=""3"" />
-  </packageSources>
-  <packageSourceMapping>
-    <packageSource key=""local-output"">
-      <package pattern=""Daml.*"" />
-    </packageSource>
-    <packageSource key=""nuget.org"">
-      <package pattern=""*"" />
-    </packageSource>
-  </packageSourceMapping>
-</configuration>";
-        File.WriteAllText(configPath, content);
-    }
-
     private static string ReadNuspecVersion(string nupkgPath)
     {
         using var archive = System.IO.Compression.ZipFile.OpenRead(nupkgPath);
@@ -280,6 +356,23 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
             @"<license\s+type=""expression""[^>]*>([^<]+)</license>",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+    }
+
+    private static IReadOnlyList<string> ReadNuspecDependencyIds(string nupkgPath)
+    {
+        using var archive = System.IO.Compression.ZipFile.OpenRead(nupkgPath);
+        var nuspecEntry = archive.Entries.FirstOrDefault(
+            e => e.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+        nuspecEntry.Should().NotBeNull("a .nupkg must contain a .nuspec manifest");
+        using var stream = nuspecEntry!.Open();
+        using var reader = new StreamReader(stream);
+        var content = reader.ReadToEnd();
+        return System.Text.RegularExpressions.Regex.Matches(
+                content,
+                @"<dependency\s+id=""([^""]+)""",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Select(match => match.Groups[1].Value)
+            .ToList();
     }
 
     private static IReadOnlyList<string> ListNupkgEntries(string nupkgPath)

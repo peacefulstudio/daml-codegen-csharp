@@ -7,7 +7,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;
@@ -20,8 +20,8 @@ public class HoldingInterfaceChoiceTests
         new(
             UpdateId: "upd-1",
             CompletionOffset: LedgerOffset.At(1),
-            CreatedContracts: Array.Empty<CreatedContract>(),
-            ArchivedContractIds: Array.Empty<string>(),
+            CreatedContracts: [],
+            ArchivedContractIds: [],
             CommandId: default);
 
     [Fact]

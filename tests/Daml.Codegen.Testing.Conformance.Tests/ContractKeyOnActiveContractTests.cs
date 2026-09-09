@@ -4,7 +4,8 @@
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Contractkeys;
+using Daml.Codegen.Testing.Conformance.ContractKeys;
+using Daml.Codegen.Testing.Conformance.KeyBuilders;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;

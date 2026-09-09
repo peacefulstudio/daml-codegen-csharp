@@ -279,9 +279,8 @@ public partial class CodeGenEdgeCaseTests
         type1File.Should().NotBeNull();
         type2File.Should().NotBeNull();
 
-        // All types from all modules go into the root namespace (derived from package name)
-        type1File!.Content.Should().Contain("namespace Test.Package;");
-        type2File!.Content.Should().Contain("namespace Test.Package;");
+        type1File!.Content.Should().Contain("namespace Module.One;");
+        type2File!.Content.Should().Contain("namespace Module.Two;");
     }
 
     #endregion

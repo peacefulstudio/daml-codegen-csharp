@@ -19,7 +19,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Holdings",
+            Name = "Acme.ContractId",
             Templates =
             [
                 new DamlTemplate
@@ -40,7 +40,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
                 {
                     Name = "VaultRef",
                     Definition = new DamlRecordDefinition(
-                        [new DamlFieldDefinition("vaultCid", ContractIdOf("Vault"))]),
+                        [new DamlFieldDefinition("vaultCid", ContractIdOf("Acme.ContractId", "Vault"))]),
                 },
             ],
             Interfaces = [],
@@ -61,7 +61,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.ContractId", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .ContractId");
+            "the test only guards the shadowing bug if the module namespace actually ends in .ContractId");
 
         var vaultRef = files.First(f => f.RelativePath.EndsWith("VaultRef.cs", StringComparison.Ordinal));
         vaultRef.Content.Should().Contain(
@@ -83,7 +83,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Generic",
+            Name = "Acme.Collections.Generic.IReadOnlyList",
             Templates = [],
             DataTypes =
             [
@@ -116,7 +116,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.Collections.Generic.IReadOnlyList", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .IReadOnlyList");
+            "the test only guards the shadowing bug if the module namespace actually ends in .IReadOnlyList");
 
         var bag = files.First(f => f.RelativePath.EndsWith("Bag.cs", StringComparison.Ordinal));
         bag.Content.Should().Contain(
@@ -135,7 +135,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Choice",
+            Name = "Acme.Choice",
             Templates =
             [
                 new DamlTemplate
@@ -183,7 +183,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.Choice", StringComparison.Ordinal),
-            "the test only guards the shadowing path if the derived namespace actually ends in .Choice");
+            "the test only guards the shadowing path if the module namespace actually ends in .Choice");
 
         var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         asset.Content.Should().Contain(
@@ -211,7 +211,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "IContract",
+            Name = "Acme.IContract",
             Templates =
             [
                 new DamlTemplate
@@ -248,7 +248,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.IContract", StringComparison.Ordinal),
-            "the test only guards the shadowing path if the derived namespace actually ends in .IContract");
+            "the test only guards the shadowing path if the module namespace actually ends in .IContract");
 
         var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         asset.Content.Should().Contain(
@@ -267,7 +267,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
     {
         var module = new DamlModule
         {
-            Name = "Outcomes",
+            Name = "Acme.ExerciseOutcome",
             Templates =
             [
                 new DamlTemplate
@@ -315,7 +315,7 @@ public class EmittedNamespaceCollisionGlobalQualificationCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.ExerciseOutcome", StringComparison.Ordinal),
-            "the test only guards the shadowing path if the derived namespace actually ends in .ExerciseOutcome");
+            "the test only guards the shadowing path if the module namespace actually ends in .ExerciseOutcome");
 
         var emitted = string.Join("\n", files.Select(f => f.Content));
         emitted.Should().Contain(

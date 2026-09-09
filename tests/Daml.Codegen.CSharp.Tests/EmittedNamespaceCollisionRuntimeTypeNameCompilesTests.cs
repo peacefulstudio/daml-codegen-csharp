@@ -15,18 +15,11 @@ namespace Daml.Codegen.CSharp.Tests;
 public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 {
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_party()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_party()
     {
-        // Regression for B3: the runtime type Daml.Runtime.Data.Party was emitted
-        // as the bare identifier `Party`. When the package name derives a C# namespace
-        // whose tail segment is `Party` (real DAR: canton-party-replication-alpha),
-        // that namespace shadows the type and Roslyn reports CS0118. Every emitted
-        // Party TYPE site must be global::-qualified. This exercises the field type,
-        // the contract-key type, the choice actAs/controller params, the
-        // signatory-derived CreateAsync, and the Observers(payload) helper.
         var module = new DamlModule
         {
-            Name = "Replication",
+            Name = "Canton.Party",
             Templates =
             [
                 new DamlTemplate
@@ -42,7 +35,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                             Name = "Transfer",
                             Consuming = true,
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
-                            ReturnType = ContractIdOf("Holding"),
+                            ReturnType = ContractIdOf("Canton.Party", "Holding"),
                             Controllers = DamlPartyAnalysis.Static([new DamlPartyPayloadField("owner")]),
                             Observers = DamlPartyAnalysis.Static([]),
                         },
@@ -80,11 +73,8 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Canton.Party", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .Party");
+            "the test only guards the shadowing bug if the module namespace actually ends in .Party");
 
-        // The key-bearing template emits a throwing `public ... Key =>` stub
-        // whose key type must be global::-qualified so it doesn't resolve against the
-        // shadowing `Canton.Party` namespace. The generated files compile standalone.
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         errors.Should().BeEmpty(
@@ -93,11 +83,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_itemplate()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_itemplate()
     {
         var module = new DamlModule
         {
-            Name = "Templates",
+            Name = "Acme.ITemplate",
             Templates =
             [
                 new DamlTemplate
@@ -134,7 +124,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.ITemplate", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .ITemplate");
+            "the test only guards the shadowing bug if the module namespace actually ends in .ITemplate");
 
         var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         asset.Content.Should().Contain(
@@ -149,11 +139,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlrecord()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_idamlrecord()
     {
         var module = new DamlModule
         {
-            Name = "Values",
+            Name = "Acme.IDamlRecord",
             Templates = [],
             DataTypes =
             [
@@ -182,7 +172,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.IDamlRecord", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlRecord");
+            "the test only guards the shadowing bug if the module namespace actually ends in .IDamlRecord");
 
         var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
         payload.Content.Should().Contain(
@@ -197,11 +187,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_idamlvariant()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_idamlvariant()
     {
         var module = new DamlModule
         {
-            Name = "Values",
+            Name = "Acme.IDamlVariant",
             Templates = [],
             DataTypes =
             [
@@ -233,7 +223,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.IDamlVariant", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .IDamlVariant");
+            "the test only guards the shadowing bug if the module namespace actually ends in .IDamlVariant");
 
         var choice = files.First(f => f.RelativePath.EndsWith("Choice.cs", StringComparison.Ordinal));
         choice.Content.Should().Contain(
@@ -248,11 +238,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_submitterinfo()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_submitterinfo()
     {
         var module = new DamlModule
         {
-            Name = "Submissions",
+            Name = "Acme.SubmitterInfo",
             Templates =
             [
                 new DamlTemplate
@@ -271,7 +261,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
                             Name = "Transfer",
                             Consuming = true,
                             ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
-                            ReturnType = ContractIdOf("Asset"),
+                            ReturnType = ContractIdOf("Acme.SubmitterInfo", "Asset"),
                             Controllers = DamlPartyAnalysis.Dynamic,
                             Observers = DamlPartyAnalysis.Static([]),
                         },
@@ -308,7 +298,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.SubmitterInfo", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .SubmitterInfo");
+            "the test only guards the shadowing bug if the module namespace actually ends in .SubmitterInfo");
 
         var diagnostics = CompileEmittedFiles(files);
         var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
@@ -318,11 +308,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_identifier()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_identifier()
     {
         var module = new DamlModule
         {
-            Name = "Ids",
+            Name = "Acme.Identifier",
             Templates =
             [
                 new DamlTemplate
@@ -359,7 +349,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.Identifier", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .Identifier");
+            "the test only guards the shadowing bug if the module namespace actually ends in .Identifier");
 
         var asset = files.First(f => f.RelativePath.EndsWith("Asset.cs", StringComparison.Ordinal));
         asset.Content.Should().Contain(
@@ -374,11 +364,11 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
     }
 
     [Fact]
-    public void Emitted_code_compiles_when_package_namespace_ends_in_damlparty()
+    public void Emitted_code_compiles_when_module_namespace_ends_in_damlparty()
     {
         var module = new DamlModule
         {
-            Name = "Values",
+            Name = "Acme.DamlParty",
             Templates = [],
             DataTypes =
             [
@@ -410,7 +400,7 @@ public class EmittedNamespaceCollisionRuntimeTypeNameCompilesTests
 
         files.Should().Contain(
             f => f.Content.Contains("namespace Acme.DamlParty", StringComparison.Ordinal),
-            "the test only guards the shadowing bug if the derived namespace actually ends in .DamlParty");
+            "the test only guards the shadowing bug if the module namespace actually ends in .DamlParty");
 
         var payload = files.First(f => f.RelativePath.EndsWith("Payload.cs", StringComparison.Ordinal));
         payload.Content.Should().Contain(

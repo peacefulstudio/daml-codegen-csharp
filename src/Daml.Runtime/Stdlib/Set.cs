@@ -1,6 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 
@@ -24,6 +27,16 @@ namespace Daml.Runtime.Stdlib;
 /// concrete element type at the call site and inlines the appropriate conversion
 /// lambdas.
 /// </para>
+/// <para>
+/// Through <see cref="System.Text.Json"/> it travels as a plain JSON array of its elements —
+/// <c>["alice", "bob"]</c>, and <c>[]</c> when empty — rather than as the record the Daml-LF
+/// encoding uses, because that path is a CLR round-trip contract rather than a wire one: a
+/// <see cref="Set{T}"/> reads back the value it wrote and owes the ledger encoding nothing. It
+/// names <see cref="SetJsonConverterFactory"/> in a <see cref="JsonConverterAttribute"/>, so it
+/// converts on bare <see cref="JsonSerializerOptions"/> with no registration. Elements are written
+/// in the order the set enumerates them, which for a set built from a sequence is the order of
+/// first occurrence in that sequence.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">Element type of the set.</typeparam>
 [System.Diagnostics.CodeAnalysis.SuppressMessage(
@@ -33,6 +46,7 @@ namespace Daml.Runtime.Stdlib;
     "Design",
     "CA1000:Do not declare static members on generic types",
     Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Set<...>.FromRecord, mirroring the Daml constructor it decodes.")]
+[JsonConverter(typeof(SetJsonConverterFactory))]
 public sealed record Set<T>
     where T : notnull
 {
@@ -116,5 +130,149 @@ public sealed record Set<T>
             hash ^= EqualityComparer<T>.Default.GetHashCode(element);
         }
         return hash;
+    }
+}
+
+/// <summary>
+/// Supplies the <see cref="System.Text.Json"/> converter for any closed <see cref="Set{T}"/>.
+/// Without it the type is readable as nothing and writable only as its properties: the
+/// <c>Set(IEnumerable&lt;T&gt; elements)</c> parameter binds to no property — the
+/// <see cref="Set{T}.Elements"/> beside it is an <see cref="IReadOnlySet{T}"/>, so the names match
+/// and the types do not — and <see cref="System.Text.Json"/> refuses the type with
+/// <see cref="InvalidOperationException"/> before reading any payload, not even the object it had
+/// itself written.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>AOT / trimming incompatibility:</b> <see cref="CreateConverter"/> uses
+/// <see cref="Activator.CreateInstance(Type)"/> and <see cref="Type.MakeGenericType"/> to
+/// instantiate the closed converter at runtime. These reflection-based calls are not compatible
+/// with Native AOT compilation or aggressive IL trimming and will produce
+/// <see cref="NotSupportedException"/> in those environments — the cost
+/// <see cref="Serialization.EquatableArrayJsonConverterFactory"/> already carries, accepted so
+/// that the attribute reaches a consumer who never registers the converters.
+/// </para>
+/// <para>
+/// A source-generated <see cref="JsonSerializerContext"/> does not route around this. Because
+/// <see cref="Set{T}"/> carries the factory as an attribute, the generator emits the factory for a
+/// member of that type rather than collection metadata, and the consumer build reports
+/// <c>IL2026</c> and <c>IL3050</c>. The converter reads and writes its elements through the
+/// reflection-based <see cref="JsonSerializer"/> overloads, which need a
+/// <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo"/> for the element type the
+/// context no longer registers: writing throws a <see cref="JsonException"/> naming that element
+/// type until the context declares <c>[JsonSerializable(typeof(T))]</c> for it.
+/// </para>
+/// </remarks>
+[RequiresUnreferencedCode("SetJsonConverterFactory uses MakeGenericType and Activator.CreateInstance, which are not trimming-safe.")]
+[RequiresDynamicCode("SetJsonConverterFactory uses MakeGenericType at runtime, which requires dynamic code generation.")]
+internal sealed class SetJsonConverterFactory : JsonConverterFactory
+{
+    public override bool CanConvert(Type typeToConvert) => IsClosedSet(typeToConvert);
+
+    private static bool IsClosedSet(Type type) =>
+        type is { IsConstructedGenericType: true, ContainsGenericParameters: false }
+        && type.GetGenericTypeDefinition() == typeof(Set<>);
+
+    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) =>
+        (JsonConverter)Activator.CreateInstance(
+            typeof(SetJsonConverter<>).MakeGenericType(typeToConvert.GetGenericArguments()[0]))!;
+}
+
+internal sealed class SetJsonConverter<T> : JsonConverter<Set<T>>
+    where T : notnull
+{
+    private static readonly string TypeName = $"{nameof(Set<object>)}<{Describe(typeof(T))}>";
+
+    /// <remarks>
+    /// The posture <see cref="Serialization.ContractIdJsonConverterFactory"/> already holds: a null
+    /// token is read as the absent value the declared type already permits, and refused by
+    /// <see cref="JsonSerializerOptions.RespectNullableAnnotations"/> where it does not — which
+    /// only <see cref="Serialization.DamlJsonConverters.AddDamlConverters"/> sets, so on bare
+    /// options a null in a non-nullable slot binds as null rather than being refused.
+    /// </remarks>
+    public override bool HandleNull => false;
+
+    public override Set<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException($"Expected array token for {TypeName}, got {reader.TokenType}.");
+        }
+
+        var elements = new List<T>();
+        while (true)
+        {
+            if (!reader.Read())
+            {
+                throw new JsonException($"Unexpected end of JSON while reading {TypeName}.");
+            }
+
+            if (reader.TokenType == JsonTokenType.EndArray)
+            {
+                break;
+            }
+
+            elements.Add(ReadElement(ref reader, elements.Count, options));
+        }
+
+        return new Set<T>(elements);
+    }
+
+    public override void Write(Utf8JsonWriter writer, Set<T> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        var index = 0;
+        foreach (var element in value.Elements)
+        {
+            WriteElement(writer, element, index++, options);
+        }
+        writer.WriteEndArray();
+    }
+
+    private static T ReadElement(ref Utf8JsonReader reader, int index, JsonSerializerOptions options)
+    {
+        T? element;
+        try
+        {
+            element = JsonSerializer.Deserialize<T>(ref reader, options);
+        }
+        catch (Exception ex)
+        {
+            throw new JsonException($"Cannot read element {index} of {TypeName}: {ex.Message}", ex);
+        }
+
+        return element ?? throw new JsonException(
+            $"Element {index} of {TypeName} is null; a {TypeName} holds no null elements.");
+    }
+
+    private static void WriteElement(Utf8JsonWriter writer, T element, int index, JsonSerializerOptions options)
+    {
+        if (element is null)
+        {
+            throw new JsonException(
+                $"Element {index} of {TypeName} is null; a {TypeName} holds no null elements.");
+        }
+
+        try
+        {
+            JsonSerializer.Serialize(writer, element, options);
+        }
+        catch (Exception ex)
+        {
+            throw new JsonException($"Cannot write element {index} of {TypeName}: {ex.Message}", ex);
+        }
+    }
+
+    private static string Describe(Type type)
+    {
+        var arity = type.Name.IndexOf('`', StringComparison.Ordinal);
+        var name = arity < 0 ? type.Name : type.Name[..arity];
+        return type switch
+        {
+            { IsGenericType: true } =>
+                $"{name}<{string.Join(", ", type.GetGenericArguments().Select(Describe))}>",
+            { DeclaringType: not null } => $"{type.DeclaringType.Name}.{name}",
+            _ => name,
+        };
     }
 }

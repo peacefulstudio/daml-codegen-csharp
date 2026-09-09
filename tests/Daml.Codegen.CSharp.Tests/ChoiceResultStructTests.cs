@@ -268,6 +268,26 @@ public class ChoiceResultStructTests
         code.Should().Contain("ExerciseOutcome<RenewResult>.Many");
     }
 
+    [Theory]
+    [InlineData("Renew", false)]
+    [InlineData("Cancel", true)]
+    public void Generate_should_copy_the_mutable_match_list_into_the_Many_outcome(
+        string choiceName, bool optionalCardinality)
+    {
+        var created = ContractIdOf("AgreementRecord");
+        var module = ModuleWith(
+            Template(
+                "Agreement",
+                optionalCardinality ? OptionalOf(created) : created,
+                choiceName: choiceName),
+            siblingTemplateNames: ["AgreementRecord"]);
+
+        var code = GenerateAndReadTemplate(module, "Agreement");
+
+        code.Should().Contain(
+            $"ExerciseOutcome<{choiceName}Result>.Many(EquatableArray.Create(matches0))");
+    }
+
     [Fact]
     public void Generate_should_validate_optional_cardinality_in_projector()
     {
@@ -410,9 +430,9 @@ public class ChoiceResultStructTests
         // One branch matches the template by TemplateId, the other matches the
         // interface by InterfaceIds — neither slot silently inherits the other's branch.
         code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
-        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Package.IFactory_.InterfaceId.ModuleName, StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Package.IFactory_.InterfaceId.EntityName, StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(item.TemplateId.ModuleName, global::Test.Package.IFactory.TemplateId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Test.Module.IFactory_.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Test.Module.IFactory_.InterfaceId.EntityName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(item.TemplateId.ModuleName, global::Test.Module.IFactory.TemplateId.ModuleName, StringComparison.Ordinal)");
     }
 
     [Fact]
@@ -450,8 +470,8 @@ public class ChoiceResultStructTests
         var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
 
         code.Should().Contain("item.InterfaceIds.Any(interfaceId =>");
-        code.Should().Contain("string.Equals(interfaceId.ModuleName, Foreign.Package.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
-        code.Should().Contain("string.Equals(interfaceId.EntityName, Foreign.Package.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.ModuleName, global::Foreign.Module.IHoldable.InterfaceId.ModuleName, StringComparison.Ordinal)");
+        code.Should().Contain("string.Equals(interfaceId.EntityName, global::Foreign.Module.IHoldable.InterfaceId.EntityName, StringComparison.Ordinal)");
         code.Should().NotContain("\"Foreign.Module\"");
         code.Should().NotContain("\"Holdable\"");
     }

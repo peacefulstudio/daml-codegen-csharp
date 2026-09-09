@@ -1,6 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json.Serialization;
+using Daml.Runtime.Serialization;
+
 namespace Daml.Runtime.Commands;
 
 /// <summary>
@@ -13,6 +16,7 @@ namespace Daml.Runtime.Commands;
 /// cannot be transposed with a <see cref="CommandId"/> at a call site; use
 /// <see cref="Value"/> or <see cref="ToString"/> for logging and interpolation.
 /// </remarks>
+[JsonConverter(typeof(WorkflowIdJsonConverter))]
 public readonly record struct WorkflowId
 {
     private readonly string? _value;
@@ -49,4 +53,23 @@ public readonly record struct WorkflowId
     /// handling, and a throw here would mask the original exception.
     /// </remarks>
     public override string ToString() => _value ?? "<uninitialized WorkflowId>";
+}
+
+/// <summary>
+/// System.Text.Json converter for <see cref="WorkflowId"/>. Serializes as a plain JSON string,
+/// the shape the Ledger API's <c>workflow_id</c> field carries, so a <see cref="WorkflowId"/>
+/// member reads back with the id it correlates on. A whole <see cref="CommandsSubmission"/>
+/// reads back only while its command list is empty — <see cref="ICommand"/> carries no
+/// <c>[JsonDerivedType]</c>.
+/// </summary>
+internal sealed class WorkflowIdJsonConverter : OpaqueStringIdJsonConverter<WorkflowId>
+{
+    /// <inheritdoc/>
+    protected override bool PermitsBlank => true;
+
+    /// <inheritdoc/>
+    protected override WorkflowId Parse(string id) => new(id);
+
+    /// <inheritdoc/>
+    protected override string Format(WorkflowId value) => value.Value;
 }

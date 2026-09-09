@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using Daml.Ledger.Abstractions.Extensions;
+using Daml.Ledger.Abstractions.Testing.Conformance;
 using Daml.Runtime;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
@@ -31,7 +32,7 @@ public class LedgerClientExtensionsTests
 
     private static TransactionResult TransactionCreating(params string[] contractIds) =>
         new("update-id", LedgerOffset.Begin,
-            contractIds.Select(CreatedOf).ToArray(),
+            [.. contractIds.Select(CreatedOf)],
             [],
             new CommandId("cmd-id"));
 
@@ -120,7 +121,7 @@ public class LedgerClientExtensionsTests
     [Fact]
     public async Task ExerciseAsync_throws_InvalidOperationException_when_TryExerciseAsync_returns_Many()
     {
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(3, ["cid-1", "cid-2", "cid-3"]));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(["cid-1", "cid-2", "cid-3"]));
 
         Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -198,7 +199,7 @@ public class LedgerClientExtensionsTests
     [Fact]
     public async Task ExerciseAsync_void_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_Many()
     {
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.Many(2, ["cid-1", "cid-2"]));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2"]));
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -300,7 +301,7 @@ public class LedgerClientExtensionsTests
     [Fact]
     public async Task ExerciseAsync_with_SubmitterInfo_throws_InvalidOperationException_when_TryExerciseAsync_returns_Many()
     {
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(3, ["cid-1", "cid-2", "cid-3"]));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(["cid-1", "cid-2", "cid-3"]));
         var submitter = new SubmitterInfo(new Party("alice"));
 
         Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
@@ -335,7 +336,7 @@ public class LedgerClientExtensionsTests
     [Fact]
     public async Task ExerciseAsync_void_with_SubmitterInfo_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_Many()
     {
-        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.Many(2, ["cid-1", "cid-2"]));
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2"]));
         var submitter = new SubmitterInfo(new Party("alice"));
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, submitter, cancellationToken: TestContext.Current.CancellationToken);
@@ -452,7 +453,7 @@ public class LedgerClientExtensionsTests
     public async Task ExerciseAsync_throws_LedgerOperationException_without_error_detail_for_None_and_Many()
     {
         ILedgerClient noneClient = new StubLedgerClient(new ExerciseOutcome<int>.None());
-        ILedgerClient manyClient = new StubLedgerClient(new ExerciseOutcome<int>.Many(2, ["cid-1", "cid-2"]));
+        ILedgerClient manyClient = new StubLedgerClient(new ExerciseOutcome<int>.Many(["cid-1", "cid-2"]));
 
         Func<Task> noneAct = () => noneClient.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
         Func<Task> manyAct = () => manyClient.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
@@ -538,7 +539,7 @@ public class LedgerClientExtensionsTests
     public async Task TryCreateOneByExerciseAsync_propagates_writer_level_Many_without_collapsing_to_None()
     {
         ILedgerClient client = new StubLedgerClient(
-            new ExerciseOutcome<TransactionResult>.Many(3, ["cid-1", "cid-2", "cid-3"]));
+            new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2", "cid-3"]));
 
         var outcome = await client.TryCreateOneByExerciseAsync<SampleTemplate>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
@@ -555,14 +556,15 @@ public class LedgerClientExtensionsTests
             DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
             "CONTRACT_NOT_FOUND",
             "Contract not found",
-            new Dictionary<string, string>());
+            new Dictionary<string, string> { ["cid"] = "00abc" });
         ILedgerClient client = new StubLedgerClient(outcome);
 
         var result = await client.TryCreateOneByExerciseAsync<SampleTemplate>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.DamlError>()
-            .Which.ErrorId.Should().Be("CONTRACT_NOT_FOUND");
+        var remapped = result.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.DamlError>().Subject;
+        remapped.ErrorId.Should().Be("CONTRACT_NOT_FOUND");
+        remapped.Metadata.Should().Equal(outcome.Metadata);
     }
 
     [Fact]
@@ -602,7 +604,7 @@ public class LedgerClientExtensionsTests
         var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        outcome.Should().BeOfType<ExerciseOutcome<IReadOnlyList<ContractId<SampleTemplate>>>.One>()
+        outcome.Should().BeOfType<ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.One>()
             .Which.Result.Should().BeEmpty();
     }
 
@@ -615,7 +617,7 @@ public class LedgerClientExtensionsTests
         var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        outcome.Should().BeOfType<ExerciseOutcome<IReadOnlyList<ContractId<SampleTemplate>>>.One>()
+        outcome.Should().BeOfType<ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.One>()
             .Which.Result.Select(id => id.Value).Should().Equal("cid-1");
     }
 
@@ -628,8 +630,51 @@ public class LedgerClientExtensionsTests
         var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
             SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
-        outcome.Should().BeOfType<ExerciseOutcome<IReadOnlyList<ContractId<SampleTemplate>>>.One>()
+        outcome.Should().BeOfType<ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.One>()
             .Which.Result.Select(id => id.Value).Should().Equal("cid-1", "cid-2", "cid-3");
+    }
+
+    [Fact]
+    public async Task TryCreateManyByExerciseAsync_returns_a_One_comparing_equal_to_the_same_ids_in_order()
+    {
+        ILedgerClient client = new StubLedgerClient(
+            new ExerciseOutcome<TransactionResult>.One(TransactionCreating("cid-1", "cid-2")));
+
+        var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        outcome.Should().Be(
+            new ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.One([new("cid-1"), new("cid-2")]),
+            "the One arm carries the value-comparing array All<T>() projected, so two outcomes over the "
+            + "same created contracts are equal; boxing that array back into an IReadOnlyList changes the "
+            + "outcome's closed type and moves == on the payload off the surface the projection handed over");
+    }
+
+    [Fact]
+    public async Task TryCreateManyByExerciseAsync_propagates_writer_level_Many_without_collapsing_to_One()
+    {
+        ILedgerClient client = new StubLedgerClient(
+            new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2", "cid-3"]));
+
+        var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var many = outcome.Should().BeOfType<ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.Many>().Which;
+        many.Count.Should().Be(3);
+        many.ContractIds.Should().Equal("cid-1", "cid-2", "cid-3");
+    }
+
+    [Fact]
+    public async Task TryCreateManyByExerciseAsync_propagates_writer_level_None_without_collapsing_to_an_empty_One()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
+
+        var outcome = await client.TryCreateManyByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        outcome.Should().BeOfType<ExerciseOutcome<EquatableArray<ContractId<SampleTemplate>>>.None>(
+            "a writer that produced no transaction is not a choice that created no contracts, and the "
+            + "default EquatableArray is a valid empty array, so a collapse to One would read as success");
     }
 
     [Fact]
@@ -725,6 +770,35 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
+    public async Task CreateManyByExerciseAsync_returns_an_EquatableArray_comparing_equal_to_the_same_ids_in_order()
+    {
+        ILedgerClient client = new StubLedgerClient(
+            new ExerciseOutcome<TransactionResult>.One(TransactionCreating("cid-1", "cid-2")));
+
+        EquatableArray<ContractId<SampleTemplate>> ids = await client.CreateManyByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        EquatableArray<ContractId<SampleTemplate>> sameIds = [new("cid-1"), new("cid-2")];
+        (ids == sameIds).Should().BeTrue(
+            "the create-by-exercise twin hands back the value-comparing array All<T>() projected, "
+            + "so == on it compares content rather than the identity of two separately built sequences");
+    }
+
+    [Fact]
+    public async Task CreateManyByExerciseAsync_throws_LedgerOperationException_on_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
+
+        Func<Task> act = () => client.CreateManyByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<LedgerOperationException>(
+            "the default EquatableArray is a valid empty array, so returning it for a writer that "
+            + "produced no transaction would report 'the choice created nothing' rather than failing")
+            .WithMessage("*yielded no result (None)*");
+    }
+
+    [Fact]
     public async Task CreateManyByExerciseAsync_throws_LedgerOperationException_on_DamlError()
     {
         var outcome = new ExerciseOutcome<TransactionResult>.DamlError(
@@ -779,7 +853,7 @@ public class LedgerClientExtensionsTests
     /// the <c>Party</c>-<c>actAs</c> overloads both route here. Each primitive records the
     /// <c>timeout</c> it was handed, so a wrapper that accepts one and drops it is visible.
     /// </summary>
-    private sealed class StubLedgerClient : ILedgerClient
+    private sealed class StubLedgerClient : NotSupportedLedgerClient
     {
         private readonly object _outcome;
 
@@ -789,7 +863,7 @@ public class LedgerClientExtensionsTests
 
         public TimeSpan? LastTransactionTimeout { get; private set; }
 
-        public Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
+        public override Task<ExerciseOutcome<TResult>> TryExerciseAsync<TResult>(
             ExerciseCommand command,
             SubmitterInfo submitter,
             string? workflowId = null,
@@ -801,14 +875,7 @@ public class LedgerClientExtensionsTests
             return Task.FromResult((ExerciseOutcome<TResult>)_outcome);
         }
 
-        public Task<SubmitAndWaitResult> SubmitAndWaitAsync(
-            CommandsSubmission submission,
-            SubmitterInfo submitter,
-            TimeSpan? timeout = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(new SubmitAndWaitResult(new CommandId("cmd-id"), "update-id", LedgerOffset.Begin));
-
-        public Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
+        public override Task<ExerciseOutcome<TransactionResult>> TrySubmitAndWaitForTransactionAsync(
             CommandsSubmission submission,
             SubmitterInfo submitter,
             TimeSpan? timeout = null,
@@ -818,76 +885,70 @@ public class LedgerClientExtensionsTests
             return Task.FromResult((ExerciseOutcome<TransactionResult>)_outcome);
         }
 
-        public Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
+        public override Task<ExerciseOutcome<ContractId<TTemplate>>> TryCreateAsync<TTemplate>(
             TTemplate payload,
             SubmitterInfo submitter,
             string? workflowId = null,
             CommandId? commandId = null,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
-            where TTemplate : ITemplate
             => Task.FromResult<ExerciseOutcome<ContractId<TTemplate>>>(new ExerciseOutcome<ContractId<TTemplate>>.None());
 
-        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
+        public override IAsyncEnumerable<ContractStreamEvent<T>> SubscribeAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
-        public IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
+        public override IAsyncEnumerable<ContractStreamEvent<T>> SubscribeLedgerEffectsAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<ContractStreamEvent<T>>(cancellationToken);
 
-        public IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
+        public override IAsyncEnumerable<AcsSnapshotEntry<T>> SubscribeActiveAsync<T>(
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,
             CancellationToken cancellationToken = default)
-            where T : ITemplate, IDamlRecord<T>
             => EmptyAsync<AcsSnapshotEntry<T>>(cancellationToken);
 
-        public Task<LedgerOffset> GetLedgerEndAsync(
+        public override Task<LedgerOffset> GetLedgerEndAsync(
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(LedgerOffset.Begin);
 
         public bool Disposed { get; private set; }
 
-        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
+        public override IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeAsync<TInterface, TView>(
             ViewDescriptor<TInterface, TView> view,
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView>
             => EmptyAsync<InterfaceStreamEvent<TInterface, TView>>(cancellationToken);
 
-        public IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
+        public override IAsyncEnumerable<InterfaceStreamEvent<TInterface, TView>> SubscribeLedgerEffectsAsync<TInterface, TView>(
             ViewDescriptor<TInterface, TView> view,
             SubmitterInfo submitter,
             LedgerOffset? fromOffset = null,
             LedgerOffset? toOffset = null,
             CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView>
             => EmptyAsync<InterfaceStreamEvent<TInterface, TView>>(cancellationToken);
 
-        public IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
+        public override IAsyncEnumerable<InterfaceAcsSnapshotEntry<TInterface, TView>> SubscribeActiveAsync<TInterface, TView>(
             ViewDescriptor<TInterface, TView> view,
             SubmitterInfo submitter,
             LedgerOffset? activeAtOffset = null,
             CancellationToken cancellationToken = default)
-            where TInterface : IDamlInterface, IHasView<TView>
-            where TView : IDamlRecord<TView>
             => EmptyAsync<InterfaceAcsSnapshotEntry<TInterface, TView>>(cancellationToken);
 
-        public void Dispose() => Disposed = true;
+        public override void Dispose()
+        {
+            base.Dispose();
+            Disposed = true;
+        }
 
         private static async IAsyncEnumerable<TItem> EmptyAsync<TItem>(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)

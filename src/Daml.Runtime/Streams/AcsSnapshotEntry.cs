@@ -48,23 +48,7 @@ public abstract record AcsSnapshotEntry<T>
         ContractKey? Key,
         LedgerOffset Offset,
         SynchronizerId SynchronizerId,
-        IReadOnlyList<Party> WitnessParties) : AcsSnapshotEntry<T>
-    {
-        private readonly IReadOnlyList<Party> _witnessParties =
-            EventCollections.Borrow(WitnessParties, nameof(WitnessParties));
-
-        /// <summary>
-        /// Parties that witnessed the create event. Held as the producer supplied it, not
-        /// copied — an <see cref="IReadOnlyList{T}"/> is a read-only view, so a caller that
-        /// retains its backing list must not mutate it after construction. Rejected at
-        /// construction and on <c>init</c> when <c>null</c>.
-        /// </summary>
-        public IReadOnlyList<Party> WitnessParties
-        {
-            get => _witnessParties;
-            init => _witnessParties = EventCollections.Borrow(value, nameof(WitnessParties));
-        }
-    }
+        EquatableArray<Party> WitnessParties) : AcsSnapshotEntry<T>;
 
     /// <summary>
     /// A snapshot row the projector could not classify; surfaced, never dropped.
@@ -109,16 +93,8 @@ public abstract record AcsSnapshotEntry<T>
         /// otherwise. Get-only, so the invariant validated at construction cannot be bypassed
         /// by a <c>with</c> expression.
         /// </summary>
-        public string? RawKind { get; } = (Kind, RawKind) switch
-        {
-            (UnclassifiedKind.Unknown, null) => throw new ArgumentException(
-                "An Unclassified snapshot row with Kind Unknown must carry the transport's raw descriptor in RawKind.",
-                nameof(RawKind)),
-            (not UnclassifiedKind.Unknown, not null) => throw new ArgumentException(
-                $"An Unclassified snapshot row with the enumerated Kind '{Kind}' must not carry a RawKind; RawKind is populated only for Unknown.",
-                nameof(RawKind)),
-            _ => RawKind,
-        };
+        public string? RawKind { get; } = UnclassifiedRawKind.Validated(
+            Kind, RawKind, UnclassifiedRawKind.SnapshotRowSubject, nameof(RawKind));
     }
 
     /// <summary>
@@ -151,12 +127,23 @@ public abstract record AcsSnapshotEntry<T>
     /// want the typed enum cast back. Held as <c>int</c> so this type stays free
     /// of any transport-library dep.</param>
     /// <param name="Message">Status detail / message from the participant or transport.</param>
-    /// <param name="Category">Classification of the transport failure when the transport could determine
-    /// one without a structured Canton error attached; <c>null</c> when the failure was not classified.</param>
+    /// <param name="Category">Classification of the fault, whether the transport read it off the
+    /// participant's structured Canton error or determined it without one; <c>null</c> when the
+    /// failure was not classified.</param>
+    /// <param name="ErrorId">Canton built-in or Daml-defined error identifier the transport
+    /// decoded from the participant's structured error, under the name
+    /// <see cref="ExerciseOutcome{T}.DamlError.ErrorId"/> carries on the write path — nullable
+    /// here, where the write path's is not, because this one arm covers both the structured and
+    /// the unstructured fault. <c>null</c> when the fault carried no structured error to decode;
+    /// a transport that parsed none leaves it <c>null</c> rather than inventing a sentinel. Read
+    /// it as an identity rather than parsing it: <see cref="Category"/> and
+    /// <see cref="StatusCode"/> are both too coarse to separate two faults that need opposite
+    /// handling, and <see cref="Message"/> is participant prose rather than an API.</param>
     /// <param name="SourceException">Transport exception that caused the stream failure, when available.</param>
     public sealed record StreamError(
         int StatusCode,
         string Message,
         DamlErrorCategory? Category = null,
+        string? ErrorId = null,
         Exception? SourceException = null) : AcsSnapshotEntry<T>;
 }

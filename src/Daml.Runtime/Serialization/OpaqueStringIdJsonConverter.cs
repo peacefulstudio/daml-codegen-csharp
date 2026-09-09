@@ -8,7 +8,8 @@ namespace Daml.Runtime.Serialization;
 
 /// <summary>
 /// Shared <see cref="System.Text.Json"/> behaviour for the Daml identity structs that travel
-/// as a bare JSON string — an opaque, non-empty identifier the wrapper never decomposes.
+/// as a bare JSON string — an opaque identifier the wrapper never decomposes, non-empty
+/// except where <see cref="PermitsBlank"/> says the Ledger API allows a blank one.
 /// One implementation so the family cannot drift apart on its null posture or on the
 /// diagnostics it produces for a malformed id.
 /// </summary>
@@ -30,7 +31,16 @@ internal abstract class OpaqueStringIdJsonConverter<TId> : JsonConverter<TId>
     /// </remarks>
     public override bool HandleNull => true;
 
-    /// <summary>Builds the identity value from its wire string, which is never empty or whitespace.</summary>
+    /// <summary>
+    /// Whether the wire may carry an empty or whitespace id. <see langword="false"/> for every id
+    /// whose own constructor refuses one, so a blank is a <see cref="JsonException"/> naming the
+    /// type rather than an <see cref="ArgumentException"/> from the constructor; overridden only
+    /// where the Ledger API declares the field unconstrained, as it does for <c>workflow_id</c>.
+    /// </summary>
+    protected virtual bool PermitsBlank => false;
+
+    /// <summary>Builds the identity value from its wire string.</summary>
+    /// <param name="id">The wire string, never empty or whitespace unless <see cref="PermitsBlank"/>.</param>
     /// <exception cref="ArgumentException">The string is not a well-formed identifier.</exception>
     protected abstract TId Parse(string id);
 
@@ -47,7 +57,7 @@ internal abstract class OpaqueStringIdJsonConverter<TId> : JsonConverter<TId>
         }
 
         var id = reader.GetString()!;
-        if (string.IsNullOrWhiteSpace(id))
+        if (!PermitsBlank && string.IsNullOrWhiteSpace(id))
         {
             throw new JsonException($"{TypeName} id cannot be empty or whitespace; got '{id}'.");
         }

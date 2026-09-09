@@ -17,8 +17,8 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// <c>Contract</c> records — the latter carrying the contract key read off the
 /// created event when the template declares one —
 /// and the namespace-level choice / submission extension surface. The
-/// field-bearing serialization surface (constructor parameters, properties,
-/// <c>ToRecord</c> / <c>FromRecord</c>) is delegated to the shared
+/// field-bearing serialization surface (constructor parameters, <c>ToRecord</c> /
+/// <c>FromRecord</c>) is delegated to the shared
 /// <see cref="RecordSerializationEmitter"/>, the choice descriptors / exercisers
 /// to the shared <see cref="ChoiceEmitter"/>, and the typed-submitter surface to
 /// the shared <see cref="SubmissionExtensionsEmitter"/> — the same per-package
@@ -64,7 +64,6 @@ internal sealed partial class TemplateEmitter(
         DamlTemplate template,
         IReadOnlyList<DamlFieldDefinition> fields)
     {
-        var moduleNamespace = context.RootNamespace;
         var dataTypes = context.DataTypes;
 
         if (options.GenerateXmlDocs)
@@ -87,44 +86,36 @@ internal sealed partial class TemplateEmitter(
 
         var keyWitness = DescribeKeyWitness(className, template.Key, fields);
 
-        var interfacesList = new List<string> { context.Qualifier.Qualify(RuntimeTypeNames.ITemplate, context.RootNamespace) };
+        var interfacesList = new List<string> { context.Qualifier.Qualify(RuntimeTypeNames.ITemplate) };
         if (package.UpgradedPackageId is not null)
-            interfacesList.Add(context.Qualifier.Qualify(RuntimeTypeNames.IUpgradeable, context.RootNamespace));
+            interfacesList.Add(context.Qualifier.Qualify(RuntimeTypeNames.IUpgradeable));
         foreach (var implemented in template.Implements)
-            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IImplements, context.RootNamespace)}<{resolver.Resolve(implemented, context)}>");
+            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IImplements)}<{resolver.Resolve(implemented, context)}>");
         if (keyWitness is not null)
             interfacesList.Add(keyWitness.FacetType);
-        interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}<{className}>");
+        interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}<{className}>");
         var interfaces = string.Join(", ", interfacesList);
 
-        if (options.UseRecordTypes && options.UsePrimaryConstructors && fields.Count > 0)
+        if (fields.Count > 0)
         {
             indent.Append($"public sealed partial record {className}(");
             recordSerialization.WriteRecordParameters(indent, fields);
             indent.AppendLine($") : {interfaces}");
         }
-        else if (options.UseRecordTypes)
-        {
-            indent.AppendLine($"public sealed partial record {className} : {interfaces}");
-        }
         else
         {
-            indent.AppendLine($"public sealed partial class {className} : {interfaces}");
+            indent.AppendLine($"public sealed partial record {className} : {interfaces}");
         }
 
         indent.AppendLine("{");
         indent.Indent();
 
+        recordSerialization.WriteCollectionValueSemantics(indent, className, fields);
         WriteTemplateMetadata(indent, package, module, template);
 
         if (keyWitness is not null)
         {
             WriteKeyWitness(indent, module, template, keyWitness);
-        }
-
-        if (!options.UsePrimaryConstructors || !options.UseRecordTypes)
-        {
-            recordSerialization.WriteProperties(indent, fields);
         }
 
         recordSerialization.WriteToRecordMethod(indent, fields, []);
@@ -141,7 +132,7 @@ internal sealed partial class TemplateEmitter(
         indent.AppendLine("}");
         indent.AppendLine();
 
-        choiceEmitter.WriteChoiceResultStructs(indent, template, moduleNamespace);
+        choiceEmitter.WriteChoiceResultStructs(indent, template);
         choiceEmitter.WriteChoiceAsyncExercisersClass(indent, template, className, fields, dataTypes);
         submissionExtensions.TryWriteSubmissionExtensions(indent, template, fields);
         choiceEmitter.TryWriteNonContractChoiceExtensions(indent, template, dataTypes);
@@ -175,20 +166,21 @@ internal sealed partial class TemplateEmitter(
                 indent.AppendLine("/// </summary>");
             }
 
-            if (options.UseRecordTypes && options.UsePrimaryConstructors && record.Fields.Count > 0)
+            if (record.Fields.Count > 0)
             {
                 indent.Append($"public sealed record {choiceTypeName}(");
                 recordSerialization.WriteRecordParameters(indent, record.Fields);
-                indent.AppendLine($") : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}");
+                indent.AppendLine($") : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}");
             }
             else
             {
-                indent.AppendLine($"public sealed record {choiceTypeName} : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord, context.RootNamespace)}");
+                indent.AppendLine($"public sealed record {choiceTypeName} : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}");
             }
 
             indent.AppendLine("{");
             indent.Indent();
 
+            recordSerialization.WriteCollectionValueSemantics(indent, choiceTypeName, record.Fields);
             recordSerialization.WriteToRecordMethod(indent, record.Fields, []);
             recordSerialization.WriteFromRecordMethod(indent, choiceTypeName, record.Fields, []);
 
@@ -210,7 +202,7 @@ internal sealed partial class TemplateEmitter(
 
         if (options.GenerateXmlDocs)
             indent.AppendLine("/// <summary>Gets the template identifier.</summary>");
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} TemplateId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{template.Name}\");");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier)} TemplateId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{template.Name}\");");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
@@ -230,7 +222,7 @@ internal sealed partial class TemplateEmitter(
 
         if (options.GenerateXmlDocs)
             indent.AppendLine("/// <summary>Gets the compile-time Daml type descriptor.</summary>");
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeDescriptor, context.RootNamespace)} DamlTypeId {{ get; }} = new(TemplateId, {context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeKind, context.RootNamespace)}.Template, PackageName);");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeDescriptor)} DamlTypeId {{ get; }} = new(TemplateId, {context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeKind)}.Template, PackageName);");
         indent.AppendLine();
 
         if (package.UpgradedPackageId is not null)
@@ -276,8 +268,8 @@ internal sealed partial class TemplateEmitter(
             field => Identifiers.MemberName(field.Name, className) == KeyMemberName);
 
         return new KeyWitness(
-            $"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey, context.RootNamespace)}{typeArguments}",
-            $"{context.Qualifier.Qualify(RuntimeTypeNames.KeyDescriptor, context.RootNamespace)}{typeArguments}",
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey)}{typeArguments}",
+            $"{context.Qualifier.Qualify(RuntimeTypeNames.KeyDescriptor)}{typeArguments}",
             PackageQualifiedMapper.ToValue(keyType, KeyEncoderParameterName),
             PackageQualifiedMapper.FromValue(keyType, KeyDecoderParameterName),
             className == KeyMemberName,
@@ -345,11 +337,11 @@ internal sealed partial class TemplateEmitter(
         if (options.GenerateXmlDocs)
             indent.AppendLine($"/// <summary>Contract ID for {className}.</summary>");
         indent.AppendLine("[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]");
-        indent.AppendLine($"public sealed record {NestedContractIdTypeName}(string Value) : {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}>(Value), {context.Qualifier.Qualify(RuntimeTypeNames.IExercises, context.RootNamespace)}<{className}>");
+        indent.AppendLine($"public sealed record {NestedContractIdTypeName}(string Value) : {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{className}>(Value), {context.Qualifier.Qualify(RuntimeTypeNames.IExercises)}<{className}>");
         indent.AppendLine("{");
         indent.Indent();
 
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{className}> {context.Qualifier.Qualify(RuntimeTypeNames.IExercises, context.RootNamespace)}<{className}>.ContractId => this;");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{className}> {context.Qualifier.Qualify(RuntimeTypeNames.IExercises)}<{className}>.ContractId => this;");
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -366,11 +358,11 @@ internal sealed partial class TemplateEmitter(
 
         var contractKeyType = keyType is null
             ? null
-            : $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractKey, context.RootNamespace)}<{PackageQualifiedMapper.MapType(keyType)}>";
+            : $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractKey)}<{PackageQualifiedMapper.MapType(keyType)}>";
 
         if (options.GenerateXmlDocs)
             indent.AppendLine($"/// <summary>Active contract for {className}.</summary>");
-        indent.AppendLine($"public sealed record {NestedContractTypeName}({NestedContractIdTypeName} Id, {className} Data) : {context.Qualifier.Qualify(RuntimeTypeNames.IContract, context.RootNamespace)}<{NestedContractIdTypeName}, {className}>");
+        indent.AppendLine($"public sealed record {NestedContractTypeName}({NestedContractIdTypeName} Id, {className} Data) : {context.Qualifier.Qualify(RuntimeTypeNames.IContract)}<{NestedContractIdTypeName}, {className}>");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -384,18 +376,18 @@ internal sealed partial class TemplateEmitter(
 
         if (options.GenerateXmlDocs)
             indent.AppendLine($"/// <summary>Creates a {NestedContractTypeName} from a CreatedEvent.</summary>");
-        indent.AppendLine($"public static {NestedContractTypeName} FromCreatedEvent({context.Qualifier.Qualify(RuntimeTypeNames.CreatedEvent, context.RootNamespace)} @event) =>");
+        indent.AppendLine($"public static {NestedContractTypeName} FromCreatedEvent({context.Qualifier.Qualify(RuntimeTypeNames.CreatedEvent)} @event) =>");
         indent.Indent();
         if (keyType is null)
         {
-            indent.AppendLine($"new(new {NestedContractIdTypeName}(@event.ContractId), {QualifyInPackage(className)}.FromRecord(@event.CreateArguments));");
+            indent.AppendLine($"new(new {NestedContractIdTypeName}(@event.ContractId), {context.QualifyInModule(className)}.FromRecord(@event.CreateArguments));");
         }
         else
         {
             indent.AppendLine("new(");
             indent.Indent();
             indent.AppendLine($"new {NestedContractIdTypeName}(@event.ContractId),");
-            indent.AppendLine($"{QualifyInPackage(className)}.FromRecord(@event.CreateArguments))");
+            indent.AppendLine($"{context.QualifyInModule(className)}.FromRecord(@event.CreateArguments))");
             indent.Dedent();
             indent.AppendLine("{");
             indent.Indent();
@@ -423,18 +415,6 @@ internal sealed partial class TemplateEmitter(
         _packageQualifiedMapper ??= new DamlTypeMapper(context, new PackageQualifiedResolver(resolver));
 
     private DamlTypeMapper? _packageQualifiedMapper;
-
-    /// <summary>
-    /// Prefixes a bare in-package type name with its <c>global::</c>-qualified namespace,
-    /// so the <c>Id</c> / <c>Data</c> / <c>Key</c> properties of the active contract cannot
-    /// shadow a type a decoder names. A name that already carries a dot was emitted with its
-    /// own qualifier by the cross-package resolver and is left alone. Mirrors the same guard
-    /// the choice-result projector applies for the same reason.
-    /// </summary>
-    private string QualifyInPackage(string typeName) =>
-        typeName.Contains('.', StringComparison.Ordinal)
-            ? typeName
-            : $"global::{context.RootNamespace}.{typeName}";
 
     [LoggerMessage(
         EventId = 1300,

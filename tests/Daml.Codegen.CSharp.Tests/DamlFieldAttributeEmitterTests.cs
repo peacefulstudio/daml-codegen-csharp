@@ -40,45 +40,4 @@ public class DamlFieldAttributeEmitterTests
         code.Should().Contain("[property: DamlFieldAttribute(\"owner\")] Party Owner");
         code.Should().Contain("[property: DamlFieldAttribute(\"count\")] long Count");
     }
-
-    [Fact]
-    public void Required_property_carries_daml_field_attribute_on_its_own_line()
-    {
-        var options = new CodeGenOptions
-        {
-            EnableNullableReferenceTypes = true,
-            UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = false
-        };
-
-        var module = new DamlModule
-        {
-            Name = "Test.Module",
-            Templates =
-            [
-                new DamlTemplate
-                {
-                    Name = "Vault",
-                    Choices = []
-                }
-            ],
-            DataTypes =
-            [
-                new DamlDataType
-                {
-                    Name = "Vault",
-                    Definition = new DamlRecordDefinition(
-                        [new DamlFieldDefinition("owner", new DamlPrimitiveType(DamlPrimitive.Party))])
-                }
-            ],
-            Interfaces = []
-        };
-
-        var files = CreateGenerator(options).Generate(CreateTestDar(module));
-        var code = files.First(f => f.RelativePath.EndsWith("Vault.cs", StringComparison.Ordinal)).Content;
-
-        code.Should().Contain("[DamlFieldAttribute(\"owner\")]");
-        code.Should().Contain("public required Party Owner { get; init; }");
-    }
 }

@@ -21,6 +21,8 @@ internal sealed class VariantEmitter(
     CodeGenOptions options,
     DamlTypeMapper mapper)
 {
+    private readonly CollectionValueSemanticsEmitter _valueSemantics = new(context, options);
+
     /// <summary>
     /// Writes the abstract variant base record and its per-constructor derived
     /// records for <paramref name="dataType"/> into <paramref name="indent"/>.
@@ -45,10 +47,10 @@ internal sealed class VariantEmitter(
             EmitterHelpers.WriteTypeParamDocs(indent, dataType.TypeParams);
         }
 
-        var qualifiedDamlValue = context.Qualifier.Qualify(RuntimeTypeNames.DamlValue, context.RootNamespace);
+        var qualifiedDamlValue = context.Qualifier.Qualify(RuntimeTypeNames.DamlValue);
         var toVariantParameters = EmitterHelpers.SerializeConverterParameters(dataType.TypeParams, qualifiedDamlValue);
         var fromVariantConverters = EmitterHelpers.DeserializeConverterParameters(dataType.TypeParams, qualifiedDamlValue);
-        var fromVariantParameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)} variant{Prefixed(fromVariantConverters)}";
+        var fromVariantParameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant)} variant{Prefixed(fromVariantConverters)}";
         var delegates = EmitterHelpers.ConverterNameMap(dataType.TypeParams);
 
         var variantInterface = InterfaceDeclaration(dataType.TypeParams);
@@ -67,7 +69,7 @@ internal sealed class VariantEmitter(
         {
             indent.AppendLine("/// <summary>Converts to a DamlVariant.</summary>");
         }
-        indent.AppendLine($"public abstract {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)} ToVariant({toVariantParameters});");
+        indent.AppendLine($"public abstract {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant)} ToVariant({toVariantParameters});");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
@@ -124,6 +126,20 @@ internal sealed class VariantEmitter(
             indent.AppendLine("{");
             indent.Indent();
 
+            if (argType is not null)
+            {
+                _valueSemantics.Write(
+                    indent,
+                    ctorName,
+                    [new ValueMember(
+                        "Value",
+                        argType,
+                        mapper.ClassifyCollection(ctor.ArgumentType!),
+                        $"The payload the {ctor.Name} constructor carries.",
+                        DamlFieldName: null)],
+                    derivesFromRecord: true);
+            }
+
             if (options.GenerateXmlDocs)
             {
                 indent.AppendLine("/// <inheritdoc />");
@@ -132,12 +148,12 @@ internal sealed class VariantEmitter(
             indent.AppendLine();
             var payload = hasArg
                 ? mapper.ToValue(ctor.ArgumentType!, "Value", delegates)
-                : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit, context.RootNamespace)}.Instance";
+                : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance";
             if (options.GenerateXmlDocs)
             {
                 indent.AppendLine("/// <inheritdoc />");
             }
-            indent.AppendLine($"public override {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)} ToVariant({toVariantParameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant, context.RootNamespace)}.Create(\"{ctor.Name}\", {payload});");
+            indent.AppendLine($"public override {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant)} ToVariant({toVariantParameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant)}.Create(\"{ctor.Name}\", {payload});");
 
             indent.Dedent();
             indent.AppendLine("}");
@@ -156,7 +172,7 @@ internal sealed class VariantEmitter(
     /// </summary>
     private string InterfaceDeclaration(IReadOnlyList<string> typeParams) =>
         typeParams.Count == 0
-            ? $" : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlVariant, context.RootNamespace)}"
+            ? $" : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlVariant)}"
             : string.Empty;
 
     private static string Prefixed(string parameters) =>

@@ -16,10 +16,12 @@ internal interface ICrossPackageResolver
 {
     /// <summary>
     /// Resolves <paramref name="typeRef"/> to a C# identifier or fully qualified name.
-    /// Local refs return the bare sanitized name (qualified with the parent template
-    /// name when the type is a nested choice-argument type); cross-package refs return
-    /// a fully qualified name and record the package id so a
-    /// <c>&lt;PackageReference&gt;</c> can be emitted for it.
+    /// A local ref declared in the emitting module's namespace returns the bare sanitized
+    /// name (qualified with the parent template name when the type is a nested
+    /// choice-argument type); a local ref into another module of the same package returns
+    /// the <c>global::</c>-rooted name under that module's namespace; cross-package refs
+    /// return a fully qualified name under the referent module's namespace and record the
+    /// package id so a <c>&lt;PackageReference&gt;</c> can be emitted for it.
     /// </summary>
     string Resolve(DamlTypeRef typeRef, PackageEmitContext context);
 
@@ -32,4 +34,22 @@ internal interface ICrossPackageResolver
     /// holding the archive itself.
     /// </summary>
     DamlPackage? LookupPackage(string packageId);
+
+    /// <summary>
+    /// The data-type definitions the package with the given id declares, indexed by the
+    /// declaring module's name and the type's own name, so classifying a cross-package ref
+    /// costs a lookup instead of a walk of every module. Empty when the package is absent
+    /// from the DAR; a name declared under the same key more than once keeps every
+    /// definition, so asking whether any of them is a record, a variant or an enum answers
+    /// what a walk would have answered.
+    /// </summary>
+    ILookup<(string Module, string Name), DamlDataTypeDefinition> DataTypeDefinitions(string packageId) =>
+        IndexDataTypeDefinitions(LookupPackage(packageId));
+
+    /// <summary>Builds the <see cref="DataTypeDefinitions"/> index of <paramref name="package"/>.</summary>
+    static ILookup<(string Module, string Name), DamlDataTypeDefinition> IndexDataTypeDefinitions(DamlPackage? package) =>
+        (package?.Modules ?? [])
+            .SelectMany(module => module.DataTypes.Select(dataType =>
+                (Key: (Module: module.Name, Name: dataType.Name), dataType.Definition)))
+            .ToLookup(entry => entry.Key, entry => entry.Definition);
 }

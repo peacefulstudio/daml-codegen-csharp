@@ -51,7 +51,7 @@ quietly narrowing the evidence. Rebuild its DAR the same way:
 
 `contractkeys` is a shipped package, so rebuilding its DAR also requires
 refreshing the generated tree (`scripts/refresh-conformance.sh`) — without that
-the `Generated/Contractkeys/` sources the package compiles go stale silently.
+the `Generated/ContractKeys/` sources the package compiles go stale silently.
 The determinism gate reads only `richtypes`, so `codegen-determinism.sh` does
 not need re-running for a contract-key-only change.
 

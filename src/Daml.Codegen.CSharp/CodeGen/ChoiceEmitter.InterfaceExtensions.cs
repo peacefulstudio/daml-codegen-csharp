@@ -98,16 +98,16 @@ internal sealed partial class ChoiceEmitter
             }
         }
 
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)} {commandMethodName}(");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand)} {commandMethodName}(");
         indent.Indent();
         if (hasArg)
         {
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{interfaceName}> contractId,");
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{interfaceName}> contractId,");
             indent.AppendLine($"{argTypeName} argument)");
         }
         else
         {
-            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{interfaceName}> contractId)");
+            indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{interfaceName}> contractId)");
         }
         indent.Dedent();
         indent.AppendLine("{");
@@ -117,7 +117,7 @@ internal sealed partial class ChoiceEmitter
         {
             indent.AppendLine("ArgumentNullException.ThrowIfNull(argument);");
         }
-        indent.AppendLine($"return {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand, context.RootNamespace)}.ForInterface<{interfaceName}>(contractId, new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName, context.RootNamespace)}(\"{choice.Name}\"), {argExpr});");
+        indent.AppendLine($"return {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseCommand)}.ForInterface<{interfaceName}>(contractId, new {context.Qualifier.Qualify(RuntimeTypeNames.ChoiceName)}(\"{choice.Name}\"), {argExpr});");
         indent.Dedent();
         indent.AppendLine("}");
     }
@@ -155,10 +155,10 @@ internal sealed partial class ChoiceEmitter
             WriteSubmissionParameterDocs(indent);
         }
 
-        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult, context.RootNamespace)}>> {methodName}(");
+        indent.AppendLine($"public static Task<{context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{context.Qualifier.Qualify(RuntimeTypeNames.TransactionResult)}>> {methodName}(");
         indent.Indent();
-        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{interfaceName}> contractId,");
-        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter, context.RootNamespace)} client,");
+        indent.AppendLine($"this {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{interfaceName}> contractId,");
+        indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.ILedgerWriter)} client,");
         if (hasArg)
         {
             indent.AppendLine($"{argTypeName} argument,");

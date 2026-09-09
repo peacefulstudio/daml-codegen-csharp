@@ -8,20 +8,18 @@ namespace Daml.Codegen.CSharp.CodeGen;
 internal sealed partial class ChoiceEmitter
 {
     /// <summary>
-    /// Emits the <c>&lt;Choice&gt;Result</c> nested record (typed result struct) and a
-    /// static <c>FromCreatedContracts(...)</c> projector for every choice on
+    /// Emits the <c>&lt;Choice&gt;Result</c> record (typed result struct) and a static
+    /// <c>FromCreatedContracts(...)</c> projector for every choice on
     /// <paramref name="template"/> whose return type carries one or more
-    /// <c>ContractId T</c>s. See <see cref="ChoiceCreatedSlots.Extract"/>.
+    /// <c>ContractId T</c>s. See <see cref="ChoiceCreatedSlots.Extract"/>. The record is a
+    /// top-level type written beside the template in the template's module namespace, after
+    /// the template record has been closed — not nested inside it — so it is reached as
+    /// <c>RetagResult</c>, not <c>Offer.RetagResult</c>. Two modules declaring a same-named
+    /// choice therefore emit two result records in two namespaces, never a collision.
     /// </summary>
     /// <param name="indent">Writer positioned at the emission point in the template's file.</param>
     /// <param name="template">The template whose choices are scanned for created-contract slots.</param>
-    /// <param name="moduleNamespace">
-    /// Fully-qualified C# namespace of the emitted template. Used to <c>global::</c>-qualify
-    /// in-package template references inside the projector body so positional record
-    /// properties on the result type (e.g. a slot named <c>Agreement</c>) cannot shadow
-    /// the template type when looking up <c>Agreement.TemplateId</c>.
-    /// </param>
-    internal void WriteChoiceResultStructs(IndentWriter indent, DamlTemplate template, string moduleNamespace)
+    internal void WriteChoiceResultStructs(IndentWriter indent, DamlTemplate template)
     {
         foreach (var choice in template.Choices)
         {
@@ -31,15 +29,14 @@ internal sealed partial class ChoiceEmitter
                 continue;
             }
 
-            WriteSingleChoiceResultStruct(indent, choice, slots, moduleNamespace);
+            WriteSingleChoiceResultStruct(indent, choice, slots);
         }
     }
 
     private void WriteSingleChoiceResultStruct(
         IndentWriter indent,
         DamlChoice choice,
-        IReadOnlyList<ChoiceCreatedSlot> slots,
-        string moduleNamespace)
+        IReadOnlyList<ChoiceCreatedSlot> slots)
     {
         EmittedUsings.RequireAsyncExerciserNamespaces(indent);
         indent.Require("System.Collections.Generic");
@@ -68,32 +65,32 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
-        WriteFromCreatedContractsProjector(indent, resultName, slots, moduleNamespace);
+        new CollectionValueSemanticsEmitter(context, options).Write(
+            indent,
+            resultName,
+            [.. slots.Select(SlotValueMember)],
+            derivesFromRecord: false);
+        WriteFromCreatedContractsProjector(indent, resultName, slots);
 
         indent.Dedent();
         indent.AppendLine("}");
         indent.AppendLine();
     }
 
+    private ValueMember SlotValueMember(ChoiceCreatedSlot slot) => new(
+        slot.FieldName,
+        SlotPropertyType(slot),
+        slot.Cardinality == CreatedCardinality.List ? CollectionShape.List : CollectionShape.None,
+        $"The <c>{slot.CSharpTemplateType}</c> contracts this slot of the choice's return type carries.",
+        DamlFieldName: null);
+
     private string SlotPropertyType(ChoiceCreatedSlot slot) => slot.Cardinality switch
     {
-        CreatedCardinality.Single => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>",
-        CreatedCardinality.Optional => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>?",
-        CreatedCardinality.List => $"{context.Qualifier.Qualify("IReadOnlyList", context.RootNamespace)}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>>",
-        _ => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Single => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{slot.CSharpTemplateType}>",
+        CreatedCardinality.Optional => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{slot.CSharpTemplateType}>?",
+        CreatedCardinality.List => $"{context.Qualifier.Qualify("IReadOnlyList")}<{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{slot.CSharpTemplateType}>>",
+        _ => $"{context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{slot.CSharpTemplateType}>",
     };
-
-    /// <remarks>
-    /// A result record's positional property carries the template's own name, so an unqualified
-    /// reference inside the projector body binds to the property rather than the template type.
-    /// In-package names are therefore prefixed with <c>global::</c> and the emitted module
-    /// namespace. Cross-package references already arrive qualified — an embedded dot is the
-    /// discriminator.
-    /// </remarks>
-    private static string QualifyInPackageTemplate(string templateName, string moduleNamespace) =>
-        templateName.Contains('.', StringComparison.Ordinal)
-            ? templateName
-            : $"global::{moduleNamespace}.{templateName}";
 
     /// <remarks>
     /// Slots that name the same template share a single bucket of created contracts, which is
@@ -118,10 +115,9 @@ internal sealed partial class ChoiceEmitter
     private void WriteFromCreatedContractsProjector(
         IndentWriter indent,
         string resultName,
-        IReadOnlyList<ChoiceCreatedSlot> slots,
-        string moduleNamespace)
+        IReadOnlyList<ChoiceCreatedSlot> slots)
     {
-        string Q(string templateName) => QualifyInPackageTemplate(templateName, moduleNamespace);
+        string Q(string templateName) => context.QualifyInModule(templateName);
 
         if (options.GenerateXmlDocs)
         {
@@ -137,7 +133,7 @@ internal sealed partial class ChoiceEmitter
             indent.AppendLine("/// </summary>");
         }
 
-        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}> FromCreatedContracts(IEnumerable<{context.Qualifier.Qualify(RuntimeTypeNames.CreatedContract, context.RootNamespace)}> created)");
+        indent.AppendLine($"public static {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}> FromCreatedContracts(IEnumerable<{context.Qualifier.Qualify(RuntimeTypeNames.CreatedContract)}> created)");
         indent.AppendLine("{");
         indent.Indent();
 
@@ -264,13 +260,13 @@ internal sealed partial class ChoiceEmitter
                     indent.AppendLine($"if ({local}.Count == 0)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.None();");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>.None();");
                     indent.Dedent();
                     indent.AppendLine("}");
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>.Many({context.Qualifier.Qualify(RuntimeTypeNames.EquatableArray)}.Create({local}));");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -278,7 +274,7 @@ internal sealed partial class ChoiceEmitter
                     indent.AppendLine($"if ({local}.Count > 1)");
                     indent.AppendLine("{");
                     indent.Indent();
-                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.Many({local}.Count, {local});");
+                    indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>.Many({context.Qualifier.Qualify(RuntimeTypeNames.EquatableArray)}.Create({local}));");
                     indent.Dedent();
                     indent.AppendLine("}");
                     break;
@@ -288,7 +284,7 @@ internal sealed partial class ChoiceEmitter
         }
 
         indent.AppendLine();
-        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome, context.RootNamespace)}<{resultName}>.One(new {resultName}(");
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{resultName}>.One(new {resultName}(");
         indent.Indent();
         for (var i = 0; i < slots.Count; i++)
         {
@@ -299,13 +295,13 @@ internal sealed partial class ChoiceEmitter
             switch (slot.Cardinality)
             {
                 case CreatedCardinality.Single:
-                    indent.AppendLine($"{slot.FieldName}: new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>({local}[0]){separator}");
+                    indent.AppendLine($"{slot.FieldName}: new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateRef}>({local}[0]){separator}");
                     break;
                 case CreatedCardinality.Optional:
-                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>({local}[0]) : null{separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.Count == 1 ? new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateRef}>({local}[0]) : null{separator}");
                     break;
                 case CreatedCardinality.List:
-                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId, context.RootNamespace)}<{templateRef}>(c)){separator}");
+                    indent.AppendLine($"{slot.FieldName}: {local}.ConvertAll(c => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{templateRef}>(c)){separator}");
                     break;
             }
         }

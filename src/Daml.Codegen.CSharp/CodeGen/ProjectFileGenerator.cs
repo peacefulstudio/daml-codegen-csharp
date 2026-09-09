@@ -105,7 +105,7 @@ public sealed class ProjectFileGenerator
         sb.AppendLine(CultureInfo.InvariantCulture, $"    dotnet add package {packageId}{prereleaseFlag}");
         sb.AppendLine();
         sb.AppendLine("## Usage");
-        sb.AppendLine("Generated types live under the package's namespace; submit commands and exercise choices");
+        sb.AppendLine("Generated types live under one C# namespace per Daml module, named after the module; submit commands and exercise choices");
         sb.AppendLine("through an `ILedgerWriter`, and read or stream contracts via `ILedgerReader`/`ILedgerStreamer` (`Daml.Ledger.Abstractions`).");
         sb.AppendLine();
         sb.AppendLine("## Provenance");

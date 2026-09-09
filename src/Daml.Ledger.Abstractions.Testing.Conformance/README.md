@@ -59,6 +59,12 @@ members to the contract `ILedgerStreamer` documents by your own tests.
   resuming from a returned offset does not re-deliver the event at it;
   `toOffset` is inclusive and terminal, so a bounded subscription delivers the
   event at `toOffset` and then completes.
+- **Stream shapes** — the ACS-delta subscription conveys archival as a
+  first-class `Archived` event and never an `Exercised`; the ledger-effects
+  subscription conveys it as a consuming `Exercised` and never an `Archived`.
+  Each shape is checked in both directions: emitting the wrong variant fails,
+  and so does dropping archival altogether, because the signal a shape exists to
+  carry cannot be missing from a stream that claims to carry it.
 - **Non-termination failure mode** — every stream the contract requires to
   terminate is enumerated under a time budget (`StreamTimeout`, default 30s;
   override to widen). A stream that never terminates fails loudly with a
@@ -78,6 +84,11 @@ members to the contract `ILedgerStreamer` documents by your own tests.
   each is a distinct fault. Skipped unless the adopter overrides
   `CreateCommandIdFixture()`.
 
+Nine of the eighteen checks belong to the three opt-in families above: they skip, rather than
+fail, while the corresponding factory stays at its `null` default. A green run therefore
+reports your configuration as well as your correctness; the skips in the run output name which
+opt-in families your configuration omits.
+
 ## Seeding requirement
 
 `CreateClient()` must return a client seeded with the canonical conformance
@@ -87,6 +98,11 @@ scenario:
   classify (e.g. a missing synchronizer id);
 - at least one event on the `SubscribeAsync` stream at a known offset, with the
   `(fromOffset, toOffset]` bounds honored;
+- one archived `TProbe` at an offset no later than the seeded ledger end,
+  reaching the `SubscribeAsync` stream as an `Archived` event and the
+  `SubscribeLedgerEffectsAsync` stream as a consuming `Exercised` event — the
+  two shape checks read the archival signal itself, not only the absence of the
+  wrong variant, so a scenario that archives nothing fails both;
 - `GetLedgerEndAsync` returning the seeded ledger end;
 - an empty active-contract-set snapshot at `EmptySnapshotOffset` (defaults to
   `LedgerOffset.Begin`; override it if your transport rejects an active-contract-set
@@ -113,5 +129,26 @@ verbatim, `null` included), and a read-back of the `command_id` the participant 
 for the submission just dispatched — as a raw string, so an unset id reads back as `null`
 rather than being smuggled past the check by a `default(CommandId)`. Leaving it at its
 `null` default skips only the command-id checks.
+
+## Writing those fixtures
+
+Each of those overrides wants a client that proves one behavior and nothing else, and
+`ILedgerClient` has twelve members. Derive from `NotSupportedLedgerClient`, the abstract
+base this package publishes: every member is `virtual` and throws
+`NotSupportedException`, so a fake overrides the ones its check drives and stubs none of
+the rest.
+
+```csharp
+private sealed class LedgerEndOnlyClient : NotSupportedLedgerClient
+{
+    public override Task<LedgerOffset> GetLedgerEndAsync(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult(LedgerOffset.At(42));
+}
+```
+
+The kit's own command-id, submitter-authority and cancellation fakes are built that way;
+it is published rather than kept test-project-private so a transport author writing
+fixtures of their own pays the twelve-member tax once.
 
 Not for production use.

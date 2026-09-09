@@ -208,6 +208,34 @@ public class SingleCommandExtensionsTests
         writer.LastSubmission!.CommandId.Should().Be(new CommandId("caller-supplied"));
     }
 
+    [Fact]
+    public async Task TryCreateOneByExerciseAsync_re_wraps_a_writer_level_Many_over_the_created_contract_id()
+    {
+        var writer = new CapturingWriter(new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2"]));
+
+        var outcome = await writer.TryCreateOneByExerciseAsync<SampleTemplate>(
+            SampleCommand, Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        outcome.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.Many>()
+            .Which.ContractIds.Should().Equal("cid-1", "cid-2");
+    }
+
+    [Fact]
+    public async Task TryCreateOneByExerciseAsync_yields_Many_when_the_transaction_created_more_than_one()
+    {
+        var writer = new CapturingWriter(new ExerciseOutcome<TransactionResult>.One(
+            TransactionCreatingOneSampleTemplate with
+            {
+                CreatedContracts = [CreatedOf("cid-created"), CreatedOf("cid-created-2")],
+            }));
+
+        var outcome = await writer.TryCreateOneByExerciseAsync<SampleTemplate>(
+            SampleCommand, Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        outcome.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.Many>()
+            .Which.ContractIds.Should().Equal("cid-created", "cid-created-2");
+    }
+
     [Theory]
     [InlineData("TryCreateManyByExerciseAsync", "Party")]
     [InlineData("TryCreateManyByExerciseAsync", "SubmitterInfo")]

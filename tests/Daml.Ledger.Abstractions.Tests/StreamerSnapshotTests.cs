@@ -180,7 +180,7 @@ public sealed class StreamerSnapshotTests
         var streamer = new FakeStreamer(
             Created("cid-1", "alice", 1),
             new AcsSnapshotEntry<Probe>.StreamError(
-                14, "unavailable", DamlErrorCategory.TransientServerFailure, transportFault));
+                14, "unavailable", DamlErrorCategory.TransientServerFailure, SourceException: transportFault));
 
         var snapshot = async () => await streamer.SnapshotAsync<Probe>(Alice, cancellationToken: TestContext.Current.CancellationToken);
 
@@ -189,6 +189,26 @@ public sealed class StreamerSnapshotTests
             transportFault,
             "the exception the transport caught is lost unless this branch forwards it, leaving a caller "
             + "who catches the rethrow with none of the stack the fault actually came from");
+    }
+
+    [Fact]
+    public async Task SnapshotAsync_carries_the_stream_errors_error_id_onto_the_thrown_exception()
+    {
+        var streamer = new FakeStreamer(
+            Created("cid-1", "alice", 1),
+            new AcsSnapshotEntry<Probe>.StreamError(
+                10,
+                "the stream authorization is stale",
+                DamlErrorCategory.ContentionOnSharedResources,
+                "STALE_STREAM_AUTHORIZATION"));
+
+        var snapshot = async () => await streamer.SnapshotAsync<Probe>(Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        var thrown = await snapshot.Should().ThrowAsync<LedgerOperationException>();
+        thrown.Which.ErrorId.Should().Be(
+            "STALE_STREAM_AUTHORIZATION",
+            "the error id the snapshot entry now carries is dropped again at this rethrow unless the branch "
+            + "forwards it, and the exception already exposes the slot the caller would read it from");
     }
 
     [Fact]
@@ -275,6 +295,78 @@ public sealed class StreamerSnapshotTests
         await snapshot.Should().ThrowAsync<OperationCanceledException>(
             "a stream cut short by the caller's own token is not a transport truncation");
     }
+
+    [Fact]
+    public async Task SnapshotActiveAsync_carries_each_rows_last_update_offset_and_synchronizer()
+    {
+        var streamer = new FakeStreamer(
+            CreatedOn("cid-1", "alice", 1, "sync-a"),
+            CreatedOn("cid-2", "bob", 7, "sync-b"),
+            new AcsSnapshotEntry<Probe>.Checkpoint(new StakeholderResume(LedgerOffset.At(7))));
+
+        var active = await streamer.SnapshotActiveAsync<Probe>(Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        active.Should().HaveCount(2);
+        active[0].Contract.Id.Value.Should().Be("cid-1");
+        active[0].LastUpdateOffset.Should().Be(LedgerOffset.At(1));
+        active[0].SynchronizerId.Should().Be(new SynchronizerId("sync-a"));
+        active[1].Contract.Id.Value.Should().Be("cid-2");
+        active[1].LastUpdateOffset.Should().Be(
+            LedgerOffset.At(7),
+            "the rows carry distinct offsets and synchronizers so a field dropped, or read off the "
+            + "wrong row, cannot pass unnoticed");
+        active[1].SynchronizerId.Should().Be(new SynchronizerId("sync-b"));
+    }
+
+    [Fact]
+    public async Task SnapshotActiveAsync_carries_the_decoded_key_alongside_the_provenance()
+    {
+        var streamer = new FakeStreamer(
+            new AcsSnapshotEntry<Probe>.Created(
+                new ContractId<Probe>("cid-1"),
+                new Probe(new Party("alice"), ProbeGrade.Low),
+                new ContractKey(DamlRecord.Create(new DamlField("owner", new DamlParty("alice")))),
+                LedgerOffset.At(3),
+                new SynchronizerId("sync-a"),
+                [new Party("alice")]),
+            new AcsSnapshotEntry<Probe>.Checkpoint(new StakeholderResume(LedgerOffset.At(3))));
+
+        var active = await streamer.SnapshotActiveAsync(Probe.Key, Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        active.Should().BeAssignableTo<IReadOnlyList<ActiveContract<Contract<Probe, Party>>>>(
+            "the witness argument exists so one argument fixes both type parameters; C# performs no "
+            + "partial type-argument inference, so a call site spelling neither must still bind");
+        active[0].Contract.Key.Value.Should().Be(new Party("alice"));
+        active[0].LastUpdateOffset.Should().Be(LedgerOffset.At(3));
+        active[0].SynchronizerId.Should().Be(new SynchronizerId("sync-a"));
+    }
+
+    [Fact]
+    public async Task SnapshotActiveAsync_reports_a_keyed_row_that_carried_no_key()
+    {
+        var streamer = new FakeStreamer(
+            CreatedOn("cid-1", "alice", 1, "sync-a"),
+            new AcsSnapshotEntry<Probe>.Checkpoint(new StakeholderResume(LedgerOffset.At(1))));
+
+        var draining = async () => await streamer.SnapshotActiveAsync(Probe.Key, Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        await draining.Should().ThrowAsync<LedgerOperationException>(
+            "carrying provenance must not soften the keyed drain's own refusal: contracts the "
+            + "caller cannot address by key are the short-list failure this convenience prevents");
+    }
+
+    private static AcsSnapshotEntry<Probe>.Created CreatedOn(
+        string contractId,
+        string owner,
+        long offset,
+        string synchronizerId) =>
+        new(
+            new ContractId<Probe>(contractId),
+            new Probe(new Party(owner), ProbeGrade.Low),
+            null,
+            LedgerOffset.At(offset),
+            new SynchronizerId(synchronizerId),
+            [new Party(owner)]);
 
     private static AcsSnapshotEntry<Probe>.Created Created(string contractId, string owner, long offset) =>
         new(

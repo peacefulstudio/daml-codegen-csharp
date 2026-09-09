@@ -14,6 +14,19 @@ internal static partial class Program
 {
     internal static async Task<int> Main(string[] args)
     {
+        var rootCommand = BuildRootCommand();
+        var parseResult = rootCommand.Parse(args);
+        return await parseResult.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Declares every CLI option (with its validators and default) and wires the parsed
+    /// values into <see cref="RunCodegen"/>. Split out of <see cref="Main"/> so the option
+    /// surface — the part that grows as flags are added — is its own unit, separate from
+    /// argument parsing and invocation.
+    /// </summary>
+    private static RootCommand BuildRootCommand()
+    {
         var rootCommand = new RootCommand("Generate C# code from an IntermediateDar proto");
 
         var intermediateOption = new Option<FileInfo>("--intermediate")
@@ -39,7 +52,7 @@ internal static partial class Program
 
         var namespaceOption = new Option<string?>("-n")
         {
-            Description = "Root namespace for generated code (default: derived from package name)"
+            Description = "Namespace prefix for the main package's generated code: each Daml module is emitted under <prefix>.<Module>, the prefix is elided when the module name already starts with it, and dependency packages are never prefixed (default: no prefix, the namespace is the module name)"
         };
         namespaceOption.Aliases.Add("--namespace");
 
@@ -103,7 +116,7 @@ internal static partial class Program
 
         var contractIdentifiersOption = new Option<bool>("--contract-identifiers")
         {
-            Description = "Generate a ContractIdentifiers helper class for PQS queries",
+            Description = "Generate a ContractIdentifiers helper class per module, in that module's directory, for PQS queries",
             DefaultValueFactory = _ => true
         };
 
@@ -228,8 +241,7 @@ internal static partial class Program
                 cancellationToken);
         rootCommand.SetAction(action);
 
-        var parseResult = rootCommand.Parse(args);
-        return await parseResult.InvokeAsync();
+        return rootCommand;
     }
 
     internal static async Task<int> RunCodegen(CodegenArgs args, CancellationToken cancellationToken)
@@ -324,7 +336,7 @@ internal static partial class Program
     private static CodeGenOptions BuildOptions(CodegenArgs args, int emitterCounter) =>
         new()
         {
-            RootNamespace = args.RootNamespace,
+            NamespacePrefix = args.NamespacePrefix,
             RootFilter = args.RootFilter,
             EnableNullableReferenceTypes = args.EnableNullable,
             GenerateProjectFile = args.GenerateProjectFile,
@@ -411,7 +423,7 @@ internal static partial class Program
 internal sealed record CodegenArgs(
     FileInfo IntermediateFile,
     DirectoryInfo OutputDirectory,
-    string? RootNamespace,
+    string? NamespacePrefix,
     int Verbosity,
     string? RootFilter,
     bool EnableNullable,

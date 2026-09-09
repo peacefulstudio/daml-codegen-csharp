@@ -1,11 +1,13 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using System.Text.Json;
 using AwesomeAssertions;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Serialization;
+using Daml.Runtime.Stdlib;
 using Xunit;
 
 namespace Daml.Runtime.Tests;
@@ -283,4 +285,155 @@ public class DamlLfJsonReaderScalarTests
 
         act.Should().Throw<JsonException>().WithMessage("Expected JSON String at 'ReferenceHolder.reference' but found Number");
     }
+
+    private const string TopLevelParty = "alice::1220ab";
+
+    public static TheoryData<Type, string, DamlValue> TopLevelScalarShapes => new()
+    {
+        { typeof(Party), $"\"{TopLevelParty}\"", new DamlParty(TopLevelParty) },
+        { typeof(DamlParty), $"\"{TopLevelParty}\"", new DamlParty(TopLevelParty) },
+        { typeof(string), "\"hello\"", new DamlText("hello") },
+        { typeof(DamlText), "\"hello\"", new DamlText("hello") },
+        { typeof(bool), "true", new DamlBool(true) },
+        { typeof(DamlBool), "false", new DamlBool(false) },
+        { typeof(long), "\"42\"", new DamlInt64(42) },
+        { typeof(DamlInt64), "\"-42\"", new DamlInt64(-42) },
+        { typeof(decimal), "\"1.25\"", new DamlNumeric(1.25m) },
+        { typeof(DamlNumeric), "\"1.25\"", new DamlNumeric(1.25m) },
+        { typeof(DateOnly), "\"2026-09-05\"", new DamlDate(new DateOnly(2026, 9, 5)) },
+        { typeof(DamlDate), "\"2026-09-05\"", new DamlDate(new DateOnly(2026, 9, 5)) },
+        { typeof(DateTimeOffset), "\"2026-09-05T12:34:56Z\"", new DamlTimestamp(new DateTimeOffset(2026, 9, 5, 12, 34, 56, TimeSpan.Zero)) },
+        { typeof(DamlTimestamp), "\"2026-09-05T12:34:56Z\"", new DamlTimestamp(new DateTimeOffset(2026, 9, 5, 12, 34, 56, TimeSpan.Zero)) },
+        { typeof(Unit), "{}", DamlUnit.Instance },
+        { typeof(DamlUnit), "{}", DamlUnit.Instance },
+        { typeof(ContractId<ReferencedTemplate>), $"\"{ReferenceContractId}\"", new DamlContractId(ReferenceContractId) },
+        { typeof(DamlContractId), $"\"{ReferenceContractId}\"", new DamlContractId(ReferenceContractId) },
+    };
+
+    [Theory]
+    [MemberData(nameof(TopLevelScalarShapes))]
+    public void ReadValue_should_decode_a_top_level_scalar(Type valueType, string json, DamlValue expected)
+    {
+        DamlLfJsonReader.ReadValue(json, valueType).Should().Be(expected);
+    }
+
+    [Theory]
+    [MemberData(nameof(TopLevelScalarShapes))]
+    public void ReadValue_should_decode_a_top_level_scalar_from_a_parsed_element(
+        Type valueType, string json, DamlValue expected)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        DamlLfJsonReader.ReadValue(document.RootElement, valueType).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_a_top_level_scalar_whose_json_shape_does_not_match()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Party>("123");
+
+        act.Should().Throw<JsonException>().WithMessage("Expected JSON String at 'Party' but found Number");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_a_malformed_top_level_scalar()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<long>("\"twelve\"");
+
+        act.Should().Throw<JsonException>().WithMessage("Value 'twelve' at 'Int64' is not a valid Daml Int64");
+    }
+
+    public enum Grade
+    {
+        Pass,
+        Fail,
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_a_top_level_generated_enum()
+    {
+        DamlLfJsonReader.ReadValue<Direction>("\"Forward\"").Should().Be(DamlEnum.Create("Forward"));
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_a_top_level_enum_constructor_the_generated_enum_does_not_declare()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Direction>("\"Merit\"");
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "Unknown Daml enum constructor 'Merit' at 'Direction'; expected one of Forward, U$u0020Turn");
+    }
+
+    [Fact]
+    public void ReadValue_should_refuse_a_top_level_enum_that_is_not_a_generated_Daml_enum()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Grade>("\"Pass\"");
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{typeof(Grade)}' at 'Grade' lies outside the Daml type mapping for a top-level value; "
+            + "pass a generated Daml record, variant or enum, a Daml scalar, a ContractId or Unit.");
+    }
+
+    [Fact]
+    public void ReadValue_should_refuse_a_top_level_enum_whose_companion_does_not_return_a_DamlEnum()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Tempo>("\"Andante\"");
+
+        act.Should().Throw<NotSupportedException>().WithMessage(
+            $"Type '{typeof(Tempo)}' at 'Tempo' lies outside the Daml type mapping for a top-level value; "
+            + "pass a generated Daml record, variant or enum, a Daml scalar, a ContractId or Unit.");
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_a_top_level_stdlib_enum_whose_companion_is_hand_written()
+    {
+        DamlLfJsonReader.ReadValue<Stdlib.DayOfWeek>("\"Monday\"").Should().Be(DamlEnum.Create("Monday"));
+    }
+
+    private static IReadOnlyList<(Type Alias, Type Canonical)> TopLevelScalarAliases =>
+        (ValueTuple<Type, Type>[])PrivateReaderTable("TopLevelScalarAliases");
+
+    private static IReadOnlyDictionary<Type, Func<JsonElement, string, DamlValue>> ScalarArms =>
+        (IReadOnlyDictionary<Type, Func<JsonElement, string, DamlValue>>)PrivateReaderTable("ScalarArms");
+
+    private static object PrivateReaderTable(string name) =>
+        typeof(DamlLfJsonReader).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
+            ?? throw new InvalidOperationException(
+                $"{name} is no longer a private static field of {nameof(DamlLfJsonReader)}");
+
+    [Fact]
+    public void TopLevelScalarAliases_should_only_name_a_canonical_type_ScalarArms_reads()
+    {
+        TopLevelScalarAliases.Should().NotBeEmpty(
+            "a guard over an empty alias table passes vacuously and would never catch a drift");
+
+        TopLevelScalarAliases.Should().OnlyContain(
+            alias => ScalarArms.ContainsKey(alias.Canonical),
+            "each alias reuses the reader ScalarArms holds for its canonical type");
+    }
+
+    [Fact]
+    public void TopLevelScalarAliases_should_not_collide_with_a_scalar_arm_or_with_one_another()
+    {
+        var aliases = TopLevelScalarAliases.Select(alias => alias.Alias).ToList();
+
+        aliases.Should().OnlyHaveUniqueItems(
+            "concatenated pairs reach ToFrozenDictionary, which keeps the last of a duplicated key "
+            + "rather than throwing, so a repeated alias would silently win");
+
+        aliases.Should().NotIntersectWith(
+            ScalarArms.Keys,
+            "an alias that repeats a ScalarArms key would silently overwrite that arm's reader");
+    }
+}
+
+public enum Tempo
+{
+    Andante,
+    Presto
+}
+
+public static class TempoExtensions
+{
+    public static string ToDamlEnum(this Tempo value) => value.ToString();
 }

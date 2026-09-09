@@ -18,10 +18,15 @@ namespace Daml.Runtime.Tests;
 /// <c>ContractStreamEvent&lt;T&gt;.StreamError</c>,
 /// <c>InterfaceAcsSnapshotEntry&lt;TInterface, TView&gt;.StreamError</c>,
 /// <c>InterfaceStreamEvent&lt;TInterface, TView&gt;.StreamError</c> and
-/// <c>ExerciseOutcome&lt;T&gt;.InfraError</c> each declare for themselves. Every shape
-/// compared here is read out of the declaration by reflection, so renaming, retyping,
-/// reordering or adding a parameter on one declaration alone fails this class instead of
-/// letting the five drift apart.
+/// <c>ExerciseOutcome&lt;T&gt;.InfraError</c> each declare for themselves. The four stream
+/// variants additionally carry the participant's structured error id, between the category and
+/// the source exception; <c>ExerciseOutcome&lt;T&gt;.InfraError</c> does not, because the write
+/// path spells a structured error as <c>ExerciseOutcome&lt;T&gt;.DamlError</c> instead. The two
+/// families therefore agree on the parameters leading up to the source exception and on the
+/// source exception itself, which is the whole shape on one side and all but one parameter on
+/// the other. Every shape compared here is read out of the declaration by reflection, so
+/// renaming, retyping, reordering or adding a parameter on one declaration alone fails this
+/// class instead of letting the five drift apart.
 /// </summary>
 public class TransportFailureShapeAgreementTests
 {
@@ -58,28 +63,46 @@ public class TransportFailureShapeAgreementTests
     }
 
     [Fact]
-    public void TransportFailureShapeAgreement_the_outcome_variant_opens_with_that_same_shape()
+    public void TransportFailureShapeAgreement_the_stream_shape_opens_with_the_outcome_variants_shape()
     {
-        DeclaredShape(OutcomeInfraError).Should().StartWith(
-            DeclaredShape(SubscriptionStreamError),
-            "the infrastructure-failure outcome leads with the same transport failure ahead of its own extra " +
-            "parameters, so renaming, retyping or reordering the leading ones on either side alone has to fail");
+        DeclaredShape(SubscriptionStreamError).Should().StartWith(
+            DeclaredShapeBefore(OutcomeInfraError, nameof(ExerciseOutcome<Probe>.InfraError.SourceException)),
+            "a stream fault leads with the same transport failure the infrastructure-failure outcome declares " +
+            "ahead of its source exception, so renaming, retyping or reordering the leading ones on either " +
+            "side alone has to fail");
     }
 
     [Fact]
-    public void TransportFailureShapeAgreement_every_stream_variant_ends_with_the_source_exception()
+    public void TransportFailureShapeAgreement_every_stream_variant_carries_the_outcome_familys_error_id()
+    {
+        var errorId = $"{typeof(string)}? {nameof(ExerciseOutcome<Probe>.DamlError.ErrorId)}|";
+
+        const string reason =
+            "a stream consumer classifying a terminal fault needs the participant's error id, under the name " +
+            "the structured write-path error already spells it rather than a second name for the same thing";
+
+        DeclaredShape(SnapshotStreamError).Should().Contain(errorId, reason);
+        DeclaredShape(SubscriptionStreamError).Should().Contain(errorId, reason);
+        DeclaredShape(InterfaceSnapshotStreamError).Should().Contain(errorId, reason);
+        DeclaredShape(InterfaceSubscriptionStreamError).Should().Contain(errorId, reason);
+    }
+
+    [Fact]
+    public void TransportFailureShapeAgreement_every_variant_ends_with_the_source_exception()
     {
         var sourceException =
             $"{typeof(Exception)}? {nameof(ExerciseOutcome<Probe>.InfraError.SourceException)}|";
 
         const string reason =
             "a stream consumer deciding retry policy needs the transport exception the write path " +
-            "already hands it, carried last so the parameter order matches the outcome variant";
+            "already hands it, carried last on both families: the prefix comparison above stops at " +
+            "the outcome variant's source exception, so nothing else pins its name or its type there";
 
         DeclaredShape(SnapshotStreamError).Should().EndWith(sourceException, reason);
         DeclaredShape(SubscriptionStreamError).Should().EndWith(sourceException, reason);
         DeclaredShape(InterfaceSnapshotStreamError).Should().EndWith(sourceException, reason);
         DeclaredShape(InterfaceSubscriptionStreamError).Should().EndWith(sourceException, reason);
+        DeclaredShape(OutcomeInfraError).Should().EndWith(sourceException, reason);
     }
 
     [Fact]
@@ -98,10 +121,16 @@ public class TransportFailureShapeAgreementTests
     {
         var extendedDeclaration = new MessageRenamedToMessageDetail(14, "unavailable").GetType();
 
+        DeclaredParameters(extendedDeclaration).Should().HaveSameCount(
+            DeclaredParameters(SnapshotStreamError),
+            "this control only proves a name that extends a pinned one is caught while it is as long as what " +
+            "it is compared against; one parameter shorter and it passes on length, which is what it was " +
+            "already once fixed for");
+
         DeclaredShape(extendedDeclaration).Should().NotStartWith(
             DeclaredShape(SnapshotStreamError),
-            "a parameter name that merely extends the pinned one has to fall outside the prefix comparison, " +
-            "otherwise a one-sided rename would slip past the outcome-variant assertion");
+            "a parameter name that merely extends the pinned one has to fall outside the agreement " +
+            "comparisons, otherwise a one-sided rename would slip past them");
     }
 
     [Fact]
@@ -110,18 +139,28 @@ public class TransportFailureShapeAgreementTests
         DeclaredShape(SnapshotStreamError).Should().NotBeEmpty(VacuityReason);
         DeclaredShape(SubscriptionStreamError).Should().NotBeEmpty(VacuityReason);
         DeclaredShape(OutcomeInfraError).Should().NotBeEmpty(VacuityReason);
+        DeclaredShapeBefore(OutcomeInfraError, nameof(ExerciseOutcome<Probe>.InfraError.SourceException))
+            .Should().NotBeEmpty(VacuityReason);
     }
 
-    private static string DeclaredShape(Type declaration)
+    private static string DeclaredShape(Type declaration) =>
+        Describe(DeclaredParameters(declaration));
+
+    private static string DeclaredShapeBefore(Type declaration, string parameterName) =>
+        Describe(DeclaredParameters(declaration).TakeWhile(parameter => parameter.Name != parameterName));
+
+    private static IEnumerable<ParameterInfo> DeclaredParameters(Type declaration) =>
+        declaration.GetConstructors()
+            .OrderByDescending(constructor => constructor.GetParameters().Length)
+            .First()
+            .GetParameters();
+
+    private static string Describe(IEnumerable<ParameterInfo> parameters)
     {
         var nullability = new NullabilityInfoContext();
 
-        return string.Concat(declaration.GetConstructors()
-            .OrderByDescending(constructor => constructor.GetParameters().Length)
-            .First()
-            .GetParameters()
-            .Select(parameter =>
-                $"{parameter.ParameterType}{NullableMarker(nullability, parameter)} {parameter.Name}|"));
+        return string.Concat(parameters.Select(parameter =>
+            $"{parameter.ParameterType}{NullableMarker(nullability, parameter)} {parameter.Name}|"));
     }
 
     private static string NullableMarker(NullabilityInfoContext nullability, ParameterInfo parameter) =>
@@ -133,6 +172,7 @@ public class TransportFailureShapeAgreementTests
         int StatusCode,
         string MessageDetail,
         DamlErrorCategory? Category = null,
+        string? ErrorId = null,
         Exception? SourceException = null);
 
     private sealed record Probe : ITemplate, IDamlRecord<Probe>

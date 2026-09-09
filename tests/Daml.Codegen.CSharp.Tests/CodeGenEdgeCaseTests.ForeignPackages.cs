@@ -68,11 +68,9 @@ public partial class CodeGenEdgeCaseTests
         var files = generator.Generate(dar).ToList();
         var wrapper = files.FirstOrDefault(f => f.RelativePath.EndsWith("Wrapper.cs", StringComparison.Ordinal));
 
-        // Assert — generated field type uses the foreign package's namespace
         wrapper.Should().NotBeNull();
-        wrapper!.Content.Should().Contain("Foreign.Pkg.Meta Meta");
-        // FromRecord uses the same fully qualified name
-        wrapper.Content.Should().Contain("Foreign.Pkg.Meta.FromRecord(record.GetRequiredField(\"meta\").As<DamlRecord>())");
+        wrapper!.Content.Should().Contain("global::Foreign.Module.Meta Meta");
+        wrapper.Content.Should().Contain("global::Foreign.Module.Meta.FromRecord(record.GetRequiredField(\"meta\").As<DamlRecord>())");
     }
 
     [Fact]
@@ -125,8 +123,6 @@ public partial class CodeGenEdgeCaseTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             GenerateXmlDocs = true,
             GenerateProjectFile = true
         };
@@ -187,8 +183,6 @@ public partial class CodeGenEdgeCaseTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             GenerateXmlDocs = true,
             GenerateProjectFile = true
         };
@@ -199,7 +193,7 @@ public partial class CodeGenEdgeCaseTests
         var csproj = files.FirstOrDefault(f => f.RelativePath.EndsWith(".csproj", StringComparison.Ordinal));
 
         wrapper.Should().NotBeNull();
-        wrapper!.Content.Should().Contain("Meta Meta");
+        wrapper!.Content.Should().Contain("[property: DamlFieldAttribute(\"meta\")] Meta Meta");
         wrapper.Content.Should().NotContain("No.Package.Metadata");
 
         csproj.Should().NotBeNull();
@@ -261,8 +255,6 @@ public partial class CodeGenEdgeCaseTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             GenerateXmlDocs = true,
             GenerateProjectFile = true
         };
@@ -338,8 +330,6 @@ public partial class CodeGenEdgeCaseTests
         {
             EnableNullableReferenceTypes = true,
             UseFileScopedNamespaces = true,
-            UseRecordTypes = true,
-            UsePrimaryConstructors = true,
             GenerateXmlDocs = true,
             GenerateProjectFile = true
         };

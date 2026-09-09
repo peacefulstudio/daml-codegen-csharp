@@ -1,6 +1,8 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json.Serialization;
+
 namespace Daml.Runtime;
 
 /// <summary>
@@ -14,4 +16,13 @@ namespace Daml.Runtime;
 /// for the visibility basis this ticket protects.
 /// </summary>
 /// <param name="Offset">The underlying ledger offset.</param>
+/// <remarks>
+/// <see cref="System.Text.Json"/> reaches a struct through its implicit parameterless
+/// constructor unless told otherwise, which leaves <paramref name="Offset"/> an init-only
+/// property carrying no constructor parameter — and a resume ticket whose offset no payload
+/// mentions then reads as <see cref="LedgerOffset.Begin"/>. Naming the primary constructor puts
+/// the parameter back within reach of
+/// <see cref="Serialization.DamlJsonConverters.AddDamlConverters"/>, which requires it.
+/// </remarks>
+[method: JsonConstructor]
 public readonly record struct StakeholderResume(LedgerOffset Offset);

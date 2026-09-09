@@ -70,6 +70,140 @@ public class ContractStreamEventTests
     }
 
     [Fact]
+    public void ToContract_pairs_a_created_events_payload_with_its_contract_id()
+    {
+        var created = new ContractStreamEvent<TestTemplate>.Created(
+            new ContractId<TestTemplate>("c1"),
+            new TestTemplate("alice"),
+            null,
+            LedgerOffset.At(1),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var contract = created.ToContract();
+
+        contract.Id.Value.Should().Be("c1");
+        contract.Data.Owner.Should().Be("alice");
+    }
+
+    [Fact]
+    public void ToContract_pairs_an_assigned_events_payload_with_its_contract_id()
+    {
+        var assigned = new ContractStreamEvent<TestTemplate>.Assigned(
+            new ContractId<TestTemplate>("c1"),
+            new TestTemplate("alice"),
+            null,
+            LedgerOffset.At(4),
+            new SynchronizerId("src"),
+            new SynchronizerId("tgt"),
+            "reassignment-1",
+            7L,
+            [new Party("alice")]);
+
+        var contract = assigned.ToContract();
+
+        contract.Id.Value.Should().Be("c1");
+        contract.Data.Owner.Should().Be("alice");
+    }
+
+    [Fact]
+    public void ToContract_decodes_a_created_events_key_and_carries_the_ledgers_hash_of_it()
+    {
+        var created = new ContractStreamEvent<DecodableTemplate>.Created(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            new ContractKey(
+                DamlRecord.Create(new DamlField("owner", new DamlParty("alice"))),
+                DecodableTemplate.TemplateId)
+            {
+                KeyHash = LedgerKeyHash,
+            },
+            LedgerOffset.At(1),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var contract = created.ToContract<DecodableTemplate, Party>();
+
+        contract.Key.Value.Should().Be(
+            new Party("alice"),
+            "the live stream is where a consumer rebuilds state from, so a key left in its wire "
+            + "shape there is a decode every call site has to repeat");
+        contract.Key.Hash.Should().Be(
+            LedgerKeyHash,
+            "the hash is Canton-computed over the key and the template id, so a projection that "
+            + "drops it leaves the caller unable to address the contract by key");
+    }
+
+    [Fact]
+    public void ToContract_decodes_an_assigned_events_key_and_carries_the_ledgers_hash_of_it()
+    {
+        var assigned = new ContractStreamEvent<DecodableTemplate>.Assigned(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            new ContractKey(
+                DamlRecord.Create(new DamlField("owner", new DamlParty("alice"))),
+                DecodableTemplate.TemplateId)
+            {
+                KeyHash = LedgerKeyHash,
+            },
+            LedgerOffset.At(4),
+            new SynchronizerId("src"),
+            new SynchronizerId("tgt"),
+            "reassignment-1",
+            7L,
+            [new Party("alice")]);
+
+        var contract = assigned.ToContract<DecodableTemplate, Party>();
+
+        contract.Key.Value.Should().Be(
+            new Party("alice"),
+            "a consumer rebuilding state from one stream would lose the typed key at every "
+            + "reassignment if only the created arm had a hop off the raw slot");
+        contract.Key.Hash.Should().Be(LedgerKeyHash);
+    }
+
+    [Fact]
+    public void ToContract_rejects_a_keyed_projection_of_a_created_row_carrying_no_key()
+    {
+        var created = new ContractStreamEvent<DecodableTemplate>.Created(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            null,
+            LedgerOffset.At(1),
+            new SynchronizerId("sync"),
+            [new Party("alice")]);
+
+        var projecting = () => created.ToContract<DecodableTemplate, Party>();
+
+        projecting.Should().Throw<InvalidOperationException>(
+            "the keyed contract's key is non-nullable, so a row with no key has to fail loudly "
+            + "rather than reach a caller through a shape whose type says the key is present")
+            .WithMessage("*carried no contract key*");
+    }
+
+    [Fact]
+    public void ToContract_rejects_a_keyed_projection_of_an_assigned_row_carrying_no_key()
+    {
+        var assigned = new ContractStreamEvent<DecodableTemplate>.Assigned(
+            new ContractId<DecodableTemplate>("c1"),
+            new DecodableTemplate(new Party("alice")),
+            null,
+            LedgerOffset.At(4),
+            new SynchronizerId("src"),
+            new SynchronizerId("tgt"),
+            "reassignment-1",
+            7L,
+            [new Party("alice")]);
+
+        var projecting = () => assigned.ToContract<DecodableTemplate, Party>();
+
+        projecting.Should().Throw<InvalidOperationException>(
+            "an assignment re-emits the created contract, so a missing key there is the same "
+            + "loud failure it is on the created arm rather than a guessed one")
+            .WithMessage("*carried no contract key*");
+    }
+
+    [Fact]
     public void Variants_should_be_distinguishable_via_pattern_match()
     {
         ContractStreamEvent<TestTemplate>[] events =
@@ -146,6 +280,54 @@ public class ContractStreamEventTests
     }
 
     [Fact]
+    public void StreamError_carries_the_error_id_the_transport_parsed()
+    {
+        var err = new ContractStreamEvent<TestTemplate>.StreamError(
+            10,
+            "the stream authorization is stale",
+            DamlErrorCategory.ContentionOnSharedResources,
+            "STALE_STREAM_AUTHORIZATION");
+
+        err.ErrorId.Should().Be(
+            "STALE_STREAM_AUTHORIZATION",
+            "Canton's per-code resolutions are addressed by the error id, so a consumer that never "
+            + "receives it cannot look up whether reopening the stream resolves the fault");
+    }
+
+    [Fact]
+    public void StreamError_leaves_the_error_id_null_when_no_structured_error_was_attached()
+    {
+        var err = new ContractStreamEvent<TestTemplate>.StreamError(14, "transient");
+
+        err.ErrorId.Should().BeNull(
+            "a transport that decoded no structured error has to say so, rather than invent a sentinel "
+            + "a consumer would then have to recognise as meaning nothing was parsed");
+    }
+
+    [Fact]
+    public void StreamError_distinguishes_two_faults_sharing_a_status_and_a_category()
+    {
+        var selfClearing = new ContractStreamEvent<TestTemplate>.StreamError(
+            10,
+            "the stream authorization is stale",
+            DamlErrorCategory.ContentionOnSharedResources,
+            "STALE_STREAM_AUTHORIZATION");
+        var reproducible = new ContractStreamEvent<TestTemplate>.StreamError(
+            10,
+            "the maximum number of list elements was reached",
+            DamlErrorCategory.ContentionOnSharedResources,
+            "JSON_API_MAXIMUM_LIST_ELEMENTS_NUMBER_REACHED");
+
+        selfClearing.Category.Should().Be(reproducible.Category);
+        selfClearing.StatusCode.Should().Be(reproducible.StatusCode);
+        selfClearing.ErrorId.Should().NotBe(
+            reproducible.ErrorId,
+            "reopening resolves the first fault and reproduces the second, and the error id is the only "
+            + "member that separates them: they agree on category and on status, and matching on the "
+            + "message would pin control flow to participant prose");
+    }
+
+    [Fact]
     public void Unclassified_should_expose_offset_and_enumerated_kind()
     {
         var unclassified = new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.DecodeFailure);
@@ -171,7 +353,9 @@ public class ContractStreamEventTests
     {
         var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.DecodeFailure, "EventCase_1");
 
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("An Unclassified event with the enumerated Kind 'DecodeFailure' must not carry a RawKind; RawKind is populated only for Unknown.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -179,7 +363,9 @@ public class ContractStreamEventTests
     {
         var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(LedgerOffset.At(7), UnclassifiedKind.Unknown, null);
 
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("An Unclassified event with Kind Unknown must carry the transport's raw descriptor in RawKind.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -199,7 +385,9 @@ public class ContractStreamEventTests
         var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(null, UnclassifiedKind.DecodeFailure, "EventCase_1");
 
         act.Should().Throw<ArgumentException>(
-            "widening Offset to a nullable must not relax the Kind and RawKind invariant: an enumerated kind carrying a raw descriptor stays a construction error");
+            "widening Offset to a nullable must not relax the Kind and RawKind invariant: an enumerated kind carrying a raw descriptor stays a construction error")
+            .WithMessage("An Unclassified event with the enumerated Kind 'DecodeFailure' must not carry a RawKind; RawKind is populated only for Unknown.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -208,7 +396,9 @@ public class ContractStreamEventTests
         var act = () => new ContractStreamEvent<TestTemplate>.Unclassified(null, UnclassifiedKind.Unknown, null);
 
         act.Should().Throw<ArgumentException>(
-            "widening Offset to a nullable must not relax the Kind and RawKind invariant: Unknown without the transport's raw descriptor stays a construction error");
+            "widening Offset to a nullable must not relax the Kind and RawKind invariant: Unknown without the transport's raw descriptor stays a construction error")
+            .WithMessage("An Unclassified event with Kind Unknown must carry the transport's raw descriptor in RawKind.*")
+            .WithParameterName("RawKind");
     }
 
     [Fact]
@@ -227,6 +417,28 @@ public class ContractStreamEventTests
     public void UnclassifiedKind_default_is_Unknown()
     {
         default(UnclassifiedKind).Should().Be(UnclassifiedKind.Unknown);
+    }
+
+    private sealed record DecodableTemplate(Party Owner)
+        : ITemplate, IDamlRecord<DecodableTemplate>, IHasKey<DecodableTemplate, Party>
+    {
+        public static Identifier TemplateId { get; } = new("pkg", "M", "DecodableTemplate");
+        public static string PackageId => "pkg";
+        public static string PackageName => "test";
+        public static Version PackageVersion { get; } = new(0, 1, 0);
+        public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
+
+        public static KeyDescriptor<DecodableTemplate, Party> Key { get; } = new()
+        {
+            KeyEncoder = key => DamlRecord.Create(new DamlField("owner", key.ToDamlValue())),
+            KeyDecoder = value =>
+                Party.FromDamlValue(value.As<DamlRecord>().GetRequiredField("owner").As<DamlParty>()),
+        };
+
+        public DamlRecord ToRecord() => DamlRecord.Create(new DamlField("owner", Owner.ToDamlValue()));
+
+        public static DecodableTemplate FromRecord(DamlRecord record) =>
+            new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()));
     }
 
     private sealed record TestTemplate(string Owner) : ITemplate, IDamlRecord<TestTemplate>

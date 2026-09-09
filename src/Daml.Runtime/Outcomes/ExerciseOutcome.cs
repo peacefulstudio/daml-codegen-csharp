@@ -58,12 +58,49 @@ public abstract record ExerciseOutcome<T>
     /// one. At the writer level (<typeparamref name="T"/> is <see cref="TransactionResult"/>),
     /// this means the submission produced more than one transaction.
     /// </summary>
-    /// <param name="Count">The number of competing candidates.</param>
-    /// <param name="ContractIds">Raw contract ids of the competing candidates. Not
+    /// <param name="ContractIds">Raw contract ids of the competing candidates — at least two of
+    /// them, since fewer is what <see cref="None"/> and <see cref="One"/> are for. Not
     /// <typeparamref name="T"/> values — the created contracts' template is deliberately not part
     /// of <typeparamref name="T"/>, so the ids are carried untyped to survive re-wrapping across
-    /// generic instantiations.</param>
-    public sealed record Many(int Count, IReadOnlyList<string> ContractIds) : ExerciseOutcome<T>;
+    /// generic instantiations. Carried as an
+    /// <see cref="EquatableArray{T}">EquatableArray&lt;string&gt;</see>: the outcome owns
+    /// the ids and compares them by content, so two <see cref="Many"/> over the same ids are
+    /// equal and a producer that keeps its own list cannot change one after handover.</param>
+    /// <exception cref="ArgumentException"><paramref name="ContractIds"/> holds fewer than two
+    /// ids, at construction or through a <c>with</c> expression.</exception>
+    public sealed record Many(EquatableArray<string> ContractIds) : ExerciseOutcome<T>
+    {
+        private readonly EquatableArray<string> _contractIds =
+            CompetingCandidates(ContractIds, nameof(ContractIds));
+
+        /// <summary>
+        /// Raw contract ids of the competing candidates; never fewer than two. Not
+        /// <typeparamref name="T"/> values — the created contracts' template is deliberately not
+        /// part of <typeparamref name="T"/>, so the ids are carried untyped to survive re-wrapping
+        /// across generic instantiations. The outcome owns the ids and compares them by content, so
+        /// two <see cref="Many"/> over the same ids are equal and a producer that keeps its own
+        /// list cannot change one after handover.
+        /// </summary>
+        public EquatableArray<string> ContractIds
+        {
+            get => _contractIds;
+            init => _contractIds = CompetingCandidates(value, nameof(ContractIds));
+        }
+
+        /// <summary>The number of competing candidates; never fewer than two.</summary>
+        public int Count => ContractIds.Count;
+
+        private static EquatableArray<string> CompetingCandidates(
+            EquatableArray<string> contractIds,
+            string parameterName) =>
+            contractIds.Count >= 2
+                ? contractIds
+                : throw new ArgumentException(
+                    $"Many needs at least two contract ids and got {contractIds.Count}: it means more "
+                    + "than one candidate filled a slot that expected exactly one. None is the arm "
+                    + "for no candidate, One for a single one.",
+                    parameterName);
+    }
 
     /// <summary>
     /// Structured Canton/Daml error returned by the participant
@@ -74,12 +111,72 @@ public abstract record ExerciseOutcome<T>
     /// <see cref="DamlErrorCategory.Unknown"/> when the transport trailer is missing or unparseable.</param>
     /// <param name="ErrorId">Open string — Canton built-in or Daml-defined.</param>
     /// <param name="Message">Status message from the participant.</param>
-    /// <param name="Metadata">Structured detail from <c>ErrorInfo.metadata</c>.</param>
+    /// <param name="Metadata">Structured detail from <c>ErrorInfo.metadata</c>. Copied at
+    /// construction and on <c>init</c>, so a producer that retains the dictionary it supplied
+    /// cannot change this outcome's contents, equality or hash code afterwards. The copy uses
+    /// the default comparer, so a source dictionary's custom one does not carry over.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="Metadata"/> is <c>null</c>.</exception>
     public sealed record DamlError(
         DamlErrorCategory Category,
         string ErrorId,
         string Message,
-        IReadOnlyDictionary<string, string> Metadata) : ExerciseOutcome<T>;
+        IReadOnlyDictionary<string, string> Metadata) : ExerciseOutcome<T>
+    {
+        private readonly IReadOnlyDictionary<string, string> _metadata =
+            EventCollections.Copy(Metadata, nameof(Metadata));
+
+        /// <summary>
+        /// Structured detail from <c>ErrorInfo.metadata</c>. Copied at construction and on
+        /// <c>init</c>, so a producer that retains the dictionary it supplied cannot change
+        /// this outcome's contents, equality or hash code afterwards.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">The supplied dictionary is <c>null</c>.</exception>
+        public IReadOnlyDictionary<string, string> Metadata
+        {
+            get => _metadata;
+            init => _metadata = EventCollections.Copy(value, nameof(Metadata));
+        }
+
+        /// <summary>
+        /// Compares two structured errors by content, comparing <see cref="Metadata"/> key by
+        /// key and independently of insertion order. The record-synthesized equality compares
+        /// the backing <see cref="IReadOnlyDictionary{TKey,TValue}"/> by reference — a footgun
+        /// for a value type — so we override it, as <see cref="Contracts.CaughtException"/>
+        /// already does for the same shape.
+        /// </summary>
+        /// <param name="other">The structured error to compare against.</param>
+        /// <returns><c>true</c> when both describe the same participant error.</returns>
+        public bool Equals(DamlError? other)
+        {
+            if (other is null
+                || Category != other.Category
+                || ErrorId != other.ErrorId
+                || Message != other.Message
+                || Metadata.Count != other.Metadata.Count)
+            {
+                return false;
+            }
+            foreach (var (key, value) in Metadata)
+            {
+                if (!other.Metadata.TryGetValue(key, out var otherValue) || value != otherValue)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            var hash = HashCode.Combine(Category, ErrorId, Message, Metadata.Count);
+            foreach (var (key, value) in Metadata)
+            {
+                hash ^= HashCode.Combine(key, value);
+            }
+            return hash;
+        }
+    }
 
     /// <summary>
     /// Infrastructure-level failure (no structured Canton error attached).

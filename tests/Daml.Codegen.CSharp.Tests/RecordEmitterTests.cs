@@ -46,12 +46,12 @@ public class RecordEmitterTests
         };
 
     private static CodeGenOptions Options(bool generateXmlDocs) =>
-        new() { RootNamespace = "Test.Package", GenerateXmlDocs = generateXmlDocs };
+        new() { NamespacePrefix = "Test.Package", GenerateXmlDocs = generateXmlDocs };
 
     private static string Emit(string targetName, DamlDataType[] packageTypes, bool generateXmlDocs = true)
     {
         var options = Options(generateXmlDocs);
-        var context = PackageEmitContext.ForPackage(Package(packageTypes), options);
+        var context = PackageEmitContext.ForPackage(Package(packageTypes), options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var serialization = new RecordSerializationEmitter(context, resolver, options, mapper);
@@ -135,7 +135,7 @@ public class RecordEmitterTests
             Modules = [module],
             DependencyReferences = [],
         };
-        var context = PackageEmitContext.ForPackage(package, options);
+        var context = PackageEmitContext.ForPackage(package, options, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
         var serialization = new RecordSerializationEmitter(context, resolver, options, mapper);

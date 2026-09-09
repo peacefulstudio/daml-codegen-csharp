@@ -6,10 +6,10 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Streams;
-using Splice.Api.Token.Allocation.V2;
-using Splice.Api.Token.Holding.V2;
-using Splice.Api.Token.Metadata.V1;
-using Splice.Api.Token.Transfer.Instruction.V2;
+using Splice.Api.Token.AllocationV2;
+using Splice.Api.Token.HoldingV2;
+using Splice.Api.Token.MetadataV1;
+using Splice.Api.Token.TransferInstructionV2;
 
 Console.WriteLine("Splice Token Standard V2 - Offline Showcase");
 Console.WriteLine("===========================================\n");

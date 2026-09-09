@@ -121,11 +121,11 @@ public static class TransactionTreeExtensions
         return new TransactionResult(
             tree.UpdateId,
             tree.CompletionOffset,
-            createdContracts,
-            archivedContractIds,
+            EquatableArray.Create(createdContracts),
+            EquatableArray.Create(archivedContractIds),
             null)
         {
-            ExercisedEvents = exercisedEvents,
+            ExercisedEvents = EquatableArray.Create(exercisedEvents),
         };
     }
 }

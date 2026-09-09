@@ -28,12 +28,12 @@ public class ChoiceCreatedSlotsTests
             Name = "test-package",
             Version = new Version(1, 0, 0),
             LfVersion = "2.1",
-            Modules = [],
+            Modules = [new DamlModule { Name = "Main", Templates = [], DataTypes = [], Interfaces = [] }],
             DependencyReferences = [],
         };
 
     private static PackageEmitContext Context() =>
-        PackageEmitContext.ForPackage(Package(), new CodeGenOptions { RootNamespace = "Test.Package" });
+        PackageEmitContext.ForPackage(Package(), new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
 
     private static IReadOnlyList<ChoiceCreatedSlot> Extract(DamlType returnType, StubResolver? resolver = null)
     {
@@ -94,7 +94,7 @@ public class ChoiceCreatedSlotsTests
             Modules = [module],
             DependencyReferences = [],
         };
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var resolver = new StubResolver();
         var mapper = new DamlTypeMapper(context, resolver);
 

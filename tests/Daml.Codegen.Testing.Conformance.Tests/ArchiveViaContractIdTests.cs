@@ -7,7 +7,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;
@@ -28,12 +28,12 @@ public class ArchiveViaContractIdTests
         new(
             UpdateId: "upd-1",
             CompletionOffset: LedgerOffset.At(1),
-            CreatedContracts: Array.Empty<CreatedContract>(),
-            ArchivedContractIds: new[] { contractId },
+            CreatedContracts: [],
+            ArchivedContractIds: [contractId],
             CommandId: default)
         {
-            ExercisedEvents = new[]
-            {
+            ExercisedEvents =
+            [
                 new ExercisedEvent(
                     ContractId: contractId,
                     TemplateId: templateId,
@@ -42,9 +42,9 @@ public class ArchiveViaContractIdTests
                     ChoiceArgument: DamlRecord.Create(),
                     ExerciseResult: DamlUnit.Instance,
                     Consuming: true,
-                    ActingParties: Array.Empty<Party>(),
-                    WitnessParties: Array.Empty<Party>()),
-            },
+                    ActingParties: [],
+                    WitnessParties: []),
+            ],
         };
 
     [Fact]

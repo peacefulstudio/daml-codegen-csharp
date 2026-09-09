@@ -7,7 +7,7 @@ using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using AwesomeAssertions;
-using Daml.Codegen.Testing.Conformance.Richtypes;
+using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
 
 namespace Daml.Codegen.Testing.Conformance.Tests;
@@ -31,8 +31,8 @@ public class RelabelAsyncTests
         new(
             UpdateId: "upd-1",
             CompletionOffset: LedgerOffset.At(1),
-            CreatedContracts: new[] { CreatedOf(newRichRecordId, RichRecord.TemplateId) },
-            ArchivedContractIds: Array.Empty<string>(),
+            CreatedContracts: [CreatedOf(newRichRecordId, RichRecord.TemplateId)],
+            ArchivedContractIds: [],
             CommandId: default);
 
     [Fact]

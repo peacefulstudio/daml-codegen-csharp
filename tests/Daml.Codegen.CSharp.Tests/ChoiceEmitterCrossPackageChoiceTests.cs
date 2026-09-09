@@ -36,12 +36,12 @@ public class ChoiceEmitterCrossPackageChoiceTests
         };
 
     private static ChoiceEmitter Emitter(PackageEmitContext context, StubResolver resolver) =>
-        new(context, resolver, new CodeGenOptions { RootNamespace = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
+        new(context, resolver, new CodeGenOptions { NamespacePrefix = "Test.Package" }, new DamlTypeMapper(context, resolver), new PartyAnalysis());
 
     private static string EmitNonContract(DamlTemplate template, StubResolver resolver, params DamlDataType[] dataTypes)
     {
         var package = Package(new DamlModule { Name = "Main", Templates = [template], DataTypes = dataTypes, Interfaces = [] });
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var sb = new StringBuilder();
         var indent = new IndentWriter(sb) { CurrentTypeName = template.Name };
         Emitter(context, resolver).TryWriteNonContractChoiceExtensions(indent, template, context.DataTypes);
@@ -51,7 +51,7 @@ public class ChoiceEmitterCrossPackageChoiceTests
     private static string EmitInterfaceExtensions(DamlInterface iface, string interfaceName, StubResolver resolver)
     {
         var package = Package(new DamlModule { Name = "Main", Templates = [], DataTypes = [], Interfaces = [iface] });
-        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { RootNamespace = "Test.Package" });
+        var context = PackageEmitContext.ForPackage(package, new CodeGenOptions { NamespacePrefix = "Test.Package" }, isMainPackage: true).Single();
         var sb = new StringBuilder();
         var indent = new IndentWriter(sb);
         Emitter(context, resolver).WriteInterfaceChoiceExtensions(indent, iface, interfaceName);

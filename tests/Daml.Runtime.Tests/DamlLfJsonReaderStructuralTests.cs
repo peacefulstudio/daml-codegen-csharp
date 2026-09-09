@@ -712,6 +712,84 @@ public class DamlLfJsonReaderStructuralTests
                 + "fails for member 'Broken', so its wire constructors cannot be determined; "
                 + "pass a generated Daml enum.");
     }
+
+    [Fact]
+    public void ReadValue_should_decode_a_top_level_variant_arm_with_its_record_payload()
+    {
+        var variant = DamlLfJsonReader
+            .ReadValue<Outcome>("""{"tag":"Win","value":{"prize":"1.25","tier":"gold"}}""")
+            .Should().BeOfType<DamlVariant>().Which;
+
+        variant.Constructor.Should().Be("Win");
+        variant.Value.Should().BeOfType<DamlRecord>().Which.Fields.Should().Equal(
+            new DamlField("prize", new DamlNumeric(1.25m)),
+            new DamlField("tier", new DamlText("gold")));
+    }
+
+    [Fact]
+    public void ReadValue_should_decode_a_top_level_nullary_variant_arm_from_its_empty_object_value()
+    {
+        var variant = DamlLfJsonReader.ReadValue<Outcome>("""{"tag":"Pending","value":{}}""")
+            .Should().BeOfType<DamlVariant>().Which;
+
+        variant.Constructor.Should().Be("Pending");
+        variant.Value.Should().BeSameAs(DamlUnit.Instance);
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_an_unknown_top_level_variant_constructor()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Outcome>("""{"tag":"Draw","value":{}}""");
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("Unknown Daml variant constructor 'Draw' at 'Outcome'; expected one of Pending, Win");
+    }
+
+    [Fact]
+    public void ReadValue_should_reject_a_top_level_variant_missing_its_tag()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Outcome>("""{"value":{}}""");
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("Required Daml variant field 'Outcome.tag' is missing from the JSON object");
+    }
+
+    [Fact]
+    public void ReadValue_should_name_the_payload_path_of_a_top_level_variant_arm()
+    {
+        var act = () => DamlLfJsonReader.ReadValue<Outcome>(
+            """{"tag":"Win","value":{"prize":"1.25","tier":42}}""");
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("Expected JSON String at 'Outcome.value.tier' but found Number");
+    }
+
+    public abstract record Scribble : IDamlVariant
+    {
+        public abstract string Tag { get; }
+
+        public abstract DamlVariant ToVariant();
+
+        public sealed record Scrawled(string? Value) : Scribble
+        {
+            public override string Tag => "Scrawled";
+
+            public override DamlVariant ToVariant() => DamlVariant.Create(
+                "Scrawled",
+                Value is null ? DamlOptional.None : DamlOptional.Some(new DamlText(Value)));
+        }
+    }
+
+    [Fact]
+    public void ReadValue_should_keep_a_top_level_variant_arm_payload_optional_when_the_arm_declares_it_nullable()
+    {
+        DamlLfJsonReader.ReadValue<Scribble>("""{"tag":"Scrawled","value":null}""")
+            .Should().BeOfType<DamlVariant>().Which.Value.Should().Be(DamlOptional.None);
+
+        DamlLfJsonReader.ReadValue<Scribble>("""{"tag":"Scrawled","value":"ink"}""")
+            .Should().BeOfType<DamlVariant>().Which.Value
+            .Should().Be(DamlOptional.Some(new DamlText("ink")));
+    }
 }
 
 public enum Direction

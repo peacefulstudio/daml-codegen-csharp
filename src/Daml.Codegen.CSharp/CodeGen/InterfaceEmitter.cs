@@ -63,8 +63,8 @@ internal sealed class InterfaceEmitter(
         indent.CurrentTypeName = interfaceName;
 
         var interfaces = viewType is not null
-            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}, {context.Qualifier.Qualify(RuntimeTypeNames.IHasView, context.RootNamespace)}<{viewType}>"
-            : context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace);
+            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}, {context.Qualifier.Qualify(RuntimeTypeNames.IHasView)}<{viewType}>"
+            : context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface);
 
         indent.AppendLine($"public interface {interfaceName} : {interfaces}");
         indent.AppendLine("{");
@@ -101,7 +101,7 @@ internal sealed class InterfaceEmitter(
 
     private void WriteViewWitness(IndentWriter indent, string interfaceName, string viewTypeName)
     {
-        var descriptorType = context.Qualifier.Qualify(RuntimeTypeNames.ViewDescriptor, context.RootNamespace);
+        var descriptorType = context.Qualifier.Qualify(RuntimeTypeNames.ViewDescriptor);
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine($"/// <summary>Gets the pure type witness pairing this marker with its view record <see cref=\"{viewTypeName}\"/>; passing it to a generic method infers both type parameters from one argument.</summary>");
@@ -135,40 +135,40 @@ internal sealed class InterfaceEmitter(
         {
             indent.AppendLine("/// <summary>Gets the interface identifier.</summary>");
         }
-        indent.AppendLine($"static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.InterfaceId => InterfaceId;");
+        indent.AppendLine($"static {context.Qualifier.Qualify(RuntimeTypeNames.Identifier)} {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}.InterfaceId => InterfaceId;");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Gets the interface identifier.</summary>");
         }
-        indent.AppendLine($"public static new {context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace)} InterfaceId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
+        indent.AppendLine($"public static new {context.Qualifier.Qualify(RuntimeTypeNames.Identifier)} InterfaceId {{ get; }} = new(\"{package.PackageId}\", \"{module.Name}\", \"{iface.Name}\");");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Gets the package ID.</summary>");
         }
-        indent.AppendLine($"static string {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageId)} => \"{package.PackageId}\";");
+        indent.AppendLine($"static string {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageId)} => \"{package.PackageId}\";");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Gets the package name.</summary>");
         }
-        indent.AppendLine($"static string {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageName)} => \"{package.Name}\";");
+        indent.AppendLine($"static string {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageName)} => \"{package.Name}\";");
         indent.AppendLine();
 
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Gets the package version.</summary>");
         }
-        indent.AppendLine($"static Version {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface, context.RootNamespace)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageVersion)} => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
+        indent.AppendLine($"static Version {context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}.{nameof(Daml.Runtime.Contracts.IDamlInterface.PackageVersion)} => new({package.Version.Major}, {package.Version.Minor}, {package.Version.Build});");
         indent.AppendLine();
 
-        var descriptorType = context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeDescriptor, context.RootNamespace);
-        var kindType = context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeKind, context.RootNamespace);
-        var identifierType = context.Qualifier.Qualify(RuntimeTypeNames.Identifier, context.RootNamespace);
+        var descriptorType = context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeDescriptor);
+        var kindType = context.Qualifier.Qualify(RuntimeTypeNames.DamlTypeKind);
+        var identifierType = context.Qualifier.Qualify(RuntimeTypeNames.Identifier);
         if (options.GenerateXmlDocs)
         {
             indent.AppendLine("/// <summary>Gets the compile-time Daml type descriptor.</summary>");

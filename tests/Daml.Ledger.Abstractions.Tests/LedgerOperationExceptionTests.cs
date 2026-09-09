@@ -54,6 +54,25 @@ public class LedgerOperationExceptionTests
     }
 
     [Fact]
+    public void LedgerOperationException_infra_error_constructor_keeps_an_error_id_without_any_metadata()
+    {
+        var exception = new LedgerOperationException(
+            "the snapshot faulted",
+            10,
+            DamlErrorCategory.ContentionOnSharedResources,
+            errorId: "STALE_STREAM_AUTHORIZATION");
+
+        exception.ErrorId.Should().Be(
+            "STALE_STREAM_AUTHORIZATION",
+            "a faulted stream is the one path that carries an error id without a structured write-path "
+            + "error behind it, and this constructor is where that id enters the exception");
+        exception.Metadata.Should().BeNull(
+            "the stream fault has no ErrorInfo metadata to carry, so a catch site reading Metadata off "
+            + "the strength of a non-null ErrorId — an implication that held while only DamlError set "
+            + "the id — now has to null-check it");
+    }
+
+    [Fact]
     public void LedgerOperationException_daml_error_constructor_rejects_null_metadata()
     {
         var act = () => new LedgerOperationException(

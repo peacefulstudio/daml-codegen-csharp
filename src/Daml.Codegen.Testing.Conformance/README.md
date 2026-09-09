@@ -10,6 +10,15 @@ participant; `ConformanceCorpus.OpenDar(ConformancePackage.ContractKeys)` return
 the contract-key one, and `ConformanceCorpus.OpenDar(ConformancePackage.DefaultTarget)`
 the one built with no Daml-LF target requested.
 
+Generated types are emitted one namespace per Daml module, all under
+`Daml.Codegen.Testing.Conformance`: `RichTypes` for the first corpus, `ContractKeys` and
+`KeyBuilders` for the second, `DefaultTarget` for the third. `RichTypes` was spelled
+`Richtypes` before 0.5.0-preview.2, and the rename is case-only, which Roslyn does not
+forgive — a consumer holding `using Daml.Codegen.Testing.Conformance.Richtypes;` stops
+compiling until the spelling is corrected, as does a
+`<Compile Include … Link="Generated\Richtypes\…">` path, the directory having been
+renamed with the namespace.
+
 `RichRecord` carries the primitive, collection and nominal shapes. `TypeCorners`
 carries the harder ones: parameterized records and variants (`Box`, `Slot`),
 `GenMap` keyed by `Party` and by `Int`, `Either`, `Tuple2`/`Tuple3`, a recursive
@@ -26,7 +35,10 @@ interface carries choices as well as a view. Keyed templates live in the second
 corpus, `ContractKeys`, which is built at Daml-LF 2.3 because no earlier version
 can express a contract key: `Account` keys on a record of two payload fields,
 `Holiday` on a record whose field comes from a nested projection, `Schedule` on a
-record built by a helper in another module, and `Steward` on a bare `Party`. Each
+record built by a helper in a second module, `KeyBuilders` — so its `ScheduleKey`, and the
+`ScheduleView` beside it, are emitted under `Daml.Codegen.Testing.Conformance.KeyBuilders`
+and need a `using` of their own alongside the one for `ContractKeys` — and `Steward` on a
+bare `Party`. Each
 generated active contract carries a `Key` slot read off the created event, and
 each choice has a `<Choice>ByKeyCommand` builder beside its `<Choice>Command`
 one.
