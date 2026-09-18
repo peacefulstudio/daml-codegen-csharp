@@ -77,6 +77,11 @@ because they are versioned in lockstep:
   `Optional` child reaches the 128-level depth limit at 64 records rather than 128. An
   absent `Optional` adds no level. The obsolete `Type`-keyed overloads keep the old,
   uncounted behavior.
+- `DiscriminatedUnionJson.Write` now also enforces a fixed `MaxSafeWriteDepth` of 20,
+  independent of any caller-configured `JsonSerializerOptions.MaxDepth`: the depth actually
+  enforced is `Math.Min(configuredMaxDepth, 20)`. A `MaxDepth` larger than 20 no longer opts
+  into recursion deeper than 20 on this write path. This replaces the prior guarantee of no
+  hardcoded cap below the configured `MaxDepth`.
 
 ### Deprecated
 
@@ -93,14 +98,12 @@ because they are versioned in lockstep:
   type, constructor or payload names.
 - Fix `RelTime` field metadata, nullable annotations on erased choice descriptors, and
   empty top-level list and map decoding through the retained reflection reader.
-
-### Known Issues
-
 - On macOS x64 (`osx-x64`) only, writing a deeply-nested `Optional`, `Either`, or
-  contract/interface stream-union value through `DiscriminatedUnionJson` can overflow the
-  real call stack before its own `MaxDepth` guard trips, instead of raising the expected
-  `JsonException`. Every other supported platform/architecture is unaffected. Tracked
-  internally for a fix in the next preview release.
+  contract/interface stream-union value through `DiscriminatedUnionJson` could overflow the
+  real call stack before its own depth guard tripped, instead of raising the expected
+  `JsonException`. The guard now also checks `RuntimeHelpers.TryEnsureSufficientExecutionStack()`
+  before recursing, so it trips before the native stack is exhausted on every platform and
+  architecture.
 
 ## [0.5.0-preview.2] — 2026-09-08
 
