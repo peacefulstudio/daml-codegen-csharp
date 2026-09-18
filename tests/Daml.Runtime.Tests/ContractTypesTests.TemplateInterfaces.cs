@@ -58,6 +58,7 @@ public partial class ContractTypesTests
         {
             KeyEncoder = static key => new DamlText(key),
             KeyDecoder = static value => value.As<DamlText>().Value,
+            KeyJsonReader = static (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -81,6 +82,7 @@ public partial class ContractTypesTests
         {
             KeyEncoder = static key => key.ToDamlValue(),
             KeyDecoder = static value => Party.FromDamlValue(value.As<DamlParty>()),
+            KeyJsonReader = static (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -103,6 +105,7 @@ public partial class ContractTypesTests
         {
             KeyEncoder = static key => new DamlText(key),
             KeyDecoder = static value => value.As<DamlText>().Value,
+            KeyJsonReader = static (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -133,6 +136,7 @@ public partial class ContractTypesTests
             KeyDecoder = static value => new AccountKey(
                 Party.FromDamlValue(value.As<DamlRecord>().GetRequiredField("owner").As<DamlParty>()),
                 value.As<DamlRecord>().GetRequiredField("number").As<DamlText>().Value),
+            KeyJsonReader = static (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(

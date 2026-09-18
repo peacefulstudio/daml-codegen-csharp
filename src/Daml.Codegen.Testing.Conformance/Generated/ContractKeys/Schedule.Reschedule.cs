@@ -16,7 +16,7 @@ public sealed partial record Schedule
     /// </summary>
     public sealed record Reschedule(
         [property: DamlFieldAttribute("rescheduled")] string Rescheduled
-    ) : IDamlRecord
+    ) : IDamlRecord<Reschedule>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record Schedule
         public static Reschedule FromRecord(DamlRecord record) => new Reschedule(
             Rescheduled: record.GetRequiredField("rescheduled").As<DamlText>().Value
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("rescheduled", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "rescheduled"), context.Field("rescheduled")))
+            );
+        }
 
     }
 }

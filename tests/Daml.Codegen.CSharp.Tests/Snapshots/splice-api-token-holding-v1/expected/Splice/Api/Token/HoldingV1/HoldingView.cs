@@ -38,4 +38,18 @@ public sealed record HoldingView(
         Meta: global::Splice.Api.Token.MetadataV1.Metadata.FromRecord(record.GetRequiredField("meta").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("owner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner"))),
+            DamlField.Create("instrumentId", InstrumentId.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "instrumentId"), context.Field("instrumentId"))),
+            DamlField.Create("amount", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "amount"), context.Field("amount"))),
+            DamlField.Create("lock", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "lock"), context.Field("lock"), (__json0, __ctx0) => Lock.__ReadDamlLfJson(__json0, __ctx0))),
+            DamlField.Create("meta", global::Splice.Api.Token.MetadataV1.Metadata.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "meta"), context.Field("meta")))
+        );
+    }
+
 }

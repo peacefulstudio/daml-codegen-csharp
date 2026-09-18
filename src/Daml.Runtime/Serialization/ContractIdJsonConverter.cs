@@ -120,7 +120,32 @@ internal sealed class ContractIdJsonConverter<TContractId> : JsonConverter<TCont
             throw new JsonException($"Expected string token for {TypeName}, got {reader.TokenType}.");
         }
 
-        var value = reader.GetString();
+        return ParseChecked(reader.GetString());
+    }
+
+    public override void Write(Utf8JsonWriter writer, TContractId value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.Value);
+
+    /// <summary>
+    /// Reads a <typeparamref name="TContractId"/> used as a JSON object's property name — the
+    /// shape a <c>Map (ContractId T) v</c> field takes, e.g. <c>{"00abc":1}</c>. Property names
+    /// are always JSON strings, so the token-type guard <see cref="Read"/> needs does not apply
+    /// here; the blank/parse checks are otherwise identical.
+    /// </summary>
+    /// <inheritdoc/>
+    public override TContractId ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        ParseChecked(reader.GetString());
+
+    /// <summary>
+    /// Writes a <typeparamref name="TContractId"/> used as a JSON object's property name. See
+    /// <see cref="ReadAsPropertyName"/>.
+    /// </summary>
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, TContractId value, JsonSerializerOptions options) =>
+        writer.WritePropertyName(value.Value);
+
+    private static TContractId ParseChecked(string? value)
+    {
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new JsonException(
@@ -135,11 +160,6 @@ internal sealed class ContractIdJsonConverter<TContractId> : JsonConverter<TCont
         {
             throw new JsonException($"Invalid contract id for {TypeName}: {inner.Message}", inner);
         }
-    }
-
-    public override void Write(Utf8JsonWriter writer, TContractId value, JsonSerializerOptions options)
-    {
-        writer.WriteStringValue(value.Value);
     }
 
     private static string DescribeContractIdType(Type type) => type switch

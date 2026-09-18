@@ -1,9 +1,13 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Streams;
 
@@ -96,7 +100,18 @@ namespace Daml.Runtime.Streams;
 ///     <see cref="Assigned"/>/<see cref="Unassigned"/>.</description>
 ///   </item>
 /// </list>
+/// <para>
+/// Through <see cref="System.Text.Json"/> it travels as its own concrete arm's object with a
+/// <c>"$case"</c> discriminator, e.g. <c>{"$case":"Created","ContractId":"c1",...}</c>, rather
+/// than being left to the default reflection-based writer, which — because this is a
+/// declared-abstract type — would write only this base's (empty) member set and refuse to read
+/// any arm back at all (ADR 0028: a CLR round-trip contract, not the Daml-LF wire encoding). It
+/// names <see cref="ContractStreamEventJsonConverterFactory"/> in a
+/// <see cref="JsonConverterAttribute"/>, so it converts on bare <see cref="JsonSerializerOptions"/>
+/// with no registration.
+/// </para>
 /// </remarks>
+[JsonConverter(typeof(ContractStreamEventJsonConverterFactory))]
 public abstract record ContractStreamEvent<T>
     where T : ITemplate, IDamlRecord<T>
 {
@@ -279,13 +294,22 @@ public abstract record ContractStreamEvent<T>
     /// it as an identity rather than parsing it: <see cref="Category"/> and
     /// <see cref="StatusCode"/> are both too coarse to separate two faults that need opposite
     /// handling, and <see cref="Message"/> is participant prose rather than an API.</param>
-    /// <param name="SourceException">Transport exception that caused the stream failure, when available.</param>
+    /// <param name="SourceException">Transport exception that caused the stream failure, when
+    /// available. Carries <see cref="JsonIgnoreAttribute"/> and is excluded from the
+    /// <see cref="System.Text.Json"/> round trip: the reflection-based serializer writes an
+    /// arbitrary <see cref="Exception"/> by walking its public members, and
+    /// <see cref="System.Reflection.MethodBase"/> — reachable through
+    /// <see cref="Exception.TargetSite"/> — throws <see cref="NotSupportedException"/> the moment
+    /// a real caught exception (which always has a <see cref="Exception.TargetSite"/>) is
+    /// serialized this way. A read restores this member as <see langword="null"/> rather than
+    /// reconstructing the original exception, which the CLR type offers no JSON-constructible
+    /// shape for in general anyway.</param>
     public sealed record StreamError(
         int StatusCode,
         string Message,
         DamlErrorCategory? Category = null,
         string? ErrorId = null,
-        Exception? SourceException = null) : ContractStreamEvent<T>;
+        [property: JsonIgnore] Exception? SourceException = null) : ContractStreamEvent<T>;
 
     /// <summary>
     /// An event the transport delivered but this layer could not map to any
@@ -336,4 +360,80 @@ public abstract record ContractStreamEvent<T>
         public string? RawKind { get; } = UnclassifiedRawKind.Validated(
             Kind, RawKind, UnclassifiedRawKind.EventSubject, nameof(RawKind));
     }
+}
+
+/// <summary>
+/// Supplies the <see cref="System.Text.Json"/> converter for any closed
+/// <see cref="ContractStreamEvent{T}"/>, including its eight arms. Without it the declared-abstract
+/// type writes an empty object for every arm and refuses to read any of them back — see
+/// <see cref="ContractStreamEvent{T}"/>'s remarks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="CanConvert"/> also matches the arm types directly, so that a caller whose variable is
+/// statically typed as a concrete arm — e.g. <c>ContractStreamEvent&lt;T&gt;.Checkpoint</c>, not
+/// <c>ContractStreamEvent&lt;T&gt;</c> — still gets the discriminated shape once this factory is
+/// registered, e.g. via <see cref="DamlJsonConverters.AddDamlConverters"/>. That registration is
+/// required for the arm case specifically: <see cref="JsonConverterAttribute"/> is not inherited by
+/// <see cref="System.Text.Json"/>'s converter resolution, so the <see cref="JsonConverterAttribute"/>
+/// on <see cref="ContractStreamEvent{T}"/> alone leaves an arm-typed lookup on the default
+/// reflection-based contract — the same limitation <see cref="DamlJsonConverters.AddDamlConverters"/>'s
+/// remarks describe for a hand-written <see cref="Daml.Runtime.Contracts.ContractId{T}"/>
+/// derivation. Putting the attribute on the arm types too would not lift that requirement: see
+/// <see cref="DiscriminatedUnionJson.Write{TUnion}"/>'s remarks for why an arm can carry this
+/// converter only through <see cref="JsonSerializerOptions.Converters"/>, never its own attribute.
+/// </para>
+/// <para>
+/// <b>AOT / trimming incompatibility:</b> <see cref="CreateConverter"/> uses
+/// <see cref="Activator.CreateInstance(Type)"/> and <see cref="Type.MakeGenericType"/> to
+/// instantiate the closed converter at runtime — the same cost
+/// <see cref="Daml.Runtime.Stdlib.SetJsonConverterFactory"/> already carries, accepted so the
+/// attribute reaches a consumer who never registers the converters.
+/// </para>
+/// </remarks>
+[RequiresUnreferencedCode("ContractStreamEventJsonConverterFactory uses MakeGenericType and Activator.CreateInstance, which are not trimming-safe.")]
+[RequiresDynamicCode("ContractStreamEventJsonConverterFactory uses MakeGenericType at runtime, which requires dynamic code generation.")]
+internal sealed class ContractStreamEventJsonConverterFactory : JsonConverterFactory, IDiscriminatedUnionJsonConverterFactory
+{
+    public override bool CanConvert(Type typeToConvert) =>
+        IsClosedContractStreamEvent(typeToConvert) || IsArmOfClosedContractStreamEvent(typeToConvert);
+
+    private static bool IsClosedContractStreamEvent(Type type) =>
+        type is { IsConstructedGenericType: true, ContainsGenericParameters: false }
+        && type.GetGenericTypeDefinition() == typeof(ContractStreamEvent<>);
+
+    private static bool IsArmOfClosedContractStreamEvent(Type type) =>
+        type.BaseType is { } baseType && IsClosedContractStreamEvent(baseType);
+
+    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+    {
+        var closedEventType = IsClosedContractStreamEvent(typeToConvert) ? typeToConvert : typeToConvert.BaseType!;
+        return (JsonConverter)Activator.CreateInstance(
+            typeof(ContractStreamEventJsonConverter<>).MakeGenericType(closedEventType.GetGenericArguments()[0]))!;
+    }
+}
+
+internal sealed class ContractStreamEventJsonConverter<T> : JsonConverter<ContractStreamEvent<T>>
+    where T : ITemplate, IDamlRecord<T>
+{
+    private static readonly string TypeName =
+        $"{nameof(ContractStreamEvent<T>)}<{DiscriminatedUnionJson.Describe(typeof(T))}>";
+
+    private static readonly IReadOnlyDictionary<string, Type> Cases = new Dictionary<string, Type>
+    {
+        [nameof(ContractStreamEvent<T>.Created)] = typeof(ContractStreamEvent<T>.Created),
+        [nameof(ContractStreamEvent<T>.Archived)] = typeof(ContractStreamEvent<T>.Archived),
+        [nameof(ContractStreamEvent<T>.Exercised)] = typeof(ContractStreamEvent<T>.Exercised),
+        [nameof(ContractStreamEvent<T>.Assigned)] = typeof(ContractStreamEvent<T>.Assigned),
+        [nameof(ContractStreamEvent<T>.Unassigned)] = typeof(ContractStreamEvent<T>.Unassigned),
+        [nameof(ContractStreamEvent<T>.Checkpoint)] = typeof(ContractStreamEvent<T>.Checkpoint),
+        [nameof(ContractStreamEvent<T>.StreamError)] = typeof(ContractStreamEvent<T>.StreamError),
+        [nameof(ContractStreamEvent<T>.Unclassified)] = typeof(ContractStreamEvent<T>.Unclassified),
+    };
+
+    public override ContractStreamEvent<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Read<ContractStreamEvent<T>>(ref reader, options, Cases, TypeName);
+
+    public override void Write(Utf8JsonWriter writer, ContractStreamEvent<T> value, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Write(writer, value, options, TypeName);
 }

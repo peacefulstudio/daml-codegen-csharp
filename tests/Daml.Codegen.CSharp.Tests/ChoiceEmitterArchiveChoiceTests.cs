@@ -257,7 +257,7 @@ public class ChoiceEmitterArchiveChoiceTests
 
         var output = EmitInterfaceExtensions(iface, "IArchivable", resolver);
 
-        output.Should().Contain("ExerciseCommand.ForInterface<IArchivable>(contractId, new ChoiceName(\"Archive\"), DamlRecord.Create());");
+        output.Should().Contain("ExerciseCommand.For<IArchivable>(contractId, new ChoiceName(\"Archive\"), DamlRecord.Create());");
         output.Should().NotContain("DamlUnit.Instance");
     }
 }

@@ -11,6 +11,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Stdlib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,7 +30,7 @@ namespace Splice.Api.Token.TransferInstructionV2;
 /// materialize as concrete <see cref="TransferInstructionView"/> values, whose record value equality
 /// applies once concretely typed.
 /// </remarks>
-public interface ITransferInstruction : IDamlInterface, IHasView<TransferInstructionView>
+public interface ITransferInstruction : IDamlInterface, IHasView<TransferInstructionView>, IHasChoices<ITransferInstruction>
 {
     /// <summary>Gets the interface identifier.</summary>
     static Identifier IDamlInterface.InterfaceId => InterfaceId;
@@ -67,18 +68,84 @@ public interface ITransferInstruction : IDamlInterface, IHasView<TransferInstruc
     /// <summary>Gets the meta field of the interface view.</summary>
     global::Splice.Api.Token.MetadataV1.Metadata Meta { get; }
 
+    /// <summary>
+    /// Exercise the Archive choice.
+    /// This choice is consuming and will archive the contract.
+    /// </summary>
+    public static Choice<ITransferInstruction, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()
+    {
+        Name = new ChoiceName("Archive"),
+        Consuming = true,
+        ArgumentEncoder = _ => DamlRecord.Create(),
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
+    };
+
+    /// <summary>
+    /// Exercise the TransferInstruction_Accept choice.
+    /// </summary>
+    public static Choice<ITransferInstruction, TransferInstruction_Accept, TransferInstructionResult> ChoiceTransferInstruction_Accept { get; } = new()
+    {
+        Name = new ChoiceName("TransferInstruction_Accept"),
+        Consuming = false,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ArgumentDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Accept.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Accept.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.__ReadDamlLfJson(json, context),
+    };
+
+    /// <summary>
+    /// Exercise the TransferInstruction_Reject choice.
+    /// </summary>
+    public static Choice<ITransferInstruction, TransferInstruction_Reject, TransferInstructionResult> ChoiceTransferInstruction_Reject { get; } = new()
+    {
+        Name = new ChoiceName("TransferInstruction_Reject"),
+        Consuming = false,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ArgumentDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Reject.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Reject.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.__ReadDamlLfJson(json, context),
+    };
+
+    /// <summary>
+    /// Exercise the TransferInstruction_Withdraw choice.
+    /// </summary>
+    public static Choice<ITransferInstruction, TransferInstruction_Withdraw, TransferInstructionResult> ChoiceTransferInstruction_Withdraw { get; } = new()
+    {
+        Name = new ChoiceName("TransferInstruction_Withdraw"),
+        Consuming = false,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ArgumentDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Withdraw.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstruction_Withdraw.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Splice.Api.Token.TransferInstructionV2.TransferInstructionResult.__ReadDamlLfJson(json, context),
+    };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    static IReadOnlyList<IChoice> IHasChoices<ITransferInstruction>.Choices { get; } = [ChoiceArchive, ChoiceTransferInstruction_Accept, ChoiceTransferInstruction_Reject, ChoiceTransferInstruction_Withdraw];
+
 }
 
 /// <summary>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>TransferInstruction</c> Daml interface.
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
-/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.For{TOwner}(global::Daml.Runtime.Contracts.ContractId{TOwner},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
 /// through <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
-/// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
-/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
-/// implementing template (and therefore the produced contracts' shapes) is unknown
-/// at the call site.
+/// and projects the committed transaction's matching exercise event through the choice
+/// descriptor's <c>ResultDecoder</c>, surfacing a typed
+/// <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}"/> — the choice's own return
+/// type, not the implementing template's. A decode failure after a successful commit
+/// surfaces as <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}.CommittedUndecodable"/>,
+/// never as a resubmittable error.
 /// </summary>
 public static class ITransferInstructionExtensions
 {
@@ -92,13 +159,14 @@ public static class ITransferInstructionExtensions
         this ContractId<ITransferInstruction> contractId)
     {
         ArgumentNullException.ThrowIfNull(contractId);
-        return ExerciseCommand.ForInterface<ITransferInstruction>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
+        return ExerciseCommand.For<ITransferInstruction>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
     }
 
     /// <summary>
     /// Exercises the <c>Archive</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and returning the committed result as the stdlib Unit singleton.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -107,7 +175,7 @@ public static class ITransferInstructionExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+    public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<ITransferInstruction> contractId,
         ILedgerWriter client,
         SubmitterInfo submitter,
@@ -120,7 +188,9 @@ public static class ITransferInstructionExtensions
 
         var command = contractId.ArchiveCommand();
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -136,13 +206,14 @@ public static class ITransferInstructionExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(argument);
-        return ExerciseCommand.ForInterface<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Accept"), argument.ToRecord());
+        return ExerciseCommand.For<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Accept"), argument.ToRecord());
     }
 
     /// <summary>
     /// Exercises the <c>TransferInstruction_Accept</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and decoding the committed result through <c>ChoiceTransferInstruction_Accept.ResultDecoder</c>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -152,7 +223,7 @@ public static class ITransferInstructionExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> TransferInstruction_AcceptAsync(
+    public static async Task<ExerciseOutcome<TransferInstructionResult>> TransferInstruction_AcceptAsync(
         this ContractId<ITransferInstruction> contractId,
         ILedgerWriter client,
         TransferInstruction_Accept argument,
@@ -166,7 +237,9 @@ public static class ITransferInstructionExtensions
 
         var command = contractId.TransferInstruction_AcceptCommand(argument);
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectTransferInstruction_AcceptResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -182,13 +255,14 @@ public static class ITransferInstructionExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(argument);
-        return ExerciseCommand.ForInterface<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Reject"), argument.ToRecord());
+        return ExerciseCommand.For<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Reject"), argument.ToRecord());
     }
 
     /// <summary>
     /// Exercises the <c>TransferInstruction_Reject</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and decoding the committed result through <c>ChoiceTransferInstruction_Reject.ResultDecoder</c>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -198,7 +272,7 @@ public static class ITransferInstructionExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> TransferInstruction_RejectAsync(
+    public static async Task<ExerciseOutcome<TransferInstructionResult>> TransferInstruction_RejectAsync(
         this ContractId<ITransferInstruction> contractId,
         ILedgerWriter client,
         TransferInstruction_Reject argument,
@@ -212,7 +286,9 @@ public static class ITransferInstructionExtensions
 
         var command = contractId.TransferInstruction_RejectCommand(argument);
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectTransferInstruction_RejectResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -228,13 +304,14 @@ public static class ITransferInstructionExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(argument);
-        return ExerciseCommand.ForInterface<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Withdraw"), argument.ToRecord());
+        return ExerciseCommand.For<ITransferInstruction>(contractId, new ChoiceName("TransferInstruction_Withdraw"), argument.ToRecord());
     }
 
     /// <summary>
     /// Exercises the <c>TransferInstruction_Withdraw</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and decoding the committed result through <c>ChoiceTransferInstruction_Withdraw.ResultDecoder</c>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -244,7 +321,7 @@ public static class ITransferInstructionExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> TransferInstruction_WithdrawAsync(
+    public static async Task<ExerciseOutcome<TransferInstructionResult>> TransferInstruction_WithdrawAsync(
         this ContractId<ITransferInstruction> contractId,
         ILedgerWriter client,
         TransferInstruction_Withdraw argument,
@@ -258,6 +335,128 @@ public static class ITransferInstructionExtensions
 
         var command = contractId.TransferInstruction_WithdrawCommand(argument);
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectTransferInstruction_WithdrawResult(tx, contractId.Value));
+    }
+
+    private static ExerciseOutcome<Unit> ProjectArchiveResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ITransferInstruction.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ITransferInstruction.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "Archive", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'Archive' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<TransferInstructionResult> ProjectTransferInstruction_AcceptResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ITransferInstruction.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ITransferInstruction.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "TransferInstruction_Accept", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = ITransferInstruction.ChoiceTransferInstruction_Accept.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<TransferInstructionResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<TransferInstructionResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'TransferInstruction_Accept' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<TransferInstructionResult> ProjectTransferInstruction_RejectResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ITransferInstruction.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ITransferInstruction.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "TransferInstruction_Reject", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = ITransferInstruction.ChoiceTransferInstruction_Reject.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<TransferInstructionResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<TransferInstructionResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'TransferInstruction_Reject' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<TransferInstructionResult> ProjectTransferInstruction_WithdrawResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ITransferInstruction.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ITransferInstruction.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "TransferInstruction_Withdraw", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = ITransferInstruction.ChoiceTransferInstruction_Withdraw.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<TransferInstructionResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<TransferInstructionResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'TransferInstruction_Withdraw' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
     }
 }

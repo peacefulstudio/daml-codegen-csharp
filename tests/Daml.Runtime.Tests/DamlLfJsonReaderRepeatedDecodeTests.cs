@@ -21,8 +21,12 @@ public class DamlLfJsonReaderRepeatedDecodeTests
     [Fact]
     public void ReadRecord_should_decode_each_instantiation_of_a_generic_record_by_its_own_field_shape()
     {
-        var countBox = DamlLfJsonReader.ReadRecord<GenericBox<long>>("""{"content":"42"}""");
-        var flagBox = DamlLfJsonReader.ReadRecord<GenericBox<bool>>("""{"content":true}""");
+#pragma warning disable DAMLRT0001
+#pragma warning disable CA2263
+        var countBox = DamlLfJsonReader.ReadRecord("""{"content":"42"}""", typeof(GenericBox<long>));
+        var flagBox = DamlLfJsonReader.ReadRecord("""{"content":true}""", typeof(GenericBox<bool>));
+#pragma warning restore CA2263
+#pragma warning restore DAMLRT0001
 
         countBox.GetRequiredField("content").Should().BeOfType<DamlInt64>().Which.Value.Should().Be(42L);
         flagBox.GetRequiredField("content").Should().BeOfType<DamlBool>().Which.Value.Should().BeTrue();
@@ -30,11 +34,25 @@ public class DamlLfJsonReaderRepeatedDecodeTests
 
     public sealed record ScoredProfile(
         [property: DamlFieldAttribute("nickname")] string Nickname,
-        [property: DamlFieldAttribute("score")] long Score) : IDamlRecord
+        [property: DamlFieldAttribute("score")] long Score) : IDamlRecord<ScoredProfile>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("nickname", new DamlText(Nickname)),
             DamlField.Create("score", new DamlInt64(Score)));
+
+        public static ScoredProfile FromRecord(DamlRecord record) => new(
+            record.GetRequiredField("nickname").As<DamlText>().Value,
+            record.GetRequiredField("score").As<DamlInt64>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("nickname", DamlLfJsonDecoders.ReadText(
+                    DamlLfJsonDecoders.RequireField(json, context, "nickname"), context.Field("nickname"))),
+                DamlField.Create("score", DamlLfJsonDecoders.ReadInt64(
+                    DamlLfJsonDecoders.RequireField(json, context, "score"), context.Field("score"))));
+        }
     }
 
     [Fact]
@@ -42,8 +60,16 @@ public class DamlLfJsonReaderRepeatedDecodeTests
     {
         const string json = """{"nickname":"nick","score":"7"}""";
 
-        var first = DamlLfJsonReader.ReadRecord<ScoredProfile>(json);
-        var second = DamlLfJsonReader.ReadRecord<ScoredProfile>(json);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var first = DamlLfJsonReader.ReadRecord(json, recordType: typeof(ScoredProfile));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var second = DamlLfJsonReader.ReadRecord(json, recordType: typeof(ScoredProfile));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         second.Should().Be(first);
         second.Should().Be(new ScoredProfile("nick", 7L).ToRecord());
@@ -52,7 +78,11 @@ public class DamlLfJsonReaderRepeatedDecodeTests
     [Fact]
     public void ReadRecord_should_order_fields_by_declaration_rather_than_by_json_property_order()
     {
-        var record = DamlLfJsonReader.ReadRecord<ScoredProfile>("""{"score":"7","nickname":"nick"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"score":"7","nickname":"nick"}""", recordType: typeof(ScoredProfile));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.Should().Be(new ScoredProfile("nick", 7L).ToRecord());
     }
@@ -60,9 +90,17 @@ public class DamlLfJsonReaderRepeatedDecodeTests
     [Fact]
     public void ReadRecord_should_still_refuse_a_missing_field_once_the_type_has_been_decoded_before()
     {
-        DamlLfJsonReader.ReadRecord<ScoredProfile>("""{"nickname":"nick","score":"7"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"nickname":"nick","score":"7"}""", recordType: typeof(ScoredProfile));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
-        var act = () => DamlLfJsonReader.ReadRecord<ScoredProfile>("""{"nickname":"nick"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"nickname":"nick"}""", recordType: typeof(ScoredProfile));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("Required Daml field 'ScoredProfile.score' is missing from the JSON object");
@@ -70,11 +108,25 @@ public class DamlLfJsonReaderRepeatedDecodeTests
 
     public sealed record RaceProfile(
         [property: DamlFieldAttribute("nickname")] string Nickname,
-        [property: DamlFieldAttribute("score")] long Score) : IDamlRecord
+        [property: DamlFieldAttribute("score")] long Score) : IDamlRecord<RaceProfile>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("nickname", new DamlText(Nickname)),
             DamlField.Create("score", new DamlInt64(Score)));
+
+        public static RaceProfile FromRecord(DamlRecord record) => new(
+            record.GetRequiredField("nickname").As<DamlText>().Value,
+            record.GetRequiredField("score").As<DamlInt64>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("nickname", DamlLfJsonDecoders.ReadText(
+                    DamlLfJsonDecoders.RequireField(json, context, "nickname"), context.Field("nickname"))),
+                DamlField.Create("score", DamlLfJsonDecoders.ReadInt64(
+                    DamlLfJsonDecoders.RequireField(json, context, "score"), context.Field("score"))));
+        }
     }
 
     [Fact]
@@ -86,7 +138,11 @@ public class DamlLfJsonReaderRepeatedDecodeTests
         var records = Enumerable.Range(0, 64)
             .AsParallel()
             .WithDegreeOfParallelism(8)
-            .Select(_ => DamlLfJsonReader.ReadRecord<RaceProfile>(json))
+            #pragma warning disable DAMLRT0001
+            #pragma warning disable CA2263
+            .Select(_ => DamlLfJsonReader.ReadRecord(json, recordType: typeof(RaceProfile)))
+            #pragma warning restore CA2263
+            #pragma warning restore DAMLRT0001
             .ToList();
 
         records.Should().AllSatisfy(record => record.Should().Be(expected));
@@ -111,8 +167,10 @@ public class DamlLfJsonReaderRepeatedDecodeTests
     {
         const string json = """{"tag":"Cleared","value":"ok"}""";
 
+        #pragma warning disable DAMLRT0001
         var first = DamlLfJsonReader.ReadValue<Verdict>(json);
         var second = DamlLfJsonReader.ReadValue<Verdict>(json);
+        #pragma warning restore DAMLRT0001
 
         second.Should().Be(first);
         second.Should().Be(new Verdict.Cleared("ok").ToVariant());
@@ -124,11 +182,13 @@ public class DamlLfJsonReaderRepeatedDecodeTests
         const string json = """{"tag":"Cleared","value":"ok"}""";
         var expected = new Verdict.Cleared("ok").ToVariant();
 
+        #pragma warning disable DAMLRT0001
         var variants = Enumerable.Range(0, 64)
             .AsParallel()
             .WithDegreeOfParallelism(8)
             .Select(_ => DamlLfJsonReader.ReadValue<Verdict>(json))
             .ToList();
+        #pragma warning restore DAMLRT0001
 
         variants.Should().AllSatisfy(variant => variant.Should().Be(expected));
     }

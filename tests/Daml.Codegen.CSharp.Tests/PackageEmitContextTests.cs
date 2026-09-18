@@ -583,7 +583,7 @@ public class PackageEmitContextTests
             Options(), isMainPackage: true).Single();
 
         context.LocalChoiceArgToTemplate.Should().ContainKey("M:TransferArg")
-            .WhoseValue.Should().Be(new NestingTemplate("M", "Account"));
+            .WhoseValue.Should().Be(new NestingTemplate("M", "Account", "Transfer"));
     }
 
     [Fact]
@@ -604,7 +604,7 @@ public class PackageEmitContextTests
             Options(),
             isMainPackage: true)[0];
 
-        context.LocalChoiceArgToTemplate["Args:TransferArg"].Should().Be(new NestingTemplate("Banking", "Account"));
+        context.LocalChoiceArgToTemplate["Args:TransferArg"].Should().Be(new NestingTemplate("Banking", "Account", "Transfer"));
     }
 
     [Fact]
@@ -660,8 +660,8 @@ public class PackageEmitContextTests
                 ModuleWithTransferChoice("Custody", "Vault")),
             Options(), isMainPackage: true)[0];
 
-        context.LocalChoiceArgToTemplate["Banking:Transfer"].Should().Be(new NestingTemplate("Banking", "Account"));
-        context.LocalChoiceArgToTemplate["Custody:Transfer"].Should().Be(new NestingTemplate("Custody", "Vault"));
+        context.LocalChoiceArgToTemplate["Banking:Transfer"].Should().Be(new NestingTemplate("Banking", "Account", "Do"));
+        context.LocalChoiceArgToTemplate["Custody:Transfer"].Should().Be(new NestingTemplate("Custody", "Vault", "Do"));
     }
 
     [Fact]
@@ -694,7 +694,7 @@ public class PackageEmitContextTests
             isMainPackage: true,
             logger).Single();
 
-        context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be(new NestingTemplate("M", "Account"));
+        context.LocalChoiceArgToTemplate["M:Transfer"].Should().Be(new NestingTemplate("M", "Account", "Do"));
         logger.Warnings.Should().ContainSingle()
             .Which.Should().Contain("M:Transfer").And.Contain("Account").And.Contain("Vault").And.Contain("in the same package");
     }

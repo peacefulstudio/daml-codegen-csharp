@@ -263,7 +263,7 @@ public class InterfaceEmitterTests
             }));
 
         output.Should().Contain("public static class ITransferableExtensions");
-        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        output.Should().Contain("public static async Task<ExerciseOutcome<Unit>> TransferAsync(");
     }
 
     [Fact]
@@ -272,6 +272,54 @@ public class InterfaceEmitterTests
         var output = EmitInterface(Interface("Lockable"));
 
         output.Should().NotContain("public static class");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_adds_the_IHasChoices_facet_when_the_interface_has_a_choice()
+    {
+        var output = EmitInterface(Interface(
+            "Transferable",
+            viewType: null,
+            new DamlChoice
+            {
+                Name = "Transfer",
+                Consuming = true,
+                ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                Controllers = DamlPartyAnalysis.Dynamic,
+                Observers = DamlPartyAnalysis.Dynamic,
+            }));
+
+        output.Should().Contain(": IDamlInterface, IHasChoices<ITransferable>");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_omits_the_IHasChoices_facet_when_the_interface_has_no_choices()
+    {
+        var output = EmitInterface(Interface("Lockable"));
+
+        output.Should().NotContain("IHasChoices");
+    }
+
+    [Fact]
+    public void InterfaceEmitter_emits_the_Choices_aggregate_as_an_explicit_IHasChoices_implementation()
+    {
+        var output = EmitInterface(Interface(
+            "Transferable",
+            viewType: null,
+            new DamlChoice
+            {
+                Name = "Transfer",
+                Consuming = true,
+                ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                Controllers = DamlPartyAnalysis.Dynamic,
+                Observers = DamlPartyAnalysis.Dynamic,
+            }));
+
+        output.Should().Contain(
+            "static IReadOnlyList<IChoice> IHasChoices<ITransferable>.Choices { get; } = [ChoiceTransfer];");
+        output.Should().NotContain("public static IReadOnlyList<IChoice> Choices");
     }
 
     [Fact]

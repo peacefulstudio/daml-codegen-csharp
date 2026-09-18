@@ -93,4 +93,17 @@ public sealed record Allocation_Settle(
         ExtraArgs: global::Splice.Api.Token.MetadataV1.ExtraArgs.FromRecord(record.GetRequiredField("extraArgs").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("actors", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "actors"), context.Field("actors"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(__json0, __ctx0))),
+            DamlField.Create("extraTransferLegSides", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "extraTransferLegSides"), context.Field("extraTransferLegSides"), (__json0, __ctx0) => TransferLegSide.__ReadDamlLfJson(__json0, __ctx0))),
+            DamlField.Create("nextIterationFunding", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "nextIterationFunding"), context.Field("nextIterationFunding"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTextMap(__json0, __ctx0, (__json1, __ctx1) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(__json1, __ctx1)))),
+            DamlField.Create("extraArgs", global::Splice.Api.Token.MetadataV1.ExtraArgs.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "extraArgs"), context.Field("extraArgs")))
+        );
+    }
+
 }

@@ -27,19 +27,19 @@ public sealed partial record AmuletConversionRateFeed(
     [property: DamlFieldAttribute("dso")] Party Dso,
     [property: DamlFieldAttribute("nextUpdateAfter")] DateTimeOffset? NextUpdateAfter,
     [property: DamlFieldAttribute("amuletConversionRate")] decimal AmuletConversionRate
-) : ITemplate, IDamlRecord<AmuletConversionRateFeed>
+) : ITemplate, IHasChoices<AmuletConversionRateFeed>, IDamlRecord<AmuletConversionRateFeed>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans.AmuletConversionRateFeed", "AmuletConversionRateFeed");
+    public static Identifier TemplateId { get; } = new("cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1", "Splice.Ans.AmuletConversionRateFeed", "AmuletConversionRateFeed");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83";
+    public static string PackageId => "cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "splice-amulet-name-service";
 
     /// <summary>Gets the package version.</summary>
-    public static Version PackageVersion { get; } = new(0, 1, 23);
+    public static Version PackageVersion { get; } = new(0, 1, 24);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
@@ -60,6 +60,19 @@ public sealed partial record AmuletConversionRateFeed(
         AmuletConversionRate: record.GetRequiredField("amuletConversionRate").As<DamlNumeric>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("publisher", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "publisher"), context.Field("publisher"))),
+            DamlField.Create("dso", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "dso"), context.Field("dso"))),
+            DamlField.Create("nextUpdateAfter", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "nextUpdateAfter"), context.Field("nextUpdateAfter"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTimestamp(__json0, __ctx0))),
+            DamlField.Create("amuletConversionRate", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "amuletConversionRate"), context.Field("amuletConversionRate")))
+        );
+    }
+
     /// <summary>
     /// Exercise the AmuletConversionRateFeed_ArchiveAsDso choice.
     /// This choice is consuming and will archive the contract.
@@ -69,7 +82,10 @@ public sealed partial record AmuletConversionRateFeed(
         Name = new ChoiceName("AmuletConversionRateFeed_ArchiveAsDso"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AmuletConversionRateFeed_ArchiveAsDsoResultExtensions.FromDamlEnum(val.As<DamlEnum>())
+        ArgumentDecoder = val => AmuletConversionRateFeed_ArchiveAsDso.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AmuletConversionRateFeed_ArchiveAsDsoResultExtensions.FromDamlEnum(val.As<DamlEnum>()),
+        ArgumentJsonReader = (json, context) => AmuletConversionRateFeed.AmuletConversionRateFeed_ArchiveAsDso.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AmuletConversionRateFeed_ArchiveAsDsoResultExtensions.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -81,7 +97,10 @@ public sealed partial record AmuletConversionRateFeed(
         Name = new ChoiceName("AmuletConversionRateFeed_Update"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AmuletConversionRateFeed_UpdateResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AmuletConversionRateFeed_Update.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AmuletConversionRateFeed_UpdateResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AmuletConversionRateFeed.AmuletConversionRateFeed_Update.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AmuletConversionRateFeed_UpdateResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -93,8 +112,18 @@ public sealed partial record AmuletConversionRateFeed(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceAmuletConversionRateFeed_ArchiveAsDso, ChoiceAmuletConversionRateFeed_Update, ChoiceArchive];
 
     /// <summary>Contract ID for AmuletConversionRateFeed.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -327,8 +356,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AmuletConversionRateFeed.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AmuletConversionRateFeed_ArchiveAsDso", StringComparison.Ordinal))
             {
-                var decoded = AmuletConversionRateFeed.ChoiceAmuletConversionRateFeed_ArchiveAsDso.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>.One(decoded);
+                try
+                {
+                    var decoded = AmuletConversionRateFeed.ChoiceAmuletConversionRateFeed_ArchiveAsDso.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AmuletConversionRateFeed_ArchiveAsDsoResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -349,8 +385,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AmuletConversionRateFeed.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AmuletConversionRateFeed_Update", StringComparison.Ordinal))
             {
-                var decoded = AmuletConversionRateFeed.ChoiceAmuletConversionRateFeed_Update.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>.One(decoded);
+                try
+                {
+                    var decoded = AmuletConversionRateFeed.ChoiceAmuletConversionRateFeed_Update.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AmuletConversionRateFeed_UpdateResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -371,7 +414,15 @@ public static class AmuletConversionRateFeedNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AmuletConversionRateFeed.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

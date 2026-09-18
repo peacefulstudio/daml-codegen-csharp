@@ -13,6 +13,7 @@ using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -28,19 +29,19 @@ public sealed partial record AnsEntryContext(
     [property: DamlFieldAttribute("url")] string Url,
     [property: DamlFieldAttribute("description")] string Description,
     [property: DamlFieldAttribute("reference")] ContractId<global::Splice.Wallet.Subscriptions.SubscriptionRequest> Reference
-) : ITemplate, IDamlRecord<AnsEntryContext>
+) : ITemplate, IHasChoices<AnsEntryContext>, IDamlRecord<AnsEntryContext>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans", "AnsEntryContext");
+    public static Identifier TemplateId { get; } = new("cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1", "Splice.Ans", "AnsEntryContext");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83";
+    public static string PackageId => "cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "splice-amulet-name-service";
 
     /// <summary>Gets the package version.</summary>
-    public static Version PackageVersion { get; } = new(0, 1, 23);
+    public static Version PackageVersion { get; } = new(0, 1, 24);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
@@ -65,6 +66,21 @@ public sealed partial record AnsEntryContext(
         Reference: new ContractId<global::Splice.Wallet.Subscriptions.SubscriptionRequest>(record.GetRequiredField("reference").As<DamlContractId>().Value)
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("dso", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "dso"), context.Field("dso"))),
+            DamlField.Create("user", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "user"), context.Field("user"))),
+            DamlField.Create("name", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "name"), context.Field("name"))),
+            DamlField.Create("url", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "url"), context.Field("url"))),
+            DamlField.Create("description", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "description"), context.Field("description"))),
+            DamlField.Create("reference", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "reference"), context.Field("reference")))
+        );
+    }
+
     /// <summary>
     /// Exercise the AnsEntryContext_CollectEntryRenewalPayment choice.
     /// </summary>
@@ -73,7 +89,10 @@ public sealed partial record AnsEntryContext(
         Name = new ChoiceName("AnsEntryContext_CollectEntryRenewalPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsEntryContext_CollectEntryRenewalPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsEntryContext_CollectEntryRenewalPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsEntryContext_CollectEntryRenewalPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsEntryContext.AnsEntryContext_CollectEntryRenewalPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsEntryContext_CollectEntryRenewalPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -84,7 +103,10 @@ public sealed partial record AnsEntryContext(
         Name = new ChoiceName("AnsEntryContext_CollectInitialEntryPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsEntryContext_CollectInitialEntryPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsEntryContext_CollectInitialEntryPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsEntryContext_CollectInitialEntryPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsEntryContext.AnsEntryContext_CollectInitialEntryPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsEntryContext_CollectInitialEntryPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -95,7 +117,10 @@ public sealed partial record AnsEntryContext(
         Name = new ChoiceName("AnsEntryContext_RejectEntryInitialPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsEntryContext_RejectEntryInitialPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsEntryContext_RejectEntryInitialPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsEntryContext_RejectEntryInitialPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsEntryContext.AnsEntryContext_RejectEntryInitialPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsEntryContext_RejectEntryInitialPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -107,7 +132,10 @@ public sealed partial record AnsEntryContext(
         Name = new ChoiceName("AnsEntryContext_Terminate"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsEntryContext_TerminateResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsEntryContext_Terminate.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsEntryContext_TerminateResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsEntryContext.AnsEntryContext_Terminate.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsEntryContext_TerminateResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -119,8 +147,18 @@ public sealed partial record AnsEntryContext(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceAnsEntryContext_CollectEntryRenewalPayment, ChoiceAnsEntryContext_CollectInitialEntryPayment, ChoiceAnsEntryContext_RejectEntryInitialPayment, ChoiceAnsEntryContext_Terminate, ChoiceArchive];
 
     /// <summary>Contract ID for AnsEntryContext.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -438,8 +476,15 @@ public static class AnsEntryContextNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsEntryContext.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsEntryContext_CollectEntryRenewalPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsEntryContext.ChoiceAnsEntryContext_CollectEntryRenewalPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsEntryContext_CollectEntryRenewalPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsEntryContext.ChoiceAnsEntryContext_CollectEntryRenewalPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsEntryContext_CollectEntryRenewalPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsEntryContext_CollectEntryRenewalPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -460,8 +505,15 @@ public static class AnsEntryContextNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsEntryContext.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsEntryContext_CollectInitialEntryPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsEntryContext.ChoiceAnsEntryContext_CollectInitialEntryPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsEntryContext_CollectInitialEntryPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsEntryContext.ChoiceAnsEntryContext_CollectInitialEntryPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsEntryContext_CollectInitialEntryPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsEntryContext_CollectInitialEntryPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -482,8 +534,15 @@ public static class AnsEntryContextNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsEntryContext.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsEntryContext_RejectEntryInitialPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsEntryContext.ChoiceAnsEntryContext_RejectEntryInitialPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsEntryContext_RejectEntryInitialPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsEntryContext.ChoiceAnsEntryContext_RejectEntryInitialPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsEntryContext_RejectEntryInitialPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsEntryContext_RejectEntryInitialPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -504,8 +563,15 @@ public static class AnsEntryContextNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsEntryContext.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsEntryContext_Terminate", StringComparison.Ordinal))
             {
-                var decoded = AnsEntryContext.ChoiceAnsEntryContext_Terminate.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsEntryContext_TerminateResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsEntryContext.ChoiceAnsEntryContext_Terminate.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsEntryContext_TerminateResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsEntryContext_TerminateResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -526,7 +592,15 @@ public static class AnsEntryContextNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsEntryContext.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

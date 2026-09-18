@@ -54,4 +54,14 @@ public sealed record SettlementFactory_PublicFetch(
         Actors: (IReadOnlyList<Party>)record.GetRequiredField("actors").As<DamlList>().Values.Select(x => Party.FromDamlValue(x.As<DamlParty>())).ToList()
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("actors", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "actors"), context.Field("actors"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(__json0, __ctx0)))
+        );
+    }
+
 }

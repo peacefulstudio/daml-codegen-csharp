@@ -64,4 +64,15 @@ public sealed record MarkerContext(
         Beneficiaries: (IReadOnlyList<global::Splice.Api.FeaturedAppRightV1.AppRewardBeneficiary>)record.GetRequiredField("beneficiaries").As<DamlList>().Values.Select(x => global::Splice.Api.FeaturedAppRightV1.AppRewardBeneficiary.FromRecord(x.As<DamlRecord>())).ToList()
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("featuredAppRightCid", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "featuredAppRightCid"), context.Field("featuredAppRightCid"))),
+            DamlField.Create("beneficiaries", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "beneficiaries"), context.Field("beneficiaries"), (__json0, __ctx0) => global::Splice.Api.FeaturedAppRightV1.AppRewardBeneficiary.__ReadDamlLfJson(__json0, __ctx0)))
+        );
+    }
+
 }

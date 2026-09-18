@@ -16,7 +16,7 @@ public sealed partial record Iou
     /// </summary>
     public sealed record Transfer(
         [property: DamlFieldAttribute("newOwner")] Party NewOwner
-    ) : IDamlRecord
+    ) : IDamlRecord<Transfer>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record Iou
         public static Transfer FromRecord(DamlRecord record) => new Transfer(
             NewOwner: Party.FromDamlValue(record.GetRequiredField("newOwner").As<DamlParty>())
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("newOwner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "newOwner"), context.Field("newOwner")))
+            );
+        }
 
     }
 }

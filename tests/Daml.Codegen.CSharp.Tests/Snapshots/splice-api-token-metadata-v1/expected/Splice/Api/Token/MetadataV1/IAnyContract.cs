@@ -11,7 +11,9 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,7 +29,7 @@ namespace Splice.Api.Token.MetadataV1;
 /// materialize as concrete <see cref="AnyContractView"/> values, whose record value equality
 /// applies once concretely typed.
 /// </remarks>
-public interface IAnyContract : IDamlInterface, IHasView<AnyContractView>
+public interface IAnyContract : IDamlInterface, IHasView<AnyContractView>, IHasChoices<IAnyContract>
 {
     /// <summary>Gets the interface identifier.</summary>
     static Identifier IDamlInterface.InterfaceId => InterfaceId;
@@ -50,18 +52,42 @@ public interface IAnyContract : IDamlInterface, IHasView<AnyContractView>
     /// <summary>Gets the pure type witness pairing this marker with its view record <see cref="AnyContractView"/>; passing it to a generic method infers both type parameters from one argument.</summary>
     public static ViewDescriptor<IAnyContract, AnyContractView> View { get; } = new();
 
+    /// <summary>
+    /// Exercise the Archive choice.
+    /// This choice is consuming and will archive the contract.
+    /// </summary>
+    public static Choice<IAnyContract, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()
+    {
+        Name = new ChoiceName("Archive"),
+        Consuming = true,
+        ArgumentEncoder = _ => DamlRecord.Create(),
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
+    };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    static IReadOnlyList<IChoice> IHasChoices<IAnyContract>.Choices { get; } = [ChoiceArchive];
+
 }
 
 /// <summary>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>AnyContract</c> Daml interface.
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
-/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.For{TOwner}(global::Daml.Runtime.Contracts.ContractId{TOwner},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
 /// through <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
-/// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
-/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
-/// implementing template (and therefore the produced contracts' shapes) is unknown
-/// at the call site.
+/// and projects the committed transaction's matching exercise event through the choice
+/// descriptor's <c>ResultDecoder</c>, surfacing a typed
+/// <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}"/> — the choice's own return
+/// type, not the implementing template's. A decode failure after a successful commit
+/// surfaces as <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}.CommittedUndecodable"/>,
+/// never as a resubmittable error.
 /// </summary>
 public static class IAnyContractExtensions
 {
@@ -75,13 +101,14 @@ public static class IAnyContractExtensions
         this ContractId<IAnyContract> contractId)
     {
         ArgumentNullException.ThrowIfNull(contractId);
-        return ExerciseCommand.ForInterface<IAnyContract>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
+        return ExerciseCommand.For<IAnyContract>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
     }
 
     /// <summary>
     /// Exercises the <c>Archive</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and returning the committed result as the stdlib Unit singleton.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -90,7 +117,7 @@ public static class IAnyContractExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+    public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<IAnyContract> contractId,
         ILedgerWriter client,
         SubmitterInfo submitter,
@@ -103,6 +130,38 @@ public static class IAnyContractExtensions
 
         var command = contractId.ArchiveCommand();
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
+    }
+
+    private static ExerciseOutcome<Unit> ProjectArchiveResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, IAnyContract.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, IAnyContract.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "Archive", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'Archive' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
     }
 }

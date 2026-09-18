@@ -10,6 +10,21 @@ namespace Daml.Ledger.Abstractions.Tests;
 public class LedgerOperationExceptionTests
 {
     [Fact]
+    public void CommittedWithoutDetail_preserves_committed_state_without_synthetic_error_detail()
+    {
+        var exception = LedgerOperationException.CommittedWithoutDetail("No created contract.");
+
+        exception.Message.Should().Be("No created contract.");
+        exception.CommitState.Should().Be(CommitState.Committed);
+        exception.UpdateId.Should().BeNull();
+        exception.InnerException.Should().BeNull();
+        exception.Category.Should().BeNull();
+        exception.ErrorId.Should().BeNull();
+        exception.Metadata.Should().BeNull();
+        exception.StatusCode.Should().BeNull();
+    }
+
+    [Fact]
     public void LedgerOperationException_message_and_inner_exception_constructor_preserves_both()
     {
         var inner = new TimeoutException("transport gave up");
@@ -22,6 +37,7 @@ public class LedgerOperationExceptionTests
         exception.ErrorId.Should().BeNull();
         exception.Metadata.Should().BeNull();
         exception.StatusCode.Should().BeNull();
+        exception.CommitState.Should().Be(CommitState.NotCommitted);
     }
 
     [Fact]
@@ -96,5 +112,99 @@ public class LedgerOperationExceptionTests
             metadata);
 
         exception.Metadata.Should().BeSameAs(metadata);
+    }
+
+    [Fact]
+    public void LedgerOperationException_committed_undecodable_constructor_keeps_the_update_id_alongside_the_inner_exception()
+    {
+        var inner = new InvalidOperationException("decode failed");
+
+        var exception = new LedgerOperationException("committed but undecodable", "u1", inner);
+
+        exception.UpdateId.Should().Be("u1");
+        exception.InnerException.Should().BeSameAs(inner);
+        exception.CommitState.Should().Be(CommitState.Committed);
+        exception.Category.Should().BeNull();
+        exception.ErrorId.Should().BeNull();
+        exception.Metadata.Should().BeNull();
+        exception.StatusCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void LedgerOperationException_committed_undecodable_constructor_leaves_update_id_null_when_the_decode_failure_precedes_it()
+    {
+        var inner = new InvalidOperationException("decode failed");
+
+        var exception = new LedgerOperationException("committed but undecodable", null, inner);
+
+        exception.UpdateId.Should().BeNull();
+        exception.InnerException.Should().BeSameAs(inner);
+    }
+
+    [Fact]
+    public void LedgerOperationException_committed_undecodable_constructor_keeps_CommitState_Committed_even_when_the_update_id_is_null()
+    {
+        var exception = new LedgerOperationException(
+            "committed but undecodable", null, new InvalidOperationException("decode failed"));
+
+        exception.CommitState.Should().Be(
+            CommitState.Committed,
+            "the command committed regardless of whether the update id was readable before decoding "
+            + "failed, so a catch site must not read a null UpdateId as \"nothing committed\" the way "
+            + "it can for a None/Many exception");
+    }
+
+    [Fact]
+    public void LedgerOperationException_infra_error_constructor_sets_CommitState_Unknown()
+    {
+        var exception = new LedgerOperationException("transport failed", 503);
+
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "the transport failure happened after the command was sent, so the ledger may already "
+            + "have committed it");
+    }
+
+    [Fact]
+    public void LedgerOperationException_daml_error_constructor_sets_CommitState_NotCommitted_for_an_ordinary_category()
+    {
+        var exception = new LedgerOperationException(
+            "exercise failed",
+            DamlErrorCategory.InvalidGivenCurrentSystemStateOther,
+            "SOME_ERROR_ID",
+            new Dictionary<string, string>());
+
+        exception.CommitState.Should().Be(CommitState.NotCommitted);
+    }
+
+    [Fact]
+    public void LedgerOperationException_daml_error_constructor_sets_CommitState_Unknown_for_DeadlineExceededRequestStateUnknown()
+    {
+        var exception = new LedgerOperationException(
+            "exercise failed",
+            DamlErrorCategory.DeadlineExceededRequestStateUnknown,
+            "SOME_ERROR_ID",
+            new Dictionary<string, string>());
+
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "a DeadlineExceededRequestStateUnknown DamlError means the ledger itself reported that "
+            + "the outcome of the request is unknown");
+    }
+
+    [Fact]
+    public void LedgerOperationException_daml_error_constructor_sets_CommitState_Unknown_for_an_unclassified_category()
+    {
+        var exception = new LedgerOperationException(
+            "exercise failed",
+            DamlErrorCategory.Unknown,
+            "SOME_ERROR_ID",
+            new Dictionary<string, string>());
+
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "DamlErrorCategory.Unknown means the transport trailer was missing or unparseable, so the "
+            + "hidden category could have been DeadlineExceededRequestStateUnknown — treating it as "
+            + "NotCommitted would risk resubmitting a command that may have already committed");
     }
 }

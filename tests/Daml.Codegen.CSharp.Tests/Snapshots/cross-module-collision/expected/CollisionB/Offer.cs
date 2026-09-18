@@ -25,7 +25,7 @@ namespace CollisionB;
 public sealed partial record Offer(
     [property: DamlFieldAttribute("owner")] Party Owner,
     [property: DamlFieldAttribute("memo")] string Memo
-) : ITemplate, IDamlRecord<Offer>
+) : ITemplate, IHasChoices<Offer>, IDamlRecord<Offer>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("5a7215d354b1b18068c2f264b60dcab8d8a0df37b02c7fcb19d1f051333d75d1", "CollisionB", "Offer");
@@ -54,6 +54,17 @@ public sealed partial record Offer(
         Memo: record.GetRequiredField("memo").As<DamlText>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("owner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner"))),
+            DamlField.Create("memo", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "memo"), context.Field("memo")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -63,7 +74,14 @@ public sealed partial record Offer(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -75,8 +93,14 @@ public sealed partial record Offer(
         Name = new ChoiceName("Retag"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Offer>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Retag.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Offer>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Offer.Retag.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceRetag];
 
     /// <summary>Contract ID for Offer.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -425,7 +449,15 @@ public static class OfferNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Offer.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

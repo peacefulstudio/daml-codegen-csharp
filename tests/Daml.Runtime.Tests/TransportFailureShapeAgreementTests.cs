@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
+using System.Text.Json;
 using AwesomeAssertions;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using Xunit;
 using RuntimeIdentifier = Daml.Runtime.Data.Identifier;
@@ -186,6 +188,9 @@ public class TransportFailureShapeAgreementTests
 
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static Probe FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private sealed record ProbeInterface : IDamlInterface, IHasView<ProbeView>
@@ -204,5 +209,8 @@ public class TransportFailureShapeAgreementTests
     {
         public DamlRecord ToRecord() => DamlRecord.Create();
         public static ProbeView FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

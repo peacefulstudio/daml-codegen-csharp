@@ -678,6 +678,49 @@ public class DamlTypeMapperTests
     }
 
     [Fact]
+    public void FromJson_reads_a_plain_record_type_ref_through_the_constrained_generic_overload()
+    {
+        var resolver = ResolverWith("Acme.Widget", PackageWithDataTypes(("Acme.Widgets", "Widget", new DamlRecordDefinition([]))));
+
+        Mapper(resolver).FromJson(new DamlTypeRef(CrossPackageId, "Acme.Widgets", "Widget"), "json", "context")
+            .Should().Be("Acme.Widget.__ReadDamlLfJson(json, context)");
+    }
+
+    [Fact]
+    public void FromJson_reads_a_plain_variant_type_ref_through_the_constrained_generic_overload()
+    {
+        var variant = new DamlVariantDefinition([new DamlVariantConstructor("Circle", Prim(DamlPrimitive.Text))]);
+        var resolver = ResolverWith("Acme.Shape", PackageWithDataTypes(("Acme.Shapes", "Shape", variant)));
+
+        Mapper(resolver).FromJson(new DamlTypeRef(CrossPackageId, "Acme.Shapes", "Shape"), "json", "context")
+            .Should().Be("Acme.Shape.__ReadDamlLfJson(json, context)");
+    }
+
+    [Fact]
+    public void FromJson_reads_an_instantiated_generic_record_through_its_injected_reader_overload()
+    {
+        var record = new DamlRecordDefinition([new DamlFieldDefinition("value", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Box", PackageWithGenericType("Acme.Boxes", "Box", record));
+
+        Mapper(resolver).FromJson(GenericAppOfText("Acme.Boxes", "Box"), "json", "context")
+            .Should().Be(
+                "Acme.Box<string>.__ReadDamlLfJson(json, context, "
+                + "(__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))");
+    }
+
+    [Fact]
+    public void FromJson_reads_an_instantiated_generic_variant_through_its_injected_reader_overload()
+    {
+        var variant = new DamlVariantDefinition([new DamlVariantConstructor("Wrap", new DamlTypeVar("a"))]);
+        var resolver = ResolverWith("Acme.Choice", PackageWithGenericType("Acme.Choices", "Choice", variant));
+
+        Mapper(resolver).FromJson(GenericAppOfText("Acme.Choices", "Choice"), "json", "context")
+            .Should().Be(
+                "Acme.Choice<string>.__ReadDamlLfJson(json, context, "
+                + "(__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))");
+    }
+
+    [Fact]
     public void ToValue_maps_a_type_var_field_to_its_injected_converter_delegate()
     {
         var delegates = new Dictionary<string, string> { ["a"] = "convertTA" };
@@ -919,12 +962,19 @@ public class DamlTypeMapperTests
                 + "so an entry emitted without a reader arm is invisible to every other gate");
     }
 
+    /// <summary>
+    /// Workaround: the legacy <c>DamlLfJsonReader.ReadRecord(string, Type, ...)</c> overload
+    /// stays live and tested until every record/variant/enum/template/view has an emitted
+    /// decoder and the reflection reader retires, so this deliberately calls it directly.
+    /// </summary>
     [Fact]
     public void DamlTypeMapper_every_parametric_stdlib_type_is_dispatched_by_the_lf_json_reader()
     {
         foreach (var (holder, json) in ReaderDispatchProbes)
         {
+#pragma warning disable DAMLRT0001
             var read = () => Daml.Runtime.Serialization.DamlLfJsonReader.ReadRecord(json, holder);
+#pragma warning restore DAMLRT0001
 
             read.Should().NotThrow(
                 "an emitted parametric stdlib type the reader has no arm for falls through to the "

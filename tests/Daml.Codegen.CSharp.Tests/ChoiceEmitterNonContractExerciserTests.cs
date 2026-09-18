@@ -6,6 +6,7 @@ using Daml.Codegen.CSharp.CodeGen;
 using Daml.Codegen.Intermediate.Model;
 using AwesomeAssertions;
 using Xunit;
+using static Daml.Codegen.CSharp.Tests.EmittedCodeCompilesTestHelpers;
 using static Daml.Codegen.CSharp.Tests.TestHelpers.EmittedSubmissionShape;
 
 namespace Daml.Codegen.CSharp.Tests;
@@ -170,5 +171,44 @@ public class ChoiceEmitterNonContractExerciserTests
         var firstConstruction = output.IndexOf(commandConstructionMarker, StringComparison.Ordinal);
         firstConstruction.Should().BeGreaterThanOrEqualTo(0);
         output.IndexOf(commandConstructionMarker, firstConstruction + 1, StringComparison.Ordinal).Should().Be(-1);
+    }
+
+    [Fact]
+    public void ChoiceEmitterNonContractExerciser_dictionary_returning_choice_escapes_the_return_type_in_its_doc_comment()
+    {
+        var dictionaryReturn = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.TextMap),
+            [new DamlPrimitiveType(DamlPrimitive.Int64)]);
+
+        var output = Emit(Template(Choice("LabelCounts", dictionaryReturn)));
+
+        output.Should().Contain("<c>IReadOnlyDictionary&lt;string, long&gt;</c>");
+        output.Should().NotContain("<c>IReadOnlyDictionary<string, long></c>");
+    }
+
+    [Fact]
+    public void ChoiceEmitterNonContractExerciser_tuple_returning_choice_escapes_the_return_type_in_its_doc_comment()
+    {
+        var tupleReturn = TupleType(new DamlPrimitiveType(DamlPrimitive.Party), new DamlPrimitiveType(DamlPrimitive.Int64));
+
+        var output = Emit(Template(Choice("OwnerAndCount", tupleReturn)));
+
+        output.Should().Contain("<c>Tuple2&lt;Party, long&gt;</c>");
+        output.Should().NotContain("<c>Tuple2<Party, long></c>");
+    }
+
+    [Fact]
+    public void ChoiceEmitterNonContractExerciser_nested_generic_returning_choice_escapes_the_return_type_in_its_doc_comment()
+    {
+        var nestedReturn = new DamlTypeApp(
+            new DamlPrimitiveType(DamlPrimitive.List),
+            [new DamlTypeApp(
+                new DamlPrimitiveType(DamlPrimitive.TextMap),
+                [new DamlPrimitiveType(DamlPrimitive.Int64)])]);
+
+        var output = Emit(Template(Choice("RankByOwner", nestedReturn)));
+
+        output.Should().Contain("<c>IReadOnlyList&lt;IReadOnlyDictionary&lt;string, long&gt;&gt;</c>");
+        output.Should().NotContain("<c>IReadOnlyList<IReadOnlyDictionary<string, long>></c>");
     }
 }

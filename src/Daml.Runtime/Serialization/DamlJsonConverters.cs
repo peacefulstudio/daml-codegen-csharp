@@ -8,6 +8,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Stdlib;
+using Daml.Runtime.Streams;
 
 namespace Daml.Runtime.Serialization;
 
@@ -21,8 +22,18 @@ namespace Daml.Runtime.Serialization;
 /// <see cref="EquatableArray{T}"/> every list member of the event and stream records carries,
 /// which the built-in collection converter can write but not read,
 /// <see cref="SubmitterInfo"/>, whose two get-only party sets no built-in reader can assign
-/// through, and <see cref="Set{T}"/>, whose constructor parameter binds to no property so that no
-/// built-in reader can construct one at all.
+/// through, <see cref="Set{T}"/>, whose constructor parameter binds to no property so that no
+/// built-in reader can construct one at all, <see cref="Map{TKey, TValue}"/> and
+/// <see cref="NonEmpty{T}"/>, whose own built-in reader constructs one but lets the
+/// <see cref="ArgumentException"/> a null key, value or element trips escape
+/// <see cref="JsonSerializer.Deserialize{TValue}(string, JsonSerializerOptions?)"/> unwrapped
+/// rather than as the <see cref="JsonException"/> naming the offending index that <see cref="Set{T}"/>
+/// reports, and the declared-abstract discriminated unions
+/// <see cref="Optional{T}"/>, <see cref="Either{TL, TR}"/>,
+/// <see cref="ContractStreamEvent{T}"/> and <see cref="InterfaceStreamEvent{TInterface, TView}"/>,
+/// none of which the reflection-based serializer can write or read past their own base members —
+/// together with <see cref="Daml.Runtime.Stdlib.Unit"/>, whose private constructor leaves the
+/// reflection-based serializer nothing to call.
 /// </summary>
 /// <remarks>
 /// Every one of these types carries its converter as a
@@ -78,6 +89,13 @@ public static class DamlJsonConverters
         new SubmitterInfoJsonConverter(),
         new EquatableArrayJsonConverterFactory(),
         new SetJsonConverterFactory(),
+        new MapJsonConverterFactory(),
+        new NonEmptyJsonConverterFactory(),
+        new OptionalJsonConverterFactory(),
+        new EitherJsonConverterFactory(),
+        new ContractStreamEventJsonConverterFactory(),
+        new InterfaceStreamEventJsonConverterFactory(),
+        new UnitJsonConverter(),
     ];
 
     /// <summary>

@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
+using System.Text.Json;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -99,6 +101,9 @@ public class StreamWitnessPartiesGuardTests
         public DamlRecord ToRecord() => DamlRecord.Create();
 
         public static TestTemplate FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private interface TestInterface : IDamlInterface, IHasView<TestView>
@@ -116,5 +121,8 @@ public class StreamWitnessPartiesGuardTests
         public DamlRecord ToRecord() => DamlRecord.Create();
 
         public static TestView FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

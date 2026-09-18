@@ -129,6 +129,13 @@ public class ContractIdJsonTests
                 "SubmitterInfoJsonConverter",
                 "EquatableArrayJsonConverterFactory",
                 "SetJsonConverterFactory",
+                "MapJsonConverterFactory",
+                "NonEmptyJsonConverterFactory",
+                "OptionalJsonConverterFactory",
+                "EitherJsonConverterFactory",
+                "ContractStreamEventJsonConverterFactory",
+                "InterfaceStreamEventJsonConverterFactory",
+                "UnitJsonConverter",
             ],
             "naming the converters is what catches one silently dropping out of DamlJsonConverters.All, "
             + "which a count compared against All itself cannot");

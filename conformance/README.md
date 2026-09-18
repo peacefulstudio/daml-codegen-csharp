@@ -21,13 +21,52 @@ directly inside an `Optional` (`maybeMaybeNote`) and one separated from its oute
 `Optional` by an intervening record (`nestedNote`), an `Optional` over a record's
 own type variable (`Crate`) and one carried by an `Either` arm (`noteOrRank`) —
 positions C# nullable syntax cannot spell, so they emit the `Optional<T>` wrapper
-instead — and the `Numeric` scale extremes 0 and 37. The `Holding` interface carries choices (`Describe`, `Reissue`) as well as a
+instead — and the `Numeric` scale extremes 0 and 37. The `Holding` interface carries choices (`Describe`, `Reissue`, `Split`) as well as a
 view, so the interface-choice emitter path is exercised through a real DAR rather
-than a synthetic package.
+than a synthetic package; `Split` is nonconsuming and returns `[ContractId Holding]`,
+so an interface choice whose result is itself a generic family is covered too.
+`GenericResults` covers the same ground for a template's own choices, one choice per
+top-level generic family: `ReturnContractIds` returns `[ContractId GenericResults]`;
+`ReturnOptionalText` returns `Optional Text` driven by its own `wantSome` argument;
+`ReturnTextMap` returns `TextMap Int`; `ReturnGenMap` returns `Map Text Int`;
+`ReturnTuple` returns `(Text, Int)`; `ReturnEither` returns `Either Text Int` driven
+by its own `wantRight` argument; `ReturnSet` returns `Set Int`; `ReturnNonEmpty`
+returns `NonEmpty Int`; and `ReturnNestedOptional` returns `Optional (Optional Text)`
+driven by its own `outer`/`inner` arguments. `ReturnGenMap`'s result is written with
+`DA.Map`'s `Map` rather than the bare `GenMap` primitive on purpose: `Map` is a type
+synonym for `GenMap`, not a distinct Daml-LF shape — `TypeCorners.quotaByParty` and
+`.labelByRank` above already pin that erasure for `Map`-typed fields, and
+`RichTypesCorpusDarCharacterizationTests` pins it again for this choice's result — so
+one choice proves both the `GenMap` and the `Map` family from this corpus's
+top-level-generic-family choice-return conformance requirement; a second choice under a
+different Daml spelling would characterize the same `DamlTypeApp(GenMap, ...)` shape a
+second time, not a different one. Every one of these choices renders as a C# constructed
+generic type (`Either<long, string>`, `IReadOnlyDictionary<string, long>`, `Set<long>`,
+`NonEmpty<long>`, `Optional<Optional<string>>`, ...); before it was fixed, that tripped a
+defect in `ChoiceEmitter.NonContractExercisers.cs`'s
+`WriteSingleNonContractChoiceAsyncExerciser`, which interpolated the raw return-type name
+into an XML `<c>...</c>` doc-comment tag without escaping `<`/`>`/`,`, turning
+`GenerateDocumentationFile` + `TreatWarningsAsErrors` (both repo-wide via
+`Directory.Build.props`) into a `CS1570` build break for every one of them. Escaping the
+interpolated type name fixed it, which is what unblocked this template-choice half of the
+corpus; see the typed exercise-path choice-descriptor work (choice descriptors as witnesses,
+`ArgumentDecoder` + interface-choice descriptors) for the wider follow-up.
+
+`richtypes/daml.yaml` carries `-Wno-upgrade-interfaces` in its `build-options`:
+at `--target=2.1`, a smart-contract-upgrade-eligible target, `damlc` refuses a
+module that mixes interface definitions with the templates implementing them
+(as `RichTypes.daml` does — `Holding` plus its implementers) unless that
+warning is explicitly silenced. `contractkeys/daml.yaml` carries the same flag
+for the same reason: `ContractKeys.daml` mixes the `Stewardship` interface
+with its implementing template (`Steward`) too.
 
 Contract keys are deliberately absent: they need a Daml-LF version above the
-`--target` this corpus pins, and retargeting it would cost the LF 2.1 coverage it
-exists to ship, so keys live in their own package below.
+`--target` this corpus pins, and retargeting it would remove the 2.1 emit-path and
+main-package read coverage *this corpus* pins — the vendored Splice snapshots under
+`tests/Daml.Codegen.CSharp.Tests/Snapshots/` keep their own 2.1 main packages either way. The
+2.1 dependency read floor stays regardless: at the SDK version pinned here, it is held by the
+twenty-seven per-module `daml-prim`/`daml-stdlib` component packages a DAR bundles whatever
+its target, not by this corpus. So keys live in their own package below.
 `RichTypesCorpusDarCharacterizationTests` asserts both the pin and the absence of
 keyed templates, so moving the pin or adding a keyed template here has to be a
 deliberate act.
@@ -36,13 +75,19 @@ The `contractkeys` package carries the contract-key shapes, and pins
 `--target=2.3` because neither 2.1 nor 2.2 can express a contract key at all. It
 is compiled and shipped by `Daml.Codegen.Testing.Conformance` alongside
 `richtypes`, and its DAR is reachable from
-`ConformanceCorpus.OpenDar(ConformancePackage.ContractKeys)`. The four key shapes
+`ConformanceCorpus.OpenDar(ConformancePackage.ContractKeys)`. The six key shapes
 it covers are the ones real key-bearing Daml packages use: a record built from
 several payload fields (`Account`), a record whose field comes from a projection
 nested inside a payload record (`Holiday`), a record built by a function declared
-in another module, sharing no field name with the payload (`Schedule`), and a
+in another module, sharing no field name with the payload (`Schedule`), a
 bare `Party` key whose maintainer clause names the key binder itself
-(`Steward`). `ContractKeysCorpusDarCharacterizationTests` reads the DAR and
+(`Steward`), a tuple key `(Party, Text)` (`Membership`), and a tuple key with an
+Optional-family component, `(Party, Optional Text)` (`Enrollment`) — both derive
+their maintainer from the key's first component (`key._1`). `Steward` also
+implements the `Stewardship` interface, which declares both a `viewtype`
+(`StewardshipView`) and a non-`Unit` nonconsuming choice (`DescribeCharter`),
+so a keyed template backing an interface with a real choice is covered too.
+`ContractKeysCorpusDarCharacterizationTests` reads the DAR and
 asserts each of them, so a fixture edit that flattens a shape fails rather than
 quietly narrowing the evidence. Rebuild its DAR the same way:
 

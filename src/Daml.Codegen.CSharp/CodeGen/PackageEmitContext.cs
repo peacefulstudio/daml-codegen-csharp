@@ -14,7 +14,8 @@ namespace Daml.Codegen.CSharp.CodeGen;
 /// </summary>
 /// <param name="Module">The Daml module declaring the template.</param>
 /// <param name="Name">The template's Daml name, before sanitisation.</param>
-internal sealed record NestingTemplate(string Module, string Name);
+/// <param name="NestedClassName">The sanitised C# class name the emitter assigns to the nested type (derived from the choice name, not the argument type name).</param>
+internal sealed record NestingTemplate(string Module, string Name, string NestedClassName);
 
 /// <summary>
 /// Immutable value the C# emitter threads through its emit methods. Built once per package
@@ -265,21 +266,82 @@ internal sealed partial class PackageEmitContext
         DamlPackage package,
         CodeGenOptions options,
         bool isMainPackage,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        DamlPackage? mainPackageSibling = null,
+        IReadOnlyList<DamlPackage>? depSiblings = null)
     {
         ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(options);
 
         var scan = Scan(package, NamespacesByModule(package, options, isMainPackage), logger);
+        var crossPackageShadowTypes = (mainPackageSibling is not null || depSiblings is { Count: > 0 })
+            ? CrossPackageShadowTypes(mainPackageSibling, depSiblings, options)
+            : [];
 
         return package.Modules
             .Select(module => new PackageEmitContext(
                 scan,
                 module,
                 scan.ModuleNamespaces[module.Name],
-                new TypeReferenceQualifier(scan.ModuleNamespaces[module.Name], ShadowingTypeNames(scan, module)),
+                new TypeReferenceQualifier(scan.ModuleNamespaces[module.Name], ShadowingTypeNames(scan, module, crossPackageShadowTypes)),
                 TopLevelTypeNamesOf(scan, module)))
             .ToList();
+    }
+
+    /// <summary>
+    /// Collects every top-level type name and interface marker emitted by the sibling packages,
+    /// each paired with the C# namespace of its declaring module. The main package sibling (when
+    /// present) is resolved with <c>isMainPackage: true</c> so its namespace carries
+    /// <see cref="CodeGenOptions.NamespacePrefix"/>; dependency siblings use
+    /// <c>isMainPackage: false</c>. Used to seed the cross-package shadow set so that any
+    /// top-level type in a sibling package whose namespace is an ancestor of the emitting
+    /// module's namespace can be detected as shadowing and root-qualified.
+    /// </summary>
+    private static IReadOnlyList<(string Namespace, string TypeName)> CrossPackageShadowTypes(
+        DamlPackage? mainPackage, IReadOnlyList<DamlPackage>? depPackages, CodeGenOptions options)
+    {
+        var result = new List<(string, string)>();
+        if (mainPackage is not null)
+        {
+            AppendShadowTypesForPackage(result, mainPackage, options, isMainPackage: true);
+        }
+        foreach (var pkg in depPackages ?? [])
+        {
+            AppendShadowTypesForPackage(result, pkg, options, isMainPackage: false);
+        }
+        return result;
+    }
+
+    private static void AppendShadowTypesForPackage(
+        List<(string Namespace, string TypeName)> result,
+        DamlPackage pkg,
+        CodeGenOptions options,
+        bool isMainPackage)
+    {
+        var namespaces = NamespacesByModule(pkg, options, isMainPackage);
+        var reservedNamesByModule = ReservedTopLevelTypeNamesByModule(pkg);
+        var reservedNames = Union(reservedNamesByModule.Values);
+        var markerNames = InterfaceMarkerNames(pkg, reservedNames);
+
+        foreach (var (moduleName, moduleReservedNames) in reservedNamesByModule)
+        {
+            if (namespaces.TryGetValue(moduleName, out var ns))
+            {
+                foreach (var typeName in moduleReservedNames)
+                    result.Add((ns, typeName));
+            }
+        }
+
+        foreach (var (key, markerName) in markerNames)
+        {
+            var colonIdx = key.IndexOf(':', StringComparison.Ordinal);
+            if (colonIdx >= 0)
+            {
+                var moduleName = key[..colonIdx];
+                if (namespaces.TryGetValue(moduleName, out var ns))
+                    result.Add((ns, markerName));
+            }
+        }
     }
 
     private static IReadOnlyDictionary<string, string> NamespacesByModule(
@@ -303,9 +365,16 @@ internal sealed partial class PackageEmitContext
     /// <paramref name="module"/>'s namespace: C# binds a simple name by walking the
     /// enclosing namespaces outward before consulting <c>using</c> directives, so a type
     /// declared in the module's own namespace or in any ancestor namespace binds first,
-    /// while a type in a sibling namespace does not.
+    /// while a type in a sibling namespace does not. Also includes view-field member names
+    /// mirrored into interface markers in ancestor namespaces (which shadow types inside
+    /// the interface body), and type names from <paramref name="crossPackageShadowTypes"/>
+    /// (both top-level types and interface markers from sibling packages) whose namespace is
+    /// an ancestor of the emitting module's namespace.
     /// </summary>
-    private static IReadOnlySet<string> ShadowingTypeNames(PackageScan scan, DamlModule module)
+    private static IReadOnlySet<string> ShadowingTypeNames(
+        PackageScan scan,
+        DamlModule module,
+        IReadOnlyList<(string Namespace, string TypeName)> crossPackageShadowTypes)
     {
         var emittingNamespace = scan.ModuleNamespaces[module.Name];
         var shadowing = new HashSet<string>(StringComparer.Ordinal);
@@ -314,7 +383,34 @@ internal sealed partial class PackageEmitContext
             if (Identifiers.StartsWithSegments(emittingNamespace, moduleNamespace))
             {
                 shadowing.UnionWith(scan.ReservedTypeNamesByModule[moduleName]);
+                var modulePrefix = $"{moduleName}:";
+                foreach (var (key, markerName) in scan.InterfaceMarkerNames)
+                {
+                    if (key.StartsWith(modulePrefix, StringComparison.Ordinal))
+                    {
+                        shadowing.Add(markerName);
+                        // A stamped view mirrors its fields as properties onto the marker
+                        // interface. Inside the marker body, a property named e.g. `Party`
+                        // shadows the runtime Party type in expression position, so add each
+                        // such member name to the shadow set.
+                        foreach (var (viewKey, vMarkerName) in scan.ViewRecordMarkerNames)
+                        {
+                            if (vMarkerName == markerName
+                                && scan.DataTypes.TryGetValue(viewKey, out var viewDataType)
+                                && viewDataType.Definition is DamlRecordDefinition viewRecord)
+                            {
+                                foreach (var field in viewRecord.Fields)
+                                    shadowing.Add(Identifiers.MemberName(field.Name, markerName));
+                            }
+                        }
+                    }
+                }
             }
+        }
+        foreach (var (typeNamespace, typeName) in crossPackageShadowTypes)
+        {
+            if (Identifiers.StartsWithSegments(emittingNamespace, typeNamespace))
+                shadowing.Add(typeName);
         }
         return shadowing;
     }
@@ -384,7 +480,7 @@ internal sealed partial class PackageEmitContext
                                 }
                                 continue;
                             }
-                            choiceArgToTemplate[key] = new NestingTemplate(module.Name, template.Name);
+                            choiceArgToTemplate[key] = new NestingTemplate(module.Name, template.Name, EmitterHelpers.SanitizeIdentifier(choice.Name));
                         }
                     }
                 }
@@ -393,7 +489,7 @@ internal sealed partial class PackageEmitContext
 
         var interfaceMarkerNames = InterfaceMarkerNames(package, reservedTypeNames);
         var viewRecordMarkerNames = ViewRecordMarkerNames(
-            package, dataTypes, interfaceQualifiedNames, interfaceMarkerNames);
+            package, dataTypes, interfaceQualifiedNames, interfaceMarkerNames, choiceArgToTemplate);
 
         return new PackageScan(
             package,
@@ -425,9 +521,11 @@ internal sealed partial class PackageEmitContext
         DamlPackage package,
         IReadOnlyDictionary<string, DamlDataType> dataTypes,
         IReadOnlySet<string> localInterfaceQualifiedNames,
-        IReadOnlyDictionary<string, string> localInterfaceMarkerNames)
+        IReadOnlyDictionary<string, string> localInterfaceMarkerNames,
+        IReadOnlyDictionary<string, NestingTemplate> choiceArgToTemplate)
     {
         var markersByViewRecord = new Dictionary<string, SortedSet<string>>();
+        var declaredMemberNamesByMarker = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
         foreach (var module in package.Modules)
         {
             foreach (var iface in module.Interfaces)
@@ -445,38 +543,134 @@ internal sealed partial class PackageEmitContext
                     markers = new SortedSet<string>(StringComparer.Ordinal);
                     markersByViewRecord[viewKey] = markers;
                 }
-                markers.Add(localInterfaceMarkerNames[$"{module.Name}:{iface.Name}"]);
+                var qualifiedIfaceKey = $"{module.Name}:{iface.Name}";
+                markers.Add(qualifiedIfaceKey);
+                declaredMemberNamesByMarker[qualifiedIfaceKey] = DeclaredMemberNames(iface, module.Name, module.DataTypes, choiceArgToTemplate);
             }
         }
 
         return markersByViewRecord
             .Where(entry => entry.Value.Count == 1)
-            .Select(entry => (ViewKey: entry.Key, Marker: entry.Value.Single()))
-            .Where(pair => ViewFieldsMirrorCleanly(dataTypes[pair.ViewKey], pair.Marker))
+            .Select(entry => (ViewKey: entry.Key, QualifiedKey: entry.Value.Single()))
+            .Select(pair => (pair.ViewKey, pair.QualifiedKey, Marker: localInterfaceMarkerNames[pair.QualifiedKey]))
+            .Where(pair => ViewFieldsMirrorCleanly(dataTypes[pair.ViewKey], pair.Marker, declaredMemberNamesByMarker[pair.QualifiedKey]))
             .ToDictionary(pair => pair.ViewKey, pair => pair.Marker);
     }
 
     /// <summary>
     /// Members a generated interface marker declares in its own right, which a mirrored
-    /// view field must not shadow: the <c>View</c> witness and the <c>InterfaceId</c>
-    /// identity re-declaration (CS0102).
+    /// view field must not shadow: the <c>View</c> witness, the <c>InterfaceId</c> identity
+    /// re-declaration (both CS0102), the reserved <c>__ReadDamlLfJson</c> decoder name every
+    /// record and variant emits (see <see cref="RecordSerializationEmitter.WriteReadDamlLfJsonMethod"/>),
+    /// and — when <paramref name="iface"/> has choices — the
+    /// <c>Choices</c> aggregate and each per-choice <c>Choice{X}</c> descriptor property.
+    /// <c>Choices</c> is emitted as an explicit <c>IHasChoices&lt;TSelf&gt;</c>
+    /// implementation, so a same-named mirrored field would not itself fail to compile, but
+    /// it would still trigger CS0108 (member hides an inherited interface member) — a
+    /// warning a consumer building with <c>TreatWarningsAsErrors</c> would fail on — so it is
+    /// reserved defensively alongside the <c>Choice{X}</c> properties, which are plain
+    /// <c>public static</c> members and would collide outright (CS0102).
+    ///
+    /// Additionally, the sanitised C# name of every decoder receiver reachable from each
+    /// choice's argument and return type is reserved. <c>DamlTypeMapper.FromValue</c> emits
+    /// a bare (unqualified) type name as the static receiver for any same-module
+    /// <see cref="DamlTypeRef"/> — records and variants as <c>TypeName.FromRecord/FromVariant</c>,
+    /// enums as <c>TypeNameExtensions.FromDamlEnum</c> — and recurses into the type arguments of
+    /// any <see cref="DamlTypeApp"/>, so the same bare receivers can appear inside generic
+    /// wrappers such as <c>List&lt;Result&gt;</c>. Cross-module types use a <c>global::</c>-qualified
+    /// receiver and cannot be shadowed. Inside the interface marker body, a mirrored view-field
+    /// property of the same C# name would shadow the type in expression position
+    /// (CS0176 / CS0120). Reserving every reachable receiver name causes
+    /// <see cref="ViewFieldsMirrorCleanly"/> to decline stamping when any such collision exists.
     /// </summary>
-    private static readonly IReadOnlySet<string> MarkerDeclaredMemberNames =
-        new HashSet<string>(StringComparer.Ordinal) { "View", "InterfaceId" };
+    private static IReadOnlySet<string> DeclaredMemberNames(
+        DamlInterface iface,
+        string moduleName,
+        IReadOnlyList<DamlDataType> moduleDataTypes,
+        IReadOnlyDictionary<string, NestingTemplate> choiceArgToTemplate)
+    {
+        var enumNames = new HashSet<string>(
+            moduleDataTypes
+                .Where(dt => dt.Definition is DamlEnumDefinition)
+                .Select(dt => dt.Name),
+            StringComparer.Ordinal);
+
+        var names = new HashSet<string>(StringComparer.Ordinal) { "View", "InterfaceId", "__ReadDamlLfJson" };
+        if (iface.Choices.Count > 0)
+        {
+            names.Add("Choices");
+            foreach (var choice in iface.Choices)
+            {
+                names.Add($"Choice{EmitterHelpers.SanitizeIdentifier(choice.Name)}");
+                CollectDecoderReceiverNames(choice.ArgumentType, moduleName, enumNames, choiceArgToTemplate, names);
+                CollectDecoderReceiverNames(choice.ReturnType, moduleName, enumNames, choiceArgToTemplate, names);
+            }
+
+            // Also reserve every same-module nesting-template name: when a locally-declared
+            // record is nested as a choice argument inside a template, DarCrossPackageResolver
+            // emits its decoder receiver as "TemplateName.RecordName.FromRecord(...)". A mirrored
+            // view-field property with the same name as TemplateName shadows the bare type receiver
+            // in expression position (CS0426 / CS0117). CollectDecoderReceiverNames above covers
+            // these names via the type-tree traversal; this loop adds them as a safety net.
+            foreach (var (_, nestingTemplate) in choiceArgToTemplate)
+            {
+                if (nestingTemplate.Module == moduleName)
+                {
+                    names.Add(Identifiers.Sanitize(nestingTemplate.Name));
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static void CollectDecoderReceiverNames(
+        DamlType type,
+        string moduleName,
+        IReadOnlySet<string> moduleEnumNames,
+        IReadOnlyDictionary<string, NestingTemplate> choiceArgToTemplate,
+        HashSet<string> names)
+    {
+        switch (type)
+        {
+            case DamlTypeRef r when r.Module == moduleName:
+                var key = $"{r.Module}:{r.Name}";
+                if (choiceArgToTemplate.TryGetValue(key, out var nestingTemplate)
+                    && nestingTemplate.Module == moduleName)
+                {
+                    names.Add(Identifiers.Sanitize(nestingTemplate.Name));
+                }
+                names.Add(moduleEnumNames.Contains(r.Name)
+                    ? Identifiers.Sanitize(r.Name + "Extensions")
+                    : Identifiers.Sanitize(r.Name));
+                break;
+            case DamlTypeApp { Base: var b, Arguments: var args }:
+                CollectDecoderReceiverNames(b, moduleName, moduleEnumNames, choiceArgToTemplate, names);
+                foreach (var arg in args)
+                    CollectDecoderReceiverNames(arg, moduleName, moduleEnumNames, choiceArgToTemplate, names);
+                break;
+            case DamlWrappedOptional { Argument: var arg }:
+                CollectDecoderReceiverNames(arg, moduleName, moduleEnumNames, choiceArgToTemplate, names);
+                break;
+        }
+    }
 
     /// <summary>
-    /// Returns true when every field of <paramref name="viewRecord"/> mirrors onto
-    /// <paramref name="markerName"/> under the same C# member name the record itself emits
-    /// for it, and under no name the marker already declares. The two sides derive their
-    /// member names independently, each disambiguating only against its own enclosing type
-    /// (CS0542), so a field PascalCasing to the record's name is emitted as <c>Name_</c>
-    /// there and <c>Name</c> on the marker — and vice versa for a field PascalCasing to the
-    /// marker's name — leaving the record short of a marker member (CS0535). A field
-    /// PascalCasing to <c>View</c> or <c>InterfaceId</c> would instead redeclare a member
-    /// the marker already owns (CS0102). Either way the pair is ineligible and the record
-    /// stays un-stamped beside an un-enriched marker.
+    /// Returns true when every field of <paramref name="viewRecord"/> mirrors onto the
+    /// marker under the same C# member name the record itself emits for it, and under no
+    /// name the marker already declares (<paramref name="markerDeclaredMemberNames"/>). The
+    /// two sides derive their member names independently, each disambiguating only against
+    /// its own enclosing type (CS0542), so a field PascalCasing to the record's name is
+    /// emitted as <c>Name_</c> there and <c>Name</c> on the marker — and vice versa for a
+    /// field PascalCasing to the marker's name — leaving the record short of a marker member
+    /// (CS0535). A field PascalCasing to a name the marker already declares — see
+    /// <see cref="DeclaredMemberNames"/> — would instead redeclare that member. Either way
+    /// the pair is ineligible and the record stays un-stamped beside an un-enriched marker.
     /// </summary>
-    private static bool ViewFieldsMirrorCleanly(DamlDataType viewRecord, string markerName)
+    private static bool ViewFieldsMirrorCleanly(
+        DamlDataType viewRecord,
+        string markerName,
+        IReadOnlySet<string> markerDeclaredMemberNames)
     {
         if (viewRecord.Definition is not DamlRecordDefinition record)
         {
@@ -488,7 +682,7 @@ internal sealed partial class PackageEmitContext
         {
             var markerMemberName = Identifiers.MemberName(field.Name, markerName);
             return markerMemberName == Identifiers.MemberName(field.Name, recordClassName)
-                && !MarkerDeclaredMemberNames.Contains(markerMemberName);
+                && !markerDeclaredMemberNames.Contains(markerMemberName);
         });
     }
 

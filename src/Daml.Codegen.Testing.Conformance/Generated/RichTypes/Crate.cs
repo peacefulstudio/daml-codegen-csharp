@@ -30,4 +30,14 @@ public sealed record Crate<TA>(
         Item: Optional<TA>.FromValue(record.GetRequiredField("item"), __optional0 => convertTA(__optional0))
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context, global::Daml.Runtime.Serialization.DamlLfElementReader readTA)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("item", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "item"), context.Field("item"), (__json0, __ctx0) => readTA(__json0, __ctx0)))
+        );
+    }
+
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using AwesomeAssertions;
 using Daml.Ledger.Abstractions.Extensions;
 using Daml.Runtime;
@@ -9,6 +10,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using Xunit;
 
@@ -150,6 +152,22 @@ public sealed class StreamerSnapshotTests
         var thrown = await snapshot.Should().ThrowAsync<LedgerOperationException>();
         thrown.Which.StatusCode.Should().Be(14);
         thrown.Which.Message.Should().Contain("unavailable");
+    }
+
+    [Fact]
+    public async Task SnapshotAsync_sets_CommitState_NotCommitted_on_a_terminal_stream_error()
+    {
+        var streamer = new FakeStreamer(
+            Created("cid-1", "alice", 1),
+            new AcsSnapshotEntry<Probe>.StreamError(14, "unavailable"));
+
+        var snapshot = async () => await streamer.SnapshotAsync<Probe>(Alice, cancellationToken: TestContext.Current.CancellationToken);
+
+        var thrown = await snapshot.Should().ThrowAsync<LedgerOperationException>();
+        thrown.Which.CommitState.Should().Be(
+            CommitState.NotCommitted,
+            "a snapshot read submits no command, so unlike a write-path InfraError there is nothing "
+            + "the ledger could have committed and nothing to resubmit — retrying the read is always safe");
     }
 
     [Fact]
@@ -397,6 +415,7 @@ public sealed class StreamerSnapshotTests
             KeyEncoder = key => DamlRecord.Create(new DamlField("owner", key.ToDamlValue())),
             KeyDecoder = value =>
                 Party.FromDamlValue(value.As<DamlRecord>().GetRequiredField("owner").As<DamlParty>()),
+            KeyJsonReader = (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -412,6 +431,9 @@ public sealed class StreamerSnapshotTests
                     "High" => ProbeGrade.High,
                     var unknown => throw new ArgumentOutOfRangeException(nameof(record), unknown, null),
                 });
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeStreamer(params AcsSnapshotEntry<Probe>[] entries) : ILedgerStreamer

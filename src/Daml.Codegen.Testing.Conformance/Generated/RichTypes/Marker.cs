@@ -13,6 +13,7 @@ using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,13 +24,13 @@ namespace Daml.Codegen.Testing.Conformance.RichTypes;
 /// </summary>
 public sealed partial record Marker(
     [property: DamlFieldAttribute("owner")] Party Owner
-) : ITemplate, IDamlRecord<Marker>
+) : ITemplate, IHasChoices<Marker>, IDamlRecord<Marker>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("1e0f96e54a2b32b2e081b86edb35567a3ec6f087804f416583d54527e2b52e38", "RichTypes", "Marker");
+    public static Identifier TemplateId { get; } = new("d3b1c254073af761246f22060c60d08a92c4cf4d59327c7a554d3ec6d3e794ec", "RichTypes", "Marker");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "1e0f96e54a2b32b2e081b86edb35567a3ec6f087804f416583d54527e2b52e38";
+    public static string PackageId => "d3b1c254073af761246f22060c60d08a92c4cf4d59327c7a554d3ec6d3e794ec";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";
@@ -50,6 +51,16 @@ public sealed partial record Marker(
         Owner: Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("owner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -59,8 +70,18 @@ public sealed partial record Marker(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive];
 
     /// <summary>Contract ID for Marker.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -176,7 +197,15 @@ public static class MarkerNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Marker.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

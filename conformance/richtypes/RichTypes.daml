@@ -4,7 +4,12 @@ module RichTypes where
 
 import DA.Time ()
 import DA.TextMap (TextMap)
+import qualified DA.TextMap as TextMap
 import DA.Map (Map)
+import qualified DA.Map as Map
+import DA.Set (Set)
+import qualified DA.Set as Set
+import DA.NonEmpty.Types (NonEmpty(..))
 
 data Profile = Profile
   with
@@ -70,6 +75,17 @@ interface Holding where
     do
       create Asset with issuer = holder this, amount = newAmount
         >>= \cid -> pure (toInterfaceContractId @Holding cid)
+
+  nonconsuming choice Split : [ContractId Holding]
+    with
+      pieces : Int
+    controller holder this
+    do
+      let holdingView = view this
+      cids <- mapA
+        (const (create Asset with issuer = holder this, amount = holdingView.amount))
+        [1 .. pieces]
+      pure (map (toInterfaceContractId @Holding) cids)
 
 template Asset
   with
@@ -138,3 +154,62 @@ template TypeCorners
       controller owner
       do
         create this with boxedText = replacement
+
+template GenericResults
+  with
+    owner : Party
+  where
+    signatory owner
+
+    nonconsuming choice ReturnContractIds : [ContractId GenericResults]
+      controller owner
+      do
+        cid <- create this
+        pure [cid]
+
+    nonconsuming choice ReturnOptionalText : Optional Text
+      with
+        wantSome : Bool
+      controller owner
+      do
+        pure (if wantSome then Some "present" else None)
+
+    nonconsuming choice ReturnTextMap : TextMap Int
+      controller owner
+      do
+        pure (TextMap.fromList [("alpha", 1), ("beta", 2)])
+
+    nonconsuming choice ReturnGenMap : Map Text Int
+      controller owner
+      do
+        pure (Map.fromList [("alpha", 1), ("beta", 2)])
+
+    nonconsuming choice ReturnTuple : (Text, Int)
+      controller owner
+      do
+        pure ("alpha", 1)
+
+    nonconsuming choice ReturnEither : Either Text Int
+      with
+        wantRight : Bool
+      controller owner
+      do
+        pure (if wantRight then Right 1 else Left "alpha")
+
+    nonconsuming choice ReturnSet : Set Int
+      controller owner
+      do
+        pure (Set.fromList [1, 2, 3])
+
+    nonconsuming choice ReturnNonEmpty : NonEmpty Int
+      controller owner
+      do
+        pure (NonEmpty with hd = 1; tl = [2, 3])
+
+    nonconsuming choice ReturnNestedOptional : Optional (Optional Text)
+      with
+        outer : Bool
+        inner : Bool
+      controller owner
+      do
+        pure (if outer then Some (if inner then Some "present" else None) else None)

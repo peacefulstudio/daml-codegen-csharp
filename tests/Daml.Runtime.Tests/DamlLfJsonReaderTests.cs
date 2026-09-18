@@ -16,14 +16,35 @@ public class DamlLfJsonReaderTests
     private const string OwnerParty = "alice::1220ab";
     private static readonly Type PartyHolderKnownOnlyAtRuntime = typeof(PartyHolder);
 
-    public sealed record PartyHolder([property: DamlFieldAttribute("owner")] Party Owner) : IDamlRecord
+    public sealed record PartyHolder([property: DamlFieldAttribute("owner")] Party Owner) : IDamlRecord<PartyHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("owner", Owner.ToDamlValue()));
+
+        public static PartyHolder FromRecord(DamlRecord record) =>
+            new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("owner", DamlLfJsonDecoders.ReadParty(
+                DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner"))));
+        }
     }
 
-    public sealed record PartyHolderEnvelope([property: DamlFieldAttribute("holder")] PartyHolder Holder) : IDamlRecord
+    public sealed record PartyHolderEnvelope([property: DamlFieldAttribute("holder")] PartyHolder Holder)
+        : IDamlRecord<PartyHolderEnvelope>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("holder", Holder.ToRecord()));
+
+        public static PartyHolderEnvelope FromRecord(DamlRecord record) =>
+            new(PartyHolder.FromRecord(record.GetRequiredField("holder").As<DamlRecord>()));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("holder", PartyHolder.__ReadDamlLfJson(
+                DamlLfJsonDecoders.RequireField(json, context, "holder"), context.Field("holder"))));
+        }
     }
 
     private static void ShouldCarryTheOwnerParty(DamlRecord record)
@@ -37,7 +58,11 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadRecord_should_arm_a_party_field_when_given_json_text_and_a_type_argument()
     {
-        ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord<PartyHolder>(OwnerJson));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord(OwnerJson, recordType: typeof(PartyHolder)));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
@@ -45,13 +70,19 @@ public class DamlLfJsonReaderTests
     {
         using var document = JsonDocument.Parse(OwnerJson);
 
-        ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord<PartyHolder>(document.RootElement));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord(document.RootElement, recordType: typeof(PartyHolder)));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadRecord_should_arm_a_party_field_when_given_json_text_and_a_runtime_type()
     {
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord(OwnerJson, PartyHolderKnownOnlyAtRuntime));
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
@@ -59,13 +90,19 @@ public class DamlLfJsonReaderTests
     {
         using var document = JsonDocument.Parse(OwnerJson);
 
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(DamlLfJsonReader.ReadRecord(document.RootElement, PartyHolderKnownOnlyAtRuntime));
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadRecord_should_arm_a_party_field_nested_inside_a_record_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<PartyHolderEnvelope>("""{"holder":{"owner":"alice::1220ab"}}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"holder":{"owner":"alice::1220ab"}}""", recordType: typeof(PartyHolderEnvelope));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.Fields.Should().ContainSingle().Which.Label.Should().Be("holder");
         ShouldCarryTheOwnerParty(record.GetRequiredField("holder").Should().BeOfType<DamlRecord>().Which);
@@ -81,7 +118,9 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadRecord_should_refuse_an_interface_marker_and_point_at_its_view_type()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(OwnerJson, typeof(IHolding));
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>()
             .WithMessage($"Type '{typeof(IHolding)}' at 'IHolding' is a Daml interface marker, which has no wire "
@@ -91,7 +130,9 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadRecord_should_refuse_a_type_argument_that_is_not_a_daml_record()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(OwnerJson, typeof(int));
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>()
             .WithMessage($"Type '{typeof(int)}' at 'Int32' is not a generated Daml record; "
@@ -101,8 +142,10 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadValue_should_arm_a_record_when_given_json_text_and_a_type_argument()
     {
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(
             DamlLfJsonReader.ReadValue<PartyHolder>(OwnerJson).Should().BeOfType<DamlRecord>().Which);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
@@ -110,17 +153,21 @@ public class DamlLfJsonReaderTests
     {
         using var document = JsonDocument.Parse(OwnerJson);
 
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(
             DamlLfJsonReader.ReadValue<PartyHolder>(document.RootElement)
                 .Should().BeOfType<DamlRecord>().Which);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadValue_should_arm_a_record_when_given_json_text_and_a_runtime_type()
     {
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(
             DamlLfJsonReader.ReadValue(OwnerJson, PartyHolderKnownOnlyAtRuntime)
                 .Should().BeOfType<DamlRecord>().Which);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
@@ -128,15 +175,19 @@ public class DamlLfJsonReaderTests
     {
         using var document = JsonDocument.Parse(OwnerJson);
 
+        #pragma warning disable DAMLRT0001
         ShouldCarryTheOwnerParty(
             DamlLfJsonReader.ReadValue(document.RootElement, PartyHolderKnownOnlyAtRuntime)
                 .Should().BeOfType<DamlRecord>().Which);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadValue_should_throw_ArgumentNullException_for_null_json_text_and_a_type_argument()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<PartyHolder>((string)null!);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("json");
     }
@@ -144,7 +195,9 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadValue_should_throw_ArgumentNullException_for_null_json_text_and_a_runtime_type()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(null!, PartyHolderKnownOnlyAtRuntime);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("json");
     }
@@ -152,7 +205,9 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadValue_should_throw_ArgumentNullException_for_a_null_value_type_from_json_text()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(OwnerJson, null!);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("valueType");
     }
@@ -163,7 +218,9 @@ public class DamlLfJsonReaderTests
         using var document = JsonDocument.Parse(OwnerJson);
         var element = document.RootElement;
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(element, null!);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("valueType");
     }
@@ -171,7 +228,9 @@ public class DamlLfJsonReaderTests
     [Fact]
     public void ReadValue_should_refuse_an_interface_marker_and_point_at_its_view_type()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(OwnerJson, typeof(IHolding));
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>()
             .WithMessage($"Type '{typeof(IHolding)}' at 'IHolding' is a Daml interface marker, which has no wire "
@@ -208,7 +267,9 @@ public class DamlLfJsonReaderTests
     [MemberData(nameof(TypesOutsideTheDamlTypeMapping))]
     public void ReadValue_should_refuse_a_value_type_outside_the_Daml_type_mapping(Type valueType)
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(OwnerJson, valueType);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>().WithMessage(
             $"Type '{valueType}' at '{valueType.Name}' lies outside the Daml type mapping for a top-level value; "

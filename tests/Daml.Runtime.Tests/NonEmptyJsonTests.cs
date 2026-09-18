@@ -34,9 +34,321 @@ public class NonEmptyJsonTests
         Converters = { new JsonStringEnumConverter() },
     };
 
+    private static readonly JsonSerializerOptions IgnoringReadOnlyProperties =
+        new() { IgnoreReadOnlyProperties = true };
+
+    private static readonly JsonSerializerOptions WithASentinelTlConverter =
+        new() { Converters = { new SentinelTlConverter() } };
+
+    private static readonly JsonSerializerOptions IgnoringDefaultsOnWrite =
+        new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault };
+
+    private static readonly JsonSerializerOptions IgnoringDefaultsOnWriteWithRequiredConstructorParameters =
+        new()
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+            RespectRequiredConstructorParameters = true,
+        };
+
+    private static readonly JsonSerializerOptions IgnoringNullsOnWrite =
+        new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
+    private static readonly JsonSerializerOptions IgnoringNullsOnWriteWithRequiredConstructorParameters =
+        new()
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            RespectRequiredConstructorParameters = true,
+        };
+
     private sealed record Committee(string Name, NonEmpty<Party> Members);
 
     private sealed record OptionalCommittee(string Name, NonEmpty<Party>? Members);
+
+    private sealed record TextGroup(string Name, NonEmpty<string> Members);
+
+    private sealed record VoteTally(string Name, NonEmpty<long> Members);
+
+    private sealed class SentinelTlConverter : JsonConverter<IReadOnlyList<string>>
+    {
+        public override IReadOnlyList<string> Read(
+            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            reader.Skip();
+            return ["sentinel"];
+        }
+
+        public override void Write(Utf8JsonWriter writer, IReadOnlyList<string> value, JsonSerializerOptions options) =>
+            JsonSerializer.Serialize(writer, value.ToList(), options);
+    }
+
+    /// <summary>
+    /// <see cref="NonEmpty{T}"/> carries a custom
+    /// <see cref="System.Text.Json.Serialization.JsonConverter{T}"/>, <see cref="NonEmptyJsonConverter{T}"/>,
+    /// mirroring <see cref="SetJsonConverter{T}"/> and <see cref="MapJsonConverter{TKey, TValue}"/>:
+    /// it reads <c>Hd</c> and <c>Tl</c> itself and translates the <see cref="ArgumentException"/>
+    /// the shared <c>EventCollections.RejectNull</c> and <c>CopyRejectingNullElements</c> paths
+    /// throw for a null head or tail element into a <see cref="JsonException"/> naming the
+    /// offending slot, on both bare options and under
+    /// <see cref="DamlJsonConverters.AddDamlConverters"/>.
+    /// </summary>
+    [Fact]
+    public void NonEmpty_refuses_a_null_tail_element_reached_through_deserialization_on_bare_options()
+    {
+        var act = () => JsonSerializer.Deserialize<TextGroup>(
+            """{"Name":"board","Members":{"Hd":"alice","Tl":[null]}}""",
+            HostBuiltWithoutDamlConverters);
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("*Invalid element in NonEmpty<String>*")
+            .WithInnerException<ArgumentException>()
+            .WithMessage("*Element 0 is null*a NonEmpty<String> holds no null elements*");
+    }
+
+    [Fact]
+    public void NonEmpty_refuses_a_null_tail_element_reached_through_deserialization_under_AddDamlConverters()
+    {
+        var act = () => JsonSerializer.Deserialize<TextGroup>(
+            """{"Name":"board","Members":{"Hd":"alice","Tl":[null]}}""",
+            Registered);
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("*Invalid element in NonEmpty<String>*")
+            .WithInnerException<ArgumentException>()
+            .WithMessage("*Element 0 is null*a NonEmpty<String> holds no null elements*");
+    }
+
+    [Fact]
+    public void NonEmpty_refuses_a_null_Hd_reached_through_deserialization_on_bare_options()
+    {
+        var act = () => JsonSerializer.Deserialize<TextGroup>(
+            """{"Name":"board","Members":{"Hd":null,"Tl":[]}}""",
+            HostBuiltWithoutDamlConverters);
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("*Invalid element in NonEmpty<String>*")
+            .WithInnerException<ArgumentException>()
+            .WithMessage("*Hd is null*a NonEmpty<String> holds no null elements*");
+    }
+
+    /// <remarks>
+    /// Unlike <see cref="Set{T}"/>'s constructor parameter, <c>Hd</c> is read by
+    /// <see cref="NonEmptyJsonConverter{T}"/> itself rather than by
+    /// <see cref="System.Text.Json"/>'s own constructor binding, so
+    /// <see cref="JsonSerializerOptions.RespectNullableAnnotations"/> never sees it — the
+    /// converter's own <c>Hd</c> guard rejects the null instead, the same posture it holds on
+    /// bare options.
+    /// </remarks>
+    [Fact]
+    public void NonEmpty_refuses_a_null_Hd_reached_through_deserialization_under_AddDamlConverters()
+    {
+        var act = () => JsonSerializer.Deserialize<TextGroup>(
+            """{"Name":"board","Members":{"Hd":null,"Tl":[]}}""",
+            Registered);
+
+        act.Should().Throw<JsonException>()
+            .WithMessage("*Invalid element in NonEmpty<String>*")
+            .WithInnerException<ArgumentException>()
+            .WithMessage("*Hd is null*a NonEmpty<String> holds no null elements*");
+    }
+
+    [Fact]
+    public void NonEmpty_round_trips_under_a_camelCase_naming_policy_without_case_insensitive_reads()
+    {
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var group = new NonEmpty<string>("alice", ["bob"]);
+
+        var written = JsonSerializer.Serialize(group, options);
+
+        written.Should().Be(
+            """{"hd":"alice","tl":["bob"],"all":["alice","bob"]}""",
+            "the previous reflection-based contract wrote and accepted whatever "
+            + "PropertyNamingPolicy the caller configured, and the converter must not regress a "
+            + "consumer who upgrades into a fixed PascalCase wire shape");
+        JsonSerializer.Deserialize<NonEmpty<string>>(written, options).Should().Be(group);
+    }
+
+    [Fact]
+    public void NonEmpty_rejects_an_omitted_value_typed_Hd_when_required_constructor_parameters_are_respected()
+    {
+        var options = new JsonSerializerOptions { RespectRequiredConstructorParameters = true };
+
+        var act = () => JsonSerializer.Deserialize<VoteTally>(
+            """{"Name":"board","Members":{"Tl":[2,3]}}""", options);
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "*NonEmpty<Int64>*requires*Hd*",
+            "System.Text.Json's own constructor binding rejected a missing non-optional Hd under "
+            + "this setting before the converter existed; a value-typed Hd silently defaulting to 0 "
+            + "would turn malformed persisted data into a valid but incorrect Daml value");
+    }
+
+    [Fact]
+    public void NonEmpty_reads_an_omitted_value_typed_Hd_as_the_default_when_required_constructor_parameters_are_not_respected()
+    {
+        var tally = JsonSerializer.Deserialize<VoteTally>("""{"Name":"board","Members":{"Tl":[2,3]}}""");
+
+        tally!.Members.Hd.Should().Be(
+            0L,
+            "RespectRequiredConstructorParameters defaults to false, matching System.Text.Json's own "
+            + "pre-converter behavior for a missing non-optional value-typed constructor parameter");
+    }
+
+    [Fact]
+    public void NonEmpty_rejects_an_unmapped_member_when_unmapped_members_are_disallowed()
+    {
+        var options = new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
+
+        var act = () => JsonSerializer.Deserialize<NonEmpty<string>>(
+            """{"Hd":"alice","Tl":[],"Bogus":1}""", options);
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "*Bogus*",
+            "the previous reflection-based reader rejected an unmapped member under this setting, "
+            + "and a payload with a misspelled or unexpected field must not silently succeed");
+    }
+
+    [Fact]
+    public void NonEmpty_omits_the_read_only_All_member_when_read_only_properties_are_ignored()
+    {
+        var json = JsonSerializer.Serialize(new NonEmpty<Party>(Alice, [Bob]), IgnoringReadOnlyProperties);
+
+        json.Should().Be(
+            """{"Hd":"Alice::122012ab","Tl":["Bob::122034cd"]}""",
+            "the previous reflection-based writer omitted the read-only All under this setting, "
+            + "and a consumer suppressing derived properties for a strict downstream schema must "
+            + "keep getting that shape");
+    }
+
+    [Fact]
+    public void NonEmpty_omits_a_default_valued_Hd_under_WhenWritingDefault()
+    {
+        var group = new NonEmpty<long>(0, []);
+
+        var json = JsonSerializer.Serialize(group, IgnoringDefaultsOnWrite);
+
+        json.Should().Be(
+            """{"Tl":[],"All":[0]}""",
+            "the previous reflection-based writer omitted Hd under this setting when it equalled "
+            + "its default of 0, the same posture it held for every other property, and a direct "
+            + "write bypassing DefaultIgnoreCondition changed that shape for a consumer suppressing "
+            + "default-valued properties");
+    }
+
+    [Fact]
+    public void NonEmpty_writes_a_nonzero_Hd_under_WhenWritingDefault()
+    {
+        var group = new NonEmpty<long>(5, []);
+
+        var json = JsonSerializer.Serialize(group, IgnoringDefaultsOnWrite);
+
+        json.Should().Be("""{"Hd":5,"Tl":[],"All":[5]}""");
+    }
+
+    [Fact]
+    public void NonEmpty_still_rejects_its_own_output_when_WhenWritingDefault_drops_Hd_and_required_constructor_parameters_are_respected()
+    {
+        var written = JsonSerializer.Serialize(
+            new NonEmpty<long>(0, [2, 3]), IgnoringDefaultsOnWriteWithRequiredConstructorParameters);
+
+        var act = () => JsonSerializer.Deserialize<NonEmpty<long>>(
+            written, IgnoringDefaultsOnWriteWithRequiredConstructorParameters);
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "*NonEmpty<Int64>*requires*Hd*",
+            "System.Text.Json's own reflection contract carried this same footgun before the "
+            + "converter existed: combining WhenWritingDefault with "
+            + "RespectRequiredConstructorParameters drops a default-valued required parameter on "
+            + "write and then refuses to read it back, so the converter must reproduce that "
+            + "behavior rather than paper over it");
+    }
+
+    [Fact]
+    public void NonEmpty_omits_a_null_Hd_under_WhenWritingNull()
+    {
+#pragma warning disable CS8714
+        var group = new NonEmpty<long?>(null, []);
+#pragma warning restore CS8714
+
+        var json = JsonSerializer.Serialize(group, IgnoringNullsOnWrite);
+
+        json.Should().Be(
+            """{"Tl":[],"All":[null]}""",
+            "the previous reflection-based writer omitted Hd under this setting when it was null "
+            + "for a nullable value type element, the same posture it held for every other "
+            + "reference- or nullable-valued property, and a direct write bypassing "
+            + "DefaultIgnoreCondition changed that shape for a consumer suppressing null-valued "
+            + "properties");
+    }
+
+    [Fact]
+    public void NonEmpty_writes_a_present_Hd_under_WhenWritingNull()
+    {
+#pragma warning disable CS8714
+        var group = new NonEmpty<long?>(7, []);
+#pragma warning restore CS8714
+
+        var json = JsonSerializer.Serialize(group, IgnoringNullsOnWrite);
+
+        json.Should().Be("""{"Hd":7,"Tl":[],"All":[7]}""");
+    }
+
+    [Fact]
+    public void NonEmpty_still_rejects_its_own_output_when_WhenWritingNull_drops_Hd_and_required_constructor_parameters_are_respected()
+    {
+#pragma warning disable CS8714
+        var group = new NonEmpty<long?>(null, [2, 3]);
+#pragma warning restore CS8714
+        var written = JsonSerializer.Serialize(group, IgnoringNullsOnWriteWithRequiredConstructorParameters);
+
+#pragma warning disable CS8714
+        var act = () => JsonSerializer.Deserialize<NonEmpty<long?>>(
+            written, IgnoringNullsOnWriteWithRequiredConstructorParameters);
+#pragma warning restore CS8714
+
+        act.Should().Throw<JsonException>().WithMessage(
+            "*NonEmpty*requires*Hd*",
+            "System.Text.Json's own reflection contract carried this same footgun before the "
+            + "converter existed: combining WhenWritingNull with RespectRequiredConstructorParameters "
+            + "drops a null required parameter on write and then refuses to read it back, so the "
+            + "converter must reproduce that behavior rather than paper over it");
+    }
+
+    [Fact]
+    public void NonEmpty_round_trips_its_own_default_output_when_unmapped_members_are_disallowed()
+    {
+        var options = new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
+        var group = new NonEmpty<string>("alice", ["bob"]);
+
+        var written = JsonSerializer.Serialize(group, options);
+        var act = () => JsonSerializer.Deserialize<NonEmpty<string>>(written, options);
+
+        act.Should().NotThrow(
+            "Write emits the read-only All alongside Hd and Tl by default, and the previous "
+            + "reflection reader recognized All as a declared member rather than an unmapped one, "
+            + "so a converter's own default output must still round-trip under Disallow");
+    }
+
+    [Fact]
+    public void NonEmpty_reads_Tl_through_a_converter_registered_for_its_declared_interface_type()
+    {
+        var group = JsonSerializer.Deserialize<NonEmpty<string>>(
+            """{"Hd":"alice","Tl":["bob"]}""", WithASentinelTlConverter);
+
+        group!.Tl.Should().Equal(
+            ["sentinel"],
+            "Write already serializes Tl through its declared IReadOnlyList<T> type, so Read "
+            + "deserializing through the concrete List<T> instead bypassed a converter a caller "
+            + "registered for the declared type");
+    }
+
+    [Fact]
+    public void NonEmpty_writes_the_literal_JSON_object_of_its_head_and_tail()
+    {
+        var json = JsonSerializer.Serialize(new NonEmpty<Party>(Alice, [Bob]));
+
+        json.Should().Be(
+            """{"Hd":"Alice::122012ab","Tl":["Bob::122034cd"],"All":["Alice::122012ab","Bob::122034cd"]}""");
+    }
 
     [Fact]
     public void NonEmpty_round_trips_inside_a_record_under_AddDamlConverters()

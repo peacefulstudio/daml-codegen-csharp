@@ -23,10 +23,22 @@ public static class ContractIdentifiers
     public static string Account { get; } = GetTemplateId<Account>();
 
     /// <summary>
+    /// Gets the fully qualified template identifier for Enrollment contracts.
+    /// Format: {packageName}:ContractKeys:Enrollment
+    /// </summary>
+    public static string Enrollment { get; } = GetTemplateId<Enrollment>();
+
+    /// <summary>
     /// Gets the fully qualified template identifier for Holiday contracts.
     /// Format: {packageName}:ContractKeys:Holiday
     /// </summary>
     public static string Holiday { get; } = GetTemplateId<Holiday>();
+
+    /// <summary>
+    /// Gets the fully qualified template identifier for Membership contracts.
+    /// Format: {packageName}:ContractKeys:Membership
+    /// </summary>
+    public static string Membership { get; } = GetTemplateId<Membership>();
 
     /// <summary>
     /// Gets the fully qualified template identifier for Schedule contracts.

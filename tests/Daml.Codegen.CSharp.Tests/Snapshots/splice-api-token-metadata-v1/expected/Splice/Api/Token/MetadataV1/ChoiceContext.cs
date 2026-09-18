@@ -54,4 +54,14 @@ public sealed record ChoiceContext(
         Values: (IReadOnlyDictionary<string, AnyValue>)record.GetRequiredField("values").As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => AnyValue.FromVariant(kv.Value.As<DamlVariant>()))
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("values", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTextMap(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "values"), context.Field("values"), (__json0, __ctx0) => AnyValue.__ReadDamlLfJson(__json0, __ctx0)))
+        );
+    }
+
 }

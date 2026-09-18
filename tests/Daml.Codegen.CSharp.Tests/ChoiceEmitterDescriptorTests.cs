@@ -96,7 +96,76 @@ public class ChoiceEmitterDescriptorTests
         output.Should().Contain("Name = new ChoiceName(\"Accept\"),");
         output.Should().Contain("Consuming = true,");
         output.Should().Contain("ArgumentEncoder = _ => DamlUnit.Instance,");
+        output.Should().Contain("ArgumentDecoder = val => val is DamlUnit u ? u : throw new global::System.InvalidOperationException(\"Choice 'Accept' argument must decode to DamlUnit.\"),");
         output.Should().Contain("ResultDecoder = _ => DamlUnit.Instance");
+        output.Should().Contain("ArgumentJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),");
+    }
+
+    [Fact]
+    public void ChoiceEmitterDescriptor_validates_wire_shape_before_returning_the_singleton_for_a_synthetic_archive_argument()
+    {
+        var stdlibPackage = new DamlPackage
+        {
+            PackageId = StdlibPackageId,
+            Name = "daml-prim",
+            Version = new Version(1, 0, 0),
+            LfVersion = "2.1",
+            Modules = [],
+            DependencyReferences = [],
+        };
+        var resolver = new StubResolver(packages: new Dictionary<string, DamlPackage> { [StdlibPackageId] = stdlibPackage });
+        var choice = Choice("Archive", new DamlTypeRef(StdlibPackageId, "DA.Internal.Template", "Archive"), new DamlPrimitiveType(DamlPrimitive.Unit));
+
+        var output = EmitDescriptors(Template(choice), Package(), resolver);
+
+        output.Should().Contain("ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException(\"Choice 'Archive' argument must decode to an empty record.\"),");
+        output.Should().Contain(
+            "ArgumentJsonReader = (json, context) =>\n"
+            + "    {\n"
+            + "        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);\n"
+            + "        return DamlRecord.Create();\n"
+            + "    },");
+        output.Should().NotContain("ArgumentDecoder = _ => DamlUnit.Instance,");
+    }
+
+    [Fact]
+    public void ChoiceEmitterDescriptor_decodes_a_nested_record_argument_through_its_FromRecord()
+    {
+        var argRecord = new DamlDataType
+        {
+            Name = "TransferArg",
+            Definition = new DamlRecordDefinition([new DamlFieldDefinition("newOwner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+        };
+        var choice = Choice("Transfer", new DamlTypeRef(LocalPackageId, "Main", "TransferArg"), new DamlPrimitiveType(DamlPrimitive.Unit));
+
+        var output = EmitDescriptors(Template(choice), Package(argRecord));
+
+        output.Should().Contain("public static Choice<Asset, Transfer, DamlUnit> ChoiceTransfer { get; } = new()");
+        output.Should().Contain("ArgumentEncoder = arg => arg.ToRecord(),");
+        output.Should().Contain("ArgumentDecoder = val => Transfer.FromRecord(val.As<DamlRecord>()),");
+    }
+
+    /// <summary>
+    /// A choice literally named <c>DamlRecord</c> emits a nested argument record of that same
+    /// name into the template partial (see <see cref="ChoiceEmitter.GetChoiceArgumentInfo"/>),
+    /// which shadows the unqualified runtime <c>Daml.Runtime.Data.DamlRecord</c> reference this
+    /// decoder casts through; <see cref="TypeReferenceQualifier"/> cannot see that shadow (it is
+    /// scoped to the module, not this template), so the emitter must root-qualify it itself.
+    /// </summary>
+    [Fact]
+    public void ChoiceEmitterDescriptor_root_qualifies_the_As_cast_when_the_nested_argument_is_named_DamlRecord()
+    {
+        var argRecord = new DamlDataType
+        {
+            Name = "TransferArg",
+            Definition = new DamlRecordDefinition([new DamlFieldDefinition("newOwner", new DamlPrimitiveType(DamlPrimitive.Party))]),
+        };
+        var choice = Choice("DamlRecord", new DamlTypeRef(LocalPackageId, "Main", "TransferArg"), new DamlPrimitiveType(DamlPrimitive.Unit));
+
+        var output = EmitDescriptors(Template(choice), Package(argRecord));
+
+        output.Should().Contain("ArgumentDecoder = val => DamlRecord.FromRecord(val.As<global::Daml.Runtime.Data.DamlRecord>()),");
+        output.Should().NotContain("val.As<DamlRecord>()");
     }
 
     [Fact]
@@ -111,6 +180,9 @@ public class ChoiceEmitterDescriptorTests
 
         output.Should().Contain("ResultDecoder = val => Optional<TA>.FromValue(");
         output.Should().NotContain(".AsOptional().HasValue");
+        output.Should().Contain(
+            "ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(json, context, "
+            + "(__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnsupported(__json0, __ctx0, \"a\")),");
     }
 
     [Fact]

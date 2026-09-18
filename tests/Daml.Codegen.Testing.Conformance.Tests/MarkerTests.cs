@@ -11,7 +11,7 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 
 public class MarkerTests
 {
-    private const string PackageHash = "1e0f96e54a2b32b2e081b86edb35567a3ec6f087804f416583d54527e2b52e38";
+    private const string PackageHash = "d3b1c254073af761246f22060c60d08a92c4cf4d59327c7a554d3ec6d3e794ec";
 
     [Fact]
     public void ToRecord_then_from_record_round_trips_the_owner()

@@ -50,7 +50,10 @@ public sealed record TransactionResult(
     /// ledger-effects shape. Codegen-emitted choice wrappers deserialize each
     /// <see cref="ExercisedEvent.ExerciseResult"/> through the appropriate typed
     /// projector to surface a typed <c>ExerciseOutcome&lt;TResult&gt;</c> for choices
-    /// whose return type is not a contract id (e.g. <c>choice C : Decimal</c>).
+    /// whose return type is not a contract id (e.g. <c>choice C : Decimal</c>). Empty is
+    /// legitimate for a result obtained by other means, but a successful result from a
+    /// ledger writer's primary submit-and-wait method must populate this, including
+    /// nonconsuming exercises — see that method's documentation.
     /// </summary>
     public EquatableArray<ExercisedEvent> ExercisedEvents { get; init; }
 }
@@ -81,7 +84,8 @@ public sealed record TransactionResult(
 /// about the contract — an empty list is itself meaningful, and a template that names no
 /// observer clause reports empty observers on every create; interface views and exercise
 /// events are populated only when the read requested that shape, so empty is both common and
-/// correct for them.</param>
+/// correct for them outside a ledger writer's primary submit-and-wait result, which must
+/// populate exercise events on success.</param>
 /// <param name="Signatories">Parties that authorized the contract's creation. Required
 /// for the same reason as <paramref name="WitnessParties"/>.</param>
 /// <param name="Observers">Parties the template names as observers. Required for the

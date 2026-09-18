@@ -24,13 +24,13 @@ namespace Daml.Codegen.Testing.Conformance.ContractKeys;
 /// </summary>
 public sealed partial record Schedule(
     [property: DamlFieldAttribute("view")] global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleView View
-) : ITemplate, IHasKey<Schedule, global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleKey>, IDamlRecord<Schedule>
+) : ITemplate, IHasKey<Schedule, global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleKey>, IHasChoices<Schedule>, IDamlRecord<Schedule>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb", "ContractKeys", "Schedule");
+    public static Identifier TemplateId { get; } = new("1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d", "ContractKeys", "Schedule");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb";
+    public static string PackageId => "1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "contractkeys";
@@ -47,6 +47,7 @@ public sealed partial record Schedule(
         {
             KeyEncoder = key => key.ToRecord(),
             KeyDecoder = value => global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleKey.FromRecord(value.As<DamlRecord>()),
+            KeyJsonReader = (json, context) => global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleKey.__ReadDamlLfJson(json, context),
         };
 
     /// <summary>Converts this value to a DamlRecord.</summary>
@@ -59,6 +60,16 @@ public sealed partial record Schedule(
         View: global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleView.FromRecord(record.GetRequiredField("view").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("view", global::Daml.Codegen.Testing.Conformance.KeyBuilders.ScheduleView.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "view"), context.Field("view")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -68,7 +79,14 @@ public sealed partial record Schedule(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -80,8 +98,14 @@ public sealed partial record Schedule(
         Name = new ChoiceName("Reschedule"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Schedule>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Reschedule.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Schedule>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Schedule.Reschedule.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceReschedule];
 
     /// <summary>
     /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseByKeyCommand"/> for the Archive choice on the contract carrying this key.
@@ -373,7 +397,15 @@ public static class ScheduleNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Schedule.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

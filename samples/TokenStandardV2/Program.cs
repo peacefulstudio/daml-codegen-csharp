@@ -30,7 +30,7 @@ var transferId = new ContractId<ITransferInstruction>("00transferinstruction");
 var acceptArg = new TransferInstruction_Accept(
     Actors: new[] { alice },
     ExtraArgs: noExtraArgs).ToRecord();
-var transfer = ExerciseCommand.ForInterface<ITransferInstruction>(
+var transfer = ExerciseCommand.For<ITransferInstruction>(
     transferId,
     new ChoiceName(nameof(TransferInstruction_Accept)),
     acceptArg);
@@ -42,7 +42,7 @@ var allocationId = new ContractId<IAllocation>("00allocation");
 var withdrawArg = new Allocation_Withdraw(
     Actors: new[] { alice },
     ExtraArgs: noExtraArgs).ToRecord();
-var allocation = ExerciseCommand.ForInterface<IAllocation>(
+var allocation = ExerciseCommand.For<IAllocation>(
     allocationId,
     new ChoiceName(nameof(Allocation_Withdraw)),
     withdrawArg);

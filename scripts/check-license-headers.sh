@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
+export LC_ALL=C
 
 usage() {
   cat <<EOF
@@ -255,12 +256,12 @@ walked_files() {
     \( -type d \( -name bin -o -name obj -o -name target -o -name .daml \
     -o -name .git -o -name Snapshots -o -name Generated \) -prune \) -o \
     \( -type f -print \) \
-    | LC_ALL=C sort
+    | sort
 }
 
 files_tracked_by_git() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-  git -c core.quotePath=false ls-files --cached -- "${SCAN_PATHS[@]}" | LC_ALL=C sort
+  git -c core.quotePath=false ls-files --cached -- "${SCAN_PATHS[@]}" | sort
 }
 
 scan_files() {

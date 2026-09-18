@@ -44,10 +44,14 @@ internal sealed partial class TemplateEmitter(
     private const string NestedContractIdTypeName = "ContractId";
     private const string NestedContractTypeName = "Contract";
     private const string KeyMemberName = "Key";
+    private const string ChoicesMemberName = "Choices";
     private const string KeyEncoderMemberName = "KeyEncoder";
     private const string KeyEncoderParameterName = "key";
     private const string KeyDecoderMemberName = "KeyDecoder";
     private const string KeyDecoderParameterName = "value";
+    private const string KeyJsonReaderMemberName = "KeyJsonReader";
+    private const string KeyJsonReaderJsonParameterName = "json";
+    private const string KeyJsonReaderContextParameterName = "context";
 
     private readonly ILogger _log = logger ?? NullLogger.Instance;
 
@@ -84,7 +88,8 @@ internal sealed partial class TemplateEmitter(
 
         indent.CurrentTypeName = className;
 
-        var keyWitness = DescribeKeyWitness(className, template.Key, fields);
+        var nestedArgTypeNames = choiceEmitter.GetNestedChoiceArgumentTypeNames(template.Choices);
+        var keyWitness = DescribeKeyWitness(className, template.Key, fields, nestedArgTypeNames);
 
         var interfacesList = new List<string> { context.Qualifier.Qualify(RuntimeTypeNames.ITemplate) };
         if (package.UpgradedPackageId is not null)
@@ -93,13 +98,14 @@ internal sealed partial class TemplateEmitter(
             interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IImplements)}<{resolver.Resolve(implemented, context)}>");
         if (keyWitness is not null)
             interfacesList.Add(keyWitness.FacetType);
+        interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IHasChoices)}<{className}>");
         interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}<{className}>");
         var interfaces = string.Join(", ", interfacesList);
 
         if (fields.Count > 0)
         {
             indent.Append($"public sealed partial record {className}(");
-            recordSerialization.WriteRecordParameters(indent, fields);
+            recordSerialization.WriteRecordParameters(indent, fields, nestedArgTypeNames);
             indent.AppendLine($") : {interfaces}");
         }
         else
@@ -110,7 +116,7 @@ internal sealed partial class TemplateEmitter(
         indent.AppendLine("{");
         indent.Indent();
 
-        recordSerialization.WriteCollectionValueSemantics(indent, className, fields);
+        recordSerialization.WriteCollectionValueSemantics(indent, className, fields, nestedArgTypeNames);
         WriteTemplateMetadata(indent, package, module, template);
 
         if (keyWitness is not null)
@@ -118,15 +124,43 @@ internal sealed partial class TemplateEmitter(
             WriteKeyWitness(indent, module, template, keyWitness);
         }
 
-        recordSerialization.WriteToRecordMethod(indent, fields, []);
-        recordSerialization.WriteFromRecordMethod(indent, className, fields, []);
+        recordSerialization.WriteToRecordMethod(indent, fields, [], nestedArgTypeNames);
+        recordSerialization.WriteFromRecordMethod(indent, className, fields, [], nestedArgTypeNames);
+        recordSerialization.WriteReadDamlLfJsonMethod(indent, fields, [], nestedArgTypeNames);
 
         choiceEmitter.WriteChoiceDescriptors(indent, template);
+
+        var choicesFieldTakingTheMemberName = fields.FirstOrDefault(
+            field => Identifiers.MemberName(field.Name, className) == ChoicesMemberName);
+        var templateNameTakesTheChoicesMemberName = className == ChoicesMemberName;
+        var nestedChoiceArgChoice = template.Choices.FirstOrDefault(c =>
+            EmitterHelpers.SanitizeIdentifier(c.Name) == ChoicesMemberName &&
+            choiceEmitter.GetChoiceArgumentInfo(c, dataTypes).IsNestedTemplateArg);
+        var choicesMemberNameIsTaken = templateNameTakesTheChoicesMemberName
+            || choicesFieldTakingTheMemberName is not null
+            || nestedChoiceArgChoice is not null;
+        if (choicesFieldTakingTheMemberName is not null)
+        {
+            LogChoicesFieldTakesTheWitnessName(_log, module.Name, template.Name, choicesFieldTakingTheMemberName.Name);
+        }
+        else if (templateNameTakesTheChoicesMemberName)
+        {
+            LogTemplateNameTakesTheChoicesWitnessName(_log, module.Name, template.Name);
+        }
+        else if (nestedChoiceArgChoice is not null)
+        {
+            LogNestedChoiceArgTakesTheChoicesWitnessName(_log, module.Name, template.Name, nestedChoiceArgChoice.Name);
+        }
+        choiceEmitter.WriteChoicesAggregateProperty(
+            indent,
+            template.Choices,
+            explicitInterfaceOwner: choicesMemberNameIsTaken ? className : null,
+            nestedArgTypeNames: nestedArgTypeNames);
 
         choiceEmitter.WriteChoiceByKeyCommandBuilders(indent, template, className, dataTypes);
 
         WriteContractIdClass(indent, className);
-        WriteContractClass(indent, className, template.Key);
+        WriteContractClass(indent, className, template.Key, nestedArgTypeNames);
 
         indent.Dedent();
         indent.AppendLine("}");
@@ -158,6 +192,7 @@ internal sealed partial class TemplateEmitter(
         {
             var choiceTypeName = EmitterHelpers.SanitizeIdentifier(choice.Name);
             indent.CurrentTypeName = choiceTypeName;
+            var nestedArgTypeNames = choiceEmitter.GetNestedChoiceArgumentTypeNames(template.Choices);
 
             if (options.GenerateXmlDocs)
             {
@@ -169,20 +204,21 @@ internal sealed partial class TemplateEmitter(
             if (record.Fields.Count > 0)
             {
                 indent.Append($"public sealed record {choiceTypeName}(");
-                recordSerialization.WriteRecordParameters(indent, record.Fields);
-                indent.AppendLine($") : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}");
+                recordSerialization.WriteRecordParameters(indent, record.Fields, nestedArgTypeNames);
+                indent.AppendLine($") : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}<{choiceTypeName}>");
             }
             else
             {
-                indent.AppendLine($"public sealed record {choiceTypeName} : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}");
+                indent.AppendLine($"public sealed record {choiceTypeName} : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlRecord)}<{choiceTypeName}>");
             }
 
             indent.AppendLine("{");
             indent.Indent();
 
-            recordSerialization.WriteCollectionValueSemantics(indent, choiceTypeName, record.Fields);
-            recordSerialization.WriteToRecordMethod(indent, record.Fields, []);
-            recordSerialization.WriteFromRecordMethod(indent, choiceTypeName, record.Fields, []);
+            recordSerialization.WriteCollectionValueSemantics(indent, choiceTypeName, record.Fields, nestedArgTypeNames);
+            recordSerialization.WriteToRecordMethod(indent, record.Fields, [], nestedArgTypeNames);
+            recordSerialization.WriteFromRecordMethod(indent, choiceTypeName, record.Fields, [], nestedArgTypeNames);
+            recordSerialization.WriteReadDamlLfJsonMethod(indent, record.Fields, [], nestedArgTypeNames);
 
             indent.Dedent();
             indent.AppendLine("}");
@@ -238,14 +274,18 @@ internal sealed partial class TemplateEmitter(
     /// The resolved pieces of a keyed template's <c>IHasKey</c> facet: the facet named in the
     /// base list, the descriptor type the witness is declared as, the encode expression over a
     /// lambda parameter named <c>key</c>, the decode expression over a lambda parameter named
-    /// <c>value</c>, and whichever declaration already takes the C# member name <c>Key</c> on
-    /// the template record.
+    /// <c>value</c>, the JSON-read expression over lambda parameters named <c>json</c> and
+    /// <c>context</c> — read straight to a <c>DamlValue</c>, with no <c>Decoder</c> composed in,
+    /// matching <see cref="Daml.Runtime.Contracts.KeyDescriptor{TTemplate, TKey}.KeyJsonReader"/>
+    /// — and whichever declaration already takes the C# member name <c>Key</c> on the template
+    /// record.
     /// </summary>
     private sealed record KeyWitness(
         string FacetType,
         string DescriptorType,
         string Encoder,
         string Decoder,
+        string JsonReadExpr,
         bool TemplateNameTakesTheMemberName,
         string? FieldTakingTheMemberName)
     {
@@ -256,7 +296,8 @@ internal sealed partial class TemplateEmitter(
     private KeyWitness? DescribeKeyWitness(
         string className,
         DamlType? keyType,
-        IReadOnlyList<DamlFieldDefinition> fields)
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlySet<string>? nestedArgTypeNames)
     {
         if (keyType is null)
         {
@@ -271,7 +312,8 @@ internal sealed partial class TemplateEmitter(
             $"{context.Qualifier.Qualify(RuntimeTypeNames.IHasKey)}{typeArguments}",
             $"{context.Qualifier.Qualify(RuntimeTypeNames.KeyDescriptor)}{typeArguments}",
             PackageQualifiedMapper.ToValue(keyType, KeyEncoderParameterName),
-            PackageQualifiedMapper.FromValue(keyType, KeyDecoderParameterName),
+            PackageQualifiedMapper.FromValue(keyType, KeyDecoderParameterName, nestedArgTypeNames: nestedArgTypeNames),
+            PackageQualifiedMapper.FromJson(keyType, KeyJsonReaderJsonParameterName, KeyJsonReaderContextParameterName, nestedArgTypeNames),
             className == KeyMemberName,
             fieldTakingTheMemberName?.Name);
     }
@@ -324,6 +366,7 @@ internal sealed partial class TemplateEmitter(
         indent.Indent();
         indent.AppendLine($"{KeyEncoderMemberName} = {KeyEncoderParameterName} => {witness.Encoder},");
         indent.AppendLine($"{KeyDecoderMemberName} = {KeyDecoderParameterName} => {witness.Decoder},");
+        indent.AppendLine($"{KeyJsonReaderMemberName} = ({KeyJsonReaderJsonParameterName}, {KeyJsonReaderContextParameterName}) => {witness.JsonReadExpr},");
         indent.Dedent();
         indent.AppendLine("};");
         indent.Dedent();
@@ -348,7 +391,11 @@ internal sealed partial class TemplateEmitter(
         indent.AppendLine();
     }
 
-    private void WriteContractClass(IndentWriter indent, string className, DamlType? keyType)
+    private void WriteContractClass(
+        IndentWriter indent,
+        string className,
+        DamlType? keyType,
+        IReadOnlySet<string>? nestedArgTypeNames)
     {
         indent.Require(RuntimeNamespaces.Contracts);
         if (keyType is not null)
@@ -393,7 +440,7 @@ internal sealed partial class TemplateEmitter(
             indent.Indent();
             indent.AppendLine($"Key = @event.ContractKey is {{ }} contractKey");
             indent.Indent();
-            indent.AppendLine($"? new {contractKeyType}({PackageQualifiedMapper.FromValue(keyType, "contractKey.Value")}, contractKey.KeyHash)");
+            indent.AppendLine($"? new {contractKeyType}({PackageQualifiedMapper.FromValue(keyType, "contractKey.Value", nestedArgTypeNames: nestedArgTypeNames)}, contractKey.KeyHash)");
             indent.AppendLine($": throw new global::System.InvalidOperationException(\"The created event for contract '\" + @event.ContractId + \"' of keyed template {className} carried no contract key, so the contract key cannot be populated.\"),");
             indent.Dedent();
             indent.Dedent();
@@ -427,4 +474,22 @@ internal sealed partial class TemplateEmitter(
         Level = LogLevel.Warning,
         Message = "Template {ModuleName}:{TemplateName} maps to a C# type named Key, which a member may not share, so the contract-key witness is emitted as an explicit IHasKey implementation only. Reach it through a generic constraint on IHasKey, not through the template type directly.")]
     private static partial void LogTemplateNameTakesTheWitnessName(ILogger logger, string moduleName, string templateName);
+
+    [LoggerMessage(
+        EventId = 1302,
+        Level = LogLevel.Warning,
+        Message = "Template {ModuleName}:{TemplateName} has a field {FieldName} whose C# member is named Choices, so the choices witness is emitted as an explicit IHasChoices implementation only. Reach it through a generic constraint on IHasChoices, not through the template type directly.")]
+    private static partial void LogChoicesFieldTakesTheWitnessName(ILogger logger, string moduleName, string templateName, string fieldName);
+
+    [LoggerMessage(
+        EventId = 1303,
+        Level = LogLevel.Warning,
+        Message = "Template {ModuleName}:{TemplateName} maps to a C# type named Choices, which a member may not share, so the choices witness is emitted as an explicit IHasChoices implementation only. Reach it through a generic constraint on IHasChoices, not through the template type directly.")]
+    private static partial void LogTemplateNameTakesTheChoicesWitnessName(ILogger logger, string moduleName, string templateName);
+
+    [LoggerMessage(
+        EventId = 1304,
+        Level = LogLevel.Warning,
+        Message = "Template {ModuleName}:{TemplateName} has a non-Unit choice named {ChoiceName} whose nested argument type emits a record named Choices inside the template partial, so the choices witness is emitted as an explicit IHasChoices implementation only. Reach it through a generic constraint on IHasChoices, not through the template type directly.")]
+    private static partial void LogNestedChoiceArgTakesTheChoicesWitnessName(ILogger logger, string moduleName, string templateName, string choiceName);
 }

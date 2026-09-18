@@ -19,7 +19,7 @@ public sealed partial record AnsRules
         [property: DamlFieldAttribute("url")] string Url,
         [property: DamlFieldAttribute("description")] string Description,
         [property: DamlFieldAttribute("user")] Party User
-    ) : IDamlRecord
+    ) : IDamlRecord<AnsRules_RequestEntry>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -36,6 +36,19 @@ public sealed partial record AnsRules
             Description: record.GetRequiredField("description").As<DamlText>().Value,
             User: Party.FromDamlValue(record.GetRequiredField("user").As<DamlParty>())
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("name", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "name"), context.Field("name"))),
+                DamlField.Create("url", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "url"), context.Field("url"))),
+                DamlField.Create("description", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "description"), context.Field("description"))),
+                DamlField.Create("user", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "user"), context.Field("user")))
+            );
+        }
 
     }
 }

@@ -20,11 +20,13 @@ namespace Daml.Ledger.Abstractions.Tests;
 public sealed class StakeholderResumeCompileGuardTests
 {
     private const string Prelude = """
+        using System.Text.Json;
         using Daml.Ledger.Abstractions;
         using Daml.Runtime;
         using Daml.Runtime.Commands;
         using Daml.Runtime.Contracts;
         using Daml.Runtime.Data;
+        using Daml.Runtime.Serialization;
 
         internal sealed record Probe : ITemplate, IDamlRecord<Probe>
         {
@@ -35,12 +37,16 @@ public sealed class StakeholderResumeCompileGuardTests
             public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
             public DamlRecord ToRecord() => DamlRecord.Create();
             public static Probe FromRecord(DamlRecord record) => new();
+            public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+                throw new System.NotSupportedException();
         }
 
         internal sealed record ProbeView : IDamlRecord<ProbeView>
         {
             public DamlRecord ToRecord() => DamlRecord.Create();
             public static ProbeView FromRecord(DamlRecord record) => new();
+            public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+                throw new System.NotSupportedException();
         }
 
         internal sealed record ProbeInterface : IDamlInterface, IHasView<ProbeView>

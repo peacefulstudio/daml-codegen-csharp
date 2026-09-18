@@ -27,7 +27,7 @@ public sealed partial record Iou(
     [property: DamlFieldAttribute("owner")] Party Owner,
     [property: DamlFieldAttribute("currency")] string Currency,
     [property: DamlFieldAttribute("amount")] decimal Amount
-) : ITemplate, IDamlRecord<Iou>
+) : ITemplate, IHasChoices<Iou>, IDamlRecord<Iou>
 {
     /// <summary>Gets the template identifier.</summary>
     public static Identifier TemplateId { get; } = new("61d1c8472218a119a9e73167b9e9af82bfed91bf5ae5a89a82da27c10ea7f763", "Iou", "Iou");
@@ -60,6 +60,19 @@ public sealed partial record Iou(
         Amount: record.GetRequiredField("amount").As<DamlNumeric>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("issuer", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "issuer"), context.Field("issuer"))),
+            DamlField.Create("owner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner"))),
+            DamlField.Create("currency", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "currency"), context.Field("currency"))),
+            DamlField.Create("amount", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "amount"), context.Field("amount")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -69,7 +82,14 @@ public sealed partial record Iou(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -81,8 +101,14 @@ public sealed partial record Iou(
         Name = new ChoiceName("Transfer"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Iou>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Transfer.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Iou>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Iou.Transfer.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceTransfer];
 
     /// <summary>Contract ID for Iou.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -448,7 +474,15 @@ public static class IouNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Iou.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

@@ -301,8 +301,10 @@ public partial class ContractTypesTests
         var cid = new ContractId<ITestInterfaceMarker>("interface-cid-exec");
         var arg = new TestTemplate(new Party("alice"), 42L);
 
+#pragma warning disable CS0618
         var cmd = ExerciseCommand.ForInterface<ITestInterfaceMarker>(
             cid, new ChoiceName("Transfer"), arg.ToRecord());
+#pragma warning restore CS0618
 
         cmd.TemplateId.Should().Be(new Identifier(TestPackageId, TestModuleName, "ITestInterfaceMarker"));
         cmd.ContractId.Value.Should().Be("interface-cid-exec");

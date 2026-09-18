@@ -184,7 +184,7 @@ public class DarCrossPackageResolverTests
 
         var result = resolver.Resolve(new DamlTypeRef("other-id", "Args", "ForeignArg"), ContextFor(main));
 
-        result.Should().Be("global::N.Thing.ForeignArg");
+        result.Should().Be("global::N.Thing.Do");
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class DarCrossPackageResolverTests
 
         var result = resolver.Resolve(new DamlTypeRef("main-id", "M", "TransferArg"), ContextFor(main));
 
-        result.Should().Be("Account.TransferArg");
+        result.Should().Be("Account.Transfer");
     }
 
     [Fact]
@@ -261,9 +261,9 @@ public class DarCrossPackageResolverTests
         var context = ContextFor(main, "Banking");
 
         resolver.Resolve(new DamlTypeRef("main-id", "Banking", "Transfer"), context)
-            .Should().Be("Account.Transfer");
+            .Should().Be("Account.Do");
         resolver.Resolve(new DamlTypeRef("main-id", "Custody", "Transfer"), context)
-            .Should().Be("global::Custody.Vault.Transfer");
+            .Should().Be("global::Custody.Vault.Do");
     }
 
     [Fact]
@@ -303,9 +303,9 @@ public class DarCrossPackageResolverTests
         var context = ContextFor(main);
 
         resolver.Resolve(new DamlTypeRef("foreign-id", "Banking", "Transfer"), context)
-            .Should().Be("global::Banking.Account.Transfer");
+            .Should().Be("global::Banking.Account.Do");
         resolver.Resolve(new DamlTypeRef("foreign-id", "Custody", "Transfer"), context)
-            .Should().Be("global::Custody.Vault.Transfer");
+            .Should().Be("global::Custody.Vault.Do");
     }
 
     [Fact]
@@ -349,7 +349,7 @@ public class DarCrossPackageResolverTests
         var context = ContextFor(main);
 
         resolver.Resolve(new DamlTypeRef("foreign-id", "Banking", "Transfer"), context)
-            .Should().Be("global::Banking.Account.Transfer");
+            .Should().Be("global::Banking.Account.Do");
         logger.Warnings.Should().ContainSingle()
             .Which.Should().Contain("Banking:Transfer").And.Contain("Account").And.Contain("Vault").And.Contain("in the same package");
     }
@@ -438,7 +438,7 @@ public class DarCrossPackageResolverTests
         var first = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
         var second = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
 
-        first.Should().Be("global::N.Thing.ForeignArg");
+        first.Should().Be("global::N.Thing.Do");
         second.Should().Be(first);
     }
 
@@ -473,7 +473,7 @@ public class DarCrossPackageResolverTests
         var enumerationsAfterFirst = countingModules.EnumerationCount;
         var second = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), context);
 
-        first.Should().Be("global::N.Thing.ForeignArg");
+        first.Should().Be("global::N.Thing.Do");
         second.Should().Be(first);
         enumerationsAfterFirst.Should().BeGreaterThan(0, "the first resolve builds the foreign-choice-arg map by walking the package's modules");
         countingModules.EnumerationCount.Should().Be(enumerationsAfterFirst,
@@ -536,7 +536,7 @@ public class DarCrossPackageResolverTests
         var fromMain = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), ContextFor(main));
         var fromDep = resolver.Resolve(new DamlTypeRef("other-id", "N", "ForeignArg"), ContextFor(dep));
 
-        fromMain.Should().Be("global::N.Thing.ForeignArg");
+        fromMain.Should().Be("global::N.Thing.Do");
         fromDep.Should().Be(fromMain);
         resolver.DiscoveredExternalPackageIds.Should().BeEquivalentTo("other-id");
     }

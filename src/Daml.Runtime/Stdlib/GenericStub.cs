@@ -14,9 +14,11 @@ namespace Daml.Runtime.Stdlib;
 /// usable, while loudly failing if anyone actually tries to serialize a generic
 /// instance.
 /// <para>
-/// Call sites: the <c>DamlTypeVar</c> fallback arms of <c>DamlTypeMapper.ToValue</c>
-/// and <c>DamlTypeMapper.FromValue</c>, reached only for a type variable outside any
-/// generic record or variant body whose converter delegates would otherwise resolve it.
+/// Call sites: the <c>DamlTypeVar</c> fallback arms of <c>DamlTypeMapper.ToValue</c>,
+/// <c>DamlTypeMapper.FromValue</c>, and <c>DamlTypeMapper.FromJson</c>, reached only for a
+/// type variable outside any generic record or variant body whose converter delegates
+/// would otherwise resolve it — for example an interface choice's open-typed return
+/// before it is instantiated with concrete arguments.
 /// </para>
 /// </summary>
 public static class GenericStub

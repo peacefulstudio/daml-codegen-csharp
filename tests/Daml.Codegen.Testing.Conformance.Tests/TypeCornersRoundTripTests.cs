@@ -141,10 +141,22 @@ public class TypeCornersRoundTripTests
     }
 
     public sealed record NestedNoteBox(
-        [property: DamlFieldAttribute("item")] Optional<string> Item) : IDamlRecord
+        [property: DamlFieldAttribute("item")] Optional<string> Item) : IDamlRecord<NestedNoteBox>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(
             DamlField.Create("item", Item.ToValue(value => new DamlText(value))));
+
+        public static NestedNoteBox FromRecord(DamlRecord record) =>
+            new(Optional<string>.FromValue(record.GetRequiredField("item"), value => value.As<DamlText>().Value));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("item", DamlLfJsonDecoders.ReadOptional(
+                    DamlLfJsonDecoders.RequireField(json, context, "item"), context.Field("item"),
+                    (itemJson, itemContext) => DamlLfJsonDecoders.ReadText(itemJson, itemContext))));
+        }
     }
 
     [Fact]
@@ -384,5 +396,15 @@ public class TypeCornersRoundTripTests
 
         restored.Replacement.Item.Should().Be("replaced");
         restored.Should().Be(argument);
+    }
+
+    [Fact]
+    public void Rebox_ArgumentJsonDecoder_decodes_the_instantiated_generic_field_directly_from_the_generated_choice()
+    {
+        using var document = JsonDocument.Parse("""{"replacement":{"item":"new-value"}}""");
+
+        var argument = TypeCorners.ChoiceRebox.ArgumentJsonDecoder(document.RootElement, DamlLfJsonDecodeContext.Root("Rebox"));
+
+        argument.Should().Be(new TypeCorners.Rebox(new Box<string>("new-value")));
     }
 }

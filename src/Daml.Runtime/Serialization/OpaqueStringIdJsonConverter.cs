@@ -56,7 +56,35 @@ internal abstract class OpaqueStringIdJsonConverter<TId> : JsonConverter<TId>
             throw new JsonException($"Expected string token for {TypeName}, got {reader.TokenType}.");
         }
 
-        var id = reader.GetString()!;
+        return ParseChecked(reader.GetString()!);
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, TId value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(FormatChecked(value));
+
+    /// <summary>
+    /// Reads a <typeparamref name="TId"/> used as a JSON object's property name — the shape a
+    /// <c>Map Party v</c> (or any <see cref="System.Collections.Generic.IReadOnlyDictionary{TKey,TValue}"/>
+    /// keyed by one of this family's types) field takes, e.g. <c>{"alice":1}</c>. Property names are
+    /// always JSON strings, so the token-type guard <see cref="Read"/> needs does not apply here; the
+    /// blank/format checks are otherwise identical, so a malformed key fails exactly as the same string
+    /// would in the value position.
+    /// </summary>
+    /// <inheritdoc/>
+    public override TId ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        ParseChecked(reader.GetString()!);
+
+    /// <summary>
+    /// Writes a <typeparamref name="TId"/> used as a JSON object's property name. See
+    /// <see cref="ReadAsPropertyName"/>.
+    /// </summary>
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, TId value, JsonSerializerOptions options) =>
+        writer.WritePropertyName(FormatChecked(value));
+
+    private TId ParseChecked(string id)
+    {
         if (!PermitsBlank && string.IsNullOrWhiteSpace(id))
         {
             throw new JsonException($"{TypeName} id cannot be empty or whitespace; got '{id}'.");
@@ -72,19 +100,15 @@ internal abstract class OpaqueStringIdJsonConverter<TId> : JsonConverter<TId>
         }
     }
 
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, TId value, JsonSerializerOptions options)
+    private string FormatChecked(TId value)
     {
-        string id;
         try
         {
-            id = Format(value);
+            return Format(value);
         }
         catch (InvalidOperationException ex)
         {
             throw new JsonException($"Cannot serialize an uninitialized {TypeName}.", ex);
         }
-
-        writer.WriteStringValue(id);
     }
 }

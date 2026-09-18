@@ -1,7 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Stdlib;
 using AwesomeAssertions;
 using Xunit;
@@ -78,6 +80,36 @@ public class StdlibTests
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*microseconds*");
+    }
+
+    [Fact]
+    public void RelTime_Microseconds_carries_the_DamlField_attribute_its_wire_label_needs()
+    {
+        var property = typeof(RelTime).GetProperty(nameof(RelTime.Microseconds))!;
+
+        var damlField = property.GetCustomAttribute<DamlFieldAttribute>();
+
+        damlField.Should().NotBeNull(
+            "DamlLfJsonReader.ResolveDamlFields only includes properties carrying [DamlField] — " +
+            "one missing here silently drops the property from every reflection-driven decode, " +
+            "including the PQS field DSL, rather than raising an error");
+        damlField!.Name.Should().Be("microseconds");
+    }
+
+    [Fact]
+    public void RelTime_should_decode_through_DamlLfJsonReader_by_its_DamlField_label()
+    {
+        var record = DamlLfJsonReader.ReadRecord<RelTime>("""{"microseconds":"60000000"}""");
+
+        record.Fields.Should().Equal(new DamlField("microseconds", new DamlInt64(60_000_000L)));
+    }
+
+    [Fact]
+    public void RelTime_decoded_through_DamlLfJsonReader_round_trips_via_FromRecord()
+    {
+        var record = DamlLfJsonReader.ReadRecord<RelTime>("""{"microseconds":"60000000"}""");
+
+        RelTime.FromRecord(record).Should().Be(new RelTime(60_000_000));
     }
 
     #endregion
@@ -299,6 +331,50 @@ public class StdlibTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*map*");
     }
 
+    [Fact]
+    public void Constructor_rejects_a_null_element_of_Set_naming_the_index()
+    {
+        var act = () => new Set<string>(["a", null!]);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Element 1 is null*")
+            .WithParameterName("elements");
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_None_Optional_element_in_Set()
+    {
+        var set = new Set<Optional<string>>([new Optional<string>.None()]);
+
+        set.Count.Should().Be(1);
+        set.Contains(new Optional<string>.None()).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_null_element_of_a_nullable_value_type_in_Set()
+    {
+#pragma warning disable CS8714
+        var set = new Set<long?>([1L, null]);
+#pragma warning restore CS8714
+
+        set.Count.Should().Be(2);
+        set.Contains(1L).Should().BeTrue();
+        set.Contains(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public void FromRecord_rejects_a_null_element_payload_for_Set()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("map", DamlGenMap.Create((new DamlText("a"), (DamlValue)DamlUnit.Instance))));
+
+        var act = () => Set<string>.FromRecord(record, _ => null!);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Element 0 is null*")
+            .WithParameterName("elements");
+    }
+
     #endregion
 
     #region NonEmpty
@@ -371,6 +447,103 @@ public class StdlibTests
         var act = () => NonEmpty<long>.FromRecord(emptyRecord, v => v.As<DamlInt64>().Value);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*hd*");
+    }
+
+    [Fact]
+    public void Constructor_rejects_a_null_tail_element_of_NonEmpty_naming_the_index()
+    {
+        var act = () => new NonEmpty<string>("a", ["b", null!]);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Element 1 is null*")
+            .WithParameterName("Tl");
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_None_Optional_tail_element_in_NonEmpty()
+    {
+        var nonEmpty = new NonEmpty<Optional<string>>(
+            new Optional<string>.Some("a"), [new Optional<string>.None()]);
+
+        nonEmpty.Tl.Should().Equal(new Optional<string>.None());
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_null_tail_element_of_a_nullable_value_type_in_NonEmpty()
+    {
+#pragma warning disable CS8714
+        var nonEmpty = new NonEmpty<long?>(1L, [null]);
+#pragma warning restore CS8714
+
+        nonEmpty.Tl.Should().Equal(new long?[] { null });
+    }
+
+    [Fact]
+    public void FromRecord_rejects_a_null_tail_element_payload_for_NonEmpty()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("hd", new DamlText("a")),
+            DamlField.Create("tl", new DamlList([new DamlText("b")])));
+
+        var act = () => NonEmpty<string>.FromRecord(record, v => v.As<DamlText>().Value == "a" ? "a" : null!);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Element 0 is null*")
+            .WithParameterName("Tl");
+    }
+
+    [Fact]
+    public void Constructor_rejects_a_null_Hd_of_NonEmpty()
+    {
+        var act = () => new NonEmpty<string>(null!, []);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Hd is null*a NonEmpty<String> holds no null elements*")
+            .WithParameterName("Hd");
+    }
+
+    [Fact]
+    public void With_expression_rejects_a_null_replacement_Hd_of_NonEmpty()
+    {
+        var original = new NonEmpty<string>("a", []);
+
+        var act = () => original with { Hd = null! };
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Hd is null*a NonEmpty<String> holds no null elements*")
+            .WithParameterName("Hd");
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_None_Optional_Hd_in_NonEmpty()
+    {
+        var nonEmpty = new NonEmpty<Optional<string>>(new Optional<string>.None(), []);
+
+        nonEmpty.Hd.Should().Be(new Optional<string>.None());
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_null_Hd_of_a_nullable_value_type_in_NonEmpty()
+    {
+#pragma warning disable CS8714
+        var nonEmpty = new NonEmpty<long?>(null, []);
+#pragma warning restore CS8714
+
+        nonEmpty.Hd.Should().BeNull();
+    }
+
+    [Fact]
+    public void FromRecord_rejects_a_null_Hd_payload_for_NonEmpty()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("hd", new DamlText("a")),
+            DamlField.Create("tl", new DamlList([])));
+
+        var act = () => NonEmpty<string>.FromRecord(record, _ => null!);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Hd is null*")
+            .WithParameterName("Hd");
     }
 
     #endregion
@@ -466,6 +639,66 @@ public class StdlibTests
             v => v.As<DamlInt64>().Value);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*map*");
+    }
+
+    [Fact]
+    public void Constructor_rejects_a_null_key_of_Map_naming_the_index()
+    {
+        var act = () => new Map<string, long>([new KeyValuePair<string, long>(null!, 1L)]);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Entry 0 has a null key*a Map<String, Int64> holds no null keys*")
+            .WithParameterName("Entries");
+    }
+
+    [Fact]
+    public void Constructor_rejects_a_null_value_of_Map_naming_the_index()
+    {
+        var act = () => new Map<string, string>([new KeyValuePair<string, string>("a", null!)]);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Entry 0 has a null value*a Map<String, String> holds no null values*")
+            .WithParameterName("Entries");
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_None_Optional_value_in_Map()
+    {
+        var map = new Map<string, Optional<string>>([
+            new KeyValuePair<string, Optional<string>>("a", new Optional<string>.None()),
+        ]);
+
+        map.Count.Should().Be(1);
+        map.Entries[0].Value.Should().Be(new Optional<string>.None());
+    }
+
+    [Fact]
+    public void Constructor_accepts_a_null_value_of_a_nullable_value_type_in_Map()
+    {
+#pragma warning disable CS8714
+        var map = new Map<string, long?>([
+            new KeyValuePair<string, long?>("a", null),
+        ]);
+#pragma warning restore CS8714
+
+        map.Count.Should().Be(1);
+        map.Entries[0].Value.Should().BeNull();
+    }
+
+    [Fact]
+    public void FromRecord_rejects_a_null_value_payload_for_Map()
+    {
+        var record = DamlRecord.Create(
+            DamlField.Create("map", DamlGenMap.Create((new DamlText("a"), (DamlValue)new DamlInt64(1)))));
+
+        var act = () => Map<string, string>.FromRecord(
+            record,
+            v => v.As<DamlText>().Value,
+            _ => null!);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Entry 0 has a null value*")
+            .WithParameterName("Entries");
     }
 
     #endregion

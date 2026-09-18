@@ -16,7 +16,7 @@ public sealed partial record Holiday
     /// </summary>
     public sealed record Extend(
         [property: DamlFieldAttribute("added")] string Added
-    ) : IDamlRecord
+    ) : IDamlRecord<Extend>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record Holiday
         public static Extend FromRecord(DamlRecord record) => new Extend(
             Added: record.GetRequiredField("added").As<DamlText>().Value
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("added", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "added"), context.Field("added")))
+            );
+        }
 
     }
 }

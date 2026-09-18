@@ -13,7 +13,7 @@ namespace Splice.Api.Token.AllocationV2;
 /// <summary>
 /// Generated from Daml variant AllocationAction
 /// </summary>
-public abstract record AllocationAction : IDamlVariant
+public abstract record AllocationAction : IDamlVariant<AllocationAction>
 {
     /// <summary>Gets the variant constructor name.</summary>
     public abstract string Tag { get; }
@@ -31,6 +31,23 @@ public abstract record AllocationAction : IDamlVariant
             "AA_Custom" => new AA_Custom(AllocationAction_AA_Custom.FromRecord(variant.Value.As<DamlRecord>())),
             _ => throw new ArgumentOutOfRangeException(nameof(variant), variant.Constructor, "Unknown AllocationAction constructor")
         };
+
+    /// <summary>Decodes a Daml-LF JSON variant directly into a DamlVariant, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlVariant __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        var tag = global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadVariantTag(json, context);
+        return tag switch
+        {
+            "AA_Settle" => DamlVariant.Create("AA_Settle", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AA_Cancel" => DamlVariant.Create("AA_Cancel", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AA_Withdraw" => DamlVariant.Create("AA_Withdraw", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AA_Custom" => DamlVariant.Create("AA_Custom", AllocationAction_AA_Custom.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            _ => throw global::Daml.Runtime.Serialization.DamlLfJsonDecoders.UnknownConstructor("variant constructor", tag, context, ExpectedConstructors)
+        };
+    }
+
+    private static readonly string[] ExpectedConstructors = ["AA_Settle", "AA_Cancel", "AA_Withdraw", "AA_Custom"];
 
     /// <summary>AA_Settle constructor (no arguments).</summary>
     public sealed record AA_Settle() : AllocationAction

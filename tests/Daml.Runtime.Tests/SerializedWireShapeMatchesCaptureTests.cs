@@ -23,8 +23,10 @@ public class SerializedWireShapeMatchesCaptureTests
         using var document = DamlLfJsonReaderWireSamplesTests.LoadWireSample(fileName);
         var captured = DamlLfJsonReaderWireSamplesTests.ResolvePayload(document.RootElement, payloadPath);
 
+        #pragma warning disable DAMLRT0001
         var record = DamlLfJsonReader.ReadRecord(
             captured, DamlLfJsonReaderWireSamplesTests.DeclaredShapes[shapeName]);
+        #pragma warning restore DAMLRT0001
         using var written = JsonDocument.Parse(DamlJsonSerializer.Serialize(record));
 
         DisagreementsBetween(captured, written.RootElement, shapeName).Should().BeEmpty(

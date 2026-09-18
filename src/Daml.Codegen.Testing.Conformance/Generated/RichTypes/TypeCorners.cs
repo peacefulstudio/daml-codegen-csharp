@@ -40,7 +40,7 @@ public sealed partial record TypeCorners(
     Branch Branch,
     decimal Whole,
     decimal Finest
-) : ITemplate, IDamlRecord<TypeCorners>
+) : ITemplate, IHasChoices<TypeCorners>, IDamlRecord<TypeCorners>
 {
     /// <summary>The Daml field <c>owner</c>.</summary>
     [DamlFieldAttribute("owner")]
@@ -164,10 +164,10 @@ public sealed partial record TypeCorners(
     }
 
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("1e0f96e54a2b32b2e081b86edb35567a3ec6f087804f416583d54527e2b52e38", "RichTypes", "TypeCorners");
+    public static Identifier TemplateId { get; } = new("d3b1c254073af761246f22060c60d08a92c4cf4d59327c7a554d3ec6d3e794ec", "RichTypes", "TypeCorners");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "1e0f96e54a2b32b2e081b86edb35567a3ec6f087804f416583d54527e2b52e38";
+    public static string PackageId => "d3b1c254073af761246f22060c60d08a92c4cf4d59327c7a554d3ec6d3e794ec";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "richtypes";
@@ -218,6 +218,31 @@ public sealed partial record TypeCorners(
         Finest: record.GetRequiredField("finest").As<DamlNumeric>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("owner", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "owner"), context.Field("owner"))),
+            DamlField.Create("boxedText", Box<string>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "boxedText"), context.Field("boxedText"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))),
+            DamlField.Create("boxedProfile", Box<Profile>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "boxedProfile"), context.Field("boxedProfile"), (__json0, __ctx0) => Profile.__ReadDamlLfJson(__json0, __ctx0))),
+            DamlField.Create("slot", Slot<long>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "slot"), context.Field("slot"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0))),
+            DamlField.Create("nestedNote", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "nestedNote"), context.Field("nestedNote"), (__json0, __ctx0) => Box<Optional<string>>.__ReadDamlLfJson(__json0, __ctx0, (__json1, __ctx1) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(__json1, __ctx1, (__json2, __ctx2) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json2, __ctx2))))),
+            DamlField.Create("maybeMaybeNote", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptionalChain(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "maybeMaybeNote"), context.Field("maybeMaybeNote"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptionalChain(__json0, __ctx0, (__json1, __ctx1) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json1, __ctx1)))),
+            DamlField.Create("crate", Crate<string>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "crate"), context.Field("crate"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))),
+            DamlField.Create("quotaByParty", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadGenMap(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "quotaByParty"), context.Field("quotaByParty"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0))),
+            DamlField.Create("labelByRank", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadGenMap(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "labelByRank"), context.Field("labelByRank"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))),
+            DamlField.Create("rankOrLabel", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadEither(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "rankOrLabel"), context.Field("rankOrLabel"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0))),
+            DamlField.Create("noteOrRank", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadEither(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "noteOrRank"), context.Field("noteOrRank"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadOptional(__json0, __ctx0, (__json1, __ctx1) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json1, __ctx1)), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0))),
+            DamlField.Create("pair", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTuple2(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "pair"), context.Field("pair"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0))),
+            DamlField.Create("triple", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTuple3(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "triple"), context.Field("triple"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(__json0, __ctx0), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadBool(__json0, __ctx0))),
+            DamlField.Create("branch", Branch.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "branch"), context.Field("branch"))),
+            DamlField.Create("whole", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "whole"), context.Field("whole"))),
+            DamlField.Create("finest", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "finest"), context.Field("finest")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -227,7 +252,14 @@ public sealed partial record TypeCorners(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -238,8 +270,14 @@ public sealed partial record TypeCorners(
         Name = new ChoiceName("Rebox"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<TypeCorners>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Rebox.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<TypeCorners>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => TypeCorners.Rebox.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceRebox];
 
     /// <summary>Contract ID for TypeCorners.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -588,7 +626,15 @@ public static class TypeCornersNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, TypeCorners.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

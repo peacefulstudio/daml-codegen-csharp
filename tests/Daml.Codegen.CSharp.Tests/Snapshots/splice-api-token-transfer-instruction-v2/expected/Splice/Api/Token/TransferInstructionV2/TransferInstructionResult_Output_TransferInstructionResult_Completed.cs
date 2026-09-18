@@ -55,4 +55,14 @@ public sealed record TransferInstructionResult_Output_TransferInstructionResult_
         ReceiverHoldingCids: (IReadOnlyList<ContractId<global::Splice.Api.Token.HoldingV2.IHolding>>)record.GetRequiredField("receiverHoldingCids").As<DamlList>().Values.Select(x => new ContractId<global::Splice.Api.Token.HoldingV2.IHolding>(x.As<DamlContractId>().Value)).ToList()
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("receiverHoldingCids", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "receiverHoldingCids"), context.Field("receiverHoldingCids"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(__json0, __ctx0)))
+        );
+    }
+
 }

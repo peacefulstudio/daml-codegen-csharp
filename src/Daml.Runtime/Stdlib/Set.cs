@@ -65,7 +65,7 @@ public sealed record Set<T>
     /// </summary>
     public Set(IEnumerable<T> elements)
     {
-        Elements = EventCollections.Copy(elements, nameof(elements));
+        Elements = EventCollections.CopyRejectingNullElements(elements, nameof(elements), nameof(Set<T>));
     }
 
     /// <summary>The number of elements in the set.</summary>
@@ -215,7 +215,14 @@ internal sealed class SetJsonConverter<T> : JsonConverter<Set<T>>
             elements.Add(ReadElement(ref reader, elements.Count, options));
         }
 
-        return new Set<T>(elements);
+        try
+        {
+            return new Set<T>(elements);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new JsonException($"Invalid element in {TypeName}: {ex.Message}", ex);
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, Set<T> value, JsonSerializerOptions options)
@@ -231,28 +238,18 @@ internal sealed class SetJsonConverter<T> : JsonConverter<Set<T>>
 
     private static T ReadElement(ref Utf8JsonReader reader, int index, JsonSerializerOptions options)
     {
-        T? element;
         try
         {
-            element = JsonSerializer.Deserialize<T>(ref reader, options);
+            return JsonSerializer.Deserialize<T>(ref reader, options)!;
         }
         catch (Exception ex)
         {
             throw new JsonException($"Cannot read element {index} of {TypeName}: {ex.Message}", ex);
         }
-
-        return element ?? throw new JsonException(
-            $"Element {index} of {TypeName} is null; a {TypeName} holds no null elements.");
     }
 
     private static void WriteElement(Utf8JsonWriter writer, T element, int index, JsonSerializerOptions options)
     {
-        if (element is null)
-        {
-            throw new JsonException(
-                $"Element {index} of {TypeName} is null; a {TypeName} holds no null elements.");
-        }
-
         try
         {
             JsonSerializer.Serialize(writer, element, options);

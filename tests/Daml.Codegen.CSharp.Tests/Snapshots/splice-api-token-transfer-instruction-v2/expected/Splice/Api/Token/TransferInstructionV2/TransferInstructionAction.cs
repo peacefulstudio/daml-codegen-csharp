@@ -13,7 +13,7 @@ namespace Splice.Api.Token.TransferInstructionV2;
 /// <summary>
 /// Generated from Daml variant TransferInstructionAction
 /// </summary>
-public abstract record TransferInstructionAction : IDamlVariant
+public abstract record TransferInstructionAction : IDamlVariant<TransferInstructionAction>
 {
     /// <summary>Gets the variant constructor name.</summary>
     public abstract string Tag { get; }
@@ -31,6 +31,23 @@ public abstract record TransferInstructionAction : IDamlVariant
             "TIA_Custom" => new TIA_Custom(TransferInstructionAction_TIA_Custom.FromRecord(variant.Value.As<DamlRecord>())),
             _ => throw new ArgumentOutOfRangeException(nameof(variant), variant.Constructor, "Unknown TransferInstructionAction constructor")
         };
+
+    /// <summary>Decodes a Daml-LF JSON variant directly into a DamlVariant, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlVariant __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        var tag = global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadVariantTag(json, context);
+        return tag switch
+        {
+            "TIA_Accept" => DamlVariant.Create("TIA_Accept", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "TIA_Reject" => DamlVariant.Create("TIA_Reject", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "TIA_Withdraw" => DamlVariant.Create("TIA_Withdraw", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "TIA_Custom" => DamlVariant.Create("TIA_Custom", TransferInstructionAction_TIA_Custom.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            _ => throw global::Daml.Runtime.Serialization.DamlLfJsonDecoders.UnknownConstructor("variant constructor", tag, context, ExpectedConstructors)
+        };
+    }
+
+    private static readonly string[] ExpectedConstructors = ["TIA_Accept", "TIA_Reject", "TIA_Withdraw", "TIA_Custom"];
 
     /// <summary>TIA_Accept constructor (no arguments).</summary>
     public sealed record TIA_Accept() : TransferInstructionAction

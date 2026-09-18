@@ -1,8 +1,10 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using AwesomeAssertions;
 using Xunit;
 
@@ -41,6 +43,9 @@ public class ViewDescriptorTests
 
         public static TestHoldingView FromRecord(DamlRecord record) =>
             new(record.GetRequiredField("amount").As<DamlNumeric>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private static (Type Interface, Type View) InferredPair<TInterface, TView>(ViewDescriptor<TInterface, TView> descriptor)

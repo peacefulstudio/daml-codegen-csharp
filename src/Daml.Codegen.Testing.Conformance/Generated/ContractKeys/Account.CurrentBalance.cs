@@ -14,13 +14,21 @@ public sealed partial record Account
     /// <summary>
     /// Choice argument type for CurrentBalance.
     /// </summary>
-    public sealed record CurrentBalance : IDamlRecord
+    public sealed record CurrentBalance : IDamlRecord<CurrentBalance>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create();
 
         /// <summary>Creates an instance from a DamlRecord.</summary>
         public static CurrentBalance FromRecord(DamlRecord record) => new CurrentBalance();
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        }
 
     }
 }

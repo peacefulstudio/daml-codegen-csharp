@@ -96,6 +96,21 @@ public class ChoiceEmitterValueReturnExerciserTests
     }
 
     [Fact]
+    public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_wraps_ResultDecoder_in_a_CommittedUndecodable_guard()
+    {
+        var template = Template(
+            "Oracle",
+            Choice("GetTrailingTwap", new DamlPrimitiveType(DamlPrimitive.Unit), new DamlPrimitiveType(DamlPrimitive.Numeric)));
+
+        var output = EmitNonContract(template);
+
+        output.Should().Contain("var decoded = Oracle.ChoiceGetTrailingTwap.ResultDecoder!(exercised.ExerciseResult);");
+        output.Should().Contain("return new ExerciseOutcome<decimal>.One(decoded);");
+        output.Should().Contain("catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)");
+        output.Should().Contain("return new ExerciseOutcome<decimal>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);");
+    }
+
+    [Fact]
     public void ChoiceEmitterValueReturnExerciser_non_contract_exerciser_emits_async_wrapper_for_record_returning_choice()
     {
         var template = Template(

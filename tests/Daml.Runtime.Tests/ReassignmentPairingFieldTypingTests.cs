@@ -1,9 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -81,5 +83,8 @@ public class ReassignmentPairingFieldTypingTests
 
         public static TestTemplate FromRecord(DamlRecord record) =>
             new((record.GetField("owner") as DamlText)?.Value ?? string.Empty);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

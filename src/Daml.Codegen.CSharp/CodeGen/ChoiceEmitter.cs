@@ -33,10 +33,94 @@ internal sealed partial class ChoiceEmitter(
     /// </summary>
     internal void WriteChoiceDescriptors(IndentWriter indent, DamlTemplate template)
     {
+        var nestedArgTypeNames = GetNestedChoiceArgumentTypeNames(template.Choices);
         foreach (var choice in template.Choices)
         {
-            WriteChoiceMethod(indent, choice);
+            WriteChoiceMethod(indent, choice, nestedArgTypeNames);
         }
+    }
+
+    /// <summary>
+    /// The sanitized names of every same-package record argument that <see cref="GetChoiceArgumentInfo"/>
+    /// resolves to a nested type emitted inside the enclosing template partial (see
+    /// <c>CSharpCodeGenerator.GenerateNestedChoiceArgumentType</c>), across the given choice set. A
+    /// runtime/BCL simple name equal to one of these is shadowed by that sibling nested record no
+    /// matter which choice's descriptor references it, so <see cref="TypeReferenceQualifier.Qualify"/> —
+    /// scoped to the module, not the template — cannot see the collision; callers must root-qualify
+    /// the reference themselves when it is a member of this set.
+    ///
+    /// Template-only: <see cref="GetChoiceArgumentInfo"/> classifies only the argument shapes a
+    /// template choice can have (a same-package record reference, <c>Unit</c>, or a resolvable
+    /// external type reference) and throws for anything else. Interface choices resolve through
+    /// <c>ResolveInterfaceChoiceArgType</c> instead, which accepts any <see cref="DamlType"/> — so
+    /// callers must never call this over interface choices.
+    /// </summary>
+    internal IReadOnlySet<string> GetNestedChoiceArgumentTypeNames(IReadOnlyList<DamlChoice> choices) =>
+        choices
+            .Select(choice => GetChoiceArgumentInfo(choice, context.DataTypes))
+            .Where(info => info.IsNestedTemplateArg)
+            .Select(info => info.TypeName)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Emits the static <c>IHasChoices&lt;TSelf&gt;.Choices</c> witness aggregating the
+    /// <c>Choice{X}</c> descriptor properties already written for <paramref name="choices"/> —
+    /// shared between templates (see <see cref="WriteChoiceDescriptors"/>) and interface
+    /// markers (see <see cref="WriteInterfaceChoiceDescriptors"/>), since both emit the same
+    /// per-choice descriptor shape and therefore the same aggregate.
+    /// </summary>
+    /// <param name="indent">The writer to append to.</param>
+    /// <param name="choices">The choices to aggregate, in declaration order.</param>
+    /// <param name="explicitInterfaceOwner">
+    /// When this witness is emitted inside an interface marker declaring
+    /// <c>IHasChoices&lt;TSelf&gt;</c> for itself, the marker's own name (<c>TSelf</c>); the
+    /// property is then emitted as an explicit interface implementation, because a plain
+    /// <c>public static</c> member on the interface only <em>hides</em> the inherited static
+    /// abstract requirement (CS0108) rather than implementing it, which leaves the interface
+    /// without a most-specific implementation and makes it unusable as a type argument
+    /// (CS8920) — concrete types (templates) implementing <c>IHasChoices&lt;TSelf&gt;</c> for
+    /// themselves are unaffected and keep the plain <c>public static</c> form (pass
+    /// <see langword="null"/>, the default).
+    /// </param>
+    /// <param name="nestedArgTypeNames">
+    /// The names <see cref="GetNestedChoiceArgumentTypeNames"/> resolved for these choices, so the
+    /// witness's <c>IReadOnlyList</c>/<c>IChoice</c> references can be root-qualified against a
+    /// colliding nested choice-argument type. Template callers pass their resolved set; interface
+    /// callers omit it (<see langword="null"/>, the default) — interface choices never contribute
+    /// nested argument types, and <see cref="GetChoiceArgumentInfo"/> is not valid over them (see
+    /// <see cref="GetNestedChoiceArgumentTypeNames"/>).
+    /// </param>
+    internal void WriteChoicesAggregateProperty(
+        IndentWriter indent,
+        IReadOnlyList<DamlChoice> choices,
+        string? explicitInterfaceOwner = null,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
+    {
+        indent.Require("System.Collections.Generic");
+        indent.Require(RuntimeNamespaces.Commands);
+
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>Gets the choice descriptors declared by this type.</summary>");
+        }
+
+        var choiceRefs = string.Join(", ", choices.Select(choice => $"Choice{SanitizeIdentifier(choice.Name)}"));
+        nestedArgTypeNames ??= new HashSet<string>(StringComparer.Ordinal);
+        var choiceListHead = nestedArgTypeNames.Contains("IReadOnlyList")
+            ? Identifiers.GlobalQualified("System.Collections.Generic", "IReadOnlyList")
+            : context.Qualifier.Qualify("IReadOnlyList");
+        var choiceListType = nestedArgTypeNames.Contains(RuntimeTypeNames.IChoice)
+            ? Identifiers.GlobalQualified(RuntimeNamespaces.Commands, RuntimeTypeNames.IChoice)
+            : context.Qualifier.Qualify(RuntimeTypeNames.IChoice);
+        var hasChoicesRef = nestedArgTypeNames.Contains(RuntimeTypeNames.IHasChoices)
+            ? Identifiers.GlobalQualified(RuntimeNamespaces.Contracts, RuntimeTypeNames.IHasChoices)
+            : context.Qualifier.Qualify(RuntimeTypeNames.IHasChoices);
+        var modifier = explicitInterfaceOwner is null ? "public static" : "static";
+        var memberName = explicitInterfaceOwner is null
+            ? "Choices"
+            : $"{hasChoicesRef}<{explicitInterfaceOwner}>.Choices";
+        indent.AppendLine($"{modifier} {choiceListHead}<{choiceListType}> {memberName} {{ get; }} = [{choiceRefs}];");
+        indent.AppendLine();
     }
 
     /// <summary>
@@ -78,7 +162,7 @@ internal sealed partial class ChoiceEmitter(
             + $"'{SanitizeIdentifier(choice.Name)}Arg' stub record into generated code.");
     }
 
-    private void WriteChoiceMethod(IndentWriter indent, DamlChoice choice)
+    private void WriteChoiceMethod(IndentWriter indent, DamlChoice choice, IReadOnlySet<string> nestedArgTypeNames)
     {
         var dataTypes = context.DataTypes;
         var choiceName = SanitizeIdentifier(choice.Name);
@@ -107,14 +191,23 @@ internal sealed partial class ChoiceEmitter(
 
         if (argument.HasArgument)
         {
+            var damlRecordRef = nestedArgTypeNames.Contains(RuntimeTypeNames.DamlRecord)
+                ? Identifiers.GlobalQualified(RuntimeNamespaces.Data, RuntimeTypeNames.DamlRecord)
+                : context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord);
             indent.AppendLine("ArgumentEncoder = arg => arg.ToRecord(),");
+            indent.AppendLine($"ArgumentDecoder = val => {argTypeRef}.FromRecord(val.As<{damlRecordRef}>()),");
+            WriteResultDecoder(indent, choice.ReturnType, returnType, nestedArgTypeNames: nestedArgTypeNames);
+            WriteJsonReaderProperty(indent, "ArgumentJsonReader", choice.ArgumentType, nestedArgTypeNames: nestedArgTypeNames);
         }
         else
         {
             indent.AppendLine($"ArgumentEncoder = _ => {EmptyArgumentExpression(choice)},");
+            WriteEmptyArgumentDecoder(indent, choice);
+            WriteResultDecoder(indent, choice.ReturnType, returnType, nestedArgTypeNames: nestedArgTypeNames);
+            WriteEmptyArgumentJsonReader(indent, choice);
         }
 
-        WriteResultDecoder(indent, choice.ReturnType, returnType);
+        WriteJsonReaderProperty(indent, "ResultJsonReader", choice.ReturnType, nestedArgTypeNames: nestedArgTypeNames);
 
         indent.Dedent();
         indent.AppendLine("};");
@@ -130,21 +223,39 @@ internal sealed partial class ChoiceEmitter(
     /// simple name and would route an enum return through a record cast whenever a same-named
     /// record existed in another module of the same package.
     /// </remarks>
-    private void WriteResultDecoder(IndentWriter indent, DamlType returnType, string csharpReturnType)
+    private void WriteResultDecoder(
+        IndentWriter indent,
+        DamlType returnType,
+        string csharpReturnType,
+        DamlTypeMapper? mapperOverride = null,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
     {
+        var activeMapper = mapperOverride ?? mapper;
         switch (returnType)
         {
             case DamlPrimitiveType { Primitive: DamlPrimitive.Unit }:
-                indent.AppendLine($"ResultDecoder = _ => {context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance");
+                indent.AppendLine($"ResultDecoder = _ => {context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance,");
                 return;
             case DamlTypeApp { Base: DamlPrimitiveType { Primitive: DamlPrimitive.ContractId }, Arguments: [var arg] }:
-                var contractType = mapper.MapType(arg);
-                indent.AppendLine($"ResultDecoder = val => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{contractType}>(val.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlContractId)}>().Value)");
+                var contractType = activeMapper.MapType(arg);
+                indent.AppendLine($"ResultDecoder = val => new {context.Qualifier.Qualify(RuntimeTypeNames.ContractId)}<{contractType}>(val.As<{context.Qualifier.Qualify(RuntimeTypeNames.DamlContractId)}>().Value),");
                 return;
         }
 
-        var expr = mapper.FromValue(returnType, "val");
-        indent.AppendLine($"ResultDecoder = val => {expr}");
+        var expr = activeMapper.FromValue(returnType, "val", nestedArgTypeNames: nestedArgTypeNames);
+        indent.AppendLine($"ResultDecoder = val => {expr},");
+    }
+
+    private void WriteJsonReaderProperty(
+        IndentWriter indent,
+        string memberName,
+        DamlType type,
+        DamlTypeMapper? mapperOverride = null,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
+    {
+        var activeMapper = mapperOverride ?? mapper;
+        var jsonExpr = activeMapper.FromJson(type, "json", "context", nestedArgTypeNames);
+        indent.AppendLine($"{memberName} = (json, context) => {jsonExpr},");
     }
 
     private ChoiceSubmitterParameter SubmitterInfoParameter() => new(
@@ -170,6 +281,68 @@ internal sealed partial class ChoiceEmitter(
         IsSyntheticArchive(choice)
             ? $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create()"
             : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit)}.Instance";
+
+    /// <summary>
+    /// Emits the <c>ArgumentDecoder</c> for an argument-less choice, validating the
+    /// decoded <see cref="global::Daml.Runtime.Data.DamlValue"/> against the shape
+    /// <see cref="EmptyArgumentExpression"/> encodes instead of unconditionally
+    /// returning the <c>DamlUnit</c> singleton: a genuine <c>Unit</c>-argument choice
+    /// must decode from a <c>DamlUnit</c>, while <see cref="IsSyntheticArchive"/>'s
+    /// empty-record shape must decode from a fields-empty <c>DamlRecord</c>. Guards
+    /// <see cref="global::Daml.Runtime.Commands.IChoice.DecodeArgument"/> against
+    /// silently accepting a <c>DamlValue</c> that does not match the choice's actual
+    /// wire shape. Both branches throw <c>InvalidOperationException</c> on a mismatch,
+    /// rather than letting the <c>DamlUnit</c> branch fall through to <c>DamlValue.As</c>'s
+    /// own <c>InvalidCastException</c>, so callers of <c>IChoice.DecodeArgument</c> have a
+    /// single exception type to catch regardless of which branch a choice takes.
+    /// </summary>
+    private void WriteEmptyArgumentDecoder(IndentWriter indent, DamlChoice choice)
+    {
+        var damlUnitRef = context.Qualifier.Qualify(RuntimeTypeNames.DamlUnit);
+        if (IsSyntheticArchive(choice))
+        {
+            var damlRecordRef = context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord);
+            indent.AppendLine(
+                $"ArgumentDecoder = val => val is {damlRecordRef} {{ Fields.Count: 0 }} ? {damlUnitRef}.Instance : "
+                + $"throw new global::System.InvalidOperationException(\"Choice '{choice.Name}' argument must decode to an empty record.\"),");
+        }
+        else
+        {
+            indent.AppendLine(
+                $"ArgumentDecoder = val => val is {damlUnitRef} u ? u : "
+                + $"throw new global::System.InvalidOperationException(\"Choice '{choice.Name}' argument must decode to DamlUnit.\"),");
+        }
+    }
+
+    private void WriteEmptyArgumentJsonReader(IndentWriter indent, DamlChoice choice)
+    {
+        if (IsSyntheticArchive(choice))
+        {
+            WriteSyntheticArchiveArgumentJsonReader(indent, choice);
+        }
+        else
+        {
+            WriteUnitArgumentJsonReader(indent);
+        }
+    }
+
+    private void WriteSyntheticArchiveArgumentJsonReader(IndentWriter indent, DamlChoice choice)
+    {
+        var requireObject = $"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.RequireObject(json, context)";
+        indent.AppendLine("ArgumentJsonReader = (json, context) =>");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine($"{requireObject};");
+        indent.AppendLine($"return {EmptyArgumentExpression(choice)};");
+        indent.Dedent();
+        indent.AppendLine("},");
+    }
+
+    private static void WriteUnitArgumentJsonReader(IndentWriter indent)
+    {
+        var readUnit = $"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.ReadUnit(json, context)";
+        indent.AppendLine($"ArgumentJsonReader = (json, context) => {readUnit},");
+    }
 
     /// <summary>
     /// Emits the <c>&lt;Choice&gt;Command(this ContractId&lt;TemplateName&gt; contractId, ...)</c>

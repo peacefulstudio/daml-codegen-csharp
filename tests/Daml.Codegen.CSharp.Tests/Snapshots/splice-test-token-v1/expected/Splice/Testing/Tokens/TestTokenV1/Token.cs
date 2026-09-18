@@ -13,6 +13,7 @@ using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,19 +24,19 @@ namespace Splice.Testing.Tokens.TestTokenV1;
 /// </summary>
 public sealed partial record Token(
     [property: DamlFieldAttribute("holding")] global::Splice.Api.Token.HoldingV1.HoldingView Holding
-) : ITemplate, IImplements<global::Splice.Api.Token.HoldingV1.IHolding>, IDamlRecord<Token>
+) : ITemplate, IImplements<global::Splice.Api.Token.HoldingV1.IHolding>, IHasChoices<Token>, IDamlRecord<Token>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("aaa0b576b5a3db49b3a4f7a4710fe6f8ae462aabbde4da89f639eb87fd62e90c", "Splice.Testing.Tokens.TestTokenV1", "Token");
+    public static Identifier TemplateId { get; } = new("da294b5651ed00af8565fd31351d0c1d8778f10393d250e32c9844311f681436", "Splice.Testing.Tokens.TestTokenV1", "Token");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "aaa0b576b5a3db49b3a4f7a4710fe6f8ae462aabbde4da89f639eb87fd62e90c";
+    public static string PackageId => "da294b5651ed00af8565fd31351d0c1d8778f10393d250e32c9844311f681436";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "splice-test-token-v1";
 
     /// <summary>Gets the package version.</summary>
-    public static Version PackageVersion { get; } = new(1, 0, 0);
+    public static Version PackageVersion { get; } = new(1, 0, 1);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
@@ -50,6 +51,16 @@ public sealed partial record Token(
         Holding: global::Splice.Api.Token.HoldingV1.HoldingView.FromRecord(record.GetRequiredField("holding").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("holding", global::Splice.Api.Token.HoldingV1.HoldingView.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "holding"), context.Field("holding")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -59,8 +70,18 @@ public sealed partial record Token(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive];
 
     /// <summary>Contract ID for Token.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -178,7 +199,15 @@ public static class TokenNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Token.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

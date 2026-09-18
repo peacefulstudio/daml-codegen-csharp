@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Daml.Ledger.Abstractions.Extensions;
 using Daml.Ledger.Abstractions.Testing.Conformance;
 using Daml.Runtime;
@@ -9,6 +10,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -200,6 +202,17 @@ public class LedgerClientExtensionsTests
     public async Task ExerciseAsync_void_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_Many()
     {
         ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.Many(["cid-1", "cid-2"]));
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_does_not_throw_when_TrySubmitAndWaitForTransactionAsync_returns_CommittedUndecodable()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.CommittedUndecodable(
+            "u1", "could not decode result", new InvalidOperationException("decode failed")));
 
         Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -450,6 +463,35 @@ public class LedgerClientExtensionsTests
     }
 
     [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_carrying_the_CommittedUndecodable_outcome()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.InnerException.Should().BeSameAs(sourceException);
+        exception.UpdateId.Should().Be("u1");
+        exception.Message.Should().Contain("u1").And.Contain("could not decode result");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_a_null_update_id_when_the_decode_failure_precedes_it()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.CommittedUndecodable(
+            null, "could not decode result", sourceException));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.UpdateId.Should().BeNull();
+        exception.Message.Should().Contain("unknown").And.Contain("could not decode result");
+    }
+
+    [Fact]
     public async Task ExerciseAsync_throws_LedgerOperationException_without_error_detail_for_None_and_Many()
     {
         ILedgerClient noneClient = new StubLedgerClient(new ExerciseOutcome<int>.None());
@@ -464,6 +506,128 @@ public class LedgerClientExtensionsTests
         noneException.StatusCode.Should().BeNull();
         manyException.Category.Should().BeNull();
         manyException.StatusCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Committed_for_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.None());
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Committed,
+            "None means the command committed but produced no transaction; a caller reading "
+            + "CommitState as NotCommitted here would risk resubmitting already-accepted work");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Committed_for_Many()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.Many(["cid-1", "cid-2"]));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Committed,
+            "Many means the command committed but produced more than one transaction; a caller "
+            + "reading CommitState as NotCommitted here would risk resubmitting already-accepted work");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_NotCommitted_for_DamlError()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.InvalidGivenCurrentSystemStateResourceMissing,
+            "CONTRACT_NOT_FOUND",
+            "Contract not found",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(CommitState.NotCommitted);
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Unknown_for_DamlError_DeadlineExceededRequestStateUnknown()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.DeadlineExceededRequestStateUnknown,
+            "REQUEST_TIME_OUT",
+            "Deadline exceeded",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "the ledger itself reported that the outcome of the request is unknown, so a caller "
+            + "must retry only with the same command id");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Unknown_for_DamlError_UnknownCategory()
+    {
+        var outcome = new ExerciseOutcome<int>.DamlError(
+            DamlErrorCategory.Unknown,
+            "SOME_ERROR_ID",
+            "Unclassified error",
+            new Dictionary<string, string>());
+        ILedgerClient client = new StubLedgerClient(outcome);
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "the transport could not classify the category, so it might have been "
+            + "DeadlineExceededRequestStateUnknown, and a caller must retry only with the same command id");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Unknown_for_InfraError()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.InfraError(14, "Connection reset"));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Unknown,
+            "the transport failure happened after the command was sent, so the ledger may already "
+            + "have committed it");
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_throws_LedgerOperationException_with_CommitState_Committed_for_CommittedUndecodable()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<int>.CommittedUndecodable(
+            "u1", "could not decode result", new InvalidOperationException("decode failed")));
+
+        Func<Task> act = () => client.ExerciseAsync<int>(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(CommitState.Committed);
+    }
+
+    [Fact]
+    public async Task ExerciseAsync_void_throws_LedgerOperationException_with_CommitState_Committed_for_None()
+    {
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.None());
+
+        Func<Task> act = () => client.ExerciseAsync(SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
+        exception.CommitState.Should().Be(
+            CommitState.Committed,
+            "the void ExerciseAsync path constructs its own LedgerOperationException for None, "
+            + "separately from the typed ResultOrThrow path");
     }
 
     [Fact]
@@ -494,6 +658,7 @@ public class LedgerClientExtensionsTests
         var exception = (await act.Should().ThrowAsync<LedgerOperationException>()).Which;
         exception.StatusCode.Should().Be(4);
         exception.InnerException.Should().BeSameAs(sourceException);
+        exception.CommitState.Should().Be(CommitState.Unknown);
     }
 
     [Fact]
@@ -593,6 +758,22 @@ public class LedgerClientExtensionsTests
                 DamlErrorCategory.InvalidIndependentOfSystemState,
                 "remapping the outcome onto the created contract id without forwarding the category silently " +
                 "discards a classification the transport determined without a structured Canton error to carry it");
+    }
+
+    [Fact]
+    public async Task TryCreateOneByExerciseAsync_propagates_CommittedUndecodable()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        ILedgerClient client = new StubLedgerClient(new ExerciseOutcome<TransactionResult>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException));
+
+        var result = await client.TryCreateOneByExerciseAsync<SampleTemplate>(
+            SampleCommand, new Party("alice"), cancellationToken: TestContext.Current.CancellationToken);
+
+        var remapped = result.Should().BeOfType<ExerciseOutcome<ContractId<SampleTemplate>>.CommittedUndecodable>().Subject;
+        remapped.UpdateId.Should().Be("u1");
+        remapped.Message.Should().Be("could not decode result");
+        remapped.SourceException.Should().BeSameAs(sourceException);
     }
 
     [Fact]
@@ -988,4 +1169,6 @@ internal sealed record SampleView : IDamlRecord<SampleView>
 {
     public DamlRecord ToRecord() => DamlRecord.Create();
     public static SampleView FromRecord(DamlRecord record) => new();
+    public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+        throw new NotSupportedException();
 }
