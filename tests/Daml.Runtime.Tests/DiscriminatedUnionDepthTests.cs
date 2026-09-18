@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text;
 using System.Text.Json;
 using Daml.Runtime.Stdlib;
 using AwesomeAssertions;
@@ -19,9 +20,8 @@ public class DiscriminatedUnionDepthTests
     private const int ExplicitMaxDepth = 8;
 
     private static readonly JsonSerializerOptions ExplicitSmallMaxDepthOptions = new() { MaxDepth = ExplicitMaxDepth };
-    private static readonly JsonSerializerOptions ExplicitLargeMaxDepthOptions =
-        new() { MaxDepth = NestingLevelsPastDefaultMaxDepth + 10 };
-    private static readonly JsonSerializerOptions HonouredDeeperMaxDepthOptions = new() { MaxDepth = 200 };
+    private static readonly JsonSerializerOptions MaxDepthAboveTheSafetyCeilingOptions = new() { MaxDepth = 40 };
+    private static readonly JsonSerializerOptions MaxDepthWellAboveTheSafetyCeilingOptions = new() { MaxDepth = 200 };
 
     private static (object Value, Type DeclaredType) BuildNestedOptional(int levels)
     {
@@ -36,6 +36,23 @@ public class DiscriminatedUnionDepthTests
         }
 
         return (value, declaredType);
+    }
+
+    private static string BuildNestedOptionalJson(int levels)
+    {
+        var json = new StringBuilder();
+        for (var i = 0; i < levels; i++)
+        {
+            json.Append("{\"$case\":\"Some\",\"Value\":");
+        }
+
+        json.Append('1');
+        for (var i = 0; i < levels; i++)
+        {
+            json.Append('}');
+        }
+
+        return json.ToString();
     }
 
     private sealed record Layer<T>(T Next);
@@ -81,18 +98,18 @@ public class DiscriminatedUnionDepthTests
     }
 
     [Fact]
-    public void Optional_write_refuses_to_exceed_the_default_MaxDepth_instead_of_risking_a_stack_overflow()
+    public void Optional_write_refuses_to_exceed_its_hardcoded_safety_ceiling_well_short_of_the_documented_default_MaxDepth()
     {
         var (value, declaredType) = BuildNestedOptional(NestingLevelsPastDefaultMaxDepth);
 
         var act = () => JsonSerializer.Serialize(value, declaredType);
 
-        act.Should().Throw<JsonException>().WithMessage("*exceeded the maximum union nesting depth of 64*", because:
-            "System.Text.Json.SerializeToNode starts a fresh serialization per arm, so its own "
-            + "MaxDepth check only runs once the whole nested node tree is already built in memory — "
-            + "deep enough nesting can exhaust the real call stack before that check ever executes; "
-            + "DiscriminatedUnionJson's own re-entrant counter must catch it first, well short of "
-            + "that danger zone, at System.Text.Json's own default MaxDepth of 64");
+        act.Should().Throw<JsonException>().WithMessage("*exceeded the maximum union nesting depth of 20*", because:
+            "a macos-amd64 CI run of this exact path (daml-codegen-csharp workflow run 35363419884, "
+            + "job 105660005803) crashed the test host with an uncaught native stack overflow before "
+            + "the counted depth ever reached System.Text.Json's own documented MaxDepth default of "
+            + "64, so Write now also enforces a fixed, platform-independent safety ceiling of 20 - "
+            + "chosen with real margin below 64 - well short of where that crash was observed");
     }
 
     [Fact]
@@ -104,27 +121,45 @@ public class DiscriminatedUnionDepthTests
 
         act.Should().Throw<JsonException>().WithMessage("*exceeded the maximum union nesting depth of 8*", because:
             "Write must honour a caller-supplied JsonSerializerOptions.MaxDepth exactly as it honours "
-            + "System.Text.Json's own default, not only the default itself");
+            + "System.Text.Json's own default, not only the default itself, whenever that configured "
+            + "value is still below the hardcoded safety ceiling");
     }
 
     [Fact]
-    public void Optional_write_honours_a_caller_supplied_MaxDepth_deeper_than_its_own_default_instead_of_capping_at_it()
+    public void Optional_write_caps_at_its_hardcoded_safety_ceiling_even_when_the_caller_configures_a_MaxDepth_between_the_ceiling_and_the_documented_default()
+    {
+        var (value, declaredType) = BuildNestedOptional(30);
+
+        var act = () => JsonSerializer.Serialize(value, declaredType, MaxDepthAboveTheSafetyCeilingOptions);
+
+        act.Should().Throw<JsonException>().WithMessage("*exceeded the maximum union nesting depth of 20*", because:
+            "MaxDepthAboveTheSafetyCeilingOptions configures MaxDepth = 40, above the hardcoded safety "
+            + "ceiling of 20 but below the documented default of 64; the depth actually enforced is "
+            + "Math.Min(configuredMaxDepth, 20), so this still refuses at 20, not 40 or 64 - the real "
+            + "per-level native stack cost that motivates the ceiling does not shrink just because the "
+            + "caller configured a larger MaxDepth");
+    }
+
+    [Fact]
+    public void Optional_write_still_caps_at_its_hardcoded_safety_ceiling_even_when_the_caller_configures_a_much_larger_MaxDepth()
     {
         var (value, declaredType) = BuildNestedOptional(100);
 
-        var act = () => JsonSerializer.Serialize(value, declaredType, HonouredDeeperMaxDepthOptions);
+        var act = () => JsonSerializer.Serialize(value, declaredType, MaxDepthWellAboveTheSafetyCeilingOptions);
 
-        act.Should().NotThrow(because:
-            "a caller who raises JsonSerializerOptions.MaxDepth past its default of 64 opts into deeper "
-            + "recursion exactly as System.Text.Json itself allows; Write must not silently cap at 64 "
-            + "regardless of what the caller asked for");
+        act.Should().Throw<JsonException>().WithMessage("*exceeded the maximum union nesting depth of 20*", because:
+            "a caller who raises JsonSerializerOptions.MaxDepth no longer opts into deeper recursion "
+            + "on this specific write path once the configured value is above the hardcoded safety "
+            + "ceiling of 20: unlike System.Text.Json's own MaxDepth, this ceiling exists because of a "
+            + "proven, platform-specific native stack-overflow failure mode that a larger "
+            + "counted-depth budget does not fix");
     }
 
     [Fact]
     public void Optional_read_relies_on_System_Text_Json_own_reader_depth_guard_past_the_default_MaxDepth()
     {
-        var (value, declaredType) = BuildNestedOptional(NestingLevelsPastDefaultMaxDepth);
-        var json = JsonSerializer.Serialize(value, declaredType, ExplicitLargeMaxDepthOptions);
+        var (_, declaredType) = BuildNestedOptional(NestingLevelsPastDefaultMaxDepth);
+        var json = BuildNestedOptionalJson(NestingLevelsPastDefaultMaxDepth);
 
         var act = () => JsonSerializer.Deserialize(json, declaredType);
 
@@ -132,7 +167,10 @@ public class DiscriminatedUnionDepthTests
             "DiscriminatedUnionJson.Read has no depth guard of its own — JsonDocument.ParseValue(ref "
             + "reader) continues the ambient Utf8JsonReader's own token-depth tracking, so System.Text."
             + "Json's own reader depth guard (threaded from JsonSerializerOptions.MaxDepth, default 64) "
-            + "already throws before any of this type's code runs");
+            + "already throws before any of this type's code runs; the JSON text here is built "
+            + "directly rather than through DiscriminatedUnionJson.Write, since Write's own hardcoded "
+            + "safety ceiling of 20 would otherwise refuse to produce JSON nested this deep in the "
+            + "first place");
     }
 
     [Fact]

@@ -83,15 +83,34 @@ internal interface IDiscriminatedUnionJsonConverterFactory;
 /// layers-included depth had already reached it. <see cref="Write{TUnion}"/> fails with a
 /// <see cref="JsonException"/> once this effective depth reaches the caller's own
 /// <see cref="JsonSerializerOptions.MaxDepth"/> — or <see cref="DefaultMaxDepth"/> when unset,
-/// mirroring <see cref="JsonSerializerOptions.MaxDepth"/>'s own default of 64 — never a lower,
-/// hardcoded cap, so a caller who raises <see cref="JsonSerializerOptions.MaxDepth"/> opts into deeper
-/// recursion exactly as System.Text.Json itself allows. The real native call-stack cost of each
-/// counted level is itself platform- and JIT-dependent — the same counted depth can leave a
-/// different amount of real stack headroom on different targets — so <see cref="Write{TUnion}"/>
-/// also fails the same way, before recursing further, whenever
+/// mirroring <see cref="JsonSerializerOptions.MaxDepth"/>'s own default of 64. The real native
+/// call-stack cost of each counted level is itself platform- and JIT-dependent — the same counted
+/// depth can leave a different amount of real stack headroom on different targets — so
+/// <see cref="Write{TUnion}"/> also fails the same way, before recursing further, whenever
 /// <see cref="RuntimeHelpers.TryEnsureSufficientExecutionStack"/> reports the remaining call stack
 /// is running low, even short of the counted depth above, rather than let a platform's own stack
 /// budget be what decides whether this throws a <see cref="JsonException"/> or crashes the process.
+/// </para>
+/// <para>
+/// Neither of those alone was enough in practice: a macos-amd64 CI run of exactly this path
+/// (<c>daml-codegen-csharp</c> workflow run 35363419884, job 105660005803) crashed the test host
+/// with an uncaught native stack overflow — process exit code 7, not the intended
+/// <see cref="JsonException"/> — before either the counter or
+/// <see cref="RuntimeHelpers.TryEnsureSufficientExecutionStack"/> tripped. Each counted level
+/// re-enters <see cref="JsonSerializer"/> through roughly eight native frames (the
+/// <c>Optional</c> wrapper → its <see cref="JsonConverter{T}"/>.TryWrite → the object converter →
+/// <c>JsonTypeInfo</c>.Serialize → <c>WriteNodeAsObject</c>), and that platform's real per-level
+/// cost through this chain outran both guards' margins well before the counted default of 64.
+/// <see cref="Write{TUnion}"/> therefore also enforces <see cref="MaxSafeWriteDepth"/>: a fixed,
+/// platform-independent ceiling chosen with real margin below <see cref="DefaultMaxDepth"/>. The
+/// depth actually enforced is <c>Math.Min(callerOrDefaultMaxDepth, MaxSafeWriteDepth)</c>, so a
+/// caller-configured <see cref="JsonSerializerOptions.MaxDepth"/> smaller than
+/// <see cref="MaxSafeWriteDepth"/> is still honoured exactly as before, but one larger than it no
+/// longer opts into recursion deeper than <see cref="MaxSafeWriteDepth"/> on this write path — the
+/// real per-level native stack cost that crashed CI does not shrink just because the caller asked
+/// for a larger counted-depth budget, so unlike <see cref="JsonSerializerOptions.MaxDepth"/> itself,
+/// this internal safety ceiling is a hardcoded cap that a caller cannot opt out of by raising
+/// <see cref="JsonSerializerOptions.MaxDepth"/>.
 /// </para>
 /// <para>
 /// <see cref="Write{TUnion}"/> serializes the chosen arm — <c>value</c>'s own runtime type, e.g.
@@ -128,6 +147,14 @@ internal static class DiscriminatedUnionJson
 {
     internal const string CaseProperty = "$case";
     private const int DefaultMaxDepth = 64;
+
+    /// <summary>
+    /// Fixed, platform-independent ceiling on <see cref="Write{TUnion}"/>'s own effective
+    /// nesting-depth counter — see <see cref="Write{TUnion}"/>'s remarks for why a caller-configured
+    /// <see cref="JsonSerializerOptions.MaxDepth"/> above this value no longer raises the depth this
+    /// write path will actually recurse to.
+    /// </summary>
+    private const int MaxSafeWriteDepth = 20;
 
     [ThreadStatic]
     private static int t_depthBaseline;
@@ -186,7 +213,8 @@ internal static class DiscriminatedUnionJson
 
         var armType = value.GetType();
 
-        var maxDepth = EffectiveMaxDepth(options);
+        var configuredMaxDepth = EffectiveMaxDepth(options);
+        var maxDepth = Math.Min(configuredMaxDepth, MaxSafeWriteDepth);
         var effectiveDepth = t_depthBaseline + writer.CurrentDepth;
         if (effectiveDepth >= maxDepth || !RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
@@ -199,7 +227,12 @@ internal static class DiscriminatedUnionJson
                 + "varies by platform and JIT, so this also refuses once the remaining call stack itself "
                 + "is running low, even short of the counted depth above, rather than let a "
                 + "platform-specific stack budget be the thing that decides whether this throws a "
-                + "JsonException or crashes the process.");
+                + "JsonException or crashes the process. The depth enforced here is "
+                + $"Math.Min({configuredMaxDepth}, {MaxSafeWriteDepth}) — the smaller of the caller's "
+                + "own configured (or default) JsonSerializerOptions.MaxDepth and a fixed internal "
+                + "safety ceiling that a caller cannot raise past, because the real per-level native "
+                + "stack cost that motivates this ceiling does not shrink just because MaxDepth was "
+                + "raised.");
         }
 
         var previousDepthBaseline = t_depthBaseline;
