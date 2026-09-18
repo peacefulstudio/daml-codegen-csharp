@@ -94,6 +94,14 @@ because they are versioned in lockstep:
 - Fix `RelTime` field metadata, nullable annotations on erased choice descriptors, and
   empty top-level list and map decoding through the retained reflection reader.
 
+### Known Issues
+
+- On macOS x64 (`osx-x64`) only, writing a deeply-nested `Optional`, `Either`, or
+  contract/interface stream-union value through `DiscriminatedUnionJson` can overflow the
+  real call stack before its own `MaxDepth` guard trips, instead of raising the expected
+  `JsonException`. Every other supported platform/architecture is unaffected. Tracked
+  internally for a fix in the next preview release.
+
 ## [0.5.0-preview.2] — 2026-09-08
 
 ### Changed — BREAKING
