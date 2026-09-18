@@ -109,7 +109,11 @@ public interface ILedgerWriter
     /// callers <c>switch</c> on the outcome instead of catching exceptions. Use the
     /// <see cref="TransactionResultExtensions"/> helpers (<c>Single&lt;T&gt;</c>,
     /// <c>TrySingle&lt;T&gt;</c>, <c>All&lt;T&gt;</c>) on the success payload to project
-    /// created contracts to typed <see cref="ContractId{T}"/> values.
+    /// created contracts to typed <see cref="ContractId{T}"/> values. A successful result
+    /// must also include <see cref="TransactionResult.ExercisedEvents"/> with the exercise
+    /// argument and result values, including nonconsuming exercises. Generated interface-choice
+    /// wrappers use those events to decode the choice's declared result; implementations must
+    /// request the transaction details needed to preserve them.
     /// </summary>
     /// <param name="submission">The commands submission.</param>
     /// <param name="submitter">

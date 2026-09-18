@@ -75,25 +75,50 @@ public class ChoiceEmitterInterfaceExtensionTests
             Choice("Freeze", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain("public static class IAssetExtensions");
-        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
-        output.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> FreezeAsync(");
+        output.Should().Contain("public static async Task<ExerciseOutcome<Unit>> TransferAsync(");
+        output.Should().Contain("public static async Task<ExerciseOutcome<Unit>> FreezeAsync(");
         output.Should().Contain("this ContractId<IAsset> contractId,");
     }
 
     [Fact]
-    public void ChoiceEmitterInterfaceExtension_returns_the_submission_task_without_awaiting_it()
+    public void ChoiceEmitterInterfaceExtension_async_method_awaits_the_submission_and_projects_the_committed_result()
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         output.Should().Contain(
-            "public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(\n"
+            "public static async Task<ExerciseOutcome<Unit>> TransferAsync(\n"
             + "        this ContractId<IAsset> contractId,\n"
             + "        ILedgerWriter client,\n"
             + "        SubmitterInfo submitter,");
-        output.Should().Contain("return client." + TrySubmitSingleArgumentOrder + ";");
-        output.Should().NotContain(
-            "public static async Task<ExerciseOutcome<TransactionResult>> TransferAsync(",
-            "awaiting the submission would force the exerciser to be declared async, and scoping the check to that declaration keeps an unrelated emitted member — or the word appearing in a doc comment — from failing this test");
+        output.Should().Contain("var outcome = await client." + TrySubmitSingleArgumentOrder + ".ConfigureAwait(false);");
+        output.Should().Contain("return outcome.ProjectCommitted(tx => ProjectTransferResult(tx, contractId.Value));");
+    }
+
+    [Fact]
+    public void ChoiceEmitterInterfaceExtension_emits_a_private_projector_per_choice_that_decodes_through_the_choice_descriptor()
+    {
+        var textReturningChoice = new DamlChoice
+        {
+            Name = "Transfer",
+            ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+            ReturnType = new DamlPrimitiveType(DamlPrimitive.Text),
+            Consuming = false,
+            Controllers = DamlPartyAnalysis.Dynamic,
+            Observers = DamlPartyAnalysis.Dynamic,
+        };
+        var output = EmitExtensions(Interface(textReturningChoice));
+
+        output.Should().Contain("private static ExerciseOutcome<string> ProjectTransferResult(TransactionResult tx, string contractId)");
+        output.Should().Contain("if (exercised.InterfaceId is { } interfaceId");
+        output.Should().Contain("&& string.Equals(interfaceId.ModuleName, IAsset.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)");
+        output.Should().Contain("&& string.Equals(interfaceId.EntityName, IAsset.InterfaceId.EntityName, global::System.StringComparison.Ordinal)");
+        output.Should().Contain("&& string.Equals(exercised.ChoiceName, \"Transfer\", global::System.StringComparison.Ordinal))");
+        output.Should().Contain("var decoded = IAsset.ChoiceTransfer.ResultDecoder!(exercised.ExerciseResult);");
+        output.Should().Contain("return new ExerciseOutcome<string>.One(decoded);");
+        output.Should().Contain("catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)");
+        output.Should().Contain("return new ExerciseOutcome<string>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);");
+        output.Should().Contain("throw new global::System.InvalidOperationException(");
+        output.Should().Contain("no 'Transfer' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}");
     }
 
     [Fact]
@@ -101,7 +126,7 @@ public class ChoiceEmitterInterfaceExtensionTests
     {
         var output = EmitExtensions(Interface(Choice("Transfer", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
-        output.Should().Contain("ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\"), DamlUnit.Instance)");
+        output.Should().Contain("ExerciseCommand.For<IAsset>(contractId, new ChoiceName(\"Transfer\"), DamlUnit.Instance)");
     }
 
     [Fact]
@@ -147,7 +172,7 @@ public class ChoiceEmitterInterfaceExtensionTests
 
         output.Should().Contain("public static ExerciseCommand TransferCommand(");
         output.Should().Contain("this ContractId<IAsset> contractId)");
-        output.Should().Contain("return ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\"), DamlUnit.Instance);");
+        output.Should().Contain("return ExerciseCommand.For<IAsset>(contractId, new ChoiceName(\"Transfer\"), DamlUnit.Instance);");
     }
 
     [Fact]
@@ -157,7 +182,7 @@ public class ChoiceEmitterInterfaceExtensionTests
 
         output.Should().Contain("var command = contractId.TransferCommand();");
         output.Should().Contain("client." + TrySubmitSingleArgumentOrder);
-        output.Should().NotContain("var command = ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\")");
+        output.Should().NotContain("var command = ExerciseCommand.For<IAsset>(contractId, new ChoiceName(\"Transfer\")");
     }
 
     [Fact]
@@ -168,7 +193,7 @@ public class ChoiceEmitterInterfaceExtensionTests
         output.Should().Contain("public static ExerciseCommand TransferCommand(");
         output.Should().Contain("this ContractId<IAsset> contractId,");
         output.Should().Contain("TransferArg argument)");
-        output.Should().Contain("return ExerciseCommand.ForInterface<IAsset>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord());");
+        output.Should().Contain("return ExerciseCommand.For<IAsset>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord());");
         output.Should().Contain("var command = contractId.TransferCommand(argument);");
     }
 }

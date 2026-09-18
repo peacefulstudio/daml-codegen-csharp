@@ -71,6 +71,22 @@ template Schedule
       controller view.issuer
       do create this with view = view with reference = rescheduled
 
+data StewardshipView = StewardshipView
+  with
+    charterSummary : Text
+  deriving (Eq, Show)
+
+interface Stewardship where
+  viewtype StewardshipView
+
+  stewardParty : Party
+
+  nonconsuming choice DescribeCharter : Text
+    controller stewardParty this
+    do
+      let stewardshipView = Prelude.view this
+      pure stewardshipView.charterSummary
+
 template Steward
   with
     steward : Party
@@ -85,3 +101,37 @@ template Steward
         revised : Text
       controller steward
       do create this with charter = revised
+
+    interface instance Stewardship for Steward where
+      view = StewardshipView with charterSummary = charter
+      stewardParty = steward
+
+template Membership
+  with
+    custodian : Party
+    label : Text
+    tier : Int
+  where
+    signatory custodian
+    key (custodian, label) : (Party, Text)
+    maintainer key._1
+
+    choice Renew : ContractId Membership
+      with
+        newTier : Int
+      controller custodian
+      do create this with tier = newTier
+
+template Enrollment
+  with
+    custodian : Party
+    note : Optional Text
+    active : Bool
+  where
+    signatory custodian
+    key (custodian, note) : (Party, Optional Text)
+    maintainer key._1
+
+    choice Toggle : ContractId Enrollment
+      controller custodian
+      do create this with active = not active

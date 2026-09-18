@@ -15,20 +15,52 @@ public class DamlLfJsonReaderLimitsTests
     private const string ThreeOwnersJson = """{"owners":["a::1220ab","b::1220cd","c::1220ef"]}""";
     private static readonly Type OwnerListHolderKnownOnlyAtRuntime = typeof(OwnerListHolder);
 
-    public sealed record OwnerListHolder([property: DamlFieldAttribute("owners")] IReadOnlyList<Party> Owners) : IDamlRecord
+    public sealed record OwnerListHolder([property: DamlFieldAttribute("owners")] IReadOnlyList<Party> Owners)
+        : IDamlRecord<OwnerListHolder>
     {
         public DamlRecord ToRecord() =>
             DamlRecord.Create(DamlField.Create(
                 "owners",
                 new DamlList(Owners.Select(owner => (DamlValue)owner.ToDamlValue()).ToList())));
+
+        public static OwnerListHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("owners").As<DamlList>().Values
+                .Select(value => Party.FromDamlValue(value.As<DamlParty>()))
+                .ToList());
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var ownersJson = DamlLfJsonDecoders.RequireField(json, context, "owners");
+            var ownersContext = context.Field("owners");
+            return DamlRecord.Create(DamlField.Create(
+                "owners", DamlLfJsonDecoders.ReadList(ownersJson, ownersContext, DamlLfJsonDecoders.ReadParty)));
+        }
     }
 
-    public sealed record NestingHolder([property: DamlFieldAttribute("nested")] IReadOnlyList<NestingHolder> Nested) : IDamlRecord
+    public sealed record NestingHolder([property: DamlFieldAttribute("nested")] IReadOnlyList<NestingHolder> Nested)
+        : IDamlRecord<NestingHolder>
     {
         public DamlRecord ToRecord() =>
             DamlRecord.Create(DamlField.Create(
                 "nested",
                 new DamlList(Nested.Select(child => (DamlValue)child.ToRecord()).ToList())));
+
+        public static NestingHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("nested").As<DamlList>().Values
+                .Select(value => FromRecord(value.As<DamlRecord>()))
+                .ToList());
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var nestedJson = DamlLfJsonDecoders.RequireField(json, context, "nested");
+            var nestedContext = context.Field("nested");
+            return DamlRecord.Create(DamlField.Create(
+                "nested",
+                DamlLfJsonDecoders.ReadList(
+                    nestedJson, nestedContext, (element, elementContext) => __ReadDamlLfJson(element, elementContext))));
+        }
     }
 
     private const int LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach = 128;
@@ -44,7 +76,11 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
-        var act = () => DamlLfJsonReader.ReadRecord<OwnerListHolder>(document.RootElement, limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(document.RootElement, recordType: typeof(OwnerListHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -54,7 +90,11 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
-        var act = () => DamlLfJsonReader.ReadRecord<OwnerListHolder>(ThreeOwnersJson, limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(ThreeOwnersJson, recordType: typeof(OwnerListHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -65,7 +105,9 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(document.RootElement, OwnerListHolderKnownOnlyAtRuntime, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -75,7 +117,9 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -85,7 +129,11 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 3);
 
-        var record = DamlLfJsonReader.ReadRecord<OwnerListHolder>(ThreeOwnersJson, limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord(ThreeOwnersJson, recordType: typeof(OwnerListHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("owners").Should().BeOfType<DamlList>()
             .Which.Values.Should().HaveCount(3);
@@ -96,7 +144,11 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
 
-        var act = () => DamlLfJsonReader.ReadRecord<OwnerListHolder>(ThreeOwnersJson, limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(ThreeOwnersJson, recordType: typeof(OwnerListHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
     }
@@ -106,7 +158,9 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
     }
@@ -114,7 +168,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_reject_value_nesting_beyond_the_supported_depth()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestingHolder>(NestedJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(NestedJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach), recordType: typeof(NestingHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
@@ -122,7 +180,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_decode_value_nesting_exactly_at_the_supported_depth()
     {
-        var record = DamlLfJsonReader.ReadRecord<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord(NestedJson(LevelsExactlyFillingTheDepthBound), recordType: typeof(NestingHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("nested").Should().BeOfType<DamlList>();
     }
@@ -130,7 +192,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_reject_value_nesting_one_level_beyond_the_supported_depth()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound + 1));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(NestedJson(LevelsExactlyFillingTheDepthBound + 1), recordType: typeof(NestingHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
@@ -138,17 +204,36 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_throw_JsonException_for_duplicate_json_properties()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<OwnerListHolder>("""{"owners":["a::1220ab"],"owners":["b::1220cd"]}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"owners":["a::1220ab"],"owners":["b::1220cd"]}""", recordType: typeof(OwnerListHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>();
     }
 
     public sealed record AttributeMapHolder(
-        [property: DamlFieldAttribute("attributes")] IReadOnlyDictionary<string, string> Attributes) : IDamlRecord
+        [property: DamlFieldAttribute("attributes")] IReadOnlyDictionary<string, string> Attributes)
+        : IDamlRecord<AttributeMapHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
             "attributes",
             new DamlTextMap(Attributes.ToDictionary(entry => entry.Key, entry => (DamlValue)new DamlText(entry.Value)))));
+
+        public static AttributeMapHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("attributes").As<DamlTextMap>().Values
+                .ToDictionary(entry => entry.Key, entry => entry.Value.As<DamlText>().Value));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var attributesJson = DamlLfJsonDecoders.RequireField(json, context, "attributes");
+            var attributesContext = context.Field("attributes");
+            return DamlRecord.Create(DamlField.Create(
+                "attributes",
+                DamlLfJsonDecoders.ReadTextMap(attributesJson, attributesContext, DamlLfJsonDecoders.ReadText)));
+        }
     }
 
     [Fact]
@@ -156,8 +241,11 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
-        var act = () => DamlLfJsonReader.ReadRecord<AttributeMapHolder>(
-            """{"attributes":{"a":"1","b":"2","c":"3"}}""", limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"attributes":{"a":"1","b":"2","c":"3"}}""", recordType: typeof(AttributeMapHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("JSON object property count 3 exceeds the maximum supported Daml TextMap entry count of 2");
@@ -168,21 +256,42 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 3);
 
-        var record = DamlLfJsonReader.ReadRecord<AttributeMapHolder>(
-            """{"attributes":{"a":"1","b":"2","c":"3"}}""", limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"attributes":{"a":"1","b":"2","c":"3"}}""", recordType: typeof(AttributeMapHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("attributes").Should().BeOfType<DamlTextMap>()
             .Which.Values.Should().HaveCount(3);
     }
 
     public sealed record GenMapBalanceHolder(
-        [property: DamlFieldAttribute("balances")] IReadOnlyDictionary<Party, long> Balances) : IDamlRecord
+        [property: DamlFieldAttribute("balances")] IReadOnlyDictionary<Party, long> Balances)
+        : IDamlRecord<GenMapBalanceHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
             "balances",
             new DamlGenMap(Balances
                 .Select(entry => ((DamlValue)entry.Key.ToDamlValue(), (DamlValue)new DamlInt64(entry.Value)))
                 .ToList())));
+
+        public static GenMapBalanceHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("balances").As<DamlGenMap>().Entries
+                .ToDictionary(
+                    entry => Party.FromDamlValue(entry.Key.As<DamlParty>()),
+                    entry => entry.Value.As<DamlInt64>().Value));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var balancesJson = DamlLfJsonDecoders.RequireField(json, context, "balances");
+            var balancesContext = context.Field("balances");
+            return DamlRecord.Create(DamlField.Create(
+                "balances",
+                DamlLfJsonDecoders.ReadGenMap(
+                    balancesJson, balancesContext, DamlLfJsonDecoders.ReadParty, DamlLfJsonDecoders.ReadInt64)));
+        }
     }
 
     [Fact]
@@ -190,18 +299,37 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
-        var act = () => DamlLfJsonReader.ReadRecord<GenMapBalanceHolder>(
-            """{"balances":[["a::1220ab","1"],["b::1220cd","2"],["c::1220ef","3"]]}""", limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"balances":[["a::1220ab","1"],["b::1220cd","2"],["c::1220ef","3"]]}""", recordType: typeof(GenMapBalanceHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
 
     public sealed record NestedMapHolder(
-        [property: DamlFieldAttribute("nested")] IReadOnlyDictionary<string, NestedMapHolder> Nested) : IDamlRecord
+        [property: DamlFieldAttribute("nested")] IReadOnlyDictionary<string, NestedMapHolder> Nested)
+        : IDamlRecord<NestedMapHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
             "nested",
             new DamlTextMap(Nested.ToDictionary(entry => entry.Key, entry => (DamlValue)entry.Value.ToRecord()))));
+
+        public static NestedMapHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("nested").As<DamlTextMap>().Values
+                .ToDictionary(entry => entry.Key, entry => FromRecord(entry.Value.As<DamlRecord>())));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var nestedJson = DamlLfJsonDecoders.RequireField(json, context, "nested");
+            var nestedContext = context.Field("nested");
+            return DamlRecord.Create(DamlField.Create(
+                "nested",
+                DamlLfJsonDecoders.ReadTextMap(
+                    nestedJson, nestedContext, (element, elementContext) => __ReadDamlLfJson(element, elementContext))));
+        }
     }
 
     private static string NestedMapJson(int levels) =>
@@ -212,17 +340,42 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_reject_value_nesting_beyond_the_supported_depth_through_a_text_map()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestedMapHolder>(NestedMapJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(NestedMapJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach), recordType: typeof(NestedMapHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
 
     public sealed record NestedStdlibMapHolder(
-        [property: DamlFieldAttribute("nested")] Map<string, NestedStdlibMapHolder> Nested) : IDamlRecord
+        [property: DamlFieldAttribute("nested")] Map<string, NestedStdlibMapHolder> Nested)
+        : IDamlRecord<NestedStdlibMapHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
             "nested",
             Nested.ToRecord(key => new DamlText(key), child => child.ToRecord())));
+
+        public static NestedStdlibMapHolder FromRecord(DamlRecord record) =>
+            new(Map<string, NestedStdlibMapHolder>.FromRecord(
+                record.GetRequiredField("nested").As<DamlRecord>(),
+                value => value.As<DamlText>().Value,
+                value => FromRecord(value.As<DamlRecord>())));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var nestedJson = DamlLfJsonDecoders.RequireField(json, context, "nested");
+            var nestedContext = context.Field("nested");
+            return DamlRecord.Create(DamlField.Create(
+                "nested",
+                DamlLfJsonDecoders.ReadStdlibMap(
+                    nestedJson,
+                    nestedContext,
+                    DamlLfJsonDecoders.ReadText,
+                    (element, elementContext) => __ReadDamlLfJson(element, elementContext))));
+        }
     }
 
     private const int StdlibMapLevelsExactlyFillingTheDepthBound = 42;
@@ -235,8 +388,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_decode_stdlib_map_nesting_exactly_at_the_supported_depth()
     {
-        var record = DamlLfJsonReader.ReadRecord<NestedStdlibMapHolder>(
-            NestedStdlibMapJson(StdlibMapLevelsExactlyFillingTheDepthBound));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord(NestedStdlibMapJson(StdlibMapLevelsExactlyFillingTheDepthBound), recordType: typeof(NestedStdlibMapHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("nested").Should().BeOfType<DamlRecord>();
     }
@@ -244,18 +400,39 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_reject_stdlib_map_nesting_one_level_beyond_the_supported_depth()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestedStdlibMapHolder>(
-            NestedStdlibMapJson(StdlibMapLevelsExactlyFillingTheDepthBound + 1));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(NestedStdlibMapJson(StdlibMapLevelsExactlyFillingTheDepthBound + 1), recordType: typeof(NestedStdlibMapHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
 
     public sealed record NestedChainHolder(
-        [property: DamlFieldAttribute("nested")] Optional<Optional<NestedChainHolder>> Nested) : IDamlRecord
+        [property: DamlFieldAttribute("nested")] Optional<Optional<NestedChainHolder>> Nested)
+        : IDamlRecord<NestedChainHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create(
             "nested",
             Nested.ToChainValue(carried => carried.ToChainValue(child => child.ToRecord()))));
+
+        public static NestedChainHolder FromRecord(DamlRecord record) =>
+            new(Optional<Optional<NestedChainHolder>>.FromChainValue(
+                record.GetRequiredField("nested"),
+                carried => Optional<NestedChainHolder>.FromChainValue(
+                    carried, child => FromRecord(child.As<DamlRecord>()))));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            var nestedJson = DamlLfJsonDecoders.RequireField(json, context, "nested");
+            var nestedContext = context.Field("nested");
+            var nested = DamlLfJsonDecoders.ReadOptionalChain(nestedJson, nestedContext, (outer, outerContext) =>
+                DamlLfJsonDecoders.ReadOptionalChain(outer, outerContext, (inner, innerContext) =>
+                    __ReadDamlLfJson(inner, innerContext)));
+            return DamlRecord.Create(DamlField.Create("nested", nested));
+        }
     }
 
     private const int ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach = 42;
@@ -268,8 +445,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_decode_nested_optional_chain_nesting_exactly_at_the_supported_depth()
     {
-        var record = DamlLfJsonReader.ReadRecord<NestedChainHolder>(
-            NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord(NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach), recordType: typeof(NestedChainHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("nested").Should().BeOfType<DamlOptionalChain>();
     }
@@ -277,8 +457,11 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadRecord_should_reject_nested_optional_chain_nesting_one_level_beyond_the_supported_depth()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestedChainHolder>(
-            NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach + 1));
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord(NestedChainJson(ChainLevelsExactlyFillingTheDepthBoundAtThreeDepthUnitsEach + 1), recordType: typeof(NestedChainHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
@@ -289,7 +472,11 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: 1);
 
-        var record = DamlLfJsonReader.ReadRecord<OwnerListHolder>(document.RootElement, limits);
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord(document.RootElement, recordType: typeof(OwnerListHolder), limits: limits);
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("owners").Should().BeOfType<DamlList>()
             .Which.Values.Should().Equal(
@@ -303,7 +490,9 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadValue_should_reject_an_unusable_limit_configuration_from_json_text_and_a_type_argument()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, UnusableLimits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
     }
@@ -311,7 +500,9 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadValue_should_reject_an_unusable_limit_configuration_from_json_text_and_a_runtime_type()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, UnusableLimits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
     }
@@ -322,7 +513,9 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var element = document.RootElement;
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(element, UnusableLimits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
     }
@@ -333,7 +526,9 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var element = document.RootElement;
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(element, OwnerListHolderKnownOnlyAtRuntime, UnusableLimits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("limits");
     }
@@ -343,7 +538,9 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
     }
@@ -353,7 +550,9 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: ThreeOwnersJson.Length - 1);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(ThreeOwnersJson, OwnerListHolderKnownOnlyAtRuntime, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON input size*");
     }
@@ -364,7 +563,9 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var limits = new DamlJsonDeserializationLimits(MaxInputCharacters: 1);
 
+        #pragma warning disable DAMLRT0001
         var value = DamlLfJsonReader.ReadValue<OwnerListHolder>(document.RootElement, limits);
+        #pragma warning restore DAMLRT0001
 
         value.Should().BeOfType<DamlRecord>().Which.GetRequiredField("owners")
             .Should().BeOfType<DamlList>().Which.Values.Should().Equal(
@@ -378,7 +579,9 @@ public class DamlLfJsonReaderLimitsTests
     {
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<OwnerListHolder>(ThreeOwnersJson, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -389,7 +592,9 @@ public class DamlLfJsonReaderLimitsTests
         using var document = JsonDocument.Parse(ThreeOwnersJson);
         var limits = new DamlJsonDeserializationLimits(MaxArrayElements: 2);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue(document.RootElement, OwnerListHolderKnownOnlyAtRuntime, limits);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported JSON array length*");
     }
@@ -397,8 +602,10 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadValue_should_reject_value_nesting_beyond_the_supported_depth()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<NestingHolder>(
             NestedJson(LevelsOverflowingTheDepthBoundAtTwoDepthUnitsEach));
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }
@@ -406,7 +613,9 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadValue_should_decode_value_nesting_exactly_at_the_supported_depth()
     {
+        #pragma warning disable DAMLRT0001
         var value = DamlLfJsonReader.ReadValue<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound));
+        #pragma warning restore DAMLRT0001
 
         value.Should().BeOfType<DamlRecord>().Which.GetRequiredField("nested").Should().BeOfType<DamlList>();
     }
@@ -414,7 +623,9 @@ public class DamlLfJsonReaderLimitsTests
     [Fact]
     public void ReadValue_should_reject_value_nesting_one_level_beyond_the_supported_depth()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<NestingHolder>(NestedJson(LevelsExactlyFillingTheDepthBound + 1));
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("*maximum supported depth*");
     }

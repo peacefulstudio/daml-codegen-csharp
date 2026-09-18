@@ -5,16 +5,6 @@ using Daml.Codegen.Intermediate.Model;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
-/// <summary>
-/// Emits the C# for a Daml variant: the abstract base record carrying the
-/// <c>Tag</c> / <c>ToVariant</c> / <c>FromVariant</c> serialization surface plus one
-/// sealed derived record per constructor. Constructed once per package over the
-/// package's <see cref="PackageEmitContext"/>, the DAR-scoped
-/// <see cref="ICrossPackageResolver"/>, the shared <see cref="CodeGenOptions"/>, and
-/// the package's <see cref="DamlTypeMapper"/>. The caller owns the file scaffold and
-/// the common usings; this emitter writes the variant body into the provided
-/// <see cref="IndentWriter"/>.
-/// </summary>
 internal sealed class VariantEmitter(
     PackageEmitContext context,
     ICrossPackageResolver resolver,
@@ -23,10 +13,6 @@ internal sealed class VariantEmitter(
 {
     private readonly CollectionValueSemanticsEmitter _valueSemantics = new(context, options);
 
-    /// <summary>
-    /// Writes the abstract variant base record and its per-constructor derived
-    /// records for <paramref name="dataType"/> into <paramref name="indent"/>.
-    /// </summary>
     internal void WriteVariantType(IndentWriter indent, DamlDataType dataType, DamlVariantDefinition variant)
     {
         indent.Require("System");
@@ -53,7 +39,7 @@ internal sealed class VariantEmitter(
         var fromVariantParameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant)} variant{Prefixed(fromVariantConverters)}";
         var delegates = EmitterHelpers.ConverterNameMap(dataType.TypeParams);
 
-        var variantInterface = InterfaceDeclaration(dataType.TypeParams);
+        var variantInterface = InterfaceDeclaration(dataType.TypeParams, className);
         indent.AppendLine($"public abstract record {fullClassName}{variantInterface}{typeParamConstraints}");
         indent.AppendLine("{");
         indent.Indent();
@@ -98,6 +84,8 @@ internal sealed class VariantEmitter(
         indent.AppendLine("};");
         indent.Dedent();
         indent.AppendLine();
+
+        WriteReadDamlLfJsonMethod(indent, dataType, variant);
 
         foreach (var ctor in variant.Constructors)
         {
@@ -164,16 +152,71 @@ internal sealed class VariantEmitter(
         indent.AppendLine("}");
     }
 
-    /// <summary>
-    /// Returns the variant's interface clause: <c>: IDamlVariant</c> for non-generic variants,
-    /// or empty for generic variants, whose <c>ToVariant</c> takes one converter delegate per
-    /// type parameter and so cannot satisfy the parameterless <c>IDamlVariant.ToVariant()</c>
-    /// contract — matching the hand-written stdlib generic <c>Either</c>.
-    /// </summary>
-    private string InterfaceDeclaration(IReadOnlyList<string> typeParams) =>
+    private string InterfaceDeclaration(IReadOnlyList<string> typeParams, string className) =>
         typeParams.Count == 0
-            ? $" : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlVariant)}"
+            ? $" : {context.Qualifier.Qualify(RuntimeTypeNames.IDamlVariant)}<{className}>"
             : string.Empty;
+
+    private void WriteReadDamlLfJsonMethod(IndentWriter indent, DamlDataType dataType, DamlVariantDefinition variant)
+    {
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>Decodes a Daml-LF JSON variant directly into a DamlVariant, without going through reflection.</summary>");
+        }
+
+        var className = EmitterHelpers.SanitizeIdentifier(dataType.Name);
+        var reservedNames = variant.Constructors
+            .Select(ctor => VariantConstructorName(ctor.Name, className))
+            .ToHashSet(StringComparer.Ordinal);
+        reservedNames.Add(className);
+        reservedNames.UnionWith(context.Qualifier.DeclaredTypeNames);
+        var constructorsFieldName = "ExpectedConstructors";
+        while (reservedNames.Contains(constructorsFieldName))
+            constructorsFieldName += "_";
+
+        var readerParameters = dataType.TypeParams.Count == 0
+            ? string.Empty
+            : EmitterHelpers.JsonReaderParameters(dataType.TypeParams, DamlTypeMapper.DamlLfElementReaderQualifiedName);
+        var typeVarReaders = EmitterHelpers.ReaderNameMap(dataType.TypeParams);
+        var damlVariantRef = context.Qualifier.Qualify(RuntimeTypeNames.DamlVariant);
+        var parameters = "global::System.Text.Json.JsonElement json, "
+            + $"{DamlTypeMapper.DamlLfJsonDecodeContextQualifiedName} context{Prefixed(readerParameters)}";
+
+        indent.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        indent.AppendLine($"public static {damlVariantRef} __ReadDamlLfJson({parameters})");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine($"var tag = {DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.ReadVariantTag(json, context);");
+        indent.AppendLine("return tag switch");
+        indent.AppendLine("{");
+        indent.Indent();
+
+        var valueExpr = $"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.RequireVariantValue(json, context)";
+        var valueContextExpr = "context.Field(\"value\")";
+
+        foreach (var ctor in variant.Constructors)
+        {
+            if (HasVariantPayload(ctor))
+            {
+                StdlibPackages.RequireForFieldType(resolver, context.Package, indent, ctor.ArgumentType!);
+            }
+            var payload = HasVariantPayload(ctor)
+                ? mapper.FromJson(ctor.ArgumentType!, valueExpr, valueContextExpr, typeVarReaders: typeVarReaders)
+                : $"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.ReadUnit({valueExpr}, {valueContextExpr})";
+            indent.AppendLine($"\"{ctor.Name}\" => {damlVariantRef}.Create(\"{ctor.Name}\", {payload}),");
+        }
+
+        indent.AppendLine($"_ => throw {DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.UnknownConstructor(\"variant constructor\", tag, context, {constructorsFieldName})");
+        indent.Dedent();
+        indent.AppendLine("};");
+        indent.Dedent();
+        indent.AppendLine("}");
+        indent.AppendLine();
+
+        var expectedConstructors = string.Join(", ", variant.Constructors.Select(ctor => $"\"{ctor.Name}\""));
+        indent.AppendLine($"private static readonly string[] {constructorsFieldName} = [{expectedConstructors}];");
+        indent.AppendLine();
+    }
 
     private static string Prefixed(string parameters) =>
         string.IsNullOrEmpty(parameters) ? string.Empty : $", {parameters}";

@@ -6,6 +6,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Stdlib;
 using AwesomeAssertions;
 using Daml.Codegen.Testing.Conformance.RichTypes;
 using Xunit;
@@ -24,7 +25,9 @@ public class ArchiveViaContractIdTests
     private static readonly ContractId<Marker> MarkerCid = new("marker-cid");
     private static readonly ContractId<IHolding> HoldingCid = new("holding-cid");
 
-    private static TransactionResult ArchivingTransaction(string contractId, Identifier templateId) =>
+    private static readonly Identifier ConcreteHoldingTemplateId = new("impl-pkg-id", "Impl.Holding", "Holding");
+
+    private static TransactionResult ArchivingTransaction(string contractId, Identifier templateId, Identifier? interfaceId = null) =>
         new(
             UpdateId: "upd-1",
             CompletionOffset: LedgerOffset.At(1),
@@ -37,7 +40,7 @@ public class ArchiveViaContractIdTests
                 new ExercisedEvent(
                     ContractId: contractId,
                     TemplateId: templateId,
-                    InterfaceId: null,
+                    InterfaceId: interfaceId,
                     ChoiceName: "Archive",
                     ChoiceArgument: DamlRecord.Create(),
                     ExerciseResult: DamlUnit.Instance,
@@ -97,11 +100,13 @@ public class ArchiveViaContractIdTests
     public async Task ArchiveAsync_on_an_interface_contract_id_targets_the_interface_id()
     {
         using var client = new FakeLedgerClient(
-            _ => new ExerciseOutcome<TransactionResult>.One(ArchivingTransaction("holding-cid", IHolding.InterfaceId)));
+            _ => new ExerciseOutcome<TransactionResult>.One(
+                ArchivingTransaction("holding-cid", ConcreteHoldingTemplateId, IHolding.InterfaceId)));
 
-        await HoldingCid.ArchiveAsync(client, new Party("alice"),
+        var outcome = await HoldingCid.ArchiveAsync(client, new Party("alice"),
             cancellationToken: TestContext.Current.CancellationToken);
 
+        outcome.Should().BeOfType<ExerciseOutcome<Unit>.One>();
         var command = client.LastSubmission!.Commands.Should().ContainSingle().Which
             .Should().BeOfType<ExerciseCommand>().Subject;
         command.TemplateId.Should().Be(IHolding.InterfaceId);

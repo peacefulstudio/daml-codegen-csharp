@@ -13,6 +13,7 @@ using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
 using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,19 +25,19 @@ namespace Splice.Ans;
 public sealed partial record AnsRules(
     [property: DamlFieldAttribute("dso")] Party Dso,
     [property: DamlFieldAttribute("config")] AnsRulesConfig Config
-) : ITemplate, IDamlRecord<AnsRules>
+) : ITemplate, IHasChoices<AnsRules>, IDamlRecord<AnsRules>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83", "Splice.Ans", "AnsRules");
+    public static Identifier TemplateId { get; } = new("cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1", "Splice.Ans", "AnsRules");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83";
+    public static string PackageId => "cc7d11e790174d2b18ad3e148d8762340e58de35616b399f9397a1b1d5b752f1";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "splice-amulet-name-service";
 
     /// <summary>Gets the package version.</summary>
-    public static Version PackageVersion { get; } = new(0, 1, 23);
+    public static Version PackageVersion { get; } = new(0, 1, 24);
 
     /// <summary>Gets the compile-time Daml type descriptor.</summary>
     public static DamlTypeDescriptor DamlTypeId { get; } = new(TemplateId, DamlTypeKind.Template, PackageName);
@@ -53,6 +54,17 @@ public sealed partial record AnsRules(
         Config: AnsRulesConfig.FromRecord(record.GetRequiredField("config").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("dso", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "dso"), context.Field("dso"))),
+            DamlField.Create("config", AnsRulesConfig.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "config"), context.Field("config")))
+        );
+    }
+
     /// <summary>
     /// Exercise the AnsRules_CollectEntryRenewalPayment choice.
     /// </summary>
@@ -61,7 +73,10 @@ public sealed partial record AnsRules(
         Name = new ChoiceName("AnsRules_CollectEntryRenewalPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsRules_CollectEntryRenewalPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsRules_CollectEntryRenewalPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsRules_CollectEntryRenewalPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsRules.AnsRules_CollectEntryRenewalPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsRules_CollectEntryRenewalPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -72,7 +87,10 @@ public sealed partial record AnsRules(
         Name = new ChoiceName("AnsRules_CollectInitialEntryPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsRules_CollectInitialEntryPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsRules_CollectInitialEntryPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsRules_CollectInitialEntryPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsRules.AnsRules_CollectInitialEntryPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsRules_CollectInitialEntryPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -83,7 +101,10 @@ public sealed partial record AnsRules(
         Name = new ChoiceName("AnsRules_RejectEntryInitialPayment"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsRules_RejectEntryInitialPaymentResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsRules_RejectEntryInitialPayment.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsRules_RejectEntryInitialPaymentResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsRules.AnsRules_RejectEntryInitialPayment.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsRules_RejectEntryInitialPaymentResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -94,7 +115,10 @@ public sealed partial record AnsRules(
         Name = new ChoiceName("AnsRules_RequestEntry"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => AnsRules_RequestEntryResult.FromRecord(val.As<DamlRecord>())
+        ArgumentDecoder = val => AnsRules_RequestEntry.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => AnsRules_RequestEntryResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => AnsRules.AnsRules_RequestEntry.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => AnsRules_RequestEntryResult.__ReadDamlLfJson(json, context),
     };
 
     /// <summary>
@@ -106,8 +130,18 @@ public sealed partial record AnsRules(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceAnsRules_CollectEntryRenewalPayment, ChoiceAnsRules_CollectInitialEntryPayment, ChoiceAnsRules_RejectEntryInitialPayment, ChoiceAnsRules_RequestEntry, ChoiceArchive];
 
     /// <summary>Contract ID for AnsRules.</summary>
     [global::System.Text.Json.Serialization.JsonConverter(typeof(global::Daml.Runtime.Serialization.ContractIdJsonConverterFactory))]
@@ -423,8 +457,15 @@ public static class AnsRulesNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsRules_CollectEntryRenewalPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsRules.ChoiceAnsRules_CollectEntryRenewalPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsRules_CollectEntryRenewalPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsRules.ChoiceAnsRules_CollectEntryRenewalPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsRules_CollectEntryRenewalPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsRules_CollectEntryRenewalPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -445,8 +486,15 @@ public static class AnsRulesNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsRules_CollectInitialEntryPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsRules.ChoiceAnsRules_CollectInitialEntryPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsRules_CollectInitialEntryPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsRules.ChoiceAnsRules_CollectInitialEntryPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsRules_CollectInitialEntryPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsRules_CollectInitialEntryPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -467,8 +515,15 @@ public static class AnsRulesNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsRules_RejectEntryInitialPayment", StringComparison.Ordinal))
             {
-                var decoded = AnsRules.ChoiceAnsRules_RejectEntryInitialPayment.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsRules_RejectEntryInitialPaymentResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsRules.ChoiceAnsRules_RejectEntryInitialPayment.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsRules_RejectEntryInitialPaymentResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsRules_RejectEntryInitialPaymentResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -489,8 +544,15 @@ public static class AnsRulesNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "AnsRules_RequestEntry", StringComparison.Ordinal))
             {
-                var decoded = AnsRules.ChoiceAnsRules_RequestEntry.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<AnsRules_RequestEntryResult>.One(decoded);
+                try
+                {
+                    var decoded = AnsRules.ChoiceAnsRules_RequestEntry.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<AnsRules_RequestEntryResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<AnsRules_RequestEntryResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -511,7 +573,15 @@ public static class AnsRulesNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, AnsRules.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

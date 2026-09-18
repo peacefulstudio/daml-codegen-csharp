@@ -17,7 +17,7 @@ namespace Splice.Api.Token.MetadataV1;
 /// <summary>
 /// Generated from Daml variant AnyValue
 /// </summary>
-public abstract record AnyValue : IDamlVariant
+public abstract record AnyValue : IDamlVariant<AnyValue>
 {
     /// <summary>Gets the variant constructor name.</summary>
     public abstract string Tag { get; }
@@ -42,6 +42,30 @@ public abstract record AnyValue : IDamlVariant
             "AV_Map" => new AV_Map((IReadOnlyDictionary<string, AnyValue>)variant.Value.As<DamlTextMap>().Values.ToDictionary(kv => kv.Key, kv => AnyValue.FromVariant(kv.Value.As<DamlVariant>()))),
             _ => throw new ArgumentOutOfRangeException(nameof(variant), variant.Constructor, "Unknown AnyValue constructor")
         };
+
+    /// <summary>Decodes a Daml-LF JSON variant directly into a DamlVariant, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlVariant __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        var tag = global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadVariantTag(json, context);
+        return tag switch
+        {
+            "AV_Text" => DamlVariant.Create("AV_Text", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Int" => DamlVariant.Create("AV_Int", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Decimal" => DamlVariant.Create("AV_Decimal", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Bool" => DamlVariant.Create("AV_Bool", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadBool(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Date" => DamlVariant.Create("AV_Date", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadDate(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Time" => DamlVariant.Create("AV_Time", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTimestamp(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_RelTime" => DamlVariant.Create("AV_RelTime", RelTime.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_Party" => DamlVariant.Create("AV_Party", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_ContractId" => DamlVariant.Create("AV_ContractId", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AV_List" => DamlVariant.Create("AV_List", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"), (__json0, __ctx0) => AnyValue.__ReadDamlLfJson(__json0, __ctx0))),
+            "AV_Map" => DamlVariant.Create("AV_Map", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadTextMap(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"), (__json0, __ctx0) => AnyValue.__ReadDamlLfJson(__json0, __ctx0))),
+            _ => throw global::Daml.Runtime.Serialization.DamlLfJsonDecoders.UnknownConstructor("variant constructor", tag, context, ExpectedConstructors)
+        };
+    }
+
+    private static readonly string[] ExpectedConstructors = ["AV_Text", "AV_Int", "AV_Decimal", "AV_Bool", "AV_Date", "AV_Time", "AV_RelTime", "AV_Party", "AV_ContractId", "AV_List", "AV_Map"];
 
     /// <summary>AV_Text constructor.</summary>
     public sealed record AV_Text(string Value) : AnyValue

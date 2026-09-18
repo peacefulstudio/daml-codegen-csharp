@@ -35,7 +35,9 @@ public class DamlLfJsonReaderWireSamplesTests
         using var document = LoadWireSample(fileName);
         var payload = ResolvePayload(document.RootElement, payloadPath);
 
+        #pragma warning disable DAMLRT0001
         var record = DamlLfJsonReader.ReadRecord(payload, DeclaredShapes[shapeName]);
+        #pragma warning restore DAMLRT0001
 
         record.RecordId.Should().BeNull();
         record.Fields.Select(field => (field.Label, DamlType: field.Value.GetType()))
@@ -50,7 +52,9 @@ public class DamlLfJsonReaderWireSamplesTests
         using var document = LoadWireSample(fileName);
         var payload = ResolvePayload(document.RootElement, payloadPath);
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadRecord(payload, DeclaredShapes[shapeName]);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>().WithMessage($"*{expectedGap}*");
     }
@@ -63,7 +67,9 @@ public class DamlLfJsonReaderWireSamplesTests
         using var document = LoadWireSample(fileName);
         var payload = ResolvePayload(document.RootElement, payloadPath);
 
+        #pragma warning disable DAMLRT0001
         var value = DamlLfJsonReader.ReadValue(payload, DeclaredShapes[shapeName]);
+        #pragma warning restore DAMLRT0001
 
         value.Should().BeOfType<DamlRecord>().Which.Fields
             .Select(field => (field.Label, DamlType: field.Value.GetType()))
@@ -78,7 +84,9 @@ public class DamlLfJsonReaderWireSamplesTests
         using var document = LoadWireSample(fileName);
         var payload = ResolvePayload(document.RootElement, payloadPath);
 
+        #pragma warning disable DAMLRT0001
         var value = DamlLfJsonReader.ReadValue(payload, DeclaredShapes[shapeName]);
+        #pragma warning restore DAMLRT0001
 
         value.Should().BeOfType(expectedDamlType);
     }
@@ -90,7 +98,9 @@ public class DamlLfJsonReaderWireSamplesTests
         var payload = ResolvePayload(
             document.RootElement, "response/transaction/events/0/ExercisedEvent/exerciseResult");
 
+        #pragma warning disable DAMLRT0001
         var variant = DamlLfJsonReader.ReadValue<Outcome>(payload).Should().BeOfType<DamlVariant>().Which;
+        #pragma warning restore DAMLRT0001
 
         variant.Constructor.Should().Be("Win");
         var details = variant.GetValue<DamlRecord>();
@@ -106,7 +116,9 @@ public class DamlLfJsonReaderWireSamplesTests
         var payload = ResolvePayload(
             document.RootElement, "response/transaction/events/0/ExercisedEvent/exerciseResult");
 
+        #pragma warning disable DAMLRT0001
         DamlLfJsonReader.ReadValue<Unit>(payload).Should().BeSameAs(DamlUnit.Instance);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
@@ -116,7 +128,9 @@ public class DamlLfJsonReaderWireSamplesTests
         var capturedKey = ResolvePayload(
             document.RootElement, "response/transaction/events/0/CreatedEvent/contractKey");
 
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<Tuple2<Party, string>>(capturedKey);
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>().WithMessage(
             $"Type '{typeof(Tuple2<Party, string>)}' at '{typeof(Tuple2<Party, string>).Name}' names a generic Daml "
@@ -131,8 +145,11 @@ public class DamlLfJsonReaderWireSamplesTests
         var capturedKey = ResolvePayload(
             document.RootElement, "response/transaction/events/0/CreatedEvent/contractKey");
 
-        var record = DamlLfJsonReader.ReadRecord<TupleKeyHolder>(
-            """{"key":""" + capturedKey.GetRawText() + "}");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"key":""" + capturedKey.GetRawText() + "}", recordType: typeof(TupleKeyHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("key").Should().BeOfType<DamlRecord>().Which.Fields.Should().Equal(
             new DamlField("_1", new DamlParty(capturedKey.GetProperty("_1").GetString()!)),
@@ -206,8 +223,11 @@ public class DamlLfJsonReaderWireSamplesTests
         using var matrix = LoadWireSample("probe_nested_optional_matrix.json");
         var someNone = ResolvePayload(matrix.RootElement, "response/array_of_empty_array/sent");
 
-        var record = DamlLfJsonReader.ReadRecord<NestedNoteHolder>(
-            """{"nestedNote":""" + someNone.GetRawText() + "}");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"nestedNote":""" + someNone.GetRawText() + "}", recordType: typeof(NestedNoteHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("nestedNote")
             .Should().Be(DamlOptionalChain.Some(DamlOptionalChain.None));
@@ -216,11 +236,23 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_distinguish_the_three_accepted_nested_optional_encodings()
     {
-        DamlLfJsonReader.ReadRecord<NestedNoteHolder>("""{"nestedNote":[]}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"nestedNote":[]}""", recordType: typeof(NestedNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("nestedNote").Should().Be(DamlOptionalChain.None);
-        DamlLfJsonReader.ReadRecord<NestedNoteHolder>("""{"nestedNote":[[]]}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"nestedNote":[[]]}""", recordType: typeof(NestedNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("nestedNote").Should().Be(DamlOptionalChain.Some(DamlOptionalChain.None));
-        DamlLfJsonReader.ReadRecord<NestedNoteHolder>("""{"nestedNote":[["deep"]]}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"nestedNote":[["deep"]]}""", recordType: typeof(NestedNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("nestedNote")
             .Should().Be(DamlOptionalChain.Some(DamlOptionalChain.Some(new DamlText("deep"))));
     }
@@ -237,8 +269,11 @@ public class DamlLfJsonReaderWireSamplesTests
 
         foreach (var (encoding, message) in rejected)
         {
-            var act = () => DamlLfJsonReader.ReadRecord<NestedNoteHolder>(
-                """{"nestedNote":""" + encoding + "}");
+            #pragma warning disable DAMLRT0001
+            #pragma warning disable CA2263
+            var act = () => DamlLfJsonReader.ReadRecord("""{"nestedNote":""" + encoding + "}", recordType: typeof(NestedNoteHolder));
+            #pragma warning restore CA2263
+            #pragma warning restore DAMLRT0001
 
             act.Should().Throw<JsonException>($"the participant rejected {encoding} with HTTP 500")
                 .WithMessage(message);
@@ -248,7 +283,11 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_reject_a_nested_optional_level_carrying_more_than_one_element()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<NestedNoteHolder>("""{"nestedNote":[[],[]]}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"nestedNote":[[],[]]}""", recordType: typeof(NestedNoteHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage(
             "A nested Daml Optional at 'NestedNoteHolder.nestedNote' encodes as an array of at most "
@@ -258,8 +297,16 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_name_the_chain_level_that_failed()
     {
-        var outerLevel = () => DamlLfJsonReader.ReadRecord<DeepNoteHolder>("""{"deepNote":[null]}""");
-        var innerLevel = () => DamlLfJsonReader.ReadRecord<DeepNoteHolder>("""{"deepNote":[[null]]}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var outerLevel = () => DamlLfJsonReader.ReadRecord("""{"deepNote":[null]}""", recordType: typeof(DeepNoteHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var innerLevel = () => DamlLfJsonReader.ReadRecord("""{"deepNote":[[null]]}""", recordType: typeof(DeepNoteHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         outerLevel.Should().Throw<JsonException>().WithMessage(
             "Expected JSON Array at 'DeepNoteHolder.deepNote[0]' but found Null");
@@ -270,7 +317,11 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_name_the_chain_level_carrying_more_than_one_element()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<DeepNoteHolder>("""{"deepNote":[[[],[]]]}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"deepNote":[[[],[]]]}""", recordType: typeof(DeepNoteHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage(
             "A nested Daml Optional at 'DeepNoteHolder.deepNote[0]' encodes as an array of at most "
@@ -280,16 +331,28 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_keep_a_flat_wrapper_slot_on_the_flat_encoding()
     {
-        DamlLfJsonReader.ReadRecord<FlatNoteHolder>("""{"note":null}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"note":null}""", recordType: typeof(FlatNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("note").Should().Be(DamlOptional.None);
-        DamlLfJsonReader.ReadRecord<FlatNoteHolder>("""{"note":"present"}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        DamlLfJsonReader.ReadRecord("""{"note":"present"}""", recordType: typeof(FlatNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("note").Should().Be(DamlOptional.Some(new DamlText("present")));
     }
 
     [Fact]
     public void ReadRecord_should_read_a_wrapper_reached_through_a_generic_at_exactly_its_own_level()
     {
-        var item = DamlLfJsonReader.ReadRecord<BoxedNoteHolder>("""{"boxed":{"item":"deep"}}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var item = DamlLfJsonReader.ReadRecord("""{"boxed":{"item":"deep"}}""", recordType: typeof(BoxedNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("boxed").As<DamlRecord>()
             .GetRequiredField("item");
 
@@ -306,7 +369,11 @@ public class DamlLfJsonReaderWireSamplesTests
     [Fact]
     public void ReadRecord_should_read_every_level_of_a_chain_as_a_chain_level()
     {
-        var innerAbsent = DamlLfJsonReader.ReadRecord<NestedNoteHolder>("""{"nestedNote":[[]]}""")
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var innerAbsent = DamlLfJsonReader.ReadRecord("""{"nestedNote":[[]]}""", recordType: typeof(NestedNoteHolder))
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
             .GetRequiredField("nestedNote").As<DamlOptionalChain>();
 
         innerAbsent.Value.Should().BeOfType<DamlOptionalChain>(

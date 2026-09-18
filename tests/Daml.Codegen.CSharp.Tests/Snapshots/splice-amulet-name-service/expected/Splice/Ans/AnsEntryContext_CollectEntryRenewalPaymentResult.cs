@@ -30,4 +30,15 @@ public sealed record AnsEntryContext_CollectEntryRenewalPaymentResult(
         SubscriptionStateCid: new ContractId<global::Splice.Wallet.Subscriptions.SubscriptionIdleState>(record.GetRequiredField("subscriptionStateCid").As<DamlContractId>().Value)
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("entryCid", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "entryCid"), context.Field("entryCid"))),
+            DamlField.Create("subscriptionStateCid", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "subscriptionStateCid"), context.Field("subscriptionStateCid")))
+        );
+    }
+
 }

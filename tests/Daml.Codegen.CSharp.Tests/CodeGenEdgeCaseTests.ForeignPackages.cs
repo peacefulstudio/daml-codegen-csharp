@@ -342,7 +342,8 @@ public partial class CodeGenEdgeCaseTests
         iface.Should().NotBeNull();
         iface!.Content.Should().Contain("ArchiveAsync(");
         iface.Content.Should().Contain("DamlRecord.Create()");
-        iface.Content.Should().NotContain("DamlUnit.Instance");
+        iface.Content.Should().NotContain("ArgumentEncoder = _ => DamlUnit.Instance,");
+        iface.Content.Should().NotContain("ExerciseCommand.For<IAsset>(contractId, new ChoiceName(\"Archive\"), DamlUnit.Instance)");
         iface.Content.Should().NotContain("No.Package.Metadata");
 
         csproj.Should().NotBeNull();

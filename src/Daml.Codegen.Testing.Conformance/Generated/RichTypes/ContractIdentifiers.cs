@@ -23,6 +23,12 @@ public static class ContractIdentifiers
     public static string Asset { get; } = GetTemplateId<Asset>();
 
     /// <summary>
+    /// Gets the fully qualified template identifier for GenericResults contracts.
+    /// Format: {packageName}:RichTypes:GenericResults
+    /// </summary>
+    public static string GenericResults { get; } = GetTemplateId<GenericResults>();
+
+    /// <summary>
     /// Gets the fully qualified template identifier for Marker contracts.
     /// Format: {packageName}:RichTypes:Marker
     /// </summary>

@@ -18,7 +18,7 @@ public sealed partial record AnsEntryContext
     public sealed record AnsEntryContext_Terminate(
         [property: DamlFieldAttribute("actor")] Party Actor,
         [property: DamlFieldAttribute("terminatedSubscriptionCid")] ContractId<global::Splice.Wallet.Subscriptions.TerminatedSubscription> TerminatedSubscriptionCid
-    ) : IDamlRecord
+    ) : IDamlRecord<AnsEntryContext_Terminate>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -31,6 +31,17 @@ public sealed partial record AnsEntryContext
             Actor: Party.FromDamlValue(record.GetRequiredField("actor").As<DamlParty>()),
             TerminatedSubscriptionCid: new ContractId<global::Splice.Wallet.Subscriptions.TerminatedSubscription>(record.GetRequiredField("terminatedSubscriptionCid").As<DamlContractId>().Value)
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("actor", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "actor"), context.Field("actor"))),
+                DamlField.Create("terminatedSubscriptionCid", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "terminatedSubscriptionCid"), context.Field("terminatedSubscriptionCid")))
+            );
+        }
 
     }
 }

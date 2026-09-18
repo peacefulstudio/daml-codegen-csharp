@@ -1,7 +1,9 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using AwesomeAssertions;
 using Xunit;
 
@@ -21,6 +23,9 @@ public class DamlRecordGenericInterfaceTests
 
         public static Badge FromRecord(DamlRecord record) =>
             new(record.GetRequiredField("name").As<DamlText>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     [Fact]

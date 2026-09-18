@@ -36,4 +36,17 @@ public sealed record AnsRulesConfig(
         DescriptionPrefix: record.GetRequiredField("descriptionPrefix").As<DamlText>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("renewalDuration", RelTime.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "renewalDuration"), context.Field("renewalDuration"))),
+            DamlField.Create("entryLifetime", RelTime.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "entryLifetime"), context.Field("entryLifetime"))),
+            DamlField.Create("entryFee", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadNumeric(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "entryFee"), context.Field("entryFee"))),
+            DamlField.Create("descriptionPrefix", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "descriptionPrefix"), context.Field("descriptionPrefix")))
+        );
+    }
+
 }

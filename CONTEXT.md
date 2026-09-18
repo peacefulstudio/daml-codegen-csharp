@@ -206,11 +206,19 @@ _Avoid_: "key projection" unqualified, "the key function", "a record of field pr
 
 **Supported input**:
 The set of Daml-LF versions a released codegen accepts. Supported means
-**proven by a fixture exercised in CI** — not merely decoded by the reader, and not merely
-emittable by some compiler. A version the reader accepts but no fixture covers is a gap, and
-is named as one.
+**proven by a fixture exercised in CI** — not merely claimed, and not merely emittable by
+some compiler. A fixture proves more than one thing and they are counted separately. The
+version its target names is proven on the **emit** path *and* on the **read** path, because
+the main package is decoded at that version — so 2.2 and 2.3 are read-proven by the main
+packages of `defaulttarget` and `contractkeys`, and would move with them if either were
+retargeted. The versions its dependency packages carry are proven on the **read** path only.
+At the pinned SDK the per-module component packages behind `daml-prim` and `daml-stdlib` are
+Daml-LF 2.1 and travel unchanged inside every DAR that toolchain builds whatever its target,
+so 2.1 alone is read-proven by every fixture in the tree and no retarget can remove it. A
+version covered on neither path is a gap, and is named as one.
 _Avoid_: "the supported envelope" (jargon; say what it is), "supported SDK version" (the SDK
-range and the Daml-LF range no longer coincide and must be stated separately)
+range and the Daml-LF range no longer coincide and must be stated separately), reading a
+fixture's target as the whole of what that fixture proves
 
 **Default Daml-LF version**:
 Daml-LF **2.2** — what the compiler emits when a project sets no target, on both the 3.4 and

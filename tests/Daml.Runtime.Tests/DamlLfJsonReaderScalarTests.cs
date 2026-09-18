@@ -14,15 +14,29 @@ namespace Daml.Runtime.Tests;
 
 public class DamlLfJsonReaderScalarTests
 {
-    public sealed record TextHolder([property: DamlFieldAttribute("name")] string Name) : IDamlRecord
+    public sealed record TextHolder([property: DamlFieldAttribute("name")] string Name) : IDamlRecord<TextHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("name", new DamlText(Name)));
+
+        public static TextHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("name").As<DamlText>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("name", DamlLfJsonDecoders.ReadText(
+                DamlLfJsonDecoders.RequireField(json, context, "name"), context.Field("name"))));
+        }
     }
 
     [Fact]
     public void ReadRecord_should_decode_a_text_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<TextHolder>("""{"name":"hello"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"name":"hello"}""", recordType: typeof(TextHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("name").Should().BeOfType<DamlText>().Which.Value.Should().Be("hello");
     }
@@ -30,20 +44,38 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_an_empty_text_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<TextHolder>("""{"name":""}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"name":""}""", recordType: typeof(TextHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("name").Should().BeOfType<DamlText>().Which.Value.Should().Be("");
     }
 
-    public sealed record FlagHolder([property: DamlFieldAttribute("flag")] bool Flag) : IDamlRecord
+    public sealed record FlagHolder([property: DamlFieldAttribute("flag")] bool Flag) : IDamlRecord<FlagHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("flag", new DamlBool(Flag)));
+
+        public static FlagHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("flag").As<DamlBool>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("flag", DamlLfJsonDecoders.ReadBool(
+                DamlLfJsonDecoders.RequireField(json, context, "flag"), context.Field("flag"))));
+        }
     }
 
     [Fact]
     public void ReadRecord_should_decode_a_bool_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<FlagHolder>("""{"flag":true}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"flag":true}""", recordType: typeof(FlagHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("flag").Should().BeOfType<DamlBool>().Which.Value.Should().BeTrue();
     }
@@ -51,7 +83,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_false_bool_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<FlagHolder>("""{"flag":false}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"flag":false}""", recordType: typeof(FlagHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("flag").Should().BeOfType<DamlBool>().Which.Value.Should().BeFalse();
     }
@@ -59,7 +95,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_bool_field_encoded_as_a_json_number()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<FlagHolder>("""{"flag":1}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"flag":1}""", recordType: typeof(FlagHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("Expected JSON boolean at 'FlagHolder.flag' but found Number");
     }
@@ -67,21 +107,39 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_name_a_json_boolean_when_rejecting_a_bool_field_encoded_as_a_string()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<FlagHolder>("""{"flag":"true"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"flag":"true"}""", recordType: typeof(FlagHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("Expected JSON boolean at 'FlagHolder.flag' but found String");
     }
 
-    public sealed record CountHolder([property: DamlFieldAttribute("count")] long Count) : IDamlRecord
+    public sealed record CountHolder([property: DamlFieldAttribute("count")] long Count) : IDamlRecord<CountHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("count", new DamlInt64(Count)));
+
+        public static CountHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("count").As<DamlInt64>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("count", DamlLfJsonDecoders.ReadInt64(
+                DamlLfJsonDecoders.RequireField(json, context, "count"), context.Field("count"))));
+        }
     }
 
     [Fact]
     public void ReadRecord_should_decode_a_positive_int64_field_from_its_wire_string_form()
     {
-        var record = DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"42"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"count":"42"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("count").Should().BeOfType<DamlInt64>().Which.Value.Should().Be(42L);
     }
@@ -89,7 +147,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_negative_int64_field_from_its_wire_string_form()
     {
-        var record = DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"-1"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"count":"-1"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("count").Should().BeOfType<DamlInt64>().Which.Value.Should().Be(-1L);
     }
@@ -97,7 +159,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_an_int64_field_encoded_as_a_json_number_instead_of_the_observed_wire_string()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":42}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"count":42}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("Expected JSON String at 'CountHolder.count' but found Number");
     }
@@ -105,7 +171,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_malformed_int64_field()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"not-a-number"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"count":"not-a-number"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("Value 'not-a-number' at 'CountHolder.count' is not a valid Daml Int64");
@@ -114,7 +184,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_zero_int64_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"0"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"count":"0"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("count").Should().BeOfType<DamlInt64>().Which.Value.Should().Be(0L);
     }
@@ -122,7 +196,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_an_int64_field_with_a_leading_plus_sign()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"+42"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"count":"+42"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("Value '+42' at 'CountHolder.count' is not a valid Daml Int64");
@@ -131,7 +209,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_an_int64_field_with_leading_zeroes()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>("""{"count":"007"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"count":"007"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage("Value '007' at 'CountHolder.count' is not a valid Daml Int64");
@@ -142,7 +224,11 @@ public class DamlLfJsonReaderScalarTests
     {
         var oversizedValue = new string('9', 5_000);
 
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>($$"""{"count":"{{oversizedValue}}"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord($$"""{"count":"{{oversizedValue}}"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage($"Value '{new string('9', 64)}…' at 'CountHolder.count' is not a valid Daml Int64");
@@ -153,21 +239,39 @@ public class DamlLfJsonReaderScalarTests
     {
         var surrogateStraddlingValue = new string('9', 63) + "😀😀";
 
-        var act = () => DamlLfJsonReader.ReadRecord<CountHolder>($$"""{"count":"{{surrogateStraddlingValue}}"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord($$"""{"count":"{{surrogateStraddlingValue}}"}""", recordType: typeof(CountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>()
             .WithMessage($"Value '{new string('9', 63)}…' at 'CountHolder.count' is not a valid Daml Int64");
     }
 
-    public sealed record AmountHolder([property: DamlFieldAttribute("amount")] decimal Amount) : IDamlRecord
+    public sealed record AmountHolder([property: DamlFieldAttribute("amount")] decimal Amount) : IDamlRecord<AmountHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("amount", new DamlNumeric(Amount)));
+
+        public static AmountHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("amount").As<DamlNumeric>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("amount", DamlLfJsonDecoders.ReadNumeric(
+                DamlLfJsonDecoders.RequireField(json, context, "amount"), context.Field("amount"))));
+        }
     }
 
     [Fact]
     public void ReadRecord_should_decode_a_numeric_field_at_scale_ten()
     {
-        var record = DamlLfJsonReader.ReadRecord<AmountHolder>("""{"amount":"42.5000000000"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"amount":"42.5000000000"}""", recordType: typeof(AmountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("amount").Should().BeOfType<DamlNumeric>()
             .Which.Value.Should().Be(42.5m);
@@ -176,7 +280,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_numeric_field_at_scale_two()
     {
-        var record = DamlLfJsonReader.ReadRecord<AmountHolder>("""{"amount":"1.25"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"amount":"1.25"}""", recordType: typeof(AmountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("amount").Should().BeOfType<DamlNumeric>()
             .Which.Value.Should().Be(1.25m);
@@ -185,20 +293,38 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_malformed_numeric_field()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<AmountHolder>("""{"amount":"not-a-number"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"amount":"not-a-number"}""", recordType: typeof(AmountHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>();
     }
 
-    public sealed record IssuedHolder([property: DamlFieldAttribute("issued")] DateOnly Issued) : IDamlRecord
+    public sealed record IssuedHolder([property: DamlFieldAttribute("issued")] DateOnly Issued) : IDamlRecord<IssuedHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("issued", new DamlDate(Issued)));
+
+        public static IssuedHolder FromRecord(DamlRecord record) =>
+            new(record.GetRequiredField("issued").As<DamlDate>().Value);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("issued", DamlLfJsonDecoders.ReadDate(
+                DamlLfJsonDecoders.RequireField(json, context, "issued"), context.Field("issued"))));
+        }
     }
 
     [Fact]
     public void ReadRecord_should_decode_a_date_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<IssuedHolder>("""{"issued":"2026-07-31"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"issued":"2026-07-31"}""", recordType: typeof(IssuedHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("issued").Should().BeOfType<DamlDate>()
             .Which.Value.Should().Be(new DateOnly(2026, 7, 31));
@@ -207,7 +333,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_malformed_date_field()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<IssuedHolder>("""{"issued":"31-07-2026"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"issued":"31-07-2026"}""", recordType: typeof(IssuedHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>();
     }
@@ -215,7 +345,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_timestamp_field_with_a_microsecond_fraction()
     {
-        var record = DamlLfJsonReader.ReadRecord<RecordedAtHolder>("""{"recordedAt":"2026-07-31T12:34:56.123456Z"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"recordedAt":"2026-07-31T12:34:56.123456Z"}""", recordType: typeof(RecordedAtHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         var expected = new DateTimeOffset(2026, 7, 31, 12, 34, 56, TimeSpan.Zero).AddTicks(1_234_560);
         record.GetRequiredField("recordedAt").Should().BeOfType<DamlTimestamp>()
@@ -225,7 +359,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_timestamp_field_without_a_fraction()
     {
-        var record = DamlLfJsonReader.ReadRecord<RecordedAtHolder>("""{"recordedAt":"2026-07-31T12:34:56Z"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"recordedAt":"2026-07-31T12:34:56Z"}""", recordType: typeof(RecordedAtHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         var expected = new DateTimeOffset(2026, 7, 31, 12, 34, 56, TimeSpan.Zero);
         record.GetRequiredField("recordedAt").Should().BeOfType<DamlTimestamp>()
@@ -235,7 +373,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_timestamp_field_with_a_millisecond_fraction()
     {
-        var record = DamlLfJsonReader.ReadRecord<RecordedAtHolder>("""{"recordedAt":"2023-06-15T12:30:45.123Z"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord("""{"recordedAt":"2023-06-15T12:30:45.123Z"}""", recordType: typeof(RecordedAtHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         var expected = new DateTimeOffset(2023, 6, 15, 12, 30, 45, TimeSpan.Zero).AddTicks(1_230_000);
         record.GetRequiredField("recordedAt").Should().BeOfType<DamlTimestamp>()
@@ -245,7 +387,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_malformed_timestamp_field()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<RecordedAtHolder>("""{"recordedAt":"not-a-timestamp"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"recordedAt":"not-a-timestamp"}""", recordType: typeof(RecordedAtHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>();
     }
@@ -261,9 +407,21 @@ public class DamlLfJsonReaderScalarTests
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("placeholder", new DamlInt64(Placeholder)));
     }
 
-    public sealed record ReferenceHolder([property: DamlFieldAttribute("reference")] ContractId<ReferencedTemplate> Reference) : IDamlRecord
+    public sealed record ReferenceHolder(
+        [property: DamlFieldAttribute("reference")] ContractId<ReferencedTemplate> Reference)
+        : IDamlRecord<ReferenceHolder>
     {
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("reference", new DamlContractId(Reference.Value)));
+
+        public static ReferenceHolder FromRecord(DamlRecord record) =>
+            new(new ContractId<ReferencedTemplate>(record.GetRequiredField("reference").As<DamlContractId>().Value));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context)
+        {
+            DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(DamlField.Create("reference", DamlLfJsonDecoders.ReadContractId(
+                DamlLfJsonDecoders.RequireField(json, context, "reference"), context.Field("reference"))));
+        }
     }
 
     private const string ReferenceContractId =
@@ -272,7 +430,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_decode_a_contract_id_field()
     {
-        var record = DamlLfJsonReader.ReadRecord<ReferenceHolder>($$"""{"reference":"{{ReferenceContractId}}"}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var record = DamlLfJsonReader.ReadRecord($$"""{"reference":"{{ReferenceContractId}}"}""", recordType: typeof(ReferenceHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         record.GetRequiredField("reference").Should().BeOfType<DamlContractId>()
             .Which.Value.Should().Be(ReferenceContractId);
@@ -281,7 +443,11 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadRecord_should_reject_a_contract_id_field_encoded_as_a_json_number()
     {
-        var act = () => DamlLfJsonReader.ReadRecord<ReferenceHolder>("""{"reference":123}""");
+        #pragma warning disable DAMLRT0001
+        #pragma warning disable CA2263
+        var act = () => DamlLfJsonReader.ReadRecord("""{"reference":123}""", recordType: typeof(ReferenceHolder));
+        #pragma warning restore CA2263
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("Expected JSON String at 'ReferenceHolder.reference' but found Number");
     }
@@ -314,7 +480,9 @@ public class DamlLfJsonReaderScalarTests
     [MemberData(nameof(TopLevelScalarShapes))]
     public void ReadValue_should_decode_a_top_level_scalar(Type valueType, string json, DamlValue expected)
     {
+        #pragma warning disable DAMLRT0001
         DamlLfJsonReader.ReadValue(json, valueType).Should().Be(expected);
+        #pragma warning restore DAMLRT0001
     }
 
     [Theory]
@@ -324,13 +492,17 @@ public class DamlLfJsonReaderScalarTests
     {
         using var document = JsonDocument.Parse(json);
 
+        #pragma warning disable DAMLRT0001
         DamlLfJsonReader.ReadValue(document.RootElement, valueType).Should().Be(expected);
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadValue_should_reject_a_top_level_scalar_whose_json_shape_does_not_match()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<Party>("123");
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("Expected JSON String at 'Party' but found Number");
     }
@@ -338,7 +510,9 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadValue_should_reject_a_malformed_top_level_scalar()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<long>("\"twelve\"");
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage("Value 'twelve' at 'Int64' is not a valid Daml Int64");
     }
@@ -352,13 +526,17 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadValue_should_decode_a_top_level_generated_enum()
     {
+        #pragma warning disable DAMLRT0001
         DamlLfJsonReader.ReadValue<Direction>("\"Forward\"").Should().Be(DamlEnum.Create("Forward"));
+        #pragma warning restore DAMLRT0001
     }
 
     [Fact]
     public void ReadValue_should_reject_a_top_level_enum_constructor_the_generated_enum_does_not_declare()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<Direction>("\"Merit\"");
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<JsonException>().WithMessage(
             "Unknown Daml enum constructor 'Merit' at 'Direction'; expected one of Forward, U$u0020Turn");
@@ -367,7 +545,9 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadValue_should_refuse_a_top_level_enum_that_is_not_a_generated_Daml_enum()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<Grade>("\"Pass\"");
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>().WithMessage(
             $"Type '{typeof(Grade)}' at 'Grade' lies outside the Daml type mapping for a top-level value; "
@@ -377,7 +557,9 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadValue_should_refuse_a_top_level_enum_whose_companion_does_not_return_a_DamlEnum()
     {
+        #pragma warning disable DAMLRT0001
         var act = () => DamlLfJsonReader.ReadValue<Tempo>("\"Andante\"");
+        #pragma warning restore DAMLRT0001
 
         act.Should().Throw<NotSupportedException>().WithMessage(
             $"Type '{typeof(Tempo)}' at 'Tempo' lies outside the Daml type mapping for a top-level value; "
@@ -387,7 +569,9 @@ public class DamlLfJsonReaderScalarTests
     [Fact]
     public void ReadValue_should_decode_a_top_level_stdlib_enum_whose_companion_is_hand_written()
     {
+        #pragma warning disable DAMLRT0001
         DamlLfJsonReader.ReadValue<Stdlib.DayOfWeek>("\"Monday\"").Should().Be(DamlEnum.Create("Monday"));
+        #pragma warning restore DAMLRT0001
     }
 
     private static IReadOnlyList<(Type Alias, Type Canonical)> TopLevelScalarAliases =>

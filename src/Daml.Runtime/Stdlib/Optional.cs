@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Stdlib;
 
@@ -12,6 +15,19 @@ namespace Daml.Runtime.Stdlib;
 /// <c>GenMap</c> key, or nested inside another Optional. Elsewhere an Optional is emitted
 /// as <c>t?</c>.
 /// </summary>
+/// <remarks>
+/// Through <see cref="System.Text.Json"/> it travels as its own concrete arm's object with a
+/// <c>"$case"</c> discriminator — <c>{"$case":"Some","Value":"c"}</c> or
+/// <c>{"$case":"None"}</c> — rather than as the flat Daml-LF <c>null</c>-or-value encoding
+/// <see cref="ToValue"/> uses, because that path is a CLR round-trip contract rather than a wire
+/// one (ADR 0028): a declared-abstract <see cref="Optional{T}"/> slot writes only the base's
+/// members and cannot be read back at all without a converter, whatever shape it picks. The
+/// discriminator keeps a nested <c>Optional&lt;Optional&lt;T&gt;&gt;</c> unambiguous, which a bare
+/// <c>null</c>-for-<see cref="None"/> encoding is not: the outer <see cref="None"/> and a
+/// <see cref="Some"/> wrapping an inner <see cref="None"/> would otherwise both write <c>null</c>.
+/// It names <see cref="OptionalJsonConverterFactory"/> in a <see cref="JsonConverterAttribute"/>,
+/// so it converts on bare <see cref="JsonSerializerOptions"/> with no registration.
+/// </remarks>
 /// <typeparam name="T">The carried type.</typeparam>
 [SuppressMessage(
     "Naming",
@@ -21,6 +37,7 @@ namespace Daml.Runtime.Stdlib;
     "Design",
     "CA1000:Do not declare static members on generic types",
     Justification = "The static factory is the wire-decoding entry point for this Daml stdlib shape; generated code calls it as Optional<...>.FromValue, mirroring the Daml constructor it decodes.")]
+[JsonConverter(typeof(OptionalJsonConverterFactory))]
 public abstract record Optional<T>
     where T : notnull
 {
@@ -189,4 +206,74 @@ public abstract record Optional<T>
             return false;
         }
     }
+}
+
+/// <summary>
+/// Supplies the <see cref="System.Text.Json"/> converter for any closed <see cref="Optional{T}"/>,
+/// including its <see cref="Optional{T}.Some"/> and <see cref="Optional{T}.None"/> arms. Without it
+/// the declared-abstract type writes only its own members — <see cref="Optional{T}.HasValue"/> — and
+/// drops whichever arm's payload the value actually carries, and a read refuses the abstract type
+/// outright with <see cref="NotSupportedException"/> before looking at the payload.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="CanConvert"/> also matches the arm types directly, so that a caller whose variable
+/// is statically typed as the concrete arm — <c>Optional&lt;string&gt;.Some</c>, not
+/// <c>Optional&lt;string&gt;</c> — still gets the discriminated shape once this factory is
+/// registered, e.g. via <see cref="DamlJsonConverters.AddDamlConverters"/>. That registration is
+/// required for the arm case specifically: <see cref="JsonConverterAttribute"/> is not inherited by
+/// <see cref="System.Text.Json"/>'s converter resolution, so the <see cref="JsonConverterAttribute"/>
+/// on <see cref="Optional{T}"/> alone leaves an arm-typed lookup on the default reflection-based
+/// contract — the same limitation <see cref="DamlJsonConverters.AddDamlConverters"/>'s remarks
+/// describe for a hand-written <see cref="Daml.Runtime.Contracts.ContractId{T}"/> derivation. Putting
+/// the attribute on the arm types too would not lift that requirement: see
+/// <see cref="DiscriminatedUnionJson.Write{TUnion}"/>'s remarks for why an arm can carry this
+/// converter only through <see cref="JsonSerializerOptions.Converters"/>, never its own attribute.
+/// </para>
+/// <para>
+/// <b>AOT / trimming incompatibility:</b> <see cref="CreateConverter"/> uses
+/// <see cref="Activator.CreateInstance(Type)"/> and <see cref="Type.MakeGenericType"/> to
+/// instantiate the closed converter at runtime — the same cost
+/// <see cref="Daml.Runtime.Stdlib.SetJsonConverterFactory"/> already carries, accepted so the
+/// attribute reaches a consumer who never registers the converters.
+/// </para>
+/// </remarks>
+[RequiresUnreferencedCode("OptionalJsonConverterFactory uses MakeGenericType and Activator.CreateInstance, which are not trimming-safe.")]
+[RequiresDynamicCode("OptionalJsonConverterFactory uses MakeGenericType at runtime, which requires dynamic code generation.")]
+internal sealed class OptionalJsonConverterFactory : JsonConverterFactory, IDiscriminatedUnionJsonConverterFactory
+{
+    public override bool CanConvert(Type typeToConvert) =>
+        IsClosedOptional(typeToConvert) || IsArmOfClosedOptional(typeToConvert);
+
+    private static bool IsClosedOptional(Type type) =>
+        type is { IsConstructedGenericType: true, ContainsGenericParameters: false }
+        && type.GetGenericTypeDefinition() == typeof(Optional<>);
+
+    private static bool IsArmOfClosedOptional(Type type) =>
+        type.BaseType is { } baseType && IsClosedOptional(baseType);
+
+    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+    {
+        var closedOptionalType = IsClosedOptional(typeToConvert) ? typeToConvert : typeToConvert.BaseType!;
+        return (JsonConverter)Activator.CreateInstance(
+            typeof(OptionalJsonConverter<>).MakeGenericType(closedOptionalType.GetGenericArguments()[0]))!;
+    }
+}
+
+internal sealed class OptionalJsonConverter<T> : JsonConverter<Optional<T>>
+    where T : notnull
+{
+    private static readonly string TypeName = $"{nameof(Optional<object>)}<{DiscriminatedUnionJson.Describe(typeof(T))}>";
+
+    private static readonly IReadOnlyDictionary<string, Type> Cases = new Dictionary<string, Type>
+    {
+        [nameof(Optional<T>.Some)] = typeof(Optional<T>.Some),
+        [nameof(Optional<T>.None)] = typeof(Optional<T>.None),
+    };
+
+    public override Optional<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Read<Optional<T>>(ref reader, options, Cases, TypeName);
+
+    public override void Write(Utf8JsonWriter writer, Optional<T> value, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Write(writer, value, options, TypeName);
 }

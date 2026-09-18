@@ -44,7 +44,10 @@ public static class ThrowingExercise
     /// contract is to throw on failure cannot return normally when the writer reports that
     /// the submission produced no transaction.
     /// A <c>Many</c> outcome succeeds: the transaction committed, so reporting it as a
-    /// submission failure would risk a resubmission of already-accepted work.
+    /// submission failure would risk a resubmission of already-accepted work. A
+    /// <c>CommittedUndecodable</c> outcome succeeds for the same reason — the transaction
+    /// committed, only its response could not be decoded, which this void caller discards
+    /// regardless.
     /// Structured Daml errors and infrastructure errors also throw
     /// <see cref="LedgerOperationException"/>.
     /// For structured error handling, use
@@ -79,10 +82,11 @@ public static class ThrowingExercise
         {
             case ExerciseOutcome<T>.One:
             case ExerciseOutcome<T>.Many:
+            case ExerciseOutcome<T>.CommittedUndecodable:
                 break;
             case ExerciseOutcome<T>.None:
-                throw new LedgerOperationException(
-                    "TrySubmitSingleAsync returned no transaction (None); nothing committed. Use TrySubmitSingleAsync for the non-throwing path.");
+                throw LedgerOperationException.CommittedWithoutDetail(
+                    "TrySubmitSingleAsync returned no transaction (None); the command committed, but produced no transaction. Use TrySubmitSingleAsync for the non-throwing path.");
             case ExerciseOutcome<T>.DamlError e:
                 throw e.ToException();
             case ExerciseOutcome<T>.InfraError e:

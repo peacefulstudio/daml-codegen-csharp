@@ -39,9 +39,15 @@ public sealed partial class CSharpCodeGenerator(CodeGenOptions options, ILogger<
 
         var resolver = new DarCrossPackageResolver(dar, options, _log);
 
-        var mainModules = PackageEmitContext.ForPackage(dar.MainPackage, options, isMainPackage: true, logger);
+        var mainModules = PackageEmitContext.ForPackage(dar.MainPackage, options, isMainPackage: true, logger,
+            mainPackageSibling: null,
+            depSiblings: dar.Dependencies);
         var dependencyModules = options.IncludeDependencies
-            ? dar.Dependencies.Select(dep => PackageEmitContext.ForPackage(dep, options, isMainPackage: false, logger)).ToList()
+            ? dar.Dependencies
+                .Select((dep, i) => PackageEmitContext.ForPackage(dep, options, isMainPackage: false, logger,
+                    mainPackageSibling: dar.MainPackage,
+                    depSiblings: dar.Dependencies.Where((_, j) => j != i).ToList()))
+                .ToList()
             : [];
 
         ModuleNamespaceGuards.Check(

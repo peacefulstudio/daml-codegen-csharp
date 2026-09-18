@@ -36,6 +36,9 @@ namespace Daml.Runtime.Outcomes;
 ///   <item><see cref="DamlError"/> — structured Canton/Daml error decoded from a transport-level trailer
 ///   (gRPC <c>grpc-status-details-bin</c>, JSON error body, etc.).</item>
 ///   <item><see cref="InfraError"/> — transport-level failure with no structured Canton error attached.</item>
+///   <item><see cref="CommittedUndecodable"/> — the command committed, but the participant's
+///   response could not be decoded into <typeparamref name="T"/>; do not resubmit, and read the
+///   transaction by <see cref="CommittedUndecodable.UpdateId"/> instead.</item>
 /// </list>
 /// </remarks>
 public abstract record ExerciseOutcome<T>
@@ -199,4 +202,20 @@ public abstract record ExerciseOutcome<T>
         string Message,
         DamlErrorCategory? Category = null,
         Exception? SourceException = null) : ExerciseOutcome<T>;
+
+    /// <summary>
+    /// The command committed, but the participant's response could not be decoded into
+    /// <typeparamref name="T"/>. Unlike every other failure arm, the command must not be
+    /// resubmitted — resubmitting a command that already committed risks executing it twice.
+    /// The caller should instead read the resulting transaction by <see cref="UpdateId"/>.
+    /// </summary>
+    /// <param name="UpdateId">The committed transaction's update id, when the response was
+    /// decoded far enough to read one before decoding failed; <c>null</c> when the decode
+    /// failure happened before the id was read.</param>
+    /// <param name="Message">Description of the decode failure.</param>
+    /// <param name="SourceException">The exception the decode failure raised.</param>
+    public sealed record CommittedUndecodable(
+        string? UpdateId,
+        string Message,
+        Exception SourceException) : ExerciseOutcome<T>;
 }

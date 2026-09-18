@@ -25,13 +25,13 @@ namespace Daml.Codegen.Testing.Conformance.ContractKeys;
 public sealed partial record Holiday(
     [property: DamlFieldAttribute("provider")] Party Provider,
     [property: DamlFieldAttribute("calendar")] Calendar Calendar
-) : ITemplate, IHasKey<Holiday, global::Daml.Codegen.Testing.Conformance.ContractKeys.HolidayKey>, IDamlRecord<Holiday>
+) : ITemplate, IHasKey<Holiday, global::Daml.Codegen.Testing.Conformance.ContractKeys.HolidayKey>, IHasChoices<Holiday>, IDamlRecord<Holiday>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb", "ContractKeys", "Holiday");
+    public static Identifier TemplateId { get; } = new("1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d", "ContractKeys", "Holiday");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb";
+    public static string PackageId => "1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "contractkeys";
@@ -48,6 +48,7 @@ public sealed partial record Holiday(
         {
             KeyEncoder = key => key.ToRecord(),
             KeyDecoder = value => global::Daml.Codegen.Testing.Conformance.ContractKeys.HolidayKey.FromRecord(value.As<DamlRecord>()),
+            KeyJsonReader = (json, context) => global::Daml.Codegen.Testing.Conformance.ContractKeys.HolidayKey.__ReadDamlLfJson(json, context),
         };
 
     /// <summary>Converts this value to a DamlRecord.</summary>
@@ -62,6 +63,17 @@ public sealed partial record Holiday(
         Calendar: Calendar.FromRecord(record.GetRequiredField("calendar").As<DamlRecord>())
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("provider", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "provider"), context.Field("provider"))),
+            DamlField.Create("calendar", Calendar.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "calendar"), context.Field("calendar")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -71,7 +83,14 @@ public sealed partial record Holiday(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -83,8 +102,14 @@ public sealed partial record Holiday(
         Name = new ChoiceName("Extend"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Holiday>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Extend.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Holiday>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Holiday.Extend.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceExtend];
 
     /// <summary>
     /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseByKeyCommand"/> for the Archive choice on the contract carrying this key.
@@ -486,7 +511,15 @@ public static class HolidayNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Holiday.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

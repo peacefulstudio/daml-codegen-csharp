@@ -16,7 +16,7 @@ public sealed partial record TypeCorners
     /// </summary>
     public sealed record Rebox(
         [property: DamlFieldAttribute("replacement")] Box<string> Replacement
-    ) : IDamlRecord
+    ) : IDamlRecord<Rebox>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record TypeCorners
         public static Rebox FromRecord(DamlRecord record) => new Rebox(
             Replacement: Box<string>.FromRecord(record.GetRequiredField("replacement").As<DamlRecord>(), __v0 => __v0.As<DamlText>().Value)
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("replacement", Box<string>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "replacement"), context.Field("replacement"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(__json0, __ctx0)))
+            );
+        }
 
     }
 }

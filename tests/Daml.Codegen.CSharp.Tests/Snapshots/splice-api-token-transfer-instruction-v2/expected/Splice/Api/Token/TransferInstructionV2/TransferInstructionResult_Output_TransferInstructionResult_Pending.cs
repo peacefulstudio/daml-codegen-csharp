@@ -27,4 +27,14 @@ public sealed record TransferInstructionResult_Output_TransferInstructionResult_
         TransferInstructionCid: new ContractId<ITransferInstruction>(record.GetRequiredField("transferInstructionCid").As<DamlContractId>().Value)
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("transferInstructionCid", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "transferInstructionCid"), context.Field("transferInstructionCid")))
+        );
+    }
+
 }

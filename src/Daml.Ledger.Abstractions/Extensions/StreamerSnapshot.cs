@@ -336,7 +336,7 @@ public static class StreamerSnapshot
                     goto done;
                 case AcsSnapshotEntry<T>.StreamError error:
                     cancellationToken.ThrowIfCancellationRequested();
-                    throw new LedgerOperationException(
+                    throw LedgerOperationException.FromStreamFault(
                         $"The active-contract-set snapshot for {typeof(T).Name} faulted after {rows.Count} "
                         + $"contract(s): {error.Message}. Use SubscribeActiveAsync for value-shaped fault handling.",
                         error.StatusCode,

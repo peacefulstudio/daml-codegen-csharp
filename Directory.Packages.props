@@ -10,14 +10,14 @@
          last release whose linux_arm64 protoc works. Bump only when grpc/grpc#38538 is closed. -->
     <PackageVersion Include="Grpc.Tools" Version="2.68.1" />
     <!-- Logging -->
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <!-- CLI tooling -->
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <!-- Conformance kit -->
-    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.0" />
-    <PackageVersion Include="xunit.v3.assert" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3.assert" Version="4.0.1" />
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
   </ItemGroup>
 </Project>

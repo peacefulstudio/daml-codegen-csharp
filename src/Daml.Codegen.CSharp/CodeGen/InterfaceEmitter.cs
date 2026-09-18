@@ -62,9 +62,16 @@ internal sealed class InterfaceEmitter(
 
         indent.CurrentTypeName = interfaceName;
 
-        var interfaces = viewType is not null
-            ? $"{context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface)}, {context.Qualifier.Qualify(RuntimeTypeNames.IHasView)}<{viewType}>"
-            : context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface);
+        var interfacesList = new List<string> { context.Qualifier.Qualify(RuntimeTypeNames.IDamlInterface) };
+        if (viewType is not null)
+        {
+            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IHasView)}<{viewType}>");
+        }
+        if (iface.Choices.Count > 0)
+        {
+            interfacesList.Add($"{context.Qualifier.Qualify(RuntimeTypeNames.IHasChoices)}<{interfaceName}>");
+        }
+        var interfaces = string.Join(", ", interfacesList);
 
         indent.AppendLine($"public interface {interfaceName} : {interfaces}");
         indent.AppendLine("{");
@@ -80,6 +87,12 @@ internal sealed class InterfaceEmitter(
         if (stampedViewRecord is not null)
         {
             WriteViewFieldProperties(indent, stampedViewRecord);
+        }
+
+        if (iface.Choices.Count > 0)
+        {
+            choiceEmitter.WriteInterfaceChoiceDescriptors(indent, iface, interfaceName);
+            choiceEmitter.WriteChoicesAggregateProperty(indent, iface.Choices, interfaceName);
         }
 
         indent.Dedent();

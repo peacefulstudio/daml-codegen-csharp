@@ -47,4 +47,12 @@ public static class TransferSideExtensions
             _ => throw new ArgumentOutOfRangeException(nameof(value), value.Constructor, null)
         };
     }
+
+    /// <summary>Decodes a Daml-LF JSON enum constructor directly into a DamlEnum, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlEnum __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context) =>
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadEnumConstructor(json, context, ExpectedConstructors);
+
+    private static readonly string[] ExpectedConstructors = ["SenderSide", "ReceiverSide"];
+
 }

@@ -54,6 +54,7 @@ public static class ExerciseOutcomeProjection
             ExerciseOutcome<TransactionResult>.Many many => new ExerciseOutcome<TProjected>.Many(many.ContractIds),
             ExerciseOutcome<TransactionResult>.DamlError e => new ExerciseOutcome<TProjected>.DamlError(e.Category, e.ErrorId, e.Message, e.Metadata),
             ExerciseOutcome<TransactionResult>.InfraError e => new ExerciseOutcome<TProjected>.InfraError(e.StatusCode, e.Message, e.Category, e.SourceException),
+            ExerciseOutcome<TransactionResult>.CommittedUndecodable e => new ExerciseOutcome<TProjected>.CommittedUndecodable(e.UpdateId, e.Message, e.SourceException),
             _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from TrySubmitAndWaitForTransactionAsync."),
         };
     }

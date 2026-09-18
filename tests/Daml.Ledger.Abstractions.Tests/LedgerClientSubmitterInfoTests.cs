@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Daml.Ledger.Abstractions.Extensions;
 using Daml.Ledger.Abstractions.Testing.Conformance;
 using Daml.Runtime;
@@ -9,6 +10,7 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -519,5 +521,8 @@ public class LedgerClientSubmitterInfoTests
         public DamlRecord ToRecord() => new(TemplateId, []);
 
         public static FakeTemplate FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

@@ -124,6 +124,21 @@ public class ExerciseOutcomeProjectionTests
     }
 
     [Fact]
+    public void ProjectCommitted_maps_CommittedUndecodable_preserving_update_id_message_and_source_exception()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        var outcome = new ExerciseOutcome<TransactionResult>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException);
+
+        var result = outcome.ProjectCommitted<int>(_ => new ExerciseOutcome<int>.One(0));
+
+        var committedUndecodable = result.Should().BeOfType<ExerciseOutcome<int>.CommittedUndecodable>().Subject;
+        committedUndecodable.UpdateId.Should().Be("u1");
+        committedUndecodable.Message.Should().Be("could not decode result");
+        committedUndecodable.SourceException.Should().BeSameAs(sourceException);
+    }
+
+    [Fact]
     public void ProjectCommitted_throws_when_projector_is_null()
     {
         var outcome = new ExerciseOutcome<TransactionResult>.One(SampleTransaction);

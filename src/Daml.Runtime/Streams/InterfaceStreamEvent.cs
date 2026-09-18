@@ -1,9 +1,13 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Streams;
 
@@ -116,7 +120,16 @@ namespace Daml.Runtime.Streams;
 ///     variants.</description>
 ///   </item>
 /// </list>
+/// <para>
+/// Through <see cref="System.Text.Json"/> it travels as its own concrete arm's object with a
+/// <c>"$case"</c> discriminator, mirroring <see cref="ContractStreamEvent{T}"/>'s shape (ADR
+/// 0028: a CLR round-trip contract, not the Daml-LF wire encoding). It names
+/// <see cref="InterfaceStreamEventJsonConverterFactory"/> in a
+/// <see cref="JsonConverterAttribute"/>, so it converts on bare <see cref="JsonSerializerOptions"/>
+/// with no registration.
+/// </para>
 /// </remarks>
+[JsonConverter(typeof(InterfaceStreamEventJsonConverterFactory))]
 public abstract record InterfaceStreamEvent<TInterface, TView>
     where TInterface : IDamlInterface, IHasView<TView>
     where TView : IDamlRecord<TView>
@@ -302,13 +315,21 @@ public abstract record InterfaceStreamEvent<TInterface, TView>
     /// <see cref="StatusCode"/> are both too coarse to separate two faults that need opposite
     /// handling, and <see cref="Message"/> is participant prose rather than an API.</param>
     /// <param name="SourceException">Transport exception that caused the stream failure, when
-    /// available.</param>
+    /// available. Carries <see cref="JsonIgnoreAttribute"/> and is excluded from the
+    /// <see cref="System.Text.Json"/> round trip: the reflection-based serializer writes an
+    /// arbitrary <see cref="Exception"/> by walking its public members, and
+    /// <see cref="System.Reflection.MethodBase"/> — reachable through
+    /// <see cref="Exception.TargetSite"/> — throws <see cref="NotSupportedException"/> the moment
+    /// a real caught exception (which always has a <see cref="Exception.TargetSite"/>) is
+    /// serialized this way. A read restores this member as <see langword="null"/> rather than
+    /// reconstructing the original exception, which the CLR type offers no JSON-constructible
+    /// shape for in general anyway.</param>
     public sealed record StreamError(
         int StatusCode,
         string Message,
         DamlErrorCategory? Category = null,
         string? ErrorId = null,
-        Exception? SourceException = null) : InterfaceStreamEvent<TInterface, TView>;
+        [property: JsonIgnore] Exception? SourceException = null) : InterfaceStreamEvent<TInterface, TView>;
 
     /// <summary>
     /// An event the transport delivered but this layer could not map to any of the other
@@ -363,4 +384,85 @@ public abstract record InterfaceStreamEvent<TInterface, TView>
         public string? RawKind { get; } = UnclassifiedRawKind.Validated(
             Kind, RawKind, UnclassifiedRawKind.EventSubject, nameof(RawKind));
     }
+}
+
+/// <summary>
+/// Supplies the <see cref="System.Text.Json"/> converter for any closed
+/// <see cref="InterfaceStreamEvent{TInterface, TView}"/>, including its eight arms. Without it the
+/// declared-abstract type writes an empty object for every arm and refuses to read any of them back
+/// — see <see cref="InterfaceStreamEvent{TInterface, TView}"/>'s remarks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="CanConvert"/> also matches the arm types directly, so that a caller whose variable is
+/// statically typed as a concrete arm — e.g.
+/// <c>InterfaceStreamEvent&lt;TInterface, TView&gt;.Checkpoint</c>, not
+/// <c>InterfaceStreamEvent&lt;TInterface, TView&gt;</c> — still gets the discriminated shape once
+/// this factory is registered, e.g. via <see cref="DamlJsonConverters.AddDamlConverters"/>. That
+/// registration is required for the arm case specifically:
+/// <see cref="JsonConverterAttribute"/> is not inherited by <see cref="System.Text.Json"/>'s
+/// converter resolution, so the <see cref="JsonConverterAttribute"/> on
+/// <see cref="InterfaceStreamEvent{TInterface, TView}"/> alone leaves an arm-typed lookup on the
+/// default reflection-based contract — the same limitation
+/// <see cref="DamlJsonConverters.AddDamlConverters"/>'s remarks describe for a hand-written
+/// <see cref="Daml.Runtime.Contracts.ContractId{T}"/> derivation. Putting the attribute on the arm
+/// types too would not lift that requirement: see
+/// <see cref="DiscriminatedUnionJson.Write{TUnion}"/>'s remarks for why an arm can carry this
+/// converter only through <see cref="JsonSerializerOptions.Converters"/>, never its own attribute.
+/// </para>
+/// <para>
+/// <b>AOT / trimming incompatibility:</b> <see cref="CreateConverter"/> uses
+/// <see cref="Activator.CreateInstance(Type)"/> and <see cref="Type.MakeGenericType"/> to
+/// instantiate the closed converter at runtime — the same cost
+/// <see cref="Daml.Runtime.Stdlib.SetJsonConverterFactory"/> already carries, accepted so the
+/// attribute reaches a consumer who never registers the converters.
+/// </para>
+/// </remarks>
+[RequiresUnreferencedCode("InterfaceStreamEventJsonConverterFactory uses MakeGenericType and Activator.CreateInstance, which are not trimming-safe.")]
+[RequiresDynamicCode("InterfaceStreamEventJsonConverterFactory uses MakeGenericType at runtime, which requires dynamic code generation.")]
+internal sealed class InterfaceStreamEventJsonConverterFactory : JsonConverterFactory, IDiscriminatedUnionJsonConverterFactory
+{
+    public override bool CanConvert(Type typeToConvert) =>
+        IsClosedInterfaceStreamEvent(typeToConvert) || IsArmOfClosedInterfaceStreamEvent(typeToConvert);
+
+    private static bool IsClosedInterfaceStreamEvent(Type type) =>
+        type is { IsConstructedGenericType: true, ContainsGenericParameters: false }
+        && type.GetGenericTypeDefinition() == typeof(InterfaceStreamEvent<,>);
+
+    private static bool IsArmOfClosedInterfaceStreamEvent(Type type) =>
+        type.BaseType is { } baseType && IsClosedInterfaceStreamEvent(baseType);
+
+    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+    {
+        var closedEventType = IsClosedInterfaceStreamEvent(typeToConvert) ? typeToConvert : typeToConvert.BaseType!;
+        var typeArguments = closedEventType.GetGenericArguments();
+        return (JsonConverter)Activator.CreateInstance(
+            typeof(InterfaceStreamEventJsonConverter<,>).MakeGenericType(typeArguments[0], typeArguments[1]))!;
+    }
+}
+
+internal sealed class InterfaceStreamEventJsonConverter<TInterface, TView> : JsonConverter<InterfaceStreamEvent<TInterface, TView>>
+    where TInterface : IDamlInterface, IHasView<TView>
+    where TView : IDamlRecord<TView>
+{
+    private static readonly string TypeName =
+        $"{nameof(InterfaceStreamEvent<TInterface, TView>)}<{DiscriminatedUnionJson.Describe(typeof(TInterface))}, {DiscriminatedUnionJson.Describe(typeof(TView))}>";
+
+    private static readonly IReadOnlyDictionary<string, Type> Cases = new Dictionary<string, Type>
+    {
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Created)] = typeof(InterfaceStreamEvent<TInterface, TView>.Created),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Archived)] = typeof(InterfaceStreamEvent<TInterface, TView>.Archived),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Exercised)] = typeof(InterfaceStreamEvent<TInterface, TView>.Exercised),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Assigned)] = typeof(InterfaceStreamEvent<TInterface, TView>.Assigned),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Unassigned)] = typeof(InterfaceStreamEvent<TInterface, TView>.Unassigned),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Checkpoint)] = typeof(InterfaceStreamEvent<TInterface, TView>.Checkpoint),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.StreamError)] = typeof(InterfaceStreamEvent<TInterface, TView>.StreamError),
+        [nameof(InterfaceStreamEvent<TInterface, TView>.Unclassified)] = typeof(InterfaceStreamEvent<TInterface, TView>.Unclassified),
+    };
+
+    public override InterfaceStreamEvent<TInterface, TView> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Read<InterfaceStreamEvent<TInterface, TView>>(ref reader, options, Cases, TypeName);
+
+    public override void Write(Utf8JsonWriter writer, InterfaceStreamEvent<TInterface, TView> value, JsonSerializerOptions options) =>
+        DiscriminatedUnionJson.Write(writer, value, options, TypeName);
 }

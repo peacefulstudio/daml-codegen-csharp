@@ -252,27 +252,24 @@ public partial class CodeGenEdgeCaseTests
         // Sibling extensions class with one method per choice
         code.Should().Contain("public static class IHoldingExtensions");
 
-        // Record-argument choice: signature returning ExerciseOutcome<TransactionResult>
-        // (mirrors the concrete-template <Choice>Async shape). Interface choices
-        // surface the raw ExerciseOutcome<TransactionResult> because the implementing
-        // template — and therefore any typed <Choice>Result projection — is unknown at
-        // the call site.
-        code.Should().Contain("public static Task<ExerciseOutcome<TransactionResult>> TransferAsync(");
+        code.Should().Contain(
+            "public static async Task<ExerciseOutcome<Transfer_Result>> TransferAsync(",
+            "a record-argument choice returns ExerciseOutcome<Transfer_Result> — the choice's own return type, decoded through the choice descriptor's ResultDecoder rather than the raw ExerciseOutcome<TransactionResult>");
         code.Should().Contain("this ContractId<IHolding> contractId,");
         code.Should().Contain("ILedgerWriter client,");
         code.Should().Contain("Transfer argument,");
         code.Should().Contain("SubmitterInfo submitter,");
-        // Internally builds the command via the runtime ForInterface helper — the
+        // Internally builds the command via the runtime For<TOwner> helper — the
         // wire-level template_id slot carries IHolding.InterfaceId, and the choice
         // argument is serialised via argument.ToRecord().
-        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord())");
+        code.Should().Contain("ExerciseCommand.For<IHolding>(contractId, new ChoiceName(\"Transfer\"), argument.ToRecord())");
         code.Should().Contain("client." + TrySubmitSingleArgumentOrder);
 
         // Unit-argument choice: no `argument` parameter, DamlUnit.Instance is passed
         code.Should().Contain(
-            "public static Task<ExerciseOutcome<TransactionResult>> LockAsync(\n        this ContractId<IHolding> contractId,\n        ILedgerWriter client,\n        SubmitterInfo submitter,",
+            "public static async Task<ExerciseOutcome<Unit>> LockAsync(\n        this ContractId<IHolding> contractId,\n        ILedgerWriter client,\n        SubmitterInfo submitter,",
             "a single-line signature assertion cannot tell one emitted parameter list from another, so it is pinned verbatim — a failure here means the exerciser signature changed or the emitter's indentation did, not that the assertion is wrong");
-        code.Should().Contain("ExerciseCommand.ForInterface<IHolding>(contractId, new ChoiceName(\"Lock\"), DamlUnit.Instance)");
+        code.Should().Contain("ExerciseCommand.For<IHolding>(contractId, new ChoiceName(\"Lock\"), DamlUnit.Instance)");
     }
 
     [Fact]

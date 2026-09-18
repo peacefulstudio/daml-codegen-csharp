@@ -1,9 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using AwesomeAssertions;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using Xunit;
 
@@ -134,5 +136,8 @@ public sealed class InterfaceStreamEventTests
         public DamlRecord ToRecord() => DamlRecord.Create();
 
         public static TestView FromRecord(DamlRecord record) => new();
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

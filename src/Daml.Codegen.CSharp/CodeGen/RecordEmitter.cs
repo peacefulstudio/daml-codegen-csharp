@@ -65,6 +65,7 @@ internal sealed class RecordEmitter(
         serialization.WriteCollectionValueSemantics(indent, fullClassName, record.Fields);
         serialization.WriteToRecordMethod(indent, record.Fields, dataType.TypeParams);
         serialization.WriteFromRecordMethod(indent, fullClassName, record.Fields, dataType.TypeParams);
+        serialization.WriteReadDamlLfJsonMethod(indent, record.Fields, dataType.TypeParams);
 
         indent.Dedent();
         indent.AppendLine("}");

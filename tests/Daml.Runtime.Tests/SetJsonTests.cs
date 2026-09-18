@@ -140,19 +140,20 @@ public class SetJsonTests
     {
         var act = () => JsonSerializer.Deserialize<Set<string>>("""["alice",null]""");
 
-        act.Should().Throw<JsonException>().WithMessage("*Element 1 of Set<String> is null*");
+        act.Should().Throw<JsonException>()
+            .WithMessage("*Invalid element in Set<String>*")
+            .WithInnerException<ArgumentException>()
+            .WithMessage("*Element 1 is null*a Set<String> holds no null elements*");
     }
 
     [Fact]
-    public void Set_refuses_to_write_a_null_element()
+    public void Constructor_refuses_a_null_element_so_Set_never_holds_one_to_write()
     {
-        var set = new Set<string>([null!]);
-        set.Count.Should().Be(1);
+        var act = () => new Set<string>([null!]);
 
-        var act = () => JsonSerializer.Serialize(set);
-
-        act.Should().Throw<JsonException>()
-            .WithMessage("*Element 0 of Set<String> is null*");
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Element 0 is null*a Set<String> holds no null elements*")
+            .WithParameterName("elements");
     }
 
     [Fact]

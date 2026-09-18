@@ -1,6 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using Daml.Runtime.Serialization;
+
 namespace Daml.Runtime.Data;
 
 /// <summary>
@@ -45,6 +50,21 @@ public interface IDamlRecord<TSelf> : IDamlRecord
     /// representation. Implementations throw when a required field is missing.
     /// </summary>
     static abstract TSelf FromRecord(DamlRecord record);
+
+    /// <summary>
+    /// Decodes a Daml-LF JSON record directly into a <see cref="DamlRecord"/> for
+    /// <typeparamref name="TSelf"/>, without going through reflection.
+    /// </summary>
+    /// <remarks>
+    /// Emitted by the code generator for generated types; not for hand-authored calls.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [SuppressMessage(
+        "Naming", "CA1707:Identifiers should not contain underscores",
+        Justification = "The double-underscore prefix is the emitted-plumbing naming convention shared "
+            + "by every __ReadDamlLfJson member; it marks a compiler-dispatched member no hand-written "
+            + "call site should name, the same intent EditorBrowsable(Never) signals.")]
+    static abstract DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context);
 }
 
 /// <summary>
@@ -56,6 +76,31 @@ public interface IDamlVariant : IDamlValue
     /// Converts this value to its Ledger API variant representation.
     /// </summary>
     DamlVariant ToVariant();
+}
+
+/// <summary>
+/// A Daml value whose Ledger API representation is a variant and whose concrete arm can be
+/// decoded directly from Daml-LF JSON.
+/// </summary>
+/// <typeparam name="TSelf">The implementing type itself; the self-referential constraint
+/// lets the reader dispatch to the concrete type's own decoding logic.</typeparam>
+public interface IDamlVariant<TSelf> : IDamlVariant
+    where TSelf : IDamlVariant<TSelf>
+{
+    /// <summary>
+    /// Decodes a Daml-LF JSON variant directly into a <see cref="DamlVariant"/> for
+    /// <typeparamref name="TSelf"/>, without going through reflection.
+    /// </summary>
+    /// <remarks>
+    /// Emitted by the code generator for generated types; not for hand-authored calls.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [SuppressMessage(
+        "Naming", "CA1707:Identifiers should not contain underscores",
+        Justification = "The double-underscore prefix is the emitted-plumbing naming convention shared "
+            + "by every __ReadDamlLfJson member; it marks a compiler-dispatched member no hand-written "
+            + "call site should name, the same intent EditorBrowsable(Never) signals.")]
+    static abstract DamlVariant __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context);
 }
 
 /// <summary>

@@ -81,7 +81,7 @@ internal sealed partial class ChoiceEmitter
         slot.FieldName,
         SlotPropertyType(slot),
         slot.Cardinality == CreatedCardinality.List ? CollectionShape.List : CollectionShape.None,
-        $"The <c>{slot.CSharpTemplateType}</c> contracts this slot of the choice's return type carries.",
+        $"The <c>{EmitterHelpers.EscapeXmlText(slot.CSharpTemplateType)}</c> contracts this slot of the choice's return type carries.",
         DamlFieldName: null);
 
     private string SlotPropertyType(ChoiceCreatedSlot slot) => slot.Cardinality switch

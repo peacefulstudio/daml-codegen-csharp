@@ -16,7 +16,7 @@ public sealed partial record Steward
     /// </summary>
     public sealed record Revise(
         [property: DamlFieldAttribute("revised")] string Revised
-    ) : IDamlRecord
+    ) : IDamlRecord<Revise>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record Steward
         public static Revise FromRecord(DamlRecord record) => new Revise(
             Revised: record.GetRequiredField("revised").As<DamlText>().Value
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("revised", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "revised"), context.Field("revised")))
+            );
+        }
 
     }
 }

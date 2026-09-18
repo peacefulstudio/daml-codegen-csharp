@@ -17,7 +17,7 @@ public sealed partial record AnsEntry
     /// </summary>
     public sealed record AnsEntry_Renew(
         [property: DamlFieldAttribute("extension")] RelTime Extension
-    ) : IDamlRecord
+    ) : IDamlRecord<AnsEntry_Renew>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -28,6 +28,16 @@ public sealed partial record AnsEntry
         public static AnsEntry_Renew FromRecord(DamlRecord record) => new AnsEntry_Renew(
             Extension: RelTime.FromRecord(record.GetRequiredField("extension").As<DamlRecord>())
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("extension", RelTime.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "extension"), context.Field("extension")))
+            );
+        }
 
     }
 }

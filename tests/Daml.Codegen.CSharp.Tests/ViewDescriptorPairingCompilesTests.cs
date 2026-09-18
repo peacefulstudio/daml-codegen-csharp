@@ -22,9 +22,11 @@ public class ViewDescriptorPairingCompilesTests
 {
     private const string PairingSource = """
         using System;
+        using System.Text.Json;
         using Daml.Runtime;
         using Daml.Runtime.Contracts;
         using Daml.Runtime.Data;
+        using Daml.Runtime.Serialization;
 
         namespace Pairing;
 
@@ -44,6 +46,9 @@ public class ViewDescriptorPairingCompilesTests
 
             public static TestHoldingView FromRecord(DamlRecord record) =>
                 new(record.GetRequiredField("amount").As<DamlNumeric>().Value);
+
+            public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+                DamlRecord.Create(DamlField.Create("amount", DamlLfJsonDecoders.ReadNumeric(DamlLfJsonDecoders.RequireField(json, context, "amount"), context.Field("amount"))));
         }
 
         public sealed record WrongView(decimal Amount) : IDamlRecord<WrongView>
@@ -52,6 +57,9 @@ public class ViewDescriptorPairingCompilesTests
 
             public static WrongView FromRecord(DamlRecord record) =>
                 new(record.GetRequiredField("amount").As<DamlNumeric>().Value);
+
+            public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+                DamlRecord.Create(DamlField.Create("amount", DamlLfJsonDecoders.ReadNumeric(DamlLfJsonDecoders.RequireField(json, context, "amount"), context.Field("amount"))));
         }
         """;
 

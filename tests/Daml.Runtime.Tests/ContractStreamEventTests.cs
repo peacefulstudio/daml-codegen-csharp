@@ -1,10 +1,12 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using Daml.Runtime;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using AwesomeAssertions;
 using Xunit;
@@ -433,12 +435,16 @@ public class ContractStreamEventTests
             KeyEncoder = key => DamlRecord.Create(new DamlField("owner", key.ToDamlValue())),
             KeyDecoder = value =>
                 Party.FromDamlValue(value.As<DamlRecord>().GetRequiredField("owner").As<DamlParty>()),
+            KeyJsonReader = (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(new DamlField("owner", Owner.ToDamlValue()));
 
         public static DecodableTemplate FromRecord(DamlRecord record) =>
             new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private sealed record TestTemplate(string Owner) : ITemplate, IDamlRecord<TestTemplate>
@@ -453,5 +459,8 @@ public class ContractStreamEventTests
 
         public static TestTemplate FromRecord(DamlRecord record) =>
             new((record.GetField("owner") as DamlText)?.Value ?? string.Empty);
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

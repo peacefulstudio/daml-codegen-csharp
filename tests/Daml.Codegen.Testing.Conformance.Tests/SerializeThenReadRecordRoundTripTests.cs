@@ -20,53 +20,37 @@ namespace Daml.Codegen.Testing.Conformance.Tests;
 /// </summary>
 public class SerializeThenReadRecordRoundTripTests
 {
-    private static readonly IReadOnlyDictionary<string, (Type RecordType, DamlRecord Record)> Corpus =
-        new Dictionary<string, (Type, DamlRecord)>(StringComparer.Ordinal)
+    private sealed record CorpusEntry(DamlRecord Record, Func<string, DamlRecord> Read);
+
+    private static CorpusEntry Entry<T>(DamlRecord record) where T : IDamlRecord<T> =>
+        new(record, json => DamlLfJsonReader.ReadRecord<T>(json));
+
+    private static readonly IReadOnlyDictionary<string, CorpusEntry> Corpus =
+        new Dictionary<string, CorpusEntry>(StringComparer.Ordinal)
         {
-            [nameof(RichRecord)] = (typeof(RichRecord), RichRecordSample(new Outcome.Win(
+            [nameof(RichRecord)] = Entry<RichRecord>(RichRecordSample(new Outcome.Win(
                 new Outcome_Win(Prize: 12.34m, Tier: "gold"))).ToRecord()),
-            ["RichRecord_nullary_variant_arm"] = (typeof(RichRecord),
+            ["RichRecord_nullary_variant_arm"] = Entry<RichRecord>(
                 RichRecordSample(new Outcome.Pending()).ToRecord()),
-            [nameof(TypeCorners)] = (typeof(TypeCorners), TypeCornersSample().ToRecord()),
-            [nameof(Profile)] = (typeof(Profile), new Profile("ace", 7).ToRecord()),
-            [nameof(Outcome_Win)] = (typeof(Outcome_Win), new Outcome_Win(Prize: 12.34m, Tier: "gold").ToRecord()),
-            [nameof(Account)] = (typeof(Account),
+            [nameof(TypeCorners)] = Entry<TypeCorners>(TypeCornersSample().ToRecord()),
+            [nameof(Profile)] = Entry<Profile>(new Profile("ace", 7).ToRecord()),
+            [nameof(Outcome_Win)] = Entry<Outcome_Win>(new Outcome_Win(Prize: 12.34m, Tier: "gold").ToRecord()),
+            [nameof(Account)] = Entry<Account>(
                 new Account(new Party("alice"), "savings", 1_000).ToRecord()),
-            [nameof(AccountKey)] = (typeof(AccountKey), new AccountKey(new Party("alice"), "savings").ToRecord()),
+            [nameof(AccountKey)] = Entry<AccountKey>(new AccountKey(new Party("alice"), "savings").ToRecord()),
         };
 
-    /// <summary>
-    /// The generated generic records <c>Box</c>, <c>Crate</c> and <c>Slot</c> take their field
-    /// converters as arguments, so the emitter cannot put <c>IDamlRecord</c> on them and the typed
-    /// reader has no slot mapping for them. <c>TypeCorners</c> carries three of them, which puts the
-    /// whole template outside the reader today; the gap is pinned here so that closing it fails this
-    /// test and forces <c>TypeCorners</c> into the round-trip theory.
-    /// </summary>
-    private const string TypeCornersReaderGap =
-        "CLR type 'Daml.Codegen.Testing.Conformance.RichTypes.Box`1[System.String]' at "
-        + "'TypeCorners.boxedText' lies outside the Daml type mapping";
-
-    public static TheoryData<string> RoundTrippableCorpusEntries =>
-        [.. Corpus.Keys.Where(entry => entry != nameof(TypeCorners))];
+    public static TheoryData<string> RoundTrippableCorpusEntries => [.. Corpus.Keys];
 
     [Theory]
     [MemberData(nameof(RoundTrippableCorpusEntries))]
     public void ReadRecord_round_trips_the_writer_output_for_every_corpus_record(string entry)
     {
-        var (recordType, record) = Corpus[entry];
+        var corpusEntry = Corpus[entry];
 
-        var restored = DamlLfJsonReader.ReadRecord(DamlJsonSerializer.Serialize(record), recordType);
+        var restored = corpusEntry.Read(DamlJsonSerializer.Serialize(corpusEntry.Record));
 
-        restored.Should().Be(WithoutTypeIdentifiers(record));
-    }
-
-    [Fact]
-    public void ReadRecord_pins_the_reader_gap_that_keeps_TypeCorners_out_of_the_round_trip()
-    {
-        var act = () => DamlLfJsonReader.ReadRecord<TypeCorners>(
-            DamlJsonSerializer.Serialize(Corpus[nameof(TypeCorners)].Record));
-
-        act.Should().Throw<NotSupportedException>().WithMessage($"*{TypeCornersReaderGap}*");
+        restored.Should().Be(WithoutTypeIdentifiers(corpusEntry.Record));
     }
 
     [Fact]

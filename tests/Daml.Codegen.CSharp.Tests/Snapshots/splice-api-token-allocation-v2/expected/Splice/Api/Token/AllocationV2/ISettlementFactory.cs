@@ -11,7 +11,9 @@ using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Stdlib;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,7 +29,7 @@ namespace Splice.Api.Token.AllocationV2;
 /// materialize as concrete <see cref="SettlementFactoryView"/> values, whose record value equality
 /// applies once concretely typed.
 /// </remarks>
-public interface ISettlementFactory : IDamlInterface, IHasView<SettlementFactoryView>
+public interface ISettlementFactory : IDamlInterface, IHasView<SettlementFactoryView>, IHasChoices<ISettlementFactory>
 {
     /// <summary>Gets the interface identifier.</summary>
     static Identifier IDamlInterface.InterfaceId => InterfaceId;
@@ -56,18 +58,70 @@ public interface ISettlementFactory : IDamlInterface, IHasView<SettlementFactory
     /// <summary>Gets the meta field of the interface view.</summary>
     global::Splice.Api.Token.MetadataV1.Metadata Meta { get; }
 
+    /// <summary>
+    /// Exercise the Archive choice.
+    /// This choice is consuming and will archive the contract.
+    /// </summary>
+    public static Choice<ISettlementFactory, DamlUnit, DamlUnit> ChoiceArchive { get; } = new()
+    {
+        Name = new ChoiceName("Archive"),
+        Consuming = true,
+        ArgumentEncoder = _ => DamlRecord.Create(),
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
+    };
+
+    /// <summary>
+    /// Exercise the SettlementFactory_PublicFetch choice.
+    /// </summary>
+    public static Choice<ISettlementFactory, SettlementFactory_PublicFetch, SettlementFactoryView> ChoiceSettlementFactory_PublicFetch { get; } = new()
+    {
+        Name = new ChoiceName("SettlementFactory_PublicFetch"),
+        Consuming = false,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ArgumentDecoder = val => global::Splice.Api.Token.AllocationV2.SettlementFactory_PublicFetch.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => global::Splice.Api.Token.AllocationV2.SettlementFactoryView.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => global::Splice.Api.Token.AllocationV2.SettlementFactory_PublicFetch.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Splice.Api.Token.AllocationV2.SettlementFactoryView.__ReadDamlLfJson(json, context),
+    };
+
+    /// <summary>
+    /// Exercise the SettlementFactory_SettleBatch choice.
+    /// </summary>
+    public static Choice<ISettlementFactory, SettlementFactory_SettleBatch, SettlementFactory_SettleBatchResult> ChoiceSettlementFactory_SettleBatch { get; } = new()
+    {
+        Name = new ChoiceName("SettlementFactory_SettleBatch"),
+        Consuming = false,
+        ArgumentEncoder = arg => arg.ToRecord(),
+        ArgumentDecoder = val => global::Splice.Api.Token.AllocationV2.SettlementFactory_SettleBatch.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => global::Splice.Api.Token.AllocationV2.SettlementFactory_SettleBatchResult.FromRecord(val.As<DamlRecord>()),
+        ArgumentJsonReader = (json, context) => global::Splice.Api.Token.AllocationV2.SettlementFactory_SettleBatch.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Splice.Api.Token.AllocationV2.SettlementFactory_SettleBatchResult.__ReadDamlLfJson(json, context),
+    };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    static IReadOnlyList<IChoice> IHasChoices<ISettlementFactory>.Choices { get; } = [ChoiceArchive, ChoiceSettlementFactory_PublicFetch, ChoiceSettlementFactory_SettleBatch];
+
 }
 
 /// <summary>
 /// Static <c>&lt;Choice&gt;Async</c> extension methods for the <c>SettlementFactory</c> Daml interface.
 /// One method per choice; each submits an interface-typed
 /// <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> built via
-/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.ForInterface{TInterface}(global::Daml.Runtime.Contracts.ContractId{TInterface},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
+/// <see cref="global::Daml.Runtime.Commands.ExerciseCommand.For{TOwner}(global::Daml.Runtime.Contracts.ContractId{TOwner},global::Daml.Runtime.Commands.ChoiceName,global::Daml.Runtime.Data.DamlValue)"/>
 /// through <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
-/// and surfaces the raw <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TransactionResult}"/> —
-/// interface choices have no typed <c>&lt;Choice&gt;Result</c> projection because the
-/// implementing template (and therefore the produced contracts' shapes) is unknown
-/// at the call site.
+/// and projects the committed transaction's matching exercise event through the choice
+/// descriptor's <c>ResultDecoder</c>, surfacing a typed
+/// <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}"/> — the choice's own return
+/// type, not the implementing template's. A decode failure after a successful commit
+/// surfaces as <see cref="global::Daml.Runtime.Outcomes.ExerciseOutcome{TResult}.CommittedUndecodable"/>,
+/// never as a resubmittable error.
 /// </summary>
 public static class ISettlementFactoryExtensions
 {
@@ -81,13 +135,14 @@ public static class ISettlementFactoryExtensions
         this ContractId<ISettlementFactory> contractId)
     {
         ArgumentNullException.ThrowIfNull(contractId);
-        return ExerciseCommand.ForInterface<ISettlementFactory>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
+        return ExerciseCommand.For<ISettlementFactory>(contractId, new ChoiceName("Archive"), DamlRecord.Create());
     }
 
     /// <summary>
     /// Exercises the <c>Archive</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and returning the committed result as the stdlib Unit singleton.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -96,7 +151,7 @@ public static class ISettlementFactoryExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> ArchiveAsync(
+    public static async Task<ExerciseOutcome<Unit>> ArchiveAsync(
         this ContractId<ISettlementFactory> contractId,
         ILedgerWriter client,
         SubmitterInfo submitter,
@@ -109,7 +164,9 @@ public static class ISettlementFactoryExtensions
 
         var command = contractId.ArchiveCommand();
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectArchiveResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -125,13 +182,14 @@ public static class ISettlementFactoryExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(argument);
-        return ExerciseCommand.ForInterface<ISettlementFactory>(contractId, new ChoiceName("SettlementFactory_PublicFetch"), argument.ToRecord());
+        return ExerciseCommand.For<ISettlementFactory>(contractId, new ChoiceName("SettlementFactory_PublicFetch"), argument.ToRecord());
     }
 
     /// <summary>
     /// Exercises the <c>SettlementFactory_PublicFetch</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and decoding the committed result through <c>ChoiceSettlementFactory_PublicFetch.ResultDecoder</c>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -141,7 +199,7 @@ public static class ISettlementFactoryExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> SettlementFactory_PublicFetchAsync(
+    public static async Task<ExerciseOutcome<SettlementFactoryView>> SettlementFactory_PublicFetchAsync(
         this ContractId<ISettlementFactory> contractId,
         ILedgerWriter client,
         SettlementFactory_PublicFetch argument,
@@ -155,7 +213,9 @@ public static class ISettlementFactoryExtensions
 
         var command = contractId.SettlementFactory_PublicFetchCommand(argument);
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectSettlementFactory_PublicFetchResult(tx, contractId.Value));
     }
 
     /// <summary>
@@ -171,13 +231,14 @@ public static class ISettlementFactoryExtensions
     {
         ArgumentNullException.ThrowIfNull(contractId);
         ArgumentNullException.ThrowIfNull(argument);
-        return ExerciseCommand.ForInterface<ISettlementFactory>(contractId, new ChoiceName("SettlementFactory_SettleBatch"), argument.ToRecord());
+        return ExerciseCommand.For<ISettlementFactory>(contractId, new ChoiceName("SettlementFactory_SettleBatch"), argument.ToRecord());
     }
 
     /// <summary>
     /// Exercises the <c>SettlementFactory_SettleBatch</c> interface choice on this contract id, submitting the
     /// resulting <see cref="global::Daml.Runtime.Commands.ExerciseCommand"/> through
-    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>.
+    /// <see cref="global::Daml.Ledger.Abstractions.Extensions.SingleCommandExtensions.TrySubmitSingleAsync"/>
+    /// and decoding the committed result through <c>ChoiceSettlementFactory_SettleBatch.ResultDecoder</c>.
     /// </summary>
     /// <param name="contractId">The interface-typed contract id to exercise on.</param>
     /// <param name="client">The ledger client.</param>
@@ -187,7 +248,7 @@ public static class ISettlementFactoryExtensions
     /// <param name="commandId">Optional command id for deduplication; a fresh id is minted only when omitted, and a minted id is not reported back on a failed submission. Supply and retain your own id to make a retry of a lost-but-accepted submission deduplicable, so the ledger deduplicates the resubmission instead of re-executing the choice.</param>
     /// <param name="timeout">Optional per-call deadline, applied best-effort by the transport; transports without a server-side deadline apply a client-side bound only. The default <c>null</c> applies no deadline. An overrun surfaces as an <c>InfraError</c> outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public static Task<ExerciseOutcome<TransactionResult>> SettlementFactory_SettleBatchAsync(
+    public static async Task<ExerciseOutcome<SettlementFactory_SettleBatchResult>> SettlementFactory_SettleBatchAsync(
         this ContractId<ISettlementFactory> contractId,
         ILedgerWriter client,
         SettlementFactory_SettleBatch argument,
@@ -201,6 +262,98 @@ public static class ISettlementFactoryExtensions
 
         var command = contractId.SettlementFactory_SettleBatchCommand(argument);
 
-        return client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken);
+        var outcome = await client.TrySubmitSingleAsync(command, submitter, workflowId, commandId, timeout, cancellationToken).ConfigureAwait(false);
+
+        return outcome.ProjectCommitted(tx => ProjectSettlementFactory_SettleBatchResult(tx, contractId.Value));
+    }
+
+    private static ExerciseOutcome<Unit> ProjectArchiveResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ISettlementFactory.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ISettlementFactory.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "Archive", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'Archive' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<SettlementFactoryView> ProjectSettlementFactory_PublicFetchResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ISettlementFactory.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ISettlementFactory.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "SettlementFactory_PublicFetch", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = ISettlementFactory.ChoiceSettlementFactory_PublicFetch.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<SettlementFactoryView>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<SettlementFactoryView>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'SettlementFactory_PublicFetch' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
+    }
+
+    private static ExerciseOutcome<SettlementFactory_SettleBatchResult> ProjectSettlementFactory_SettleBatchResult(TransactionResult tx, string contractId)
+    {
+        foreach (var exercised in tx.ExercisedEvents)
+        {
+            if (exercised.InterfaceId is { } interfaceId
+                && string.Equals(exercised.ContractId, contractId, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.ModuleName, ISettlementFactory.InterfaceId.ModuleName, global::System.StringComparison.Ordinal)
+                && string.Equals(interfaceId.EntityName, ISettlementFactory.InterfaceId.EntityName, global::System.StringComparison.Ordinal)
+                && string.Equals(exercised.ChoiceName, "SettlementFactory_SettleBatch", global::System.StringComparison.Ordinal))
+            {
+                try
+                {
+                    var decoded = ISettlementFactory.ChoiceSettlementFactory_SettleBatch.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<SettlementFactory_SettleBatchResult>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<SettlementFactory_SettleBatchResult>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
+            }
+        }
+
+        throw new global::System.InvalidOperationException(
+            $"Submission succeeded but no 'SettlementFactory_SettleBatch' exercise on contract '{contractId}' was recorded on transaction {tx.UpdateId}. " +
+            "This is most often caused by the ILedgerWriter implementation not populating TransactionResult.ExercisedEvents — " +
+            "your ILedgerWriter implementation must project the transaction's exercised events into TransactionResult.ExercisedEvents. " +
+            "If your implementation does populate ExercisedEvents, ensure the participant is configured to return " +
+            "LedgerEffects with verbose events so the exercise event survives projection.");
     }
 }

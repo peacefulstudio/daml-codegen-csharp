@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using Daml.Runtime.Commands;
 using Daml.Runtime.Data;
 
 namespace Daml.Runtime.Contracts;
@@ -52,6 +53,23 @@ public interface IHasKey<TSelf, TKey>
     /// Gets the witness pairing this template with its key type and carrying the key codec.
     /// </summary>
     static abstract KeyDescriptor<TSelf, TKey> Key { get; }
+}
+
+/// <summary>
+/// Facet implemented by every template and interface marker that declares at least one
+/// choice (in practice, every template — Daml always carries the implicit Archive choice —
+/// and every interface with a non-empty choice set). Generic code constrained on this
+/// facet enumerates a type's <see cref="IChoice"/> descriptors through <see cref="Choices"/>
+/// with no reflection.
+/// </summary>
+/// <typeparam name="TSelf">The implementing template or interface marker type.</typeparam>
+public interface IHasChoices<TSelf>
+    where TSelf : IDamlType, IHasChoices<TSelf>
+{
+    /// <summary>
+    /// Gets the choice descriptors declared by <typeparamref name="TSelf"/>.
+    /// </summary>
+    static abstract IReadOnlyList<IChoice> Choices { get; }
 }
 
 /// <summary>

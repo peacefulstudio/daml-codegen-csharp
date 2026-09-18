@@ -13,7 +13,7 @@ namespace Splice.Api.Token.AllocationV2;
 /// <summary>
 /// Generated from Daml variant AllocationResult_Output
 /// </summary>
-public abstract record AllocationResult_Output : IDamlVariant
+public abstract record AllocationResult_Output : IDamlVariant<AllocationResult_Output>
 {
     /// <summary>Gets the variant constructor name.</summary>
     public abstract string Tag { get; }
@@ -31,6 +31,23 @@ public abstract record AllocationResult_Output : IDamlVariant
             "AllocationResult_Withdrawn" => new AllocationResult_Withdrawn(),
             _ => throw new ArgumentOutOfRangeException(nameof(variant), variant.Constructor, "Unknown AllocationResult_Output constructor")
         };
+
+    /// <summary>Decodes a Daml-LF JSON variant directly into a DamlVariant, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlVariant __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        var tag = global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadVariantTag(json, context);
+        return tag switch
+        {
+            "AllocationResult_Pending" => DamlVariant.Create("AllocationResult_Pending", AllocationResult_Output_AllocationResult_Pending.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AllocationResult_Settled" => DamlVariant.Create("AllocationResult_Settled", AllocationResult_Output_AllocationResult_Settled.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AllocationResult_Cancelled" => DamlVariant.Create("AllocationResult_Cancelled", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            "AllocationResult_Withdrawn" => DamlVariant.Create("AllocationResult_Withdrawn", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireVariantValue(json, context), context.Field("value"))),
+            _ => throw global::Daml.Runtime.Serialization.DamlLfJsonDecoders.UnknownConstructor("variant constructor", tag, context, ExpectedConstructors)
+        };
+    }
+
+    private static readonly string[] ExpectedConstructors = ["AllocationResult_Pending", "AllocationResult_Settled", "AllocationResult_Cancelled", "AllocationResult_Withdrawn"];
 
     /// <summary>AllocationResult_Pending constructor.</summary>
     public sealed record AllocationResult_Pending(AllocationResult_Output_AllocationResult_Pending Value) : AllocationResult_Output

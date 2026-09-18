@@ -95,11 +95,11 @@ public class EmittedNamespaceCollisionShadowingCompilesTests
 
         var iface = files.First(f => f.RelativePath.EndsWith("IHolding.cs", StringComparison.Ordinal));
         iface.Content.Should().NotContain(
-            "  Daml.Runtime.Commands.ExerciseCommand.ForInterface<",
+            "  Daml.Runtime.Commands.ExerciseCommand.For<",
             "the interface-choice ExerciseCommand head must route through the qualifier, never the hard-coded non-global fully-qualified form");
         iface.Content.Should().Contain(
-            "ExerciseCommand.ForInterface<",
-            "the interface-choice site still calls ExerciseCommand.ForInterface, qualified by the central qualifier (bare or global::-prefixed depending on the surrounding namespace)");
+            "ExerciseCommand.For<",
+            "the interface-choice site still calls ExerciseCommand.For, qualified by the central qualifier (bare or global::-prefixed depending on the surrounding namespace)");
         iface.Content.Should().NotContain(
             "cref=\"Daml.Runtime.",
             "interface doc crefs must use global:: so they resolve correctly when the generated namespace shadows the Daml root (e.g. package 'daml' -> namespace Daml.*)");

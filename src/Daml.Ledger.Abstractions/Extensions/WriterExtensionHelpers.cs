@@ -31,10 +31,11 @@ internal static class WriterExtensionHelpers
         outcome switch
         {
             ExerciseOutcome<T>.One one => one.Result,
-            ExerciseOutcome<T>.None => throw new LedgerOperationException(describeNone()),
-            ExerciseOutcome<T>.Many many => throw new LedgerOperationException(describeMany(many.Count)),
+            ExerciseOutcome<T>.None => throw LedgerOperationException.CommittedWithoutDetail(describeNone()),
+            ExerciseOutcome<T>.Many many => throw LedgerOperationException.CommittedWithoutDetail(describeMany(many.Count)),
             ExerciseOutcome<T>.DamlError e => throw e.ToException(),
             ExerciseOutcome<T>.InfraError e => e.ThrowAsCancellationOrException(cancellationToken),
+            ExerciseOutcome<T>.CommittedUndecodable e => throw e.ToException(),
             _ => throw new UnreachableException($"Unexpected outcome {outcome.GetType().Name} from {operation}."),
         };
 
@@ -45,6 +46,9 @@ internal static class WriterExtensionHelpers
     internal static LedgerOperationException ToException<T>(this ExerciseOutcome<T>.InfraError error) =>
         new($"Infrastructure error [{error.StatusCode}]: {error.Message}",
             error.StatusCode, error.Category, error.SourceException);
+
+    internal static LedgerOperationException ToException<T>(this ExerciseOutcome<T>.CommittedUndecodable error) =>
+        new($"Committed but undecodable [{error.UpdateId ?? "unknown"}]: {error.Message}", error.UpdateId, error.SourceException);
 
     [DoesNotReturn]
     internal static T ThrowAsCancellationOrException<T>(this ExerciseOutcome<T>.InfraError error, CancellationToken cancellationToken)

@@ -1,7 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 
 namespace Daml.Runtime.Stdlib;
 
@@ -57,4 +61,19 @@ public static class DayOfWeekExtensions
         "Sunday" => DayOfWeek.Sunday,
         _ => throw new ArgumentOutOfRangeException(nameof(value), value.Constructor, null)
     };
+
+    /// <summary>
+    /// Decodes this enum's Daml-LF JSON — a bare constructor string — into its wire value.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [SuppressMessage(
+        "Naming", "CA1707:Identifiers should not contain underscores",
+        Justification = "The double-underscore prefix is the emitted-plumbing naming convention shared "
+            + "by every __ReadDamlLfJson member; it marks a compiler-dispatched member no hand-written "
+            + "call site should name, the same intent EditorBrowsable(Never) signals.")]
+    public static DamlEnum __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+        DamlLfJsonDecoders.ReadEnumConstructor(json, context, ExpectedConstructors);
+
+    private static readonly string[] ExpectedConstructors =
+        ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 }

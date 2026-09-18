@@ -63,4 +63,15 @@ public sealed record Branch(
         Children: (IReadOnlyList<Branch>)record.GetRequiredField("children").As<DamlList>().Values.Select(x => Branch.FromRecord(x.As<DamlRecord>())).ToList()
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("label", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "label"), context.Field("label"))),
+            DamlField.Create("children", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadList(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "children"), context.Field("children"), (__json0, __ctx0) => Branch.__ReadDamlLfJson(__json0, __ctx0)))
+        );
+    }
+
 }

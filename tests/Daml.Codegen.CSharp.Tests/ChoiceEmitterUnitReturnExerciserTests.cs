@@ -77,7 +77,9 @@ public class ChoiceEmitterUnitReturnExerciserTests
         var (code, usings) = EmitNonContract(Template(Choice("DoNothing", new DamlPrimitiveType(DamlPrimitive.Unit))));
 
         code.Should().Contain("public static async Task<ExerciseOutcome<Unit>> DoNothingAsync(");
-        code.Should().Contain("new ExerciseOutcome<Unit>.One(Unit.Value)");
+        code.Should().Contain("var decoded = Unit.Value;");
+        code.Should().Contain("new ExerciseOutcome<Unit>.One(decoded)");
+        code.Should().Contain("CommittedUndecodable");
         usings.Should().Contain(StdlibNamespace);
     }
 

@@ -16,7 +16,7 @@ public sealed partial record AnsEntry
     /// </summary>
     public sealed record AnsEntry_Expire(
         [property: DamlFieldAttribute("actor")] Party Actor
-    ) : IDamlRecord
+    ) : IDamlRecord<AnsEntry_Expire>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record AnsEntry
         public static AnsEntry_Expire FromRecord(DamlRecord record) => new AnsEntry_Expire(
             Actor: Party.FromDamlValue(record.GetRequiredField("actor").As<DamlParty>())
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("actor", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "actor"), context.Field("actor")))
+            );
+        }
 
     }
 }

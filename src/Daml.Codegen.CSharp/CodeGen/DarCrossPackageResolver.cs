@@ -99,7 +99,7 @@ internal sealed partial class DarCrossPackageResolver : ICrossPackageResolver
         }
         if (ForeignChoiceArgToTemplate(foreignPkg).TryGetValue(qualifiedName, out var nestingTemplate))
         {
-            return $"{Identifiers.GlobalPrefix}{ForeignNamespace(foreignPkg, nestingTemplate.Module)}.{Identifiers.Sanitize(nestingTemplate.Name)}.{sanitized}";
+            return $"{Identifiers.GlobalPrefix}{ForeignNamespace(foreignPkg, nestingTemplate.Module)}.{Identifiers.Sanitize(nestingTemplate.Name)}.{nestingTemplate.NestedClassName}";
         }
         return Identifiers.GlobalQualified(ForeignNamespace(foreignPkg, typeRef.Module), sanitized);
     }
@@ -117,7 +117,7 @@ internal sealed partial class DarCrossPackageResolver : ICrossPackageResolver
             context.LocalInterfaceQualifiedNames.Contains(qualifiedName)
                 ? (typeRef.Module, context.LocalInterfaceMarkerNames[qualifiedName])
                 : context.LocalChoiceArgToTemplate.TryGetValue(qualifiedName, out var nestingTemplate)
-                    ? (nestingTemplate.Module, $"{Identifiers.Sanitize(nestingTemplate.Name)}.{sanitized}")
+                    ? (nestingTemplate.Module, $"{Identifiers.Sanitize(nestingTemplate.Name)}.{nestingTemplate.NestedClassName}")
                     : (typeRef.Module, sanitized);
 
         var homeNamespace = context.NamespaceOf(homeModule);
@@ -213,7 +213,7 @@ internal sealed partial class DarCrossPackageResolver : ICrossPackageResolver
                             LogAmbiguousForeignChoiceArgument(_logger, key, pkg.Name, existingTemplate.Name, template.Name);
                             continue;
                         }
-                        result[key] = new NestingTemplate(module.Name, template.Name);
+                        result[key] = new NestingTemplate(module.Name, template.Name, Identifiers.Sanitize(choice.Name));
                     }
                 }
             }

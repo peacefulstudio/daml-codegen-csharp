@@ -141,7 +141,7 @@ internal sealed partial class ChoiceEmitter
         {
             indent.AppendLine("/// <summary>");
             indent.AppendLine($"/// Exercises the {choice.Name} choice and lifts the choice's exercise result to");
-            indent.AppendLine($"/// <see cref=\"ExerciseOutcome{{T}}\"/> over <c>{returnTypeName}</c>. Structured Canton/Daml errors");
+            indent.AppendLine($"/// <see cref=\"ExerciseOutcome{{T}}\"/> over <c>{EmitterHelpers.EscapeXmlText(returnTypeName)}</c>. Structured Canton/Daml errors");
             indent.AppendLine("/// and infrastructure/transport errors pass through unchanged.");
             indent.AppendLine("/// </summary>");
             indent.AppendLine("/// <param name=\"contractId\">The contract on which to exercise the choice.</param>");
@@ -223,18 +223,29 @@ internal sealed partial class ChoiceEmitter
         indent.AppendLine("{");
         indent.Indent();
 
+        indent.AppendLine("try");
+        indent.AppendLine("{");
+        indent.Indent();
         if (needsStdlibUnitDecoder)
         {
             var decoderExpr = RenderNonContractReturnDecoder(
                 choice.ReturnType,
                 "exercised.ExerciseResult");
-            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.One({decoderExpr});");
+            indent.AppendLine($"var decoded = {decoderExpr};");
         }
         else
         {
             indent.AppendLine($"var decoded = {templateClassName}.Choice{choiceName}.ResultDecoder!(exercised.ExerciseResult);");
-            indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.One(decoded);");
         }
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.One(decoded);");
+        indent.Dedent();
+        indent.AppendLine("}");
+        indent.AppendLine("catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine($"return new {context.Qualifier.Qualify(RuntimeTypeNames.ExerciseOutcome)}<{returnTypeName}>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);");
+        indent.Dedent();
+        indent.AppendLine("}");
 
         indent.Dedent();
         indent.AppendLine("}");

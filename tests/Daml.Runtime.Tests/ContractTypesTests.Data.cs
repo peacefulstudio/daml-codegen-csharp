@@ -347,6 +347,7 @@ public partial class ContractTypesTests
         {
             KeyEncoder = key => key.ToDamlValue(),
             KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),
+            KeyJsonReader = (_, _) => throw new NotImplementedException(),
         };
 
         public DamlRecord ToRecord() => DamlRecord.Create(DamlField.Create("owner", Owner.ToDamlValue()));

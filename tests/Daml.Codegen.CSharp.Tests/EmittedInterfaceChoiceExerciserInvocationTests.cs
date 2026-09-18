@@ -8,6 +8,7 @@ using Daml.Ledger.Abstractions;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Outcomes;
+using Daml.Runtime.Stdlib;
 using AwesomeAssertions;
 using NSubstitute;
 using Xunit;
@@ -19,12 +20,12 @@ namespace Daml.Codegen.CSharp.Tests;
 
 /// <summary>
 /// Invokes the emitted interface-choice exercisers for real, through reflection over a
-/// compiled assembly, to pin where their argument-validation failures surface. An
-/// interface choice has no typed result to project, so the exercisers hand back the
-/// submission task instead of awaiting it — which moves a null-argument failure from
-/// the returned task to the call site. The <c>Func&lt;Task&gt;</c> + <c>ThrowAsync</c>
-/// idiom used elsewhere in the suite passes either way; <c>MethodInfo.Invoke</c> does
-/// not, because it only wraps an exception the invoked method threw before returning.
+/// compiled assembly, to pin where their argument-validation failures surface and what
+/// they hand back for a valid call. The exerciser is an <c>async</c> method, so an
+/// exception thrown before its first <c>await</c> — like the null-<c>client</c> guard —
+/// is captured into the returned (faulted) <see cref="Task"/> rather than thrown
+/// synchronously at the <c>MethodInfo.Invoke</c> call site; <see cref="Record.ExceptionAsync"/>
+/// unwraps that without an extra <see cref="TargetInvocationException"/> layer.
 /// </summary>
 public class EmittedInterfaceChoiceExerciserInvocationTests
 {
@@ -33,20 +34,19 @@ public class EmittedInterfaceChoiceExerciserInvocationTests
     private static readonly Assembly Emitted = EmitToAssembly(GenerateCustodyInterfacePackage());
 
     [Fact]
-    public void EmittedInterfaceChoiceExerciser_rejects_a_null_client_before_returning_a_task()
+    public async Task EmittedInterfaceChoiceExerciser_rejects_a_null_client_via_the_returned_faulted_task()
     {
         var exerciser = ChoiceExerciser();
 
-        Action act = () => exerciser.Invoke(null, Arguments(null));
+        var task = (Task)exerciser.Invoke(null, Arguments(null))!;
+        var thrown = await Record.ExceptionAsync(() => task);
 
-        var thrown = act.Should().Throw<TargetInvocationException>(
-            "an exerciser that awaited its submission would be an async method, whose argument checks surface on the returned task rather than at the call site")
-            .Which;
-        thrown.InnerException.Should().BeOfType<ArgumentNullException>();
+        thrown.Should().BeOfType<ArgumentNullException>(
+            "the null-client guard runs before the first await in an async method, so it faults the returned task instead of throwing at the call site");
     }
 
     [Fact]
-    public void EmittedInterfaceChoiceExerciser_hands_back_the_submission_task_for_valid_arguments()
+    public async Task EmittedInterfaceChoiceExerciser_projects_the_committed_result_for_valid_arguments()
     {
         var exerciser = ChoiceExerciser();
         var client = Substitute.For<ILedgerWriter>();
@@ -60,8 +60,11 @@ public class EmittedInterfaceChoiceExerciserInvocationTests
 
         var returned = exerciser.Invoke(null, Arguments(client));
 
-        returned.Should().BeAssignableTo<Task<ExerciseOutcome<TransactionResult>>>(
-            "only the argument checks run at the call site — a valid call still has to hand the caller the submission task, so an exerciser that threw unconditionally would satisfy the null-client pin while being useless");
+        returned.Should().BeAssignableTo<Task<ExerciseOutcome<Unit>>>(
+            "the Transfer choice returns Unit, so the projected outcome is typed to the stdlib Unit rather than the untyped TransactionResult");
+        var outcome = await (Task<ExerciseOutcome<Unit>>)returned!;
+        outcome.Should().BeOfType<ExerciseOutcome<Unit>.None>(
+            "ProjectCommitted re-wraps a non-committing outcome like None faithfully, without invoking the per-choice decode projector");
     }
 
     private static MethodInfo ChoiceExerciser() =>

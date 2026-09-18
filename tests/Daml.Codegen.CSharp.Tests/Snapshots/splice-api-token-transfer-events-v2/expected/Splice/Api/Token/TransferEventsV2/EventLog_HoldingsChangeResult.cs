@@ -20,4 +20,12 @@ public sealed record EventLog_HoldingsChangeResult : IDamlRecord<EventLog_Holdin
     /// <summary>Creates an instance from a DamlRecord.</summary>
     public static EventLog_HoldingsChangeResult FromRecord(DamlRecord record) => new EventLog_HoldingsChangeResult();
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create();
+    }
+
 }

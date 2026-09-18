@@ -27,4 +27,14 @@ public sealed record AnsEntryContext_RejectEntryInitialPaymentResult(
         AmuletSum: global::Splice.Amulet.AmuletCreateSummary<ContractId<global::Splice.Amulet.Amulet>>.FromRecord(record.GetRequiredField("amuletSum").As<DamlRecord>(), __v0 => new ContractId<global::Splice.Amulet.Amulet>(__v0.As<DamlContractId>().Value))
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("amuletSum", global::Splice.Amulet.AmuletCreateSummary<ContractId<global::Splice.Amulet.Amulet>>.__ReadDamlLfJson(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "amuletSum"), context.Field("amuletSum"), (__json0, __ctx0) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(__json0, __ctx0)))
+        );
+    }
+
 }

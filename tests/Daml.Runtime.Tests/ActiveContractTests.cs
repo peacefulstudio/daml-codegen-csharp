@@ -1,9 +1,11 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using AwesomeAssertions;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
+using Daml.Runtime.Serialization;
 using Daml.Runtime.Streams;
 using Xunit;
 
@@ -75,6 +77,9 @@ public sealed class ActiveContractTests
 
         public static ProbeView FromRecord(DamlRecord record) =>
             new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 
     private sealed record InterfaceViewPairing(ContractId<ProbeInterface> Id, ProbeView View);
@@ -91,5 +96,8 @@ public sealed class ActiveContractTests
 
         public static ProbeTemplate FromRecord(DamlRecord record) =>
             new(Party.FromDamlValue(record.GetRequiredField("owner").As<DamlParty>()));
+
+        public static DamlRecord __ReadDamlLfJson(JsonElement json, DamlLfJsonDecodeContext context) =>
+            throw new NotSupportedException();
     }
 }

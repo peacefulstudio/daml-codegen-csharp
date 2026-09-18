@@ -19,6 +19,16 @@ internal static class EmitterHelpers
     internal static string ToPascalCase(string name) => Identifiers.ToPascalCase(name);
 
     /// <summary>
+    /// Escapes <c>&lt;</c>, <c>&gt;</c>, <c>&amp;</c>, <c>'</c> and <c>"</c> for embedding in
+    /// generated XML — an emitted <c>/// &lt;summary&gt;</c> doc comment or a <c>.csproj</c>
+    /// element — so interpolated text that itself contains those characters (a constructed
+    /// generic type name such as <c>IReadOnlyDictionary&lt;string, long&gt;</c>, a package
+    /// description, a license expression) cannot break the surrounding markup.
+    /// </summary>
+    internal static string EscapeXmlText(string value) =>
+        System.Security.SecurityElement.Escape(value) ?? string.Empty;
+
+    /// <summary>
     /// Derives the C# type-parameter name for a Daml type variable: PascalCased and
     /// sanitised behind a <c>T</c> prefix. The <c>T</c> prefix combined with PascalCasing
     /// makes a keyword collision unreachable — all C# reserved keywords are lowercase, so
@@ -72,6 +82,32 @@ internal static class EmitterHelpers
     /// </summary>
     internal static IReadOnlyDictionary<string, string> ConverterNameMap(IReadOnlyList<string> typeParams) =>
         typeParams.ToDictionary(param => param, ConverterParameterName);
+
+    /// <summary>
+    /// Derives the injected <c>DamlLfElementReader</c> parameter name for a Daml type
+    /// variable — the reader a generic record's or variant's emitted <c>__ReadDamlLfJson</c>
+    /// accepts to decode that type parameter's carried JSON, the JSON-side twin of
+    /// <see cref="ConverterParameterName"/>.
+    /// </summary>
+    internal static string ReaderParameterName(string damlTypeParam) =>
+        $"read{TypeParameterName(damlTypeParam)}";
+
+    /// <summary>
+    /// Maps each Daml type-variable name to its <see cref="ReaderParameterName"/>, threaded into
+    /// the <see cref="DamlTypeMapper"/>'s <c>FromJson</c> as its <c>typeVarReaders</c> argument so
+    /// a <see cref="DamlTypeVar"/> field resolves to its injected reader, the JSON-side twin of
+    /// <see cref="ConverterNameMap"/>.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ReaderNameMap(IReadOnlyList<string> typeParams) =>
+        typeParams.ToDictionary(param => param, ReaderParameterName);
+
+    /// <summary>
+    /// Builds the <c>DamlLfElementReader</c> parameter list for a generic record's or variant's
+    /// <c>__ReadDamlLfJson</c>, one per type parameter, named per <see cref="ReaderParameterName"/> —
+    /// the JSON-side twin of <see cref="SerializeConverterParameters"/>/<see cref="DeserializeConverterParameters"/>.
+    /// </summary>
+    internal static string JsonReaderParameters(IReadOnlyList<string> typeParams, string qualifiedDamlLfElementReader) =>
+        string.Join(", ", typeParams.Select(param => $"{qualifiedDamlLfElementReader} {ReaderParameterName(param)}"));
 
     internal static string SerializeConverterParameters(IReadOnlyList<string> typeParams, string qualifiedDamlValue) =>
         string.Join(", ", typeParams.Select(param =>

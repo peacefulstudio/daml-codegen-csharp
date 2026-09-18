@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using Daml.Codegen.Intermediate.Model;
+using RuntimeNamespaces = Daml.Runtime.RuntimeNamespaces;
 
 namespace Daml.Codegen.CSharp.CodeGen;
 
@@ -29,8 +30,17 @@ internal sealed class RecordSerializationEmitter(
     /// at the start of the line that closes the parameter list. The caller has already
     /// written the opening parenthesis and writes the closing one, so the closing
     /// parenthesis and any base list land on their own line.
+    /// <paramref name="nestedArgTypeNames"/> carries the names
+    /// <see cref="ChoiceEmitter.GetNestedChoiceArgumentTypeNames"/> resolved for the enclosing
+    /// template's choices, so a same-package choice-argument record nested inside the template
+    /// partial that happens to be named <c>DamlFieldAttribute</c> gets root-qualified instead of
+    /// shadowing the runtime <see cref="Daml.Runtime.Data.DamlFieldAttribute"/>; null qualifies
+    /// through the ordinary <see cref="TypeReferenceQualifier"/>.
     /// </summary>
-    internal void WriteRecordParameters(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields)
+    internal void WriteRecordParameters(
+        IndentWriter indent,
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
     {
         var members = ValueMembers(indent, fields);
         var redeclaresProperties = CollectionValueSemanticsEmitter.NeedsValueSemantics(members);
@@ -45,7 +55,7 @@ internal sealed class RecordSerializationEmitter(
             var separator = i == fields.Count - 1 ? "" : ",";
             var attribute = redeclaresProperties
                 ? string.Empty
-                : $"[property: {DamlFieldAttributeSyntax(field.Name)}] ";
+                : $"[property: {DamlFieldAttributeSyntax(field.Name, nestedArgTypeNames)}] ";
             indent.AppendLine($"{attribute}{member.CSharpType} {member.Name}{separator}");
         }
         indent.Dedent();
@@ -54,16 +64,23 @@ internal sealed class RecordSerializationEmitter(
     /// <summary>
     /// Writes the copying properties, <c>Equals</c> and <c>GetHashCode</c> that give
     /// <paramref name="selfType"/> value semantics over its collection-typed fields, or nothing
-    /// when it carries none.
+    /// when it carries none. See <see cref="WriteRecordParameters"/> for
+    /// <paramref name="nestedArgTypeNames"/>; the same root-qualification applies to each
+    /// redeclared property's <c>DamlFieldAttribute</c> here.
     /// </summary>
     /// <param name="indent">Writer positioned at the top of the record body.</param>
     /// <param name="selfType">The record's own type, including type parameters.</param>
     /// <param name="fields">The record's Daml fields, in declaration order.</param>
+    /// <param name="nestedArgTypeNames">
+    /// See <see cref="WriteRecordParameters"/>; the same root-qualification applies to each
+    /// redeclared property's <c>DamlFieldAttribute</c> here.
+    /// </param>
     internal void WriteCollectionValueSemantics(
         IndentWriter indent,
         string selfType,
-        IReadOnlyList<DamlFieldDefinition> fields) =>
-        _valueSemantics.Write(indent, selfType, ValueMembers(indent, fields), derivesFromRecord: false);
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlySet<string>? nestedArgTypeNames = null) =>
+        _valueSemantics.Write(indent, selfType, ValueMembers(indent, fields), derivesFromRecord: false, nestedArgTypeNames);
 
     private IReadOnlyList<ValueMember> ValueMembers(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields) =>
     [
@@ -80,8 +97,19 @@ internal sealed class RecordSerializationEmitter(
     /// DamlRecord into <paramref name="indent"/>. When <paramref name="typeParams"/> is
     /// non-empty the method accepts one <c>Func&lt;T, DamlValue&gt;</c> converter per type
     /// parameter, and type-variable fields serialize through the matching converter.
+    /// <paramref name="nestedArgTypeNames"/> carries the names
+    /// <see cref="ChoiceEmitter.GetNestedChoiceArgumentTypeNames"/> resolved for the enclosing
+    /// template's choices, so a same-package choice-argument record nested inside the template
+    /// partial that happens to be named <c>DamlRecord</c> or <c>DamlField</c> gets root-qualified
+    /// instead of shadowing the runtime <see cref="Daml.Runtime.Data.DamlRecord"/> or
+    /// <see cref="Daml.Runtime.Data.DamlField"/> respectively; null qualifies through the ordinary
+    /// <see cref="TypeReferenceQualifier"/>.
     /// </summary>
-    internal void WriteToRecordMethod(IndentWriter indent, IReadOnlyList<DamlFieldDefinition> fields, IReadOnlyList<string> typeParams)
+    internal void WriteToRecordMethod(
+        IndentWriter indent,
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlyList<string> typeParams,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
     {
         if (options.GenerateXmlDocs)
         {
@@ -90,15 +118,16 @@ internal sealed class RecordSerializationEmitter(
 
         var parameters = ConverterParameters(indent, typeParams, EmitterHelpers.SerializeConverterParameters);
         var delegates = EmitterHelpers.ConverterNameMap(typeParams);
+        var damlRecordRef = DamlRecordReference(nestedArgTypeNames);
 
         if (fields.Count == 0)
         {
-            indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create();");
+            indent.AppendLine($"public {damlRecordRef} ToRecord({parameters}) => {damlRecordRef}.Create();");
             indent.AppendLine();
             return;
         }
 
-        indent.AppendLine($"public {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} ToRecord({parameters}) => {context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)}.Create(");
+        indent.AppendLine($"public {damlRecordRef} ToRecord({parameters}) => {damlRecordRef}.Create(");
         indent.Indent();
 
         for (int i = 0; i < fields.Count; i++)
@@ -109,7 +138,7 @@ internal sealed class RecordSerializationEmitter(
             var comma = i < fields.Count - 1 ? "," : "";
             StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
 
-            indent.AppendLine($"{context.Qualifier.Qualify(RuntimeTypeNames.DamlField)}.Create(\"{field.Name}\", {conversion}){comma}");
+            indent.AppendLine($"{DamlFieldReference(nestedArgTypeNames)}.Create(\"{field.Name}\", {conversion}){comma}");
         }
 
         indent.Dedent();
@@ -120,9 +149,16 @@ internal sealed class RecordSerializationEmitter(
     /// <summary>
     /// Writes the static <c>FromRecord</c> factory that reconstructs a
     /// <paramref name="className"/> instance from a DamlRecord into
-    /// <paramref name="indent"/>.
+    /// <paramref name="indent"/>. See <see cref="WriteToRecordMethod"/> for
+    /// <paramref name="nestedArgTypeNames"/>; the same root-qualification applies to the
+    /// <c>record</c> parameter's type here.
     /// </summary>
-    internal void WriteFromRecordMethod(IndentWriter indent, string className, IReadOnlyList<DamlFieldDefinition> fields, IReadOnlyList<string> typeParams)
+    internal void WriteFromRecordMethod(
+        IndentWriter indent,
+        string className,
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlyList<string> typeParams,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
     {
         if (options.GenerateXmlDocs)
         {
@@ -130,7 +166,7 @@ internal sealed class RecordSerializationEmitter(
         }
 
         var converterParameters = ConverterParameters(indent, typeParams, EmitterHelpers.DeserializeConverterParameters);
-        var parameters = $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord)} record{Prefixed(converterParameters)}";
+        var parameters = $"{DamlRecordReference(nestedArgTypeNames)} record{Prefixed(converterParameters)}";
         var delegates = EmitterHelpers.ConverterNameMap(typeParams);
 
         if (fields.Count == 0)
@@ -152,7 +188,7 @@ internal sealed class RecordSerializationEmitter(
         {
             var field = fields[i];
             var fieldName = MemberName(field.Name, indent.CurrentTypeName);
-            var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates);
+            var conversion = mapper.FromValue(field.Type, $"record.GetRequiredField(\"{field.Name}\")", delegates, nestedArgTypeNames);
             var comma = i < fields.Count - 1 ? "," : "";
 
             indent.AppendLine($"{fieldName}: {conversion}{comma}");
@@ -160,6 +196,75 @@ internal sealed class RecordSerializationEmitter(
 
         indent.Dedent();
         indent.AppendLine(");");
+        indent.AppendLine();
+    }
+
+    /// <summary>
+    /// Writes the static <c>__ReadDamlLfJson</c> method that decodes Daml-LF JSON directly into a
+    /// <c>DamlRecord</c> for <paramref name="fields"/>, without going through reflection.
+    /// Implements <see cref="Daml.Runtime.Data.IDamlRecord{TSelf}.__ReadDamlLfJson"/> for a
+    /// non-generic record (<paramref name="typeParams"/> empty); a generic record cannot
+    /// implement that interface at all — see <see cref="RecordEmitter.InterfaceDeclaration"/> —
+    /// so it gets a plain static method of the same name instead, taking one
+    /// <c>DamlLfElementReader</c> per type parameter and called directly by name rather than
+    /// through the interface, the shape
+    /// <see cref="DamlTypeMapper.FromJson(DamlType, string, string, IReadOnlySet{string}, IReadOnlyDictionary{string, string})"/>
+    /// emits for an instantiated generic record. See <see cref="WriteToRecordMethod"/> for
+    /// <paramref name="nestedArgTypeNames"/>.
+    /// </summary>
+    internal void WriteReadDamlLfJsonMethod(
+        IndentWriter indent,
+        IReadOnlyList<DamlFieldDefinition> fields,
+        IReadOnlyList<string> typeParams,
+        IReadOnlySet<string>? nestedArgTypeNames = null)
+    {
+        if (options.GenerateXmlDocs)
+        {
+            indent.AppendLine("/// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>");
+        }
+
+        var readerParameters = typeParams.Count == 0
+            ? string.Empty
+            : EmitterHelpers.JsonReaderParameters(typeParams, DamlTypeMapper.DamlLfElementReaderQualifiedName);
+        var typeVarReaders = EmitterHelpers.ReaderNameMap(typeParams);
+        var damlRecordRef = DamlRecordReference(nestedArgTypeNames);
+        var parameters = "global::System.Text.Json.JsonElement json, "
+            + $"{DamlTypeMapper.DamlLfJsonDecodeContextQualifiedName} context{Prefixed(readerParameters)}";
+
+        indent.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        indent.AppendLine($"public static {damlRecordRef} __ReadDamlLfJson({parameters})");
+        indent.AppendLine("{");
+        indent.Indent();
+        indent.AppendLine($"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.RequireObject(json, context);");
+
+        if (fields.Count == 0)
+        {
+            indent.AppendLine($"return {damlRecordRef}.Create();");
+            indent.Dedent();
+            indent.AppendLine("}");
+            indent.AppendLine();
+            return;
+        }
+
+        indent.AppendLine($"return {damlRecordRef}.Create(");
+        indent.Indent();
+
+        for (int i = 0; i < fields.Count; i++)
+        {
+            var field = fields[i];
+            StdlibPackages.RequireForFieldType(resolver, context.Package, indent, field.Type);
+            var jsonExpr = $"{DamlTypeMapper.DamlLfJsonDecodersQualifiedName}.RequireField(json, context, \"{field.Name}\")";
+            var contextExpr = $"context.Field(\"{field.Name}\")";
+            var decoded = mapper.FromJson(field.Type, jsonExpr, contextExpr, nestedArgTypeNames, typeVarReaders);
+            var comma = i < fields.Count - 1 ? "," : "";
+
+            indent.AppendLine($"{DamlFieldReference(nestedArgTypeNames)}.Create(\"{field.Name}\", {decoded}){comma}");
+        }
+
+        indent.Dedent();
+        indent.AppendLine(");");
+        indent.Dedent();
+        indent.AppendLine("}");
         indent.AppendLine();
     }
 
@@ -180,8 +285,20 @@ internal sealed class RecordSerializationEmitter(
     private static string Prefixed(string parameters) =>
         string.IsNullOrEmpty(parameters) ? string.Empty : $", {parameters}";
 
-    private string DamlFieldAttributeSyntax(string damlFieldName) =>
-        $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlFieldAttribute)}(\"{damlFieldName}\")";
+    private string DamlRecordReference(IReadOnlySet<string>? nestedArgTypeNames) =>
+        nestedArgTypeNames?.Contains(RuntimeTypeNames.DamlRecord) == true
+            ? Identifiers.GlobalQualified(RuntimeNamespaces.Data, RuntimeTypeNames.DamlRecord)
+            : context.Qualifier.Qualify(RuntimeTypeNames.DamlRecord);
+
+    private string DamlFieldReference(IReadOnlySet<string>? nestedArgTypeNames) =>
+        nestedArgTypeNames?.Contains(RuntimeTypeNames.DamlField) == true
+            ? Identifiers.GlobalQualified(RuntimeNamespaces.Data, RuntimeTypeNames.DamlField)
+            : context.Qualifier.Qualify(RuntimeTypeNames.DamlField);
+
+    private string DamlFieldAttributeSyntax(string damlFieldName, IReadOnlySet<string>? nestedArgTypeNames) =>
+        nestedArgTypeNames?.Contains(RuntimeTypeNames.DamlFieldAttribute) == true
+            ? $"{Identifiers.GlobalQualified(RuntimeNamespaces.Data, RuntimeTypeNames.DamlFieldAttribute)}(\"{damlFieldName}\")"
+            : $"{context.Qualifier.Qualify(RuntimeTypeNames.DamlFieldAttribute)}(\"{damlFieldName}\")";
 
     private static string MemberName(string damlFieldName, string enclosingTypeName) =>
         Identifiers.MemberName(damlFieldName, enclosingTypeName);

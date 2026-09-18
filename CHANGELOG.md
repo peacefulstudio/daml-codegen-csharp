@@ -37,6 +37,71 @@ because they are versioned in lockstep:
 
 ### Security
 
+## [0.5.0-preview.3] — 2026-09-18
+
+### Added
+
+- Generated records, templates, variants and enums now decode Daml-LF JSON through emitted
+  readers. Choice arguments, choice results and contract keys support instantiated generic
+  records and variants, lists, optionals, tuples and other Daml generic shapes without
+  reflecting over their CLR types.
+- Generated interface markers expose typed choice descriptors and raw JSON readers, so a
+  ledger client can decode an interface-owned exercise argument and result using the same
+  descriptors as template choices. `GeneratedTypeReaders` provides registration helpers
+  for clients that discover generated types at startup; discovery may still use reflection.
+- The conformance packages include generic choice results, tuple and optional tuple keys,
+  and a keyed template implementing an interface with a non-Unit choice.
+
+### Changed — BREAKING
+
+- Regenerate bindings when upgrading: `IDamlRecord<TSelf>` now requires
+  `__ReadDamlLfJson(JsonElement, DamlLfJsonDecodeContext)`. Hand-written record implementers
+  must provide that member. Hand-built `Choice<>` descriptors require an argument decoder
+  and argument/result JSON readers; hand-built `KeyDescriptor<>` instances require a key
+  JSON reader.
+- Interface-choice async methods now return `ExerciseOutcome<TResult>` for the choice's
+  declared result, replacing `ExerciseOutcome<TransactionResult>`. Update outcome switches
+  and remove manual result decoding. `Choice<>` and `IExercises<>` now accept interface
+  owners as well as templates.
+- `ExerciseOutcome<T>` adds `CommittedUndecodable`: the command committed, but its response
+  could not be decoded. Update exhaustive switches and do not resubmit a committed command.
+  `LedgerOperationException.CommitState` distinguishes `NotCommitted`, `Committed` and
+  `Unknown`; retry an unknown submission only with its original command ID. Downstream
+  throwing wrappers can use `CommittedWithoutDetail` for committed `None`/`Many` outcomes.
+- `Optional<>`, `Either<>` and the contract/interface stream event unions now round-trip
+  through `System.Text.Json` using a `$case` discriminator. This CLR serialization format
+  is separate from Daml-LF wire JSON. `Unit` also round-trips, and `Set<>`, `Map<,>` and
+  `NonEmpty<>` reject null elements rather than retaining invalid values.
+- Generated and constrained record decoders now count each flat, present `Optional`'s
+  carried value as an additional nesting level, so a recursive record containing an
+  `Optional` child reaches the 128-level depth limit at 64 records rather than 128. An
+  absent `Optional` adds no level. The obsolete `Type`-keyed overloads keep the old,
+  uncounted behavior.
+
+### Deprecated
+
+- Reflection-based `DamlLfJsonReader` and `DamlLfJsonDecoders` overloads are obsolete.
+  Move payload decoding to generated readers and descriptor readers. The retained
+  reflection overloads do not gain support for nested generated generic types, and this
+  release does not establish AOT support.
+- `ExerciseCommand.ForInterface<TInterface>` is obsolete. Call `ExerciseCommand.For<TOwner>`,
+  which resolves the same identifier for templates and interface markers.
+
+### Fixed
+
+- Fix generated variant compilation when JSON reader helper names collide with generated
+  type, constructor or payload names.
+- Fix `RelTime` field metadata, nullable annotations on erased choice descriptors, and
+  empty top-level list and map decoding through the retained reflection reader.
+
+### Known Issues
+
+- On macOS x64 (`osx-x64`) only, writing a deeply-nested `Optional`, `Either`, or
+  contract/interface stream-union value through `DiscriminatedUnionJson` can overflow the
+  real call stack before its own `MaxDepth` guard trips, instead of raising the expected
+  `JsonException`. Every other supported platform/architecture is unaffected. Tracked
+  internally for a fix in the next preview release.
+
 ## [0.5.0-preview.2] — 2026-09-08
 
 ### Changed — BREAKING
@@ -2993,7 +3058,8 @@ the GitHub Packages NuGet feed
 (`nuget.pkg.github.com/peacefulstudio`) during development and have
 since been pruned. They are not supported.
 
-[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.5.0-preview.2...HEAD
+[Unreleased]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.5.0-preview.3...HEAD
+[0.5.0-preview.3]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.5.0-preview.2...v0.5.0-preview.3
 [0.5.0-preview.2]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.5.0-preview.1...v0.5.0-preview.2
 [0.5.0-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.1-preview.1...v0.5.0-preview.1
 [0.4.1-preview.1]: https://github.com/peacefulstudio/daml-codegen-csharp/compare/v0.4.0-preview.3...v0.4.1-preview.1

@@ -341,6 +341,53 @@ public class ExerciseOutcomeTests
     }
 
     [Fact]
+    public void CommittedUndecodable_carries_update_id_message_and_source_exception()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException);
+
+        outcome.UpdateId.Should().Be("u1");
+        outcome.Message.Should().Be("could not decode result");
+        outcome.SourceException.Should().BeSameAs(sourceException);
+    }
+
+    [Fact]
+    public void CommittedUndecodable_leaves_the_update_id_null_when_the_decode_failure_precedes_it()
+    {
+        var outcome = new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable(
+            null, "could not decode result", new InvalidOperationException());
+
+        outcome.UpdateId.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommittedUndecodable_compares_unequal_to_another_outcome_variant_and_to_null()
+    {
+        ExerciseOutcome<ContractId<FooBar>> outcome = new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable(
+            "u1", "could not decode result", new InvalidOperationException());
+        ExerciseOutcome<ContractId<FooBar>> infra =
+            new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.Unavailable, "network down");
+
+        outcome.Should().NotBe(infra);
+        infra.Should().NotBe(outcome);
+        outcome.Equals(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CommittedUndecodable_compares_equal_to_another_CommittedUndecodable_with_the_same_values()
+    {
+        var sourceException = new InvalidOperationException("decode failed");
+        ExerciseOutcome<ContractId<FooBar>> first = new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException);
+        ExerciseOutcome<ContractId<FooBar>> second = new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable(
+            "u1", "could not decode result", sourceException);
+
+        first.Should().Be(second);
+        first.GetHashCode().Should().Be(second.GetHashCode());
+    }
+
+    [Fact]
     public void Variants_should_be_distinguishable_via_pattern_match()
     {
         ExerciseOutcome<ContractId<FooBar>>[] outcomes =
@@ -350,6 +397,7 @@ public class ExerciseOutcomeTests
             new ExerciseOutcome<ContractId<FooBar>>.Many(["c1", "c2"]),
             new ExerciseOutcome<ContractId<FooBar>>.DamlError(DamlErrorCategory.Unknown, "X", "x", new Dictionary<string, string>()),
             new ExerciseOutcome<ContractId<FooBar>>.InfraError(StatusCodes.Unavailable, "u"),
+            new ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable("u1", "bad", new InvalidOperationException()),
         ];
 
         var seen = outcomes.Select(o => o switch
@@ -359,10 +407,11 @@ public class ExerciseOutcomeTests
             ExerciseOutcome<ContractId<FooBar>>.Many => "many",
             ExerciseOutcome<ContractId<FooBar>>.DamlError => "daml-err",
             ExerciseOutcome<ContractId<FooBar>>.InfraError => "infra-err",
+            ExerciseOutcome<ContractId<FooBar>>.CommittedUndecodable => "committed-undecodable",
             _ => "other",
         }).ToList();
 
-        seen.Should().Equal("one", "none", "many", "daml-err", "infra-err");
+        seen.Should().Equal("one", "none", "many", "daml-err", "infra-err", "committed-undecodable");
     }
 
     /// <summary>

@@ -35,6 +35,7 @@ internal static class RuntimeTypeNames
     public const string ContractId = nameof(Daml.Runtime.Contracts.ContractId);
     public const string ITemplate = nameof(Daml.Runtime.Contracts.ITemplate);
     public const string IHasKey = nameof(Daml.Runtime.Contracts.IHasKey<,>);
+    public const string IHasChoices = nameof(Daml.Runtime.Contracts.IHasChoices<>);
     public const string IUpgradeable = nameof(Daml.Runtime.Contracts.IUpgradeable);
     public const string TransactionResult = nameof(Daml.Runtime.Contracts.TransactionResult);
     public const string CreatedContract = nameof(Daml.Runtime.Contracts.CreatedContract);
@@ -54,6 +55,7 @@ internal static class RuntimeTypeNames
     public const string WorkflowId = nameof(Daml.Runtime.Commands.WorkflowId);
     public const string CommandId = nameof(Daml.Runtime.Commands.CommandId);
     public const string ChoiceName = nameof(Daml.Runtime.Commands.ChoiceName);
+    public const string IChoice = nameof(Daml.Runtime.Commands.IChoice);
 
     public const string ExerciseOutcome = nameof(Daml.Runtime.Outcomes.ExerciseOutcome<object>);
 

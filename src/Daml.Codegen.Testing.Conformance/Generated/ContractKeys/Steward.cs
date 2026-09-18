@@ -25,13 +25,13 @@ namespace Daml.Codegen.Testing.Conformance.ContractKeys;
 public sealed partial record Steward(
     [property: DamlFieldAttribute("steward")] Party Steward_,
     [property: DamlFieldAttribute("charter")] string Charter
-) : ITemplate, IHasKey<Steward, Party>, IDamlRecord<Steward>
+) : ITemplate, IImplements<IStewardship>, IHasKey<Steward, Party>, IHasChoices<Steward>, IDamlRecord<Steward>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb", "ContractKeys", "Steward");
+    public static Identifier TemplateId { get; } = new("1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d", "ContractKeys", "Steward");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb";
+    public static string PackageId => "1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "contractkeys";
@@ -48,6 +48,7 @@ public sealed partial record Steward(
         {
             KeyEncoder = key => key.ToDamlValue(),
             KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),
+            KeyJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(json, context),
         };
 
     /// <summary>Converts this value to a DamlRecord.</summary>
@@ -62,6 +63,17 @@ public sealed partial record Steward(
         Charter: record.GetRequiredField("charter").As<DamlText>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("steward", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "steward"), context.Field("steward"))),
+            DamlField.Create("charter", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "charter"), context.Field("charter")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -71,7 +83,14 @@ public sealed partial record Steward(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -83,8 +102,14 @@ public sealed partial record Steward(
         Name = new ChoiceName("Revise"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Steward>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Revise.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Steward>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Steward.Revise.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceRevise];
 
     /// <summary>
     /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseByKeyCommand"/> for the Archive choice on the contract carrying this key.
@@ -484,7 +509,15 @@ public static class StewardNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Steward.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

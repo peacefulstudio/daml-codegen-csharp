@@ -176,6 +176,8 @@ public class TemplateEmitterTests
             "KeyEncoder = key => key.ToRecord(),");
         output.Should().Contain(
             "KeyDecoder = value => global::Test.Package.Test.Module.AccountKey.FromRecord(value.As<DamlRecord>()),");
+        output.Should().Contain(
+            "KeyJsonReader = (json, context) => global::Test.Package.Test.Module.AccountKey.__ReadDamlLfJson(json, context),");
     }
 
     [Fact]
@@ -193,6 +195,8 @@ public class TemplateEmitterTests
             "KeyEncoder = key => key.ToDamlValue(),");
         output.Should().Contain(
             "KeyDecoder = value => Party.FromDamlValue(value.As<DamlParty>()),");
+        output.Should().Contain(
+            "KeyJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(json, context),");
     }
 
     [Fact]
@@ -265,6 +269,138 @@ public class TemplateEmitterTests
     }
 
     [Fact]
+    public void TemplateEmitter_hides_the_Choices_witness_behind_the_facet_when_a_field_takes_the_name()
+    {
+        var logger = new CapturingLogger();
+
+        var output = EmitTemplate(
+            Template(
+                "Vault",
+                [Field("choices", DamlPrimitive.Text)],
+                choices:
+                [
+                    new DamlChoice
+                    {
+                        Name = "Grant",
+                        Consuming = true,
+                        ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                    },
+                ]),
+            logger: logger);
+
+        output.Should().Contain(
+            "static IReadOnlyList<IChoice> IHasChoices<Vault>.Choices { get; } = [ChoiceGrant];");
+        output.Should().NotContain("public static IReadOnlyList<IChoice> Choices");
+        output.Should().Contain("string Choices");
+    }
+
+    [Fact]
+    public void TemplateEmitter_warns_when_a_field_takes_the_Choices_witness_name()
+    {
+        var logger = new CapturingLogger();
+
+        EmitTemplate(
+            Template(
+                "Vault",
+                [Field("choices", DamlPrimitive.Text)]),
+            logger: logger);
+
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("Test.Module:Vault")
+            .And.Contain("choices");
+    }
+
+    [Fact]
+    public void TemplateEmitter_hides_the_Choices_witness_behind_the_facet_when_the_template_is_named_Choices()
+    {
+        var output = EmitTemplate(
+            Template(
+                "Choices",
+                [Field("owner", DamlPrimitive.Party)],
+                choices:
+                [
+                    new DamlChoice
+                    {
+                        Name = "Grant",
+                        Consuming = true,
+                        ArgumentType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                        ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                    },
+                ]));
+
+        output.Should().Contain(
+            "static IReadOnlyList<IChoice> IHasChoices<Choices>.Choices { get; } = [ChoiceGrant];");
+        output.Should().NotContain("public static IReadOnlyList<IChoice> Choices");
+    }
+
+    [Fact]
+    public void TemplateEmitter_warns_when_the_template_name_takes_the_Choices_witness_name()
+    {
+        var logger = new CapturingLogger();
+
+        EmitTemplate(
+            Template(
+                "Choices",
+                [Field("owner", DamlPrimitive.Party)]),
+            logger: logger);
+
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("Test.Module:Choices");
+    }
+
+    [Fact]
+    public void TemplateEmitter_hides_the_Choices_witness_behind_the_facet_when_a_nested_choice_argument_is_named_Choices()
+    {
+        var output = EmitTemplate(
+            Template(
+                "Vault",
+                [Field("owner", DamlPrimitive.Party)],
+                choices:
+                [
+                    new DamlChoice
+                    {
+                        Name = "Choices",
+                        Consuming = true,
+                        ArgumentType = new DamlTypeRef(LocalPackageId, ModuleName, "ChoicesArgument"),
+                        ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                    },
+                ]),
+            dataTypes: [RecordDataType("ChoicesArgument", Field("amount", DamlPrimitive.Int64))]);
+
+        output.Should().Contain(
+            "static IReadOnlyList<IChoice> IHasChoices<Vault>.Choices { get; } = [ChoiceChoices];");
+        output.Should().NotContain("public static IReadOnlyList<IChoice> Choices");
+    }
+
+    [Fact]
+    public void TemplateEmitter_warns_when_a_nested_choice_argument_takes_the_Choices_witness_name()
+    {
+        var logger = new CapturingLogger();
+
+        EmitTemplate(
+            Template(
+                "Vault",
+                [Field("owner", DamlPrimitive.Party)],
+                choices:
+                [
+                    new DamlChoice
+                    {
+                        Name = "Choices",
+                        Consuming = true,
+                        ArgumentType = new DamlTypeRef(LocalPackageId, ModuleName, "ChoicesArgument"),
+                        ReturnType = new DamlPrimitiveType(DamlPrimitive.Unit),
+                    },
+                ]),
+            dataTypes: [RecordDataType("ChoicesArgument", Field("amount", DamlPrimitive.Int64))],
+            logger: logger);
+
+        logger.Warnings.Should().ContainSingle()
+            .Which.Should().Contain("Test.Module:Vault")
+            .And.Contain("Choices");
+    }
+
+    [Fact]
     public void TemplateEmitter_orders_IImplements_after_the_IUpgradeable_facet_in_the_base_list()
     {
         var output = EmitTemplate(
@@ -279,7 +415,7 @@ public class TemplateEmitterTests
             upgradedPackageId: "old-package-id");
 
         output.Should().Contain(
-            ": ITemplate, IUpgradeable, IImplements<Asset>, IHasKey<KeyedUpgradedVault, Party>, IDamlRecord<KeyedUpgradedVault>");
+            ": ITemplate, IUpgradeable, IImplements<Asset>, IHasKey<KeyedUpgradedVault, Party>, IHasChoices<KeyedUpgradedVault>, IDamlRecord<KeyedUpgradedVault>");
     }
 
     [Fact]
@@ -287,7 +423,7 @@ public class TemplateEmitterTests
     {
         var output = EmitTemplate(Template("SimpleTemplate", [Field("owner", DamlPrimitive.Party)]));
 
-        output.Should().Contain(": ITemplate, IDamlRecord<SimpleTemplate>");
+        output.Should().Contain(": ITemplate, IHasChoices<SimpleTemplate>, IDamlRecord<SimpleTemplate>");
     }
 
     [Fact]

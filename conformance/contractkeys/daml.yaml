@@ -9,3 +9,4 @@ dependencies:
   - daml-stdlib
 build-options:
   - --target=2.3
+  - -Wno-upgrade-interfaces

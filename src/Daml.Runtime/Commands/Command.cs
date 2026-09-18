@@ -59,15 +59,21 @@ public sealed record ExerciseCommand(
     public string CommandType => "Exercise";
 
     /// <summary>
-    /// Creates an ExerciseCommand for a specific contract and choice.
+    /// Creates an ExerciseCommand for a specific contract and choice. Works uniformly for
+    /// a concrete template or a Daml interface marker: the identifier that travels on the
+    /// wire — a template id or an interface id — comes from
+    /// <typeparamref name="TOwner"/>'s own <see cref="IDamlType.DamlTypeId"/>, matching the
+    /// ledger API's <c>template_id</c> field, which also accepts interface ids for
+    /// interface choices.
     /// </summary>
-    public static ExerciseCommand For<T>(
-        ContractId<T> contractId,
+    /// <typeparam name="TOwner">The choice owner: a concrete template or interface marker.</typeparam>
+    public static ExerciseCommand For<TOwner>(
+        ContractId<TOwner> contractId,
         ChoiceName choice,
-        DamlValue argument) where T : ITemplate
+        DamlValue argument) where TOwner : IDamlType
     {
         ArgumentNullException.ThrowIfNull(contractId);
-        return new(T.TemplateId, contractId, choice, argument);
+        return new(TOwner.DamlTypeId.Identifier, contractId, choice, argument);
     }
 
     /// <summary>
@@ -76,6 +82,7 @@ public sealed record ExerciseCommand(
     /// also accepts interface ids for interface choices.
     /// </summary>
     /// <typeparam name="TInterface">The Daml interface marker type.</typeparam>
+    [Obsolete($"Use {nameof(For)}<TOwner> instead — it resolves the same identifier for both templates and interface markers.")]
     public static ExerciseCommand ForInterface<TInterface>(
         ContractId<TInterface> contractId,
         ChoiceName choice,

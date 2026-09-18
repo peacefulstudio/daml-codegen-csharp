@@ -16,7 +16,7 @@ public sealed partial record Account
     /// </summary>
     public sealed record Credit(
         [property: DamlFieldAttribute("delta")] long Delta
-    ) : IDamlRecord
+    ) : IDamlRecord<Credit>
     {
         /// <summary>Converts this value to a DamlRecord.</summary>
         public DamlRecord ToRecord() => DamlRecord.Create(
@@ -27,6 +27,16 @@ public sealed partial record Account
         public static Credit FromRecord(DamlRecord record) => new Credit(
             Delta: record.GetRequiredField("delta").As<DamlInt64>().Value
         );
+
+        /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create(
+                DamlField.Create("delta", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "delta"), context.Field("delta")))
+            );
+        }
 
     }
 }

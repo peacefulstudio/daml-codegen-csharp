@@ -26,13 +26,13 @@ public sealed partial record Account(
     [property: DamlFieldAttribute("custodian")] Party Custodian,
     [property: DamlFieldAttribute("label")] string Label,
     [property: DamlFieldAttribute("balance")] long Balance
-) : ITemplate, IHasKey<Account, global::Daml.Codegen.Testing.Conformance.ContractKeys.AccountKey>, IDamlRecord<Account>
+) : ITemplate, IHasKey<Account, global::Daml.Codegen.Testing.Conformance.ContractKeys.AccountKey>, IHasChoices<Account>, IDamlRecord<Account>
 {
     /// <summary>Gets the template identifier.</summary>
-    public static Identifier TemplateId { get; } = new("71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb", "ContractKeys", "Account");
+    public static Identifier TemplateId { get; } = new("1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d", "ContractKeys", "Account");
 
     /// <summary>Gets the package ID.</summary>
-    public static string PackageId => "71331490239cc6dacb44ebb109c5a4086ef8088e7cb873ebc09068a986446abb";
+    public static string PackageId => "1435b1fe66cf84bdbf8ff0e9f0fd942e662bb6013aa1dbf33da20fc2a14cdb5d";
 
     /// <summary>Gets the package name.</summary>
     public static string PackageName => "contractkeys";
@@ -49,6 +49,7 @@ public sealed partial record Account(
         {
             KeyEncoder = key => key.ToRecord(),
             KeyDecoder = value => global::Daml.Codegen.Testing.Conformance.ContractKeys.AccountKey.FromRecord(value.As<DamlRecord>()),
+            KeyJsonReader = (json, context) => global::Daml.Codegen.Testing.Conformance.ContractKeys.AccountKey.__ReadDamlLfJson(json, context),
         };
 
     /// <summary>Converts this value to a DamlRecord.</summary>
@@ -65,6 +66,18 @@ public sealed partial record Account(
         Balance: record.GetRequiredField("balance").As<DamlInt64>().Value
     );
 
+    /// <summary>Decodes a Daml-LF JSON record directly into a DamlRecord, without going through reflection.</summary>
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    public static DamlRecord __ReadDamlLfJson(global::System.Text.Json.JsonElement json, global::Daml.Runtime.Serialization.DamlLfJsonDecodeContext context)
+    {
+        global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+        return DamlRecord.Create(
+            DamlField.Create("custodian", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadParty(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "custodian"), context.Field("custodian"))),
+            DamlField.Create("label", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadText(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "label"), context.Field("label"))),
+            DamlField.Create("balance", global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireField(json, context, "balance"), context.Field("balance")))
+        );
+    }
+
     /// <summary>
     /// Exercise the Archive choice.
     /// This choice is consuming and will archive the contract.
@@ -74,7 +87,14 @@ public sealed partial record Account(
         Name = new ChoiceName("Archive"),
         Consuming = true,
         ArgumentEncoder = _ => DamlRecord.Create(),
-        ResultDecoder = _ => DamlUnit.Instance
+        ArgumentDecoder = val => val is DamlRecord { Fields.Count: 0 } ? DamlUnit.Instance : throw new global::System.InvalidOperationException("Choice 'Archive' argument must decode to an empty record."),
+        ResultDecoder = _ => DamlUnit.Instance,
+        ArgumentJsonReader = (json, context) =>
+        {
+            global::Daml.Runtime.Serialization.DamlLfJsonDecoders.RequireObject(json, context);
+            return DamlRecord.Create();
+        },
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadUnit(json, context),
     };
 
     /// <summary>
@@ -86,7 +106,10 @@ public sealed partial record Account(
         Name = new ChoiceName("Credit"),
         Consuming = true,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => new ContractId<Account>(val.As<DamlContractId>().Value)
+        ArgumentDecoder = val => Credit.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => new ContractId<Account>(val.As<DamlContractId>().Value),
+        ArgumentJsonReader = (json, context) => Account.Credit.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadContractId(json, context),
     };
 
     /// <summary>
@@ -97,8 +120,14 @@ public sealed partial record Account(
         Name = new ChoiceName("CurrentBalance"),
         Consuming = false,
         ArgumentEncoder = arg => arg.ToRecord(),
-        ResultDecoder = val => val.As<DamlInt64>().Value
+        ArgumentDecoder = val => CurrentBalance.FromRecord(val.As<DamlRecord>()),
+        ResultDecoder = val => val.As<DamlInt64>().Value,
+        ArgumentJsonReader = (json, context) => Account.CurrentBalance.__ReadDamlLfJson(json, context),
+        ResultJsonReader = (json, context) => global::Daml.Runtime.Serialization.DamlLfJsonDecoders.ReadInt64(json, context),
     };
+
+    /// <summary>Gets the choice descriptors declared by this type.</summary>
+    public static IReadOnlyList<IChoice> Choices { get; } = [ChoiceArchive, ChoiceCredit, ChoiceCurrentBalance];
 
     /// <summary>
     /// Builds the <see cref="global::Daml.Runtime.Commands.ExerciseByKeyCommand"/> for the Archive choice on the contract carrying this key.
@@ -573,7 +602,15 @@ public static class AccountNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Account.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "Archive", StringComparison.Ordinal))
             {
-                return new ExerciseOutcome<Unit>.One(Unit.Value);
+                try
+                {
+                    var decoded = Unit.Value;
+                    return new ExerciseOutcome<Unit>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<Unit>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 
@@ -594,8 +631,15 @@ public static class AccountNonContractExtensions
                 && string.Equals(exercised.TemplateId.EntityName, Account.TemplateId.EntityName, StringComparison.Ordinal)
                 && string.Equals(exercised.ChoiceName, "CurrentBalance", StringComparison.Ordinal))
             {
-                var decoded = Account.ChoiceCurrentBalance.ResultDecoder!(exercised.ExerciseResult);
-                return new ExerciseOutcome<long>.One(decoded);
+                try
+                {
+                    var decoded = Account.ChoiceCurrentBalance.ResultDecoder!(exercised.ExerciseResult);
+                    return new ExerciseOutcome<long>.One(decoded);
+                }
+                catch (global::System.Exception ex) when (ex is not global::System.OperationCanceledException)
+                {
+                    return new ExerciseOutcome<long>.CommittedUndecodable(tx.UpdateId, ex.Message, ex);
+                }
             }
         }
 

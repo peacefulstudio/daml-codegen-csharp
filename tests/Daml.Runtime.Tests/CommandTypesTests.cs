@@ -1,6 +1,7 @@
 // Copyright 2026 Peaceful Studio OÜ
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using Daml.Runtime.Commands;
 using Daml.Runtime.Contracts;
 using Daml.Runtime.Data;
@@ -160,10 +161,37 @@ public class CommandTypesTests
     [Fact]
     public void ExerciseCommand_ForInterface_rejects_a_null_contract_id()
     {
+#pragma warning disable CS0618
         var act = () => ExerciseCommand.ForInterface<TestInterfaceMarker>(null!, new ChoiceName("Transfer"), DamlUnit.Instance);
+#pragma warning restore CS0618
 
         act.Should().Throw<ArgumentNullException>();
     }
+
+    [Fact]
+    public void ExerciseCommand_ForInterface_is_marked_Obsolete()
+    {
+        var method = typeof(ExerciseCommand).GetMethod(nameof(ExerciseCommand.ForInterface));
+
+        method.Should().NotBeNull();
+        method!.GetCustomAttribute<ObsoleteAttribute>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ExerciseCommand_For_should_create_command_from_an_interface_marker_contract_id()
+    {
+        var contractId = new ContractId<TestInterfaceMarker>("contract-456");
+        var choice = new ChoiceName("Transfer");
+        var arg = DamlUnit.Instance;
+
+        var command = ExerciseCommand.For(contractId, choice, arg);
+
+        command.TemplateId.Should().Be(DamlTypeIdOf<TestInterfaceMarker>().Identifier);
+        command.ContractId.Value.Should().Be("contract-456");
+        command.Choice.Should().Be(choice);
+    }
+
+    private static DamlTypeDescriptor DamlTypeIdOf<T>() where T : IDamlType => T.DamlTypeId;
 
     private sealed record ArchivableContract(ContractId<TestTemplate> ContractId) : IExercises<TestTemplate>;
 
@@ -178,6 +206,21 @@ public class CommandTypesTests
         command.ChoiceArgument.Should().BeOfType<DamlRecord>()
             .Which.Fields.Should().BeEmpty();
         command.ChoiceArgument.Should().NotBeOfType<DamlUnit>();
+    }
+
+    private sealed record ArchivableInterfaceContract(ContractId<TestInterfaceMarker> ContractId) : IExercises<TestInterfaceMarker>;
+
+    [Fact]
+    public void ExerciseArchive_works_for_an_interface_marker_owner()
+    {
+        IExercises<TestInterfaceMarker> exercisable = new ArchivableInterfaceContract(new ContractId<TestInterfaceMarker>("contract-789"));
+
+        var command = exercisable.ExerciseArchive();
+
+        command.TemplateId.Should().Be(DamlTypeIdOf<TestInterfaceMarker>().Identifier);
+        command.Choice.Value.Should().Be("Archive");
+        command.ChoiceArgument.Should().BeOfType<DamlRecord>()
+            .Which.Fields.Should().BeEmpty();
     }
 
     [Fact]
@@ -1025,7 +1068,10 @@ public class CommandTypesTests
             Name = new ChoiceName("Archive"),
             Consuming = true,
             ArgumentEncoder = _ => DamlUnit.Instance,
-            ResultDecoder = _ => DamlUnit.Instance
+            ArgumentDecoder = _ => DamlUnit.Instance,
+            ResultDecoder = _ => DamlUnit.Instance,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
         };
 
         // Assert
@@ -1043,7 +1089,10 @@ public class CommandTypesTests
             Name = new ChoiceName("GetValue"),
             Consuming = false,
             ArgumentEncoder = arg => arg,
-            ResultDecoder = val => val.As<DamlText>().Value
+            ArgumentDecoder = val => val.As<DamlInt64>(),
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
         };
 
         // Act
@@ -1051,6 +1100,28 @@ public class CommandTypesTests
 
         // Assert
         encoded.As<DamlInt64>().Value.Should().Be(42);
+    }
+
+    [Fact]
+    public void Choice_ArgumentDecoder_should_decode_argument()
+    {
+        // Arrange
+        var choice = new Choice<TestTemplate, DamlInt64, string>
+        {
+            Name = new ChoiceName("GetValue"),
+            Consuming = false,
+            ArgumentEncoder = arg => arg,
+            ArgumentDecoder = val => val.As<DamlInt64>(),
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        // Act
+        var decoded = choice.ArgumentDecoder(new DamlInt64(42));
+
+        // Assert
+        decoded.Value.Should().Be(42);
     }
 
     [Fact]
@@ -1062,7 +1133,10 @@ public class CommandTypesTests
             Name = new ChoiceName("GetCount"),
             Consuming = false,
             ArgumentEncoder = _ => DamlUnit.Instance,
-            ResultDecoder = val => val.As<DamlInt64>().Value
+            ArgumentDecoder = _ => DamlUnit.Instance,
+            ResultDecoder = val => val.As<DamlInt64>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
         };
 
         // Act
@@ -1070,5 +1144,118 @@ public class CommandTypesTests
 
         // Assert
         decoded.Should().Be(123);
+    }
+
+    [Fact]
+    public void Choice_implements_IChoice_exposing_argument_and_result_types()
+    {
+        IChoice choice = new Choice<TestTemplate, DamlInt64, string>
+        {
+            Name = new ChoiceName("GetValue"),
+            Consuming = false,
+            ArgumentEncoder = arg => arg,
+            ArgumentDecoder = val => val.As<DamlInt64>(),
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        choice.ArgumentType.Should().Be<DamlInt64>();
+        choice.ResultType.Should().Be<string>();
+    }
+
+    [Fact]
+    public void Choice_IChoice_EncodeArgument_delegates_to_the_typed_ArgumentEncoder()
+    {
+        IChoice choice = new Choice<TestTemplate, DamlInt64, string>
+        {
+            Name = new ChoiceName("GetValue"),
+            Consuming = false,
+            ArgumentEncoder = arg => arg,
+            ArgumentDecoder = val => val.As<DamlInt64>(),
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        var encoded = choice.EncodeArgument(new DamlInt64(42));
+
+        encoded.As<DamlInt64>().Value.Should().Be(42);
+    }
+
+    [Fact]
+    public void Choice_IChoice_DecodeArgument_delegates_to_the_typed_ArgumentDecoder()
+    {
+        IChoice choice = new Choice<TestTemplate, DamlInt64, string>
+        {
+            Name = new ChoiceName("GetValue"),
+            Consuming = false,
+            ArgumentEncoder = arg => arg,
+            ArgumentDecoder = val => val.As<DamlInt64>(),
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        var decoded = choice.DecodeArgument(new DamlInt64(42));
+
+        decoded.Should().BeOfType<DamlInt64>().Which.Value.Should().Be(42);
+    }
+
+    [Fact]
+    public void Choice_IChoice_DecodeResult_delegates_to_the_typed_ResultDecoder()
+    {
+        IChoice choice = new Choice<TestTemplate, DamlUnit, long>
+        {
+            Name = new ChoiceName("GetCount"),
+            Consuming = false,
+            ArgumentEncoder = _ => DamlUnit.Instance,
+            ArgumentDecoder = _ => DamlUnit.Instance,
+            ResultDecoder = val => val.As<DamlInt64>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        var decoded = choice.DecodeResult(new DamlInt64(123));
+
+        decoded.Should().BeOfType<long>().Which.Should().Be(123);
+    }
+
+    [Theory]
+    [InlineData(nameof(IChoice.EncodeArgument))]
+    [InlineData(nameof(IChoice.DecodeArgument))]
+    [InlineData(nameof(IChoice.DecodeResult))]
+    [InlineData(nameof(IChoice.DecodeArgumentJson))]
+    [InlineData(nameof(IChoice.DecodeResultJson))]
+    public void IChoice_wrapped_value_member_is_annotated_nullable(string memberName)
+    {
+        var method = typeof(IChoice).GetMethod(memberName)!;
+        var nullability = new NullabilityInfoContext();
+
+        var state = memberName == nameof(IChoice.EncodeArgument)
+            ? nullability.Create(method.GetParameters()[0]).WriteState
+            : nullability.Create(method.ReturnParameter).ReadState;
+
+        state.Should().Be(NullabilityState.Nullable);
+    }
+
+    [Fact]
+    public void Choice_IChoice_EncodeArgument_and_DecodeArgument_round_trip_a_null_argument()
+    {
+        IChoice choice = new Choice<TestTemplate, string?, string>
+        {
+            Name = new ChoiceName("Annotate"),
+            Consuming = false,
+            ArgumentEncoder = arg => arg is null ? DamlOptional.None : DamlOptional.Some(new DamlText(arg)),
+            ArgumentDecoder = val => val.As<DamlOptional>().GetValueOrDefault<DamlText>()?.Value,
+            ResultDecoder = val => val.As<DamlText>().Value,
+            ArgumentJsonReader = (_, _) => throw new NotImplementedException(),
+            ResultJsonReader = (_, _) => throw new NotImplementedException()
+        };
+
+        var encoded = choice.EncodeArgument(null);
+        var decoded = choice.DecodeArgument(encoded);
+
+        decoded.Should().BeNull();
     }
 }
