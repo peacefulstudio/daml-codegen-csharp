@@ -85,7 +85,13 @@ internal interface IDiscriminatedUnionJsonConverterFactory;
 /// <see cref="JsonSerializerOptions.MaxDepth"/> — or <see cref="DefaultMaxDepth"/> when unset,
 /// mirroring <see cref="JsonSerializerOptions.MaxDepth"/>'s own default of 64 — never a lower,
 /// hardcoded cap, so a caller who raises <see cref="JsonSerializerOptions.MaxDepth"/> opts into deeper
-/// recursion exactly as System.Text.Json itself allows.
+/// recursion exactly as System.Text.Json itself allows. The real native call-stack cost of each
+/// counted level is itself platform- and JIT-dependent — the same counted depth can leave a
+/// different amount of real stack headroom on different targets — so <see cref="Write{TUnion}"/>
+/// also fails the same way, before recursing further, whenever
+/// <see cref="RuntimeHelpers.TryEnsureSufficientExecutionStack"/> reports the remaining call stack
+/// is running low, even short of the counted depth above, rather than let a platform's own stack
+/// budget be what decides whether this throws a <see cref="JsonException"/> or crashes the process.
 /// </para>
 /// <para>
 /// <see cref="Write{TUnion}"/> serializes the chosen arm — <c>value</c>'s own runtime type, e.g.
@@ -182,14 +188,18 @@ internal static class DiscriminatedUnionJson
 
         var maxDepth = EffectiveMaxDepth(options);
         var effectiveDepth = t_depthBaseline + writer.CurrentDepth;
-        if (effectiveDepth >= maxDepth)
+        if (effectiveDepth >= maxDepth || !RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
             throw new JsonException(
                 $"{typeName} exceeded the maximum union nesting depth of {maxDepth} while writing case "
                 + $"\"{armType.Name}\": each nested union re-enters JsonSerializer.SerializeToNode as a "
                 + "fresh operation, so System.Text.Json's own MaxDepth guard only runs once the whole "
                 + "node tree is already built in memory and cannot be relied on to catch this before "
-                + "the call stack is exhausted.");
+                + "the call stack is exhausted. The actual native call-stack cost of each counted level "
+                + "varies by platform and JIT, so this also refuses once the remaining call stack itself "
+                + "is running low, even short of the counted depth above, rather than let a "
+                + "platform-specific stack budget be the thing that decides whether this throws a "
+                + "JsonException or crashes the process.");
         }
 
         var previousDepthBaseline = t_depthBaseline;
